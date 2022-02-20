@@ -728,8 +728,10 @@ COMMIT
 # We use a sequence to avoid busy-looping the test.
 statement ok
 CREATE SEQUENCE s;
-  BEGIN TRANSACTION;
-  SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
+
+statement ok
+BEGIN TRANSACTION;
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
 
 # Demonstrate that the txn was indeed retried.
 query I
@@ -739,13 +741,17 @@ SELECT currval('s')
 
 statement ok
 ROLLBACK;
-  DROP SEQUENCE s
+
+statement ok
+DROP SEQUENCE s
 
 # Automatic retries for the first batch even when that first batch comes after
 # the BEGIN.
 statement ok
 CREATE SEQUENCE s;
-  BEGIN TRANSACTION;
+
+statement ok
+BEGIN TRANSACTION;
 
 statement ok
 SELECT 1;
@@ -759,14 +765,18 @@ SELECT currval('s')
 
 statement ok
 ROLLBACK;
-  DROP SEQUENCE s
+
+statement ok
+DROP SEQUENCE s
 
 # Automatic retries for the first batch even when that first batch comes after
 # the BEGIN and the BEGIN also has special statements that don't move the txn
 # state out of the "AutoRetry" state.
 statement ok
 CREATE SEQUENCE s;
-  BEGIN TRANSACTION;
+
+statement ok
+BEGIN TRANSACTION;
   SAVEPOINT cockroach_restart;
   SET TRANSACTION PRIORITY HIGH;
   SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
@@ -792,12 +802,16 @@ high
 
 statement ok
 ROLLBACK;
-  DROP SEQUENCE s
+
+statement ok
+DROP SEQUENCE s
 
 # Like above, but the SAVEPOINT is its own batch.
 statement ok
 CREATE SEQUENCE s;
-  BEGIN TRANSACTION
+
+statement ok
+BEGIN TRANSACTION
 
 statement ok
 SAVEPOINT cockroach_restart;
@@ -813,13 +827,17 @@ SELECT currval('s')
 
 statement ok
 ROLLBACK;
-  DROP SEQUENCE s
+
+statement ok
+DROP SEQUENCE s
 
 
 # Automatic retries for the first batch after an explicit restart.
 statement ok
 CREATE SEQUENCE s;
-  BEGIN TRANSACTION;
+
+statement ok
+BEGIN TRANSACTION;
   SAVEPOINT cockroach_restart;
   SELECT 1;
 
@@ -841,7 +859,9 @@ SELECT currval('s')
 
 statement ok
 ROLLBACK;
-  DROP SEQUENCE s
+
+statement ok
+DROP SEQUENCE s
 
 
 # Test READ ONLY/WRITE syntax.
@@ -1124,7 +1144,11 @@ iso_8601
 
 statement ok
 TRUNCATE rewind_session_test;
+
+statement ok
 SET intervalstyle = 'postgres';
+
+statement ok
 BEGIN;
 INSERT INTO rewind_session_test VALUES ('1 day 01:02:03'::interval::string);
 SET LOCAL intervalstyle = 'iso_8601';

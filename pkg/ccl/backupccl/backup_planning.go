@@ -653,8 +653,8 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnImplicit || backupStmt.Options.Detached) {
-			return errors.Errorf("BACKUP cannot be used inside a transaction without DETACHED option")
+		if !(p.IsAutoCommit() || backupStmt.Options.Detached) {
+			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
 		subdir, err := subdirFn()

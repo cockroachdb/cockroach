@@ -41,8 +41,14 @@ CREATE TABLE grandchild (
   g INT PRIMARY KEY,
   c INT REFERENCES child(c)
 );
+
+statement ok
 INSERT INTO parent VALUES (1), (2);
+
+statement ok
 INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
+
+statement ok
 INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11);
 
 statement ok
@@ -72,8 +78,14 @@ CREATE TABLE grandchild (
   g INT PRIMARY KEY,
   c INT REFERENCES child(c) ON DELETE CASCADE
 );
+
+statement ok
 INSERT INTO parent VALUES (1), (2);
+
+statement ok
 INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
+
+statement ok
 INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11), (200, 20)
 
 statement ok
@@ -103,18 +115,26 @@ SELECT * FROM grandchild
 
 statement ok
 DROP TABLE grandchild;
+
+statement ok
 DROP TABLE child;
+
+statement ok
 DROP TABLE parent
 
 # Delete cascade with multiple columns and multiple child tables.
 statement ok
 CREATE TABLE parent_multi (pa INT, pb INT, pc INT, UNIQUE INDEX (pa,pb,pc));
+
+statement ok
 CREATE TABLE child_multi_1 (
   c INT,
   a INT,
   b INT,
   FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
 );
+
+statement ok
 CREATE TABLE child_multi_2 (
   b INT,
   c INT,

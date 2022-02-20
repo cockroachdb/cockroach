@@ -153,6 +153,8 @@ WHERE label LIKE 'row-level-ttl-%'
 # Ensure schedules are removed on DROP TABLE.
 statement ok
 DROP TABLE tbl;
+
+statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   text TEXT,
@@ -177,6 +179,8 @@ WHERE label LIKE 'row-level-ttl-%'
 # Create TTL on a different schema and ensure schedules are removed when dropped.
 statement ok
 CREATE SCHEMA drop_me;
+
+statement ok
 CREATE TABLE drop_me.tbl () WITH (ttl_expire_after = '10 minutes'::interval);
 CREATE TABLE drop_me.tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
 
@@ -198,7 +202,11 @@ WHERE label LIKE 'row-level-ttl-%'
 # Create TTL on a different database and ensure schedules are removed when dropped.
 statement ok
 CREATE DATABASE drop_me;
+
+statement ok
 USE drop_me;
+
+statement ok
 CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes'::interval);
 CREATE TABLE tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
 
@@ -374,6 +382,8 @@ ALTER TABLE no_ttl_table SET (ttl_label_metrics = true)
 
 statement ok
 DROP TABLE tbl;
+
+statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   text TEXT,
@@ -442,6 +452,8 @@ CREATE TABLE public.tbl (
 # Test adding to TTL table with crdb_internal_expiration already defined.
 statement ok
 DROP TABLE tbl;
+
+statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   text TEXT,
@@ -493,6 +505,8 @@ ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
 
 statement ok
 DROP TABLE tbl;
+
+statement ok
 CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text)) WITH (ttl_expire_after = '10 minutes')
 
 statement error non-ascending ordering on PRIMARY KEYs are not supported
@@ -502,6 +516,8 @@ ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (id, text DESC)
 # the schedule and TTL is setup correctly.
 statement ok
 DROP TABLE tbl;
+
+statement ok
 CREATE TABLE tbl (
    id INT PRIMARY KEY,
    text TEXT,

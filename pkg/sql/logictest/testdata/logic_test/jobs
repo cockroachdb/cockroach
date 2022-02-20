@@ -12,7 +12,13 @@ statement ok
 GRANT ALL ON DATABASE test TO testuser
 
 statement ok
-CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (1); CREATE INDEX ON t(x)
+CREATE TABLE t(x INT);
+
+statement ok
+INSERT INTO t(x) VALUES (1);
+
+statement ok
+CREATE INDEX ON t(x)
 
 query TTT
 SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name = 'root'
@@ -48,7 +54,10 @@ SELECT job_type, description, user_name FROM crdb_internal.jobs
 # However they can see their own jobs.
 
 statement ok
-CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1); CREATE INDEX ON u(x);
+CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1)
+
+statement ok
+CREATE INDEX ON u(x);
 
 
 query TTT
@@ -103,8 +112,14 @@ user testuser2
 
 statement ok
 CREATE TABLE t1(x INT);
+
+statement ok
 INSERT INTO t1(x) VALUES (1);
+
+statement ok
 CREATE INDEX ON t1(x);
+
+statement ok
 DROP TABLE t1
 
 user testuser

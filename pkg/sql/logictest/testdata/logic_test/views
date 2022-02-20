@@ -683,6 +683,8 @@ DROP TABLE t2
 statement ok
 CREATE INDEX i ON t2 (x);
 CREATE INDEX i2 ON t2 (x);
+
+statement ok
 CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2@i
 
 statement error pq: cannot drop index \"i\" because view \"tview\" depends on it
@@ -727,6 +729,8 @@ user root
 # Only column a should be depended on in this case.
 statement ok
 DROP TABLE ab CASCADE;
+
+statement ok
 CREATE TABLE ab (a INT, b INT);
 CREATE VIEW vab (x) AS SELECT ab.a FROM ab, ab AS ab2
 
@@ -760,6 +764,8 @@ DROP TABLE toreg;
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE VIEW vregclass AS SELECT x FROM (SELECT CAST('toreg' AS regclass) AS x)
 
 statement error pq: cannot drop relation "toreg" because view "vregclass" depends on it
@@ -767,6 +773,8 @@ DROP TABLE toreg;
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE SEQUENCE s_reg;
 CREATE VIEW vregclass AS SELECT x FROM [SELECT 's_reg'::REGCLASS AS x]
 
@@ -777,11 +785,15 @@ DROP SEQUENCE s_reg
 # a variable.
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE VIEW vregclass AS SELECT x::regclass FROM (SELECT 's_reg' AS x);
 DROP SEQUENCE s_reg;
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE VIEW vregclass AS SELECT x::regclass FROM (SELECT 'does_not_exist' AS x);
 
 statement error pq: relation "does_not_exist" does not exist
@@ -789,7 +801,11 @@ SELECT * FROM vregclass
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE table tregclass();
+
+statement ok
 CREATE VIEW vregclass AS SELECT 1 FROM (SELECT 1) AS foo WHERE 'tregclass'::regclass = 'tregclass'::regclass;
 
 statement error pq: cannot drop relation "tregclass" because view "vregclass" depends on it

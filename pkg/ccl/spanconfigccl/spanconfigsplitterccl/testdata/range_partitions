@@ -24,6 +24,9 @@ splits database=db table=range_partitions
 # Try the same thing on a secondary index.
 exec-sql
 CREATE INDEX idx ON db.range_partitions (j);
+----
+
+exec-sql
 ALTER INDEX db.range_partitions@idx PARTITION BY RANGE (j) (
   PARTITION less_than_five       VALUES FROM (minvalue) to (5),
   PARTITION between_five_and_ten VALUES FROM (5) to (10),

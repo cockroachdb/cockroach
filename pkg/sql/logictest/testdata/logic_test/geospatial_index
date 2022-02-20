@@ -67,7 +67,10 @@ let $create_table
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 
 statement ok
-DROP TABLE geo_table; $create_table
+DROP TABLE geo_table;
+
+statement ok
+$create_table
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]

@@ -2739,12 +2739,9 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT NOT NULL, v INT);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT NOT NULL, v INT);`)
 	// GC the old indexes to be dropped after the PK change immediately.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
@@ -2779,16 +2776,14 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	// We separate the columns into multiple different families
 	// in order to test different cases of reads, writes and
 	// deletions operating on different sets of families.
-	if _, err := sqlDB.Exec(`
-DROP TABLE t.test;
+	sqlRunner.Exec(t, `DROP TABLE t.test;`)
+	sqlRunner.Exec(t, `
 CREATE TABLE t.test (
 	x INT PRIMARY KEY, y INT NOT NULL, z INT, a INT, b INT,
 	c INT, d INT, FAMILY (x), FAMILY (y), FAMILY (z),
 	FAMILY (a, b), FAMILY (c), FAMILY (d)
 );
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
 	// Insert into the table.
 	inserts := make([]string, maxValue+1)
 	for i := 0; i < maxValue+1; i++ {
@@ -2797,10 +2792,7 @@ CREATE TABLE t.test (
 			i, i, i, i, i, i, i,
 		)
 	}
-	if _, err := sqlDB.Exec(
-		fmt.Sprintf(`INSERT INTO t.test VALUES %s`, strings.Join(inserts, ","))); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, fmt.Sprintf(`INSERT INTO t.test VALUES %s`, strings.Join(inserts, ",")))
 
 	notification := initBackfillNotification()
 
@@ -3187,14 +3179,11 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, w INT, INDEX i (w));
-INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
-ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, w INT, INDEX i (w));`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);`)
+	sqlRunner.Exec(t, `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);`)
 
 	// Wait for the async schema changer to run.
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
@@ -4322,17 +4311,12 @@ func TestTruncateCompletion(t *testing.T) {
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14'));
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14'));`)
 
-	if _, err := sqlDB.Exec(`INSERT INTO t.pi VALUES (3.14)`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `INSERT INTO t.pi VALUES (3.14)`)
 
 	// Bulk insert.
 	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
@@ -4359,14 +4343,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
-		t.Error(err)
-	}
+	sqlRunner.Exec(t, "TRUNCATE TABLE t.test")
 
 	// Check that SQL thinks the table is empty.
-	row := sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	row := sqlRunner.QueryRow(t, "SELECT count(*) FROM t.test")
 	var count int
-	require.NoError(t, row.Scan(&count))
+	row.Scan(&count)
 	require.Equal(t, 0, count)
 
 	// Bulk insert.
@@ -4374,8 +4356,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	row = sqlDB.QueryRow("SELECT count(*) FROM t.test")
-	require.NoError(t, row.Scan(&count))
+	row = sqlRunner.QueryRow(t, "SELECT count(*) FROM t.test")
+	row.Scan(&count)
 	require.Equal(t, maxValue+1, count)
 
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
@@ -4445,13 +4427,10 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);`)
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -6135,6 +6114,7 @@ func TestMultipleRevert(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	db = sqlDB
+	runner := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -6143,19 +6123,12 @@ func TestMultipleRevert(t *testing.T) {
 
 	// Create a k-v table and kick off a schema change that should get rolled
 	// back.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
-INSERT INTO t.test VALUES (1, 2);
-ALTER TABLE t.public.test DROP COLUMN v;
-`); err == nil {
-		t.Fatal("expected job to be canceled")
-	} else if !strings.Contains(err.Error(), "job canceled by user") {
-		t.Fatal(err)
-	}
+	runner.Exec(t, `CREATE DATABASE t;`)
+	runner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);`)
+	runner.Exec(t, `INSERT INTO t.test VALUES (1, 2);`)
+	runner.ExpectErr(t, "job canceled by user", `ALTER TABLE t.public.test DROP COLUMN v;`)
 
 	// Ensure that the schema change was rolled back.
-	runner := sqlutils.MakeSQLRunner(sqlDB)
 	rows := runner.QueryStr(t, "SELECT * FROM t.test")
 	require.Equal(t, [][]string{
 		{"1", "2"},
@@ -7027,10 +7000,8 @@ func TestDropColumnAfterMutations(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	var schemaChangeWaitGroup sync.WaitGroup
 
-	tdb.Exec(t, `
-CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
-INSERT INTO t VALUES (1, 1);
-`)
+	tdb.Exec(t, `CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);`)
+	tdb.Exec(t, `INSERT INTO t VALUES (1, 1);`)
 
 	// Test 1: with concurrent drop and mutations.
 	t.Run("basic-concurrent-drop-mutations", func(t *testing.T) {
@@ -7095,11 +7066,9 @@ COMMIT;
 		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
 		jobControlMu.Unlock()
 
-		tdb.Exec(t, `
-	   DROP TABLE t;
-	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
-	   INSERT INTO t VALUES (1, 1);
-	   `)
+		tdb.Exec(t, `DROP TABLE t;`)
+		tdb.Exec(t, `CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);`)
+		tdb.Exec(t, `INSERT INTO t VALUES (1, 1);`)
 		go func() {
 			// This transaction will not complete. Therefore, we don't check the returned error.
 			_, _ = tdb.DB.ExecContext(context.Background(),
@@ -7176,11 +7145,9 @@ COMMIT;
 		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
 		jobControlMu.Unlock()
 
-		tdb.Exec(t, `
-	   DROP TABLE t;
-	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
-	   INSERT INTO t VALUES (1, 1);
-	   `)
+		tdb.Exec(t, `DROP TABLE t;`)
+		tdb.Exec(t, `CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);`)
+		tdb.Exec(t, `INSERT INTO t VALUES (1, 1);`)
 
 		go func() {
 			// Two possibilities exist based on timing, either the following transaction

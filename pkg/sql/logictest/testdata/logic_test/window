@@ -4251,6 +4251,8 @@ NULL
 # OFFSET PRECEDING or OFFSET FOLLOWING (#67975).
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x DATE);
 INSERT INTO t VALUES ('5874897-01-01'::DATE), ('1999-01-08'::DATE);
 SET vectorize=off;
@@ -4265,6 +4267,8 @@ RESET vectorize;
 # shrinks.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT);
 INSERT INTO t VALUES (1), (-1), (NULL);
 SET vectorize=off;
@@ -4285,6 +4289,8 @@ RESET vectorize;
 # values.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT, y STRING);
 INSERT INTO t VALUES (1, 'NotNull'), (1, NULL), (1, NULL),
 (2, 'NotNull'), (2, 'NotNull'), (2, 'NotNull'), (2, 'NotNull');

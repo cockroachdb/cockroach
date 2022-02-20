@@ -1314,6 +1314,8 @@ subtest array_compare
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT[], y INT[], z STRING[])
 
 statement error pq: unsupported comparison operator: <int\[\]> < <string\[\]>
@@ -1452,7 +1454,11 @@ SELECT x FROM t WHERE x > ARRAY[1] ORDER BY x
 # Ensure that we can order by the arrays without any indexes.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT[]);
+
+statement ok
 INSERT INTO t VALUES
   (ARRAY[1]),
   (ARRAY[5]),
@@ -1527,7 +1533,11 @@ SELECT x FROM tarray ORDER BY x
 # Add multicolumn INDEX i (x, y, z) once #50659 is fixed.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT, y INT[], z INT);
+
+statement ok
 INSERT INTO t VALUES
   (1, ARRAY[1, 2, 3], 3),
   (NULL, ARRAY[1, NULL, 3], NULL),
@@ -1551,7 +1561,11 @@ SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 # Add parent PRIMARY KEY (x) once #50659 is fixed.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x STRING[]);
+
+statement ok
 INSERT INTO t VALUES
   (ARRAY['']),
   (ARRAY['hello', 'hi\nthere']),
@@ -1576,7 +1590,11 @@ SELECT x FROM t WHERE x > ARRAY['hell'] AND x < ARRAY['i']
 # Add parent PRIMARY KEY (x) once #50659 is fixed.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x BYTES[]);
+
+statement ok
 INSERT INTO t VALUES
   (ARRAY[b'\xFF', b'\x00']),
   (ARRAY[NULL, b'\x01', b'\x01', NULL]),
@@ -1593,7 +1611,11 @@ SELECT x FROM t ORDER BY x
 # Add parent PRIMARY KEY (x DESC) once #50659 is fixed.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x BYTES[]);
+
+statement ok
 INSERT INTO t VALUES
   (ARRAY[b'\xFF', b'\x00']),
   (ARRAY[NULL, b'\x01', b'\x01', NULL]),
@@ -1610,7 +1632,11 @@ SELECT x FROM t ORDER BY x
 # Add parent PRIMARY KEY (x, y) once #50659 is fixed.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT[], y INT[]);
+
+statement ok
 INSERT INTO t VALUES
   (ARRAY[1, 2], ARRAY[3, 4]),
   (ARRAY[NULL, NULL], ARRAY[NULL, NULL]),
@@ -1657,8 +1683,14 @@ SELECT x, y FROM t WHERE x > ARRAY[NULL]:::INT[] ORDER BY y
 # Add t1 and t2 PRIMARY KEY x once #50659 is fixed.
 statement ok
 DROP TABLE IF EXISTS t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT[]);
+
+statement ok
 CREATE TABLE t2 (x INT[]);
+
+statement ok
 INSERT INTO t1 VALUES
   (ARRAY[1, 2]),
   (ARRAY[NULL]),
@@ -1691,7 +1723,11 @@ SELECT t1.x FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
 # Add INDEX (x) once #50659 is fixed.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT[]);
+
+statement ok
 INSERT INTO t VALUES
   (ARRAY[1, 2]),
   (ARRAY[1, 2]),
@@ -1720,6 +1756,8 @@ END
 # Test that string literals can be implicitly casted to array types
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (
   a INT[],
   b DECIMAL[],
@@ -1731,6 +1769,8 @@ CREATE TABLE t (
   h INET[],
   i VARBIT[],
   j FLOAT[]);
+
+statement ok
 INSERT INTO t VALUES (
   '{1, 2}',
   '{1.1, 2.2}',
@@ -1794,6 +1834,8 @@ CREATE TABLE kv (
   k INT PRIMARY KEY,
   v STRING
 );
+
+statement ok
 INSERT INTO kv VALUES (1, 'one'), (2, 'two'), (3, 'three'), (4, 'four'), (5, null)
 
 query T rowsort
@@ -2019,8 +2061,10 @@ SELECT array_remove(ARRAY[(1,'cat'),(2,'dog')], (3,'\xc03b4478eb'::BYTEA))
 
 subtest regression_71394
 
-query T
+statement ok
 PREPARE regression_71394 AS SELECT ARRAY[$1]::int[];
+
+query T
 EXECUTE regression_71394(71394)
 ----
 {71394}
@@ -2031,10 +2075,14 @@ subtest array_enums
 
 statement ok
 CREATE TYPE letter AS ENUM ('a', 'b', 'c');
+
+statement ok
 CREATE TABLE kv_enum (
   k INT PRIMARY KEY,
   v letter
 );
+
+statement ok
 INSERT INTO kv_enum VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, NULL)
 
 query T rowsort

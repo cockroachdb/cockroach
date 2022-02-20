@@ -222,18 +222,26 @@ ALTER TABLE public.c VALIDATE CONSTRAINT c_i_fkey;
 # Test that a cycle between two tables is handled correctly.
 statement ok
 CREATE DATABASE test_cycle;
+
+statement ok
 USE test_cycle;
+
+statement ok
 CREATE TABLE loop_a (
   id INT PRIMARY KEY,
   b_id INT,
   INDEX(b_id),
   FAMILY f1 (id, b_id)
 );
+
+statement ok
 CREATE TABLE loop_b (
   id INT PRIMARY KEY,
   a_id INT REFERENCES loop_a ON DELETE CASCADE,
   FAMILY f1 (id, a_id)
 );
+
+statement ok
 ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
 FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
 
@@ -262,6 +270,8 @@ ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
 # Test that a primary key with a non-default name works.
 statement ok
 CREATE DATABASE test_primary_key;
+
+statement ok
 CREATE TABLE test_primary_key.t (
 	i int,
 	CONSTRAINT pk_name PRIMARY KEY (i)

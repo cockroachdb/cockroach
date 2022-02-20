@@ -20,6 +20,9 @@ GRANT ADMIN TO testuser;
 
 exec-sql user=testuser
 DROP DATABASE d;
+----
+
+exec-sql user=testuser
 RESTORE DATABASE d FROM 'nodelocal://0/test/';
 ----
 

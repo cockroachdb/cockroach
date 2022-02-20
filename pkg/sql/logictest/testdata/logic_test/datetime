@@ -1893,6 +1893,8 @@ SELECT
 
 statement ok
 CREATE TABLE timestamp_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+
+statement ok
 INSERT INTO timestamp_datestyle_parse VALUES
   (1, '07-09-12 11:30:45.123'),
   (2, '07-09-12')
@@ -1942,6 +1944,8 @@ SELECT
 
 statement ok
 CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+
+statement ok
 INSERT INTO time_datestyle_parse VALUES
   (1, '2007-09-12 11:30:45.123+06'),
   (2, '2007-09-12 11:30:45.123+03')

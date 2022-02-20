@@ -473,13 +473,10 @@ func TestTxnAutoRetry(t *testing.T) {
 	// lib/pq connection directly. As of Feb 2016, there's code in cli/sql_util.go to
 	// do that.
 	sqlDB.SetMaxOpenConns(1)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);`)
 
 	// Set up error injection that causes retries.
 	magicVals := createFilterVals(nil, nil)
@@ -539,12 +536,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	// current allocation count in monitor and checking that it has the
 	// same value at the beginning of each retry.
 	rows, err := sqlDB.Query(`
+BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp()) RETURNING 1;
+END;
 BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp()) RETURNING 1;
 INSERT INTO t.public.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp()) RETURNING 1;
 END;
+BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp()) RETURNING 1;
+END;
 BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (5, 'josephine', cluster_logical_timestamp()) RETURNING 1;
 INSERT INTO t.public.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp()) RETURNING 1;

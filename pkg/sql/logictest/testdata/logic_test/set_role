@@ -332,6 +332,8 @@ user root
 
 statement ok
 GRANT ADMIN TO testuser;
+
+statement ok
 BEGIN;
 SET LOCAL ROLE testuser
 

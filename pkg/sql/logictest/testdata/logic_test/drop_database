@@ -262,10 +262,16 @@ SET sql_safe_updates = FALSE; DROP DATABASE foo
 
 # Check that the default databases can be dropped and re-created like any other.
 statement OK
-DROP DATABASE defaultdb; DROP DATABASE postgres
+DROP DATABASE defaultdb;
+
+statement OK
+DROP DATABASE postgres
 
 statement ok
-CREATE DATABASE defaultdb; CREATE DATABASE postgres
+CREATE DATABASE defaultdb;
+
+statement OK
+CREATE DATABASE postgres
 
 # Test that an empty database doesn't get a GC job.
 statement ok

@@ -56,10 +56,16 @@ func TestCleanupSchemaObjects(t *testing.T) {
 	_, err = conn.ExecContext(ctx, `
 SET experimental_enable_temp_tables=true;
 SET serial_normalization='sql_sequence';
-CREATE TEMP TABLE a (a SERIAL, c INT);
+CREATE TEMP TABLE a (a SERIAL, c INT);`,
+	)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 ALTER TABLE a ADD COLUMN b SERIAL;
 CREATE TEMP SEQUENCE a_sequence;
-CREATE TEMP VIEW a_view AS SELECT a FROM a;
+CREATE TEMP VIEW a_view AS SELECT a FROM a;`,
+	)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int);
 INSERT INTO perm_table VALUES (DEFAULT, 1);
 `)

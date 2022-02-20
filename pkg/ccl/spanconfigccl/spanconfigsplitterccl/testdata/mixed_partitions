@@ -42,6 +42,9 @@ splits database=db table=list_then_range_partitions
 # Try the same thing on a secondary index.
 exec-sql
 CREATE INDEX idx ON db.list_then_range_partitions (C1, N2);
+----
+
+exec-sql
 ALTER INDEX db.list_then_range_partitions@idx PARTITION BY LIST (C1) (
     PARTITION P1C1 VALUES IN ('A', 'C')
         PARTITION BY RANGE (N2) (
@@ -135,6 +138,9 @@ splits database=db table=list_then_list_then_range_partitions_mixed
 # Try the same thing on a secondary index.
 exec-sql
 CREATE INDEX idx ON db.list_then_list_then_range_partitions_mixed (C1, C2, N3);
+----
+
+exec-sql
 ALTER INDEX db.list_then_list_then_range_partitions_mixed@idx PARTITION BY LIST (C1) (
     PARTITION P1C1 VALUES IN ('A', 'C'),
     PARTITION P2C1 VALUES IN ('B', 'D')

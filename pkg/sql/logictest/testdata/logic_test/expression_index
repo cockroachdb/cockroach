@@ -500,6 +500,8 @@ CREATE TABLE public.anon (
 
 statement ok
 DROP TABLE anon;
+
+statement ok
 CREATE TABLE anon (
   k INT PRIMARY KEY,
   a INT,
@@ -534,6 +536,8 @@ CREATE TABLE public.anon (
 
 statement ok
 CREATE INDEX t_a_plus_b_idx ON t ((a + b));
+
+statement ok
 CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
 
 statement ok
@@ -910,7 +914,11 @@ INSERT INTO uniq VALUES (4, 1, 219) ON CONFLICT ((a + b)) DO UPDATE SET b = 90
 
 statement ok
 CREATE TABLE t72012 (col integer);
+
+statement ok
 CREATE INDEX t72012_idx ON t72012 ((abs(col)));
+
+statement ok
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 
 query TT
@@ -925,6 +933,8 @@ t72012  CREATE TABLE public.t72012 (
 
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
+
+statement ok
 INSERT INTO t72012 VALUES (NULL)
 
 statement error validation of NOT NULL constraint failed: validation of CHECK "col IS NOT NULL" failed on row: col=NULL, rowid=\d+

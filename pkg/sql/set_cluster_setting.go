@@ -192,7 +192,7 @@ func (p *planner) getAndValidateTypedClusterSetting(
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
 	if !params.p.ExtendedEvalContext().TxnImplicit {
-		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
+		return errors.Errorf("SET CLUSTER SETTING cannot be used inside an explicit transaction")
 	}
 
 	expectedEncodedValue, err := writeSettingInternal(

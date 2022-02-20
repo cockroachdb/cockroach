@@ -23,7 +23,16 @@ true
 # Check that node_statement_statistics report per statement
 
 statement ok
-SET application_name = hello; SELECT 1; SELECT 1,2; SELECT 1
+SET application_name = hello;
+
+statement ok
+SELECT 1
+
+statement ok
+SELECT 1,2
+
+statement ok
+SELECT 1
 
 # reset for other tests.
 statement ok
@@ -32,8 +41,8 @@ SET application_name = ''
 query TB
 SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%' ORDER BY key
 ----
-SELECT _    true
-SELECT _, _ true
+SELECT _     true
+SELECT _, _  true
 
 statement ok
 CREATE TABLE test(x INT, y INT, z INT); INSERT INTO test(x, y, z) VALUES (0,0,0);

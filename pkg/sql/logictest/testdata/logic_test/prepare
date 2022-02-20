@@ -885,7 +885,10 @@ query error pq: column "b" does not exist
 EXECUTE change_drop
 
 statement ok
-ALTER TABLE othertable ADD COLUMN b INT; UPDATE othertable SET b=10
+ALTER TABLE othertable ADD COLUMN b INT;
+
+statement ok
+UPDATE othertable SET b=10
 
 query II
 EXECUTE change_drop

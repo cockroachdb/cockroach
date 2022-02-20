@@ -963,6 +963,8 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkdFro0AQxt_vr
 # matches the input ordering.
 statement ok
 DROP TABLE abc;
+
+statement ok
 CREATE TABLE abc (a INT, b INT, c INT, INDEX (a, b, c DESC));
 CREATE TABLE def (d INT PRIMARY KEY, e INT, f INT);
 

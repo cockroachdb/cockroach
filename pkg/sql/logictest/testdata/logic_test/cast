@@ -951,6 +951,8 @@ INSERT INTO assn_cast_p VALUES (1.0, 10.0);
 # Test ON UPDATE CASCADE.
 statement ok
 CREATE TABLE assn_cast_c (c INT PRIMARY KEY, p DECIMAL(10, 0) REFERENCES assn_cast_p(p) ON UPDATE CASCADE);
+
+statement ok
 INSERT INTO assn_cast_c VALUES (1, 1.0);
 
 statement error update on table "assn_cast_c" violates foreign key constraint "assn_cast_c_p_fkey"
@@ -966,7 +968,11 @@ SELECT * FROM assn_cast_c
 
 statement ok
 DROP TABLE assn_cast_c;
+
+statement ok
 CREATE TABLE assn_cast_c (c INT PRIMARY KEY, d DECIMAL(10, 0) REFERENCES assn_cast_p(d) ON UPDATE CASCADE);
+
+statement ok
 UPSERT INTO assn_cast_c VALUES (2, 10)
 
 statement error update on table "assn_cast_c" violates foreign key constraint "assn_cast_c_d_fkey"
@@ -984,7 +990,11 @@ INSERT INTO assn_cast_p VALUES (2.0, 11.00) ON CONFLICT (d) DO UPDATE SET d = 12
 # Test ON UPDATE SET DEFAULT.
 statement ok
 DROP TABLE assn_cast_c;
+
+statement ok
 CREATE TABLE assn_cast_c (c INT PRIMARY KEY, p DECIMAL(10, 0) DEFAULT 3.1 REFERENCES assn_cast_p(p) ON UPDATE SET DEFAULT);
+
+statement ok
 INSERT INTO assn_cast_c VALUES (2, 2.0);
 
 statement error update on table "assn_cast_c" violates foreign key constraint "assn_cast_c_p_fkey"
@@ -1000,7 +1010,11 @@ SELECT * FROM assn_cast_c
 
 statement ok
 DROP TABLE assn_cast_c;
+
+statement ok
 CREATE TABLE assn_cast_c (c INT PRIMARY KEY, d DECIMAL(10, 0) DEFAULT 3.1 REFERENCES assn_cast_p(d) ON UPDATE SET DEFAULT);
+
+statement ok
 INSERT INTO assn_cast_c VALUES (2, 12)
 
 statement error update on table "assn_cast_c" violates foreign key constraint "assn_cast_c_d_fkey"
@@ -1176,6 +1190,8 @@ SELECT t1.c0 FROM t1 WHERE t1.c0 BETWEEN t1.c0 AND INTERVAL '-1'::DECIMAL
 # Regression test for incorrectly casting integers out of range (#64429).
 statement ok
 CREATE TABLE t64429 (_int8 INT8, _int4 INT4);
+
+statement ok
 INSERT INTO t64429 VALUES (3000000000, 300000);
 
 statement error integer out of range for type int2
@@ -1209,10 +1225,14 @@ CREATE TABLE t66067_a (
   c CHAR(26),
   CONSTRAINT c UNIQUE (c)
 );
+
+statement ok
 CREATE TABLE t66067_b (
   a INT,
   v VARCHAR(40)
 );
+
+statement ok
 INSERT INTO t66067_a VALUES (1, 'foo');
 INSERT INTO t66067_b VALUES (1, 'bar');
 
@@ -1296,6 +1316,8 @@ f
 
 statement ok
 CREATE TABLE t73450 (c CHAR);
+
+statement ok
 INSERT INTO t73450 VALUES ('f')
 
 query T

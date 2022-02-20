@@ -239,17 +239,14 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
 	// Add an index so that we test adding a column when a table has an index.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR, i VARCHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
-CREATE INDEX allidx ON t.test (k, v);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR, i VARCHAR DEFAULT 'i',FAMILY (k), FAMILY (v), FAMILY (i));`)
+	sqlRunner.Exec(t, `CREATE INDEX allidx ON t.test (k, v);`)
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
@@ -266,13 +263,9 @@ CREATE INDEX allidx ON t.test (k, v);
 				func(t *testing.T) {
 
 					// Init table to start state.
-					if _, err := sqlDB.Exec(`
-DROP TABLE t.test;
-CREATE TABLE t.test (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR, i VARCHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
-CREATE INDEX allidx ON t.test (k, v);
-`); err != nil {
-						t.Fatal(err)
-					}
+					sqlRunner.Exec(t, `DROP TABLE t.test;`)
+					sqlRunner.Exec(t, `CREATE TABLE t.test (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR,i VARCHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));`)
+					sqlRunner.Exec(t, `CREATE INDEX allidx ON t.test (k, v);`)
 
 					// read table descriptor
 					mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
@@ -512,13 +505,10 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
@@ -538,15 +528,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 		} {
 			t.Run(fmt.Sprintf("upsert=%t/state=%v", useUpsert, state), func(t *testing.T) {
 				// Init table with some entries.
-				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := sqlDB.Exec(`
-DROP TABLE t.test;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
-`); err != nil {
-					t.Fatal(err)
-				}
+				sqlRunner.Exec(t, `TRUNCATE TABLE t.test`)
+				sqlRunner.Exec(t, `DROP TABLE t.test;`)
+				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
 				// read table descriptor
 				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 					kvDB, keys.SystemSQLCodec, "t", "test")
@@ -689,18 +673,15 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Create a table with column i and an index on v and i. Fix the column
 	// families so the key counts below don't change if the family heuristics
 	// are updated.
 	// Add an index so that we test adding a column when a table has an index.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
-CREATE INDEX allidx ON t.test (k, v);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k),FAMILY (v), FAMILY (i));`)
+	sqlRunner.Exec(t, `CREATE INDEX allidx ON t.test (k, v);`)
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
@@ -728,13 +709,9 @@ CREATE INDEX allidx ON t.test (k, v);
 					continue
 				}
 				// Init table to start state.
-				if _, err := sqlDB.Exec(`
-DROP TABLE t.test;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
-CREATE INDEX allidx ON t.test (k, v);
-`); err != nil {
-					t.Fatal(err)
-				}
+				sqlRunner.Exec(t, `DROP TABLE t.test;`)
+				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k),FAMILY (v), FAMILY (i));`)
+				sqlRunner.Exec(t, `CREATE INDEX allidx ON t.test (k, v);`)
 				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 					t.Fatal(err)
 				}
