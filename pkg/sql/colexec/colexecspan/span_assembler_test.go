@@ -176,7 +176,7 @@ func spanGeneratorOracle(
 ) roachpb.Spans {
 	var spans roachpb.Spans
 	for _, inputRow := range rows {
-		generatedSpan, containsNull, err := spanBuilder.SpanFromEncDatums(inputRow, lookupCols)
+		generatedSpan, containsNull, err := spanBuilder.SpanFromEncDatums(inputRow[:lookupCols])
 		if err != nil {
 			t.Fatal(err)
 		}
