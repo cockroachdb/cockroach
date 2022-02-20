@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -86,8 +87,11 @@ SET use_declarative_schema_changer = 'off';
 	defer server.Stopper().Stop(context.Background())
 
 	getRevisionsForTest := func(setupSQL, schemaChangeSQL, dataSQL string, deletePreservingEncoding bool) ([]kvclient.VersionedValues, []byte, error) {
-		if _, err := sqlDB.Exec(setupSQL); err != nil {
-			t.Fatal(err)
+		setupStmts := strings.Split(setupSQL, ";")
+		for _, stmt := range setupStmts {
+			if _, err := sqlDB.Exec(stmt); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		// Start the schema change but pause right before the backfill.

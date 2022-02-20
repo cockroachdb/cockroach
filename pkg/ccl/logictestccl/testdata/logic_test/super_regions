@@ -31,8 +31,14 @@ ALTER DATABASE db ADD SUPER REGION "test2" VALUES "us-east-1"
 
 statement ok
 CREATE DATABASE mr1 PRIMARY REGION "us-east-1";
+
+statement ok
 CREATE TABLE mr1.rbt(x INT) LOCALITY REGIONAL BY TABLE;
+
+statement ok
 CREATE TABLE mr1.rbr(x INT) LOCALITY REGIONAL BY ROW;
+
+statement ok
 ALTER DATABASE mr1 ADD SUPER REGION "test" VALUES "us-east-1";
 
 query TT
@@ -588,6 +594,8 @@ ALTER DATABASE db DROP REGION "us-east-1";
 # Dropping primary region.
 statement ok
 CREATE DATABASE db2 PRIMARY REGION "ca-central-1";
+
+statement ok
 ALTER DATABASE db2 ADD SUPER REGION "test" VALUES "ca-central-1";
 
 statement error pq: region ca-central-1 is part of super region test
@@ -598,7 +606,11 @@ ALTER DATABASE db2 DROP REGION "ca-central-1";
 # to be part of another super region.
 statement ok
 CREATE DATABASE db3 PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "us-west-1";
+
+statement ok
 ALTER DATABASE db3 ADD SUPER REGION "test1" VALUES "ca-central-1", "us-west-1";
+
+statement ok
 ALTER DATABASE db3 ADD SUPER REGION "test2" VALUES "us-east-1";
 
 statement ok
