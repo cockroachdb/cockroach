@@ -41,9 +41,9 @@ import (
 )
 
 func sharedTestdata(t *testing.T) string {
-	testdataDir := "../importccl/testdata/"
+	testdataDir := "../../sql/importer/testdata/"
 	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/ccl/importccl/testdata/")
+		runfile, err := bazel.Runfile("pkg/sql/importer/testdata/")
 		if err != nil {
 			t.Fatal(err)
 		}

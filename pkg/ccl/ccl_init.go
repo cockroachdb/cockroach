@@ -19,7 +19,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/cliccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
@@ -31,4 +30,5 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
 )

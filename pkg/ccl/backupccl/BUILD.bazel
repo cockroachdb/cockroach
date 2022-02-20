@@ -179,7 +179,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
-        "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",
@@ -228,6 +227,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/importer",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
