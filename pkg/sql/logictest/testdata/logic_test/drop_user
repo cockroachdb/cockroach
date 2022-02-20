@@ -132,12 +132,16 @@ GRANT CONNECT ON DATABASE test TO user1
 statement error cannot drop roles/users user1, user3: grants still exist on test, test.public.foo
 DROP USER IF EXISTS user1,user3
 
-statement error cannot drop roles/users user1, user3: grants still exist on test
+statement ok
 REVOKE SELECT ON foo FROM user3;
+
+statement error cannot drop roles/users user1, user3: grants still exist on test
 DROP USER IF EXISTS user1,user3
 
 statement ok
 REVOKE CONNECT ON DATABASE test FROM user1;
+
+statement ok
 DROP USER IF EXISTS user1,user3
 
 statement ok

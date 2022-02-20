@@ -347,7 +347,10 @@ like_hash  CREATE TABLE public.like_hash (
 )
 
 statement ok
-DROP TABLE like_hash; CREATE TABLE like_hash (LIKE like_hash_base INCLUDING ALL)
+DROP TABLE like_hash;
+
+statement ok
+CREATE TABLE like_hash (LIKE like_hash_base INCLUDING ALL)
 
 query TT
 SHOW CREATE TABLE like_hash
@@ -362,6 +365,8 @@ like_hash  CREATE TABLE public.like_hash (
 
 statement ok
 CREATE TABLE regression_67196 (pk INT PRIMARY KEY, hidden INT NOT VISIBLE);
+
+statement ok
 CREATE TABLE regression_67196_like (LIKE regression_67196)
 
 query TT

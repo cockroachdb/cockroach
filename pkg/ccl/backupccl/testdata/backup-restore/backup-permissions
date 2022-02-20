@@ -9,6 +9,13 @@ CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
 
+# BACKUP is not allowed in a batch-statement.
+exec-sql
+BACKUP TO 'nodelocal://0/test-root/';
+SELECT 1;
+----
+pq: BACKUP cannot be used inside a multi-statement transaction without DETACHED option
+
 # Cluster backup should succeed as a root user.
 exec-sql
 BACKUP TO 'nodelocal://0/test-root/'
@@ -22,7 +29,13 @@ GRANT ADMIN TO testuser;
 
 exec-sql user=testuser
 BACKUP TO 'nodelocal://0/test-nonroot-cluster';
+----
+
+exec-sql user=testuser
 BACKUP DATABASE d TO 'nodelocal://0/test-nonroot-db';
+----
+
+exec-sql user=testuser
 BACKUP TABLE d.t TO 'nodelocal://0/test-nonroot-table';
 ----
 
@@ -106,6 +119,9 @@ GRANT USAGE ON TYPE d2.greeting TO testuser;
 # testuser should now have all the required privileges.
 exec-sql server=s2 user=testuser
 BACKUP DATABASE d2 TO 'nodelocal://0/d2';
+----
+
+exec-sql server=s2 user=testuser
 BACKUP TABLE d2.t TO 'nodelocal://0/d2-table';
 ----
 

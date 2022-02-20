@@ -108,7 +108,8 @@ func randTablesN(r *rand.Rand, n int) string {
 
 const (
 	seedTable = `
-CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
+BEGIN; CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning'); COMMIT;
+BEGIN;
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT
 		g::INT2 AS _int2,
@@ -130,6 +131,7 @@ CREATE TABLE IF NOT EXISTS seed AS
 		enum_range('hello'::greeting)[g] as _enum
 	FROM
 		generate_series(1, 5) AS g;
+COMMIT;
 
 INSERT INTO seed DEFAULT VALUES;
 CREATE INDEX on seed (_int8, _float8, _date);

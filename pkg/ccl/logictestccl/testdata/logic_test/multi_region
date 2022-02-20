@@ -78,8 +78,14 @@ us-east-1  us-east-1
 
 statement ok
 CREATE DATABASE deleted_database;
+
+statement ok
 SET sql_safe_updates = false;
+
+statement ok
 USE deleted_database;
+
+statement ok
 DROP DATABASE deleted_database
 
 statement error database.*deleted_database.*does not exist
@@ -1126,8 +1132,14 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
 # created before the first region was added to the multi-region DB.
 statement ok
 CREATE DATABASE start_off_non_multi_region;
+
+statement ok
 CREATE TABLE start_off_non_multi_region.public.t(a INT);
+
+statement ok
 ALTER DATABASE start_off_non_multi_region PRIMARY REGION "ca-central-1";
+
+statement ok
 ALTER DATABASE start_off_non_multi_region ADD REGION "ap-southeast-2"
 
 statement error pgcode 42P12 cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE start_off_non_multi_region PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
@@ -1333,9 +1345,17 @@ USE db_with_views_and_sequences
 
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY, a INT, b INT);
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3), (4, 5, 6);
+
+statement ok
 CREATE SEQUENCE s;
+
+statement ok
 CREATE VIEW v AS SELECT id, a, b FROM t;
+
+statement ok
 CREATE MATERIALIZED VIEW mat_view AS SELECT id, a, b FROM t
 
 statement ok
@@ -1352,7 +1372,11 @@ mat_view    GLOBAL
 
 statement ok
 CREATE SEQUENCE s2;
+
+statement ok
 CREATE VIEW v2 AS SELECT id, a, b FROM t;
+
+statement ok
 CREATE MATERIALIZED VIEW mat_view2 AS SELECT id, a, b FROM t
 
 query TT colnames
@@ -1400,6 +1424,8 @@ subtest enum_name_clash
 
 statement ok
 CREATE DATABASE db_enum_name_clash;
+
+statement ok
 CREATE TYPE db_enum_name_clash.crdb_internal_region AS ENUM ();
 
 statement error pq: type "db_enum_name_clash.public.crdb_internal_region" already exists\nHINT: object "crdb_internal_regions" must be renamed or dropped before adding the primary region\nDETAIL: multi-region databases employ an internal enum called crdb_internal_region to manage regions which conflicts with the existing object
@@ -1409,6 +1435,8 @@ ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 # database.
 statement ok
 DROP TYPE db_enum_name_clash.crdb_internal_region;
+
+statement ok
 ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 
 
@@ -1418,8 +1446,12 @@ subtest regional_by_row_view
 
 statement ok
 CREATE DATABASE db;
+
+statement ok
 USE db;
 ALTER DATABASE db PRIMARY REGION "us-east-1";
+
+statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -1433,6 +1465,8 @@ subtest create_table_as_regional_by_row
 
 statement ok
 CREATE DATABASE "mr-create-table-as" PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1";
+
+statement ok
 USE "mr-create-table-as"
 
 statement ok

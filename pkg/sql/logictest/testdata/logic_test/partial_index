@@ -863,15 +863,25 @@ INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < -1 DO NOTHING
 # an arbiter.
 statement ok
 CREATE UNIQUE INDEX i2 ON u (b) WHERE 1 = 1;
+
+statement ok
 INSERT INTO u VALUES (1, 1) ON CONFLICT (b) DO NOTHING;
+
+statement ok
 DELETE FROM u;
+
+statement ok
 DROP INDEX i2;
 
 # An ON CONFLICT with any WHERE clause can use a unique non-partial index as an
 # arbiter.
 statement ok
 CREATE UNIQUE INDEX i2 ON u (b);
+
+statement ok
 INSERT INTO u VALUES (1, 1) ON CONFLICT (b) WHERE b > 0 DO NOTHING;
+
+statement ok
 DROP INDEX i2;
 
 # An ON CONFLICT with a WHERE clause can be use a unique partial index if the
@@ -889,6 +899,8 @@ SELECT * FROM u
 # arbiters.
 statement ok
 CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
+
+statement ok
 INSERT INTO u VALUES (-1, -1);
 
 statement error pgcode 23505 duplicate key value violates unique constraint \"i2\"\nDETAIL: Key \(a\)=\(-1\) already exists\.
@@ -1425,7 +1437,11 @@ SELECT * FROM virt@idx WHERE c = 10
 # computed columns.
 statement ok
 DELETE FROM virt;
+
+statement ok
 DROP INDEX virt@idx;
+
+statement ok
 CREATE UNIQUE INDEX idx ON virt (b) WHERE c > 10;
 
 statement ok

@@ -234,7 +234,10 @@ SELECT * FROM regression_47030
 1
 
 statement ok
-TRUNCATE regression_47030; INSERT INTO regression_47030 VALUES (2)
+TRUNCATE regression_47030
+
+statement ok
+INSERT INTO regression_47030 VALUES (2)
 
 query I
 SELECT * FROM regression_47030

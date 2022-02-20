@@ -37,7 +37,11 @@ SELECT y, z FROM t WHERE x = 2
 
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x DECIMAL PRIMARY KEY, y INT, FAMILY (y), FAMILY (x));
+
+statement ok
 INSERT INTO t VALUES (5.607, 1), (5.6007, 2)
 
 query TI rowsort
@@ -51,15 +55,21 @@ SELECT * FROM t
 
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x DECIMAL, y DECIMAL, z INT, FAMILY (z), FAMILY (y), FAMILY (x), PRIMARY KEY (x, y));
+
+statement ok
 INSERT INTO t VALUES (1.00, 2.00, 1)
 
 query TTI
 SET tracing=on,kv,results;
 SELECT * FROM t;
-SET tracing=off
 ----
 1.00 2.00 1
+
+statement ok
+SET tracing=off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE

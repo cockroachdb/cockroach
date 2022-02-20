@@ -203,8 +203,14 @@ SELECT * FROM testuser_db.sc.othertable;
 # Let's restore tables as admin and ensure that the table's privs are the same
 # as the db it restores into.
 exec-sql
-CREATE DATABASE restoredb;
+CREATE DATABASE restoredb
+----
+
+exec-sql
 GRANT CREATE ON DATABASE restoredb TO user1;
+----
+
+exec-sql
 RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage, testdb.testtable_greeting_owner FROM 'nodelocal://1/test' WITH into_db='restoredb';
 ----
 
@@ -259,6 +265,9 @@ ALTER TYPE restoredb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
 exec-sql
 USE defaultdb;
 DROP DATABASE testdb CASCADE;
+----
+
+exec-sql
 RESTORE DATABASE testdb FROM 'nodelocal://0/test/';
 ----
 

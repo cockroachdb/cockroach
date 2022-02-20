@@ -1186,6 +1186,8 @@ t3  CREATE TABLE public.t3 (
 # Ensure that we still have the correct restrictions.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT, y INT, INDEX i (x))
 
@@ -1203,7 +1205,11 @@ INSERT INTO t2 VALUES (1, 2)
 # Test using ADD COL REFERENCES in a self referencing constraint.
 statement ok
 DROP TABLE t1 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
+
+statement ok
 ALTER TABLE t1 ADD COLUMN x2 INT REFERENCES t1 (x)
 
 query TT
@@ -1294,6 +1300,8 @@ t2  CREATE TABLE public.t2 (
 # Test the above on a table not created in the same txn.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT)
 
@@ -1319,6 +1327,8 @@ t2  CREATE TABLE public.t2 (
 # Test that an FK can use a newly created index.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT)
 
@@ -1840,6 +1850,8 @@ subtest self_reference_fk_not_valid
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES t(i) NOT VALID;
 
@@ -1855,7 +1867,11 @@ subtest regression_67234
 
 statement ok
 CREATE TABLE t67234 (k INT PRIMARY KEY, a INT, b INT, FAMILY (k, a, b));
+
+statement ok
 ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
+
+statement ok
 ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
 
 query T
@@ -1890,6 +1906,8 @@ SELECT count(usage_count)
 subtest generated_as_identity
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -1922,6 +1940,8 @@ DROP TABLE t
 subtest generated_as_identity_with_seq_option
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -1955,6 +1975,8 @@ ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -2009,6 +2031,8 @@ ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
 # Test we can assign a PRIMARY KEY overriding the existing rowid PRIMARY KEY.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (id INT NOT NULL)
 
 statement ok
@@ -2026,6 +2050,8 @@ t  CREATE TABLE public.t (
 # Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   id INT NOT NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -2040,6 +2066,8 @@ ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   id INT NOT NULL,
   explicit_rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -2051,6 +2079,8 @@ ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE public.t (
    id INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL,
@@ -2062,6 +2092,8 @@ ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE public.t (
    id INT8 NOT NULL,
    rowid INT4 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -2110,6 +2142,8 @@ statement ok
 CREATE TABLE IF NOT EXISTS multipleinstmt (
 	id INT8 DEFAULT nextval('multipleinstmt_seq') PRIMARY KEY, key STRING, value STRING
 );
+
+statement ok
 INSERT INTO multipleinstmt (key, value) VALUES ('a', 'a');
 INSERT INTO multipleinstmt (key, value) VALUES ('b', 'b');
 INSERT INTO multipleinstmt (key, value) VALUES ('c', 'c');

@@ -24,7 +24,13 @@ pq: row larger than max row size: table 109 family 0 primary key /Table/109/1/2/
 
 exec-sql
 BACKUP maxrow TO 'nodelocal://1/maxrow';
+----
+
+exec-sql
 CREATE DATABASE d2;
+----
+
+exec-sql
 RESTORE maxrow FROM 'nodelocal://1/maxrow' WITH into_db='d2';
 ----
 
