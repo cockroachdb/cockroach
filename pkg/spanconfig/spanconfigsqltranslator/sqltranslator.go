@@ -82,7 +82,10 @@ func (s *SQLTranslator) Translate(
 		if err != nil {
 			return errors.Wrap(err, "failed to get protected timestamp state")
 		}
-		ptsStateReader := newProtectedTimestampStateReader(ctx, ptsState)
+		ptsStateReader, err := newProtectedTimestampStateReader(ctx, s.execCfg.JobRegistry, txn, ptsState)
+		if err != nil {
+			return errors.Wrap(err, "failed to create a ProtectedTimestampStateReader")
+		}
 
 		// For every ID we want to translate, first expand it to descendant leaf
 		// IDs that have span configurations associated for them. We also

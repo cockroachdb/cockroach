@@ -43,11 +43,22 @@ message GCPolicy {
 // applies over a given span.
 message ProtectionPolicy {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
   // ProtectedTimestamp is a timestamp above which GC should not run, regardless
   // of the GC TTL.
   util.hlc.Timestamp protected_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // IgnoreIfExcludedFromBackup is set to true if the ProtectionPolicy can be
+  // ignored if the span it applies to has been marked to be excluded from
+  // backups i.e. the applied SpanConfig has `exclude_data_from_backup = true`.
+  // This field is currently only set to true when a protected timestamp record
+  // has been written by a backup job. This is to ensure that ProtectionPolicies
+  // written by non-backup users (CDC, streaming) on spans marked as
+  // `exclude_data_from_backup` are still respected when making GC decisions on
+  // the span.
+  bool ignore_if_excluded_from_backup = 2;
 }
 
 // Constraint constrains the stores that a replica can be stored on. It

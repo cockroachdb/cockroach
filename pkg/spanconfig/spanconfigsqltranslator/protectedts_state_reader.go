@@ -13,9 +13,14 @@ package spanconfigsqltranslator
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/errors"
 )
 
 // protectedTimestampStateReader provides a target specific view of the
@@ -31,15 +36,15 @@ type protectedTimestampStateReader struct {
 // protected timestamp records given the supplied ptpb.State. The ptpb.State is
 // the transactional state of the `system.protected_ts_records` table.
 func newProtectedTimestampStateReader(
-	_ context.Context, ptsState ptpb.State,
-) *protectedTimestampStateReader {
+	ctx context.Context, jr *jobs.Registry, txn *kv.Txn, ptsState ptpb.State,
+) (*protectedTimestampStateReader, error) {
 	reader := &protectedTimestampStateReader{
 		schemaObjectProtections: make(map[descpb.ID][]roachpb.ProtectionPolicy),
 		tenantProtections:       make([]tenantProtectedTimestamps, 0),
 		clusterProtections:      make([]roachpb.ProtectionPolicy, 0),
 	}
-	reader.loadProtectedTimestampRecords(ptsState)
-	return reader
+	err := reader.loadProtectedTimestampRecords(ctx, jr, txn, ptsState)
+	return reader, err
 }
 
 // getProtectionPoliciesForCluster returns all the protected timestamps that
@@ -70,22 +75,32 @@ func (p *protectedTimestampStateReader) getProtectionPoliciesForSchemaObject(
 	return p.schemaObjectProtections[descID]
 }
 
-func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState ptpb.State) {
+func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(
+	ctx context.Context, jr *jobs.Registry, txn *kv.Txn, ptsState ptpb.State,
+) error {
 	tenantProtections := make(map[roachpb.TenantID][]roachpb.ProtectionPolicy)
 	for _, record := range ptsState.Records {
+		// TODO(adityamaru): When schedules start writing protected timestamp
+		// records extend this logic to also include those records.
+		isBackupProtectedTimestampRecord, err := jobsprotectedts.IsRecordWrittenByJobType(ctx, jr, txn,
+			record.Meta, jobsprotectedts.Jobs, jobspb.TypeBackup)
+		if err != nil {
+			return errors.Wrap(err, "failed to check if record was written by a BACKUP")
+		}
+		protectionPolicy := roachpb.ProtectionPolicy{
+			ProtectedTimestamp:         record.Timestamp,
+			IgnoreIfExcludedFromBackup: isBackupProtectedTimestampRecord,
+		}
 		switch t := record.Target.GetUnion().(type) {
 		case *ptpb.Target_Cluster:
-			p.clusterProtections = append(p.clusterProtections,
-				roachpb.ProtectionPolicy{ProtectedTimestamp: record.Timestamp})
+			p.clusterProtections = append(p.clusterProtections, protectionPolicy)
 		case *ptpb.Target_Tenants:
 			for _, tenID := range t.Tenants.IDs {
-				tenantProtections[tenID] = append(tenantProtections[tenID],
-					roachpb.ProtectionPolicy{ProtectedTimestamp: record.Timestamp})
+				tenantProtections[tenID] = append(tenantProtections[tenID], protectionPolicy)
 			}
 		case *ptpb.Target_SchemaObjects:
 			for _, descID := range t.SchemaObjects.IDs {
-				p.schemaObjectProtections[descID] = append(p.schemaObjectProtections[descID],
-					roachpb.ProtectionPolicy{ProtectedTimestamp: record.Timestamp})
+				p.schemaObjectProtections[descID] = append(p.schemaObjectProtections[descID], protectionPolicy)
 			}
 		}
 	}
@@ -94,4 +109,5 @@ func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState p
 		p.tenantProtections = append(p.tenantProtections,
 			tenantProtectedTimestamps{tenantID: tenID, protections: tenantProtections})
 	}
+	return nil
 }

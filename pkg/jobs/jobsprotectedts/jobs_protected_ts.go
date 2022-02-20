@@ -50,8 +50,38 @@ func GetMetaType(metaType MetaType) string {
 	return metaTypes[metaType]
 }
 
+// IsRecordWrittenByJobType returns true if the job implied with this value of
+// meta is of type jobType. This method can be used to filter records written by
+// a particular job type.
+func IsRecordWrittenByJobType(
+	ctx context.Context,
+	jr *jobs.Registry,
+	txn *kv.Txn,
+	meta []byte,
+	metaType MetaType,
+	jobType jobspb.Type,
+) (bool, error) {
+	switch metaType {
+	case Jobs:
+		jobID, err := decodeID(meta)
+		if err != nil {
+			return false, err
+		}
+		j, err := jr.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+		if jobs.HasJobNotFoundError(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		payload := j.Payload()
+		return payload.Type() == jobType, nil
+	}
+	return false, nil
+}
+
 // MakeStatusFunc returns a function which determines whether the job or
-// schedule implied with this value of meta should be removed by the reconciler.
+// schedule implied with this value of meta should be removed by the ptreconciler.
 func MakeStatusFunc(
 	jr *jobs.Registry, ie sqlutil.InternalExecutor, metaType MetaType,
 ) ptreconcile.StatusFunc {

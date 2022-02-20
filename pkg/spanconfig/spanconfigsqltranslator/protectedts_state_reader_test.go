@@ -16,10 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,6 +34,10 @@ import (
 func TestProtectedTimestampStateReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	jr := s.JobRegistry().(*jobs.Registry)
 
 	mkRecordAndAddToState := func(state *ptpb.State, ts hlc.Timestamp, target *ptpb.Target) {
 		recordID := uuid.MakeV4()
@@ -64,7 +72,14 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 	protectTenants(state, ts(5), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 	protectTenants(state, ts(6), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 
-	ptsStateReader := newProtectedTimestampStateReader(context.Background(), *state)
+	ctx := context.Background()
+	var ptsStateReader *protectedTimestampStateReader
+	require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		ptsStateReader, err = newProtectedTimestampStateReader(context.Background(), jr, txn, *state)
+		require.NoError(t, err)
+		return nil
+	}))
 	clusterTimestamps := ptsStateReader.getProtectionPoliciesForCluster()
 	require.Len(t, clusterTimestamps, 1)
 	require.Equal(t, []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(3)}}, clusterTimestamps)

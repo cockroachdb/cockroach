@@ -19,10 +19,13 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
@@ -208,9 +211,37 @@ func TestDataDriven(t *testing.T) {
 				var protectTS int
 				d.ScanArgs(t, "record-id", &recordID)
 				d.ScanArgs(t, "ts", &protectTS)
-				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
 
 				jobID := tenant.JobsRegistry().MakeJobID()
+				if d.HasArg("mk-job-with-type") {
+					var mkJobWithType string
+					d.ScanArgs(t, "mk-job-with-type", &mkJobWithType)
+					var rec jobs.Record
+					switch mkJobWithType {
+					case "backup":
+						rec = jobs.Record{
+							Description: "backup",
+							Username:    security.RootUserName(),
+							Details:     jobspb.BackupDetails{},
+							Progress:    jobspb.BackupProgress{},
+						}
+					default:
+						rec = jobs.Record{
+							Description: "cdc",
+							Username:    security.RootUserName(),
+							Details:     jobspb.ChangefeedDetails{},
+							Progress:    jobspb.ChangefeedProgress{},
+						}
+					}
+					require.NoError(t, tenant.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+						if _, err = tenant.JobsRegistry().CreateJobWithTxn(ctx, rec, jobID, txn); err != nil {
+							return err
+						}
+						return nil
+					}))
+				}
+				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
+
 				require.NoError(t, tenant.ExecCfg().DB.Txn(ctx,
 					func(ctx context.Context, txn *kv.Txn) (err error) {
 						require.Len(t, recordID, 1,
