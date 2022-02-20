@@ -976,9 +976,9 @@ func backupPlanHook(
 	}
 
 	if backupStmt.Options.Detached {
-		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
-	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
 }
 
 func collectTelemetry(
