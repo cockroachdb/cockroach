@@ -33,6 +33,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (1, 1);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -54,6 +56,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (2, 2), (3, 3);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -102,6 +106,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -122,6 +128,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a < b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -145,6 +153,8 @@ false
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -182,6 +192,8 @@ true
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (1, 1);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -203,6 +215,8 @@ true
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (2, 2), (3, 3);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -251,6 +265,8 @@ true
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -272,6 +288,8 @@ false
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -296,6 +314,8 @@ false
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -333,6 +353,8 @@ true
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -383,6 +405,8 @@ true
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -405,6 +429,8 @@ false
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a + b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -430,6 +456,8 @@ false
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -468,6 +496,8 @@ true
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a = 1;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -489,6 +519,8 @@ true
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (2, 3);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -537,6 +569,8 @@ true
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (6, 7) RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -559,6 +593,8 @@ false
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (8, 9) RETURNING a + b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -584,6 +620,8 @@ false
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (10, 11) RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -633,6 +671,8 @@ false
 statement ok
 SET TRACING=ON;
   INSERT INTO fk_child VALUES (1, 1), (2, 2);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -656,6 +696,8 @@ false
 statement ok
 SET TRACING=ON;
   UPDATE fk_child SET b=b+1 WHERE a < 2;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -681,6 +723,8 @@ false
 statement ok
 SET TRACING=ON;
   DELETE FROM fk_parent WHERE p = 3;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -698,7 +742,11 @@ dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 # Test with a single cascade, which should use autocommit.
 statement ok
 DROP TABLE fk_child;
+
+statement ok
 CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p) ON DELETE CASCADE, FAMILY f1 (a, b));
+
+statement ok
 INSERT INTO fk_child VALUES (1, 1), (2, 2)
 
 # Populate table descriptor cache.
@@ -708,6 +756,8 @@ SELECT * FROM fk_parent JOIN fk_child ON p = b
 statement ok
 SET TRACING=ON;
   DELETE FROM fk_parent WHERE p = 2;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -738,6 +788,8 @@ SET TRACING=ON;
   INSERT INTO ab (
     SELECT a*10, b*10 FROM [ INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b ]
   );
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -763,6 +815,8 @@ statement ok
 SET TRACING=ON;
   WITH cte AS (INSERT INTO ab VALUES (3, 3), (4, 4) RETURNING a, b)
   INSERT INTO ab (SELECT a*10, b*10 FROM cte);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -797,6 +851,8 @@ true
 statement ok
 SET tracing = on;
   INSERT INTO guardrails VALUES (1);
+
+statement ok
 SET tracing = off;
 
 query TT

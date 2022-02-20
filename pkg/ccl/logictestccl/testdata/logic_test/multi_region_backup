@@ -376,7 +376,11 @@ ALTER DATABASE "mr-backup-2" CONFIGURE ZONE USING gc.ttlseconds = 1
 
 statement ok
 BACKUP DATABASE "mr-backup-1" TO 'nodelocal://1/mr-backup-1/';
+
+statement ok
 BACKUP DATABASE "mr-backup-2" TO 'nodelocal://1/mr-backup-2/';
+
+statement ok
 BACKUP DATABASE "mr-backup-1", "mr-backup-2" TO 'nodelocal://1/mr-backup-combined/'
 
 query T
@@ -391,6 +395,8 @@ test
 
 statement ok
 DROP DATABASE "mr-backup-1";
+
+statement ok
 DROP DATABASE "mr-backup-2"
 
 query T
@@ -712,6 +718,8 @@ TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_cen
 
 statement ok
 DROP DATABASE "mr-backup-1";
+
+statement ok
 DROP DATABASE "mr-backup-2"
 
 query T
@@ -1328,6 +1336,8 @@ CREATE DATABASE "mr-restore-1" primary region "ap-southeast-2" regions "us-east-
 
 statement ok
 RESTORE TABLE "mr-backup-2".global_table FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+
+statement ok
 USE "mr-restore-1";
 
 query TT
