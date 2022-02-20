@@ -323,6 +323,17 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 	testCustomEncodeUint64(testCases, EncodeUvarintAscending, t)
 }
 
+func TestEncodedLengthUvarintAscending(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		v := rand.Uint64()
+		exp := len(EncodeUvarintAscending(nil, v))
+		actual := EncodedLengthUvarintAscending(v)
+		if actual != exp {
+			t.Fatalf("incorrect encoded length for %d: %d (expected %d)", v, actual, exp)
+		}
+	}
+}
+
 func TestEncodeDecodeUvarintDescending(t *testing.T) {
 	testBasicEncodeDecodeUint64(EncodeUvarintDescending, DecodeUvarintDescending, true, true, true, t)
 	testCases := []testCaseUint64{

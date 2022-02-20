@@ -72,7 +72,7 @@ func MakeSplitter(
 	// * The index either has just 1 family (so we'll make a GetRequest) or we
 	//   need fewer than every column family in the table (otherwise we'd just
 	//   make a big ScanRequest).
-	// TODO(radu): should we be using index.KeysPerRow() instead?
+	// TODO(radu): should we be using IndexKeysPerRow() instead?
 	numFamilies := len(table.GetFamilies())
 	if numFamilies > 1 && len(neededFamilies) == numFamilies {
 		return NoopSplitter()

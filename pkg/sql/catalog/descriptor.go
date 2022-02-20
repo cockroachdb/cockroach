@@ -345,11 +345,6 @@ type TableDescriptor interface {
 	// 1. Whether the index is a mutation
 	// 2. if so, is it in state DELETE_AND_WRITE_ONLY
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
-	// KeysPerRow returns the maximum number of keys used to encode a row for the
-	// given index. If a secondary index doesn't store any columns, then it only
-	// has one k/v pair, but if it stores some columns, it can return up to one
-	// k/v pair per family in the table, just like a primary index.
-	KeysPerRow(id descpb.IndexID) (int, error)
 
 	// AllIndexes returns a slice with all indexes, public and non-public,
 	// in the underlying proto, in their canonical order:
@@ -509,6 +504,16 @@ type TableDescriptor interface {
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column
 
+	// IndexKeysPerRow returns the maximum number of keys used to encode a row for
+	// the given index. If a secondary index doesn't store any columns, then it
+	// only has one k/v pair, but if it stores some columns, it can return up to
+	// one k/v pair per family in the table, just like a primary index.
+	IndexKeysPerRow(idx Index) int
+
+	// IndexFetchSpecKeyAndSuffixColumns returns information about the key and
+	// suffix columns, suitable for populating a descpb.IndexFetchSpec.
+	IndexFetchSpecKeyAndSuffixColumns(idx Index) []descpb.IndexFetchSpec_KeyColumn
+
 	// FindColumnWithID returns the first column found whose ID matches the
 	// provided target ID, in the canonical order.
 	// If no column is found then an error is also returned.
@@ -551,6 +556,10 @@ type TableDescriptor interface {
 	// GetNextFamilyID returns the next unused family ID for this table. Family
 	// IDs are unique per table, but not unique globally.
 	GetNextFamilyID() descpb.FamilyID
+
+	// FamilyDefaultColumns returns the default column IDs for families with a
+	// default column. See IndexFetchSpec.FamilyDefaultColumns.
+	FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn
 
 	// HasColumnBackfillMutation returns whether the table has any queued column
 	// mutations that require a backfill.
