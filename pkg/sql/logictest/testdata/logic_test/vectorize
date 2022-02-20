@@ -836,6 +836,8 @@ CREATE TABLE t40732 AS SELECT g::INT8 AS _int8,
                               g::STRING AS _string,
                               g::STRING::BYTES AS _bytes
                          FROM generate_series(1, 5) AS g;
+
+statement ok
 SET vectorize = experimental_always;
 INSERT INTO t40732 DEFAULT VALUES;
 
@@ -1192,6 +1194,8 @@ CREATE TABLE t64793 AS
     g % 2 = 1 AS _bool, g::STRING AS _string
   FROM
     ROWS FROM (generate_series(1, 5)) AS g;
+
+statement ok
 SET vectorize=experimental_always;
 INSERT INTO t64793 DEFAULT VALUES;
 

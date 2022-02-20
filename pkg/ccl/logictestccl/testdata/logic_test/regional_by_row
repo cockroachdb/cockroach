@@ -1252,7 +1252,9 @@ regional_by_row_like                            CREATE TABLE public.regional_by_
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
-DROP TABLE regional_by_row_like;
+DROP TABLE regional_by_row_like
+
+statement ok
 CREATE TABLE regional_by_row_like (LIKE regional_by_row INCLUDING INDEXES)
 
 query TT
@@ -1269,6 +1271,8 @@ regional_by_row_like                            CREATE TABLE public.regional_by_
 
 statement ok
 DROP TABLE regional_by_row_like;
+
+statement ok
 CREATE TABLE regional_by_row_like (LIKE regional_by_row INCLUDING ALL)
 
 query TT
@@ -1644,7 +1648,11 @@ ALTER DATABASE drop_regions DROP REGION "ca-central-1";
 # Drop the two regional by row tables and now the primary region can be removed.
 statement ok
 DROP TABLE regional_by_row;
+
+statement ok
 DROP TABLE regional_by_row_as;
+
+statement ok
 ALTER DATABASE drop_regions DROP REGION "ca-central-1";
 
 ##############################################

@@ -1050,6 +1050,8 @@ CREATE TABLE groups(
   id SERIAL PRIMARY KEY,
   data JSONB
 );
+
+statement ok
 INSERT INTO groups(data) VALUES('{"name": "Group 1", "members": [{"name": "admin", "type": "USER"}, {"name": "user", "type": "USER"}]}');
 INSERT INTO groups(data) VALUES('{"name": "Group 2", "members": [{"name": "admin2", "type": "USER"}]}');
 
@@ -1139,6 +1141,8 @@ CREATE TABLE users (
     name VARCHAR(50),
     PRIMARY KEY (id)
 );
+
+statement ok
 INSERT INTO users(id, name) VALUES (1, 'user1');
 INSERT INTO users(id, name) VALUES (2, 'user2');
 INSERT INTO users(id, name) VALUES (3, 'user3');
@@ -1151,6 +1155,8 @@ CREATE TABLE stuff (
     PRIMARY KEY (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
+
+statement ok
 INSERT INTO stuff(id, date, user_id) VALUES (1, '2007-10-15'::DATE, 1);
 INSERT INTO stuff(id, date, user_id) VALUES (2, '2007-12-15'::DATE, 1);
 INSERT INTO stuff(id, date, user_id) VALUES (3, '2007-11-15'::DATE, 1);

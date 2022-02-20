@@ -12,11 +12,16 @@ rewrite
 ${1} (...)
 ----
 
-# Table descriptor validation failure on read.
-feature-usage
+exec
 CREATE TABLE fktbl (id INT PRIMARY KEY);
+----
+
+exec
 CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
-  WITH base AS (
+----
+
+exec
+WITH base AS (
                 SELECT id, crdb_internal.pb_to_json('desc', descriptor) AS d
                   FROM system.descriptor
                  WHERE id = 'fktbl'::REGCLASS
@@ -32,20 +37,26 @@ CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
                )
 SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('desc', d)), d
   FROM updated;
+----
+
+# Table descriptor validation failure on read.
+feature-usage
 SELECT * FROM tbl;
 ----
 error: pq: internal error: relation "tbl" (...): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
 errorcodes.XX000
 sql.schema.validation_errors.read.cross_references.relation
 
-# Type descriptor validation failure on read.
-feature-usage
+exec
 CREATE TYPE greeting AS ENUM('hello', 'hi');
-  WITH base AS (
-                SELECT id, crdb_internal.pb_to_json('desc', descriptor) AS d
-                  FROM system.descriptor
-                 WHERE id IN (SELECT id FROM system.namespace WHERE name = 'greeting')
-            ),
+----
+
+exec
+WITH base AS (
+              SELECT id, crdb_internal.pb_to_json('desc', descriptor) AS d
+                FROM system.descriptor
+               WHERE id IN (SELECT id FROM system.namespace WHERE name = 'greeting')
+          ),
        updated AS (
                 SELECT id,
                        json_set(
@@ -57,15 +68,22 @@ CREATE TYPE greeting AS ENUM('hello', 'hi');
                )
 SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('desc', d), true)
   FROM updated;
+----
+
+# Type descriptor validation failure on read.
+feature-usage
 SELECT 'hi'::greeting
 ----
 error: pq: type "" (...): empty type name
 errorcodes.42601
 sql.schema.validation_errors.read.self.type
 
+exec
+CREATE TABLE t (x INT PRIMARY KEY);
+----
+
 # Table descriptor validation failure on transaction commit.
 feature-usage
-CREATE TABLE t (x INT PRIMARY KEY);
 BEGIN;
 ALTER TABLE t DROP CONSTRAINT t_pkey;
 COMMIT;

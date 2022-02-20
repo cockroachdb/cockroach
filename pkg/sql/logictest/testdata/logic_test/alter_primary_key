@@ -45,12 +45,20 @@ sql.schema.alter_table.alter_primary_key
 # Test primary key changes on storing indexes with different column families (the randomizer will do this for us).
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY, y INT, z INT NOT NULL, w INT, v INT,
   INDEX i1 (y) STORING (w, v), INDEX i2 (z) STORING (y, v)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3, 4, 5), (6, 7, 8, 9, 10), (11, 12, 13, 14, 15);
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
+
+statement ok
 INSERT INTO t VALUES (16, 17, 18, 19, 20)
 
 query III rowsort
@@ -72,6 +80,8 @@ SELECT y, z, v FROM t@i2
 # Test that composite values are encoded correctly in covering indexes.
 statement ok
 CREATE TABLE t_composite (x INT PRIMARY KEY, y DECIMAL NOT NULL);
+
+statement ok
 INSERT INTO t_composite VALUES (1, 1.0), (2, 1.001)
 
 statement ok
@@ -92,9 +102,17 @@ subtest foreign_keys
 # Test primary key changes on tables with inbound and outbound FK's.
 statement ok
 CREATE TABLE fk1 (x INT NOT NULL);
+
+statement ok
 CREATE TABLE fk2 (x INT NOT NULL, UNIQUE INDEX i (x));
+
+statement ok
 ALTER TABLE fk1 ADD CONSTRAINT fk FOREIGN KEY (x) REFERENCES fk2(x);
+
+statement ok
 INSERT INTO fk2 VALUES (1);
+
+statement ok
 INSERT INTO fk1 VALUES (1)
 
 statement ok
@@ -102,6 +120,8 @@ ALTER TABLE fk1 ALTER PRIMARY KEY USING COLUMNS (x)
 
 statement ok
 INSERT INTO fk2 VALUES (2);
+
+statement ok
 INSERT INTO fk1 VALUES (2)
 
 statement ok
@@ -115,8 +135,14 @@ INSERT INTO fk1 VALUES (3)
 statement ok
 CREATE TABLE self (a INT PRIMARY KEY, x INT, y INT, z INT, w INT NOT NULL,
   INDEX (x), UNIQUE INDEX (y), INDEX (z));
+
+statement ok
 INSERT INTO self VALUES (1, 1, 1, 1, 1);
+
+statement ok
 ALTER TABLE self ADD CONSTRAINT fk1 FOREIGN KEY (z) REFERENCES self (y);
+
+statement ok
 ALTER TABLE self ADD CONSTRAINT fk2 FOREIGN KEY (x) REFERENCES self (y);
 
 statement ok
@@ -129,19 +155,39 @@ INSERT INTO self VALUES (3, 2, 3, 2, 3)
 # Set up a bunch of foreign key references pointing into and out of a table.
 statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY, y INT NOT NULL, z INT, w INT, INDEX (y), INDEX (z), UNIQUE INDEX (w));
+
+statement ok
 CREATE TABLE t2 (y INT, UNIQUE INDEX (y));
+
+statement ok
 CREATE TABLE t3 (z INT, UNIQUE INDEX (z));
+
+statement ok
 CREATE TABLE t4 (w INT, INDEX (w));
+
+statement ok
 CREATE TABLE t5 (x INT, INDEX (x));
+
+statement ok
 INSERT INTO t1 VALUES (1, 1, 1, 1);
 INSERT INTO t2 VALUES (1);
 INSERT INTO t3 VALUES (1);
 INSERT INTO t4 VALUES (1);
 INSERT INTO t5 VALUES (1);
+
+statement ok
 ALTER TABLE t1 ADD CONSTRAINT fk1 FOREIGN KEY (y) REFERENCES t2(y);
+
+statement ok
 ALTER TABLE t1 ADD CONSTRAINT fk2 FOREIGN KEY (z) REFERENCES t3(z);
+
+statement ok
 ALTER TABLE t4 ADD CONSTRAINT fk3 FOREIGN KEY (w) REFERENCES t1(w);
+
+statement ok
 ALTER TABLE t5 ADD CONSTRAINT fk4 FOREIGN KEY (x) REFERENCES t1(x);
+
+statement ok
 ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (y)
 
 statement ok
@@ -160,7 +206,11 @@ INSERT INTO t4 VALUES (101)
 # Ensure that we still rewrite a primary index if the index column has name "rowid".
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (rowid INT PRIMARY KEY, y INT NOT NULL, FAMILY (rowid, y));
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 query TT
@@ -178,6 +228,8 @@ subtest index_rewrites
 # Test that indexes that need to get rewritten indeed get rewritten.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL, -- will be new primary key.
@@ -193,7 +245,11 @@ CREATE TABLE t (
   INDEX i7 (z) USING HASH WITH (bucket_count=4), -- will be rewritten.
   FAMILY (x, y, z, w, v)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3, 4, '{}');
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 query TT
@@ -342,6 +398,8 @@ subtest hash_sharded
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL,
@@ -349,7 +407,11 @@ CREATE TABLE t (
   INDEX i1 (z) USING HASH WITH (bucket_count=5),
   FAMILY (x, y, z)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3);
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=10)
 
 query TT
@@ -402,6 +464,8 @@ SELECT * FROM t@i1
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY USING HASH WITH (bucket_count=5),
   y INT NOT NULL,
@@ -409,7 +473,11 @@ CREATE TABLE t (
   INDEX i (z),
   FAMILY (x, y, z)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3);
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 query TT
@@ -439,6 +507,8 @@ SELECT * FROM t@i
 # Ensure we don't rewrite default primary index even if its name isn't rowid.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (rowid INT NOT NULL);
 
 query TT
@@ -469,15 +539,25 @@ subtest encoding_bug
 # able to be updated and deleted with the primary index encoding.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y, z));
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3);
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
+
+statement ok
 UPDATE t SET y = 3 WHERE z = 3
 
 # Test for #45363.
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
 
 statement ok
@@ -494,6 +574,8 @@ ROLLBACK
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
 
 statement ok
@@ -512,6 +594,8 @@ subtest add_pk_rowid
 # Tests for #45509.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY)
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -519,6 +603,8 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT NOT NULL)
 
 statement ok
@@ -535,7 +621,11 @@ t  CREATE TABLE public.t (
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT NOT NULL);
+
+statement ok
 ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
 query TT
@@ -550,7 +640,11 @@ t  CREATE TABLE public.t (
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT NOT NULL);
+
+statement ok
 ALTER TABLE t ADD CONSTRAINT "my_pk" PRIMARY KEY (x)
 
 query TT
@@ -571,6 +665,8 @@ ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
 # Regression for #45362.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT NOT NULL)
 
 statement ok
@@ -590,7 +686,11 @@ ROLLBACK
 # TODO (rohany): This test might become obselete when #44923 is fixed.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT NOT NULL);
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
 
 query I
@@ -603,6 +703,8 @@ subtest add_drop_pk
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
 
 statement error pq: relation "t" \([0-9]+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
@@ -638,6 +740,8 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS "t_pkey" PRIMARY KEY (x)
 # in the same transaction.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
 
 statement ok
@@ -651,7 +755,11 @@ ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
 statement ok
 ROLLBACK;
+
+statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
 
 statement ok
@@ -681,6 +789,8 @@ t  CREATE TABLE public.t (
 # in any DML statements.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
 
 statement ok
@@ -774,7 +884,11 @@ ROLLBACK
 # as a DROP PRIMARY KEY get rolled back on failure.
 statement ok
 DROP TABLE IF EXISTS t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY, y INT NOT NULL);
+
+statement ok
 CREATE TABLE t2 (x INT)
 
 statement ok
@@ -795,6 +909,8 @@ SELECT * FROM t2
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
 
 statement error pq: table "t" does not have a primary key, cannot perform ADD COLUMN z INT8 AS \(x \+ 1\) STORED
@@ -926,7 +1042,11 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 # count shouldn't cause the old primary key to be copied.
 statement ok
 DROP TABLE IF EXISTS t CASCADE;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2));
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
 query TT
@@ -943,7 +1063,11 @@ t  CREATE TABLE public.t (
 # primary key to be copied.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2), y INT NOT NULL, FAMILY (x, y));
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=2)
 
 query TT
@@ -962,29 +1086,55 @@ t  CREATE TABLE public.t (
 # Regression for #49079.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT, y INT, z INT, PRIMARY KEY (x, y));
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y);
+
+statement ok
 SET sql_safe_updates=false;
+
+statement ok
 ALTER TABLE t DROP COLUMN z
 
 # Regression for #54629.
 statement ok
 CREATE TABLE t54629 (c INT NOT NULL, UNIQUE INDEX (c));
+
+statement ok
 ALTER TABLE t54629 ALTER PRIMARY KEY USING COLUMNS (c);
+
+statement ok
 INSERT INTO t54629 VALUES (1);
+
+statement ok
 DELETE FROM t54629 WHERE c = 1
 
 statement ok
 DROP TABLE t54629;
+
+statement ok
 CREATE TABLE t54629(a INT PRIMARY KEY, c INT NOT NULL, UNIQUE INDEX (c));
+
+statement ok
 ALTER TABLE t54629 ALTER PRIMARY KEY USING COLUMNS (c);
+
+statement ok
 DROP INDEX t54629_a_key CASCADE;
+
+statement ok
 INSERT INTO t54629 VALUES (1, 1);
+
+statement ok
 DELETE FROM t54629 WHERE c = 1;
 
 # Validate ALTER ADD PRIMARY KEY idempotence for #59307
 statement ok
 DROP TABLE t1 CASCADE;
+
+statement ok
 create table t1(id integer not null, id2 integer not null, name varchar(32));
 
 query TTT
@@ -1132,6 +1282,8 @@ subtest toggle_sharded_no_new_index
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (i INT PRIMARY KEY)
 
 query TTT
@@ -1163,7 +1315,11 @@ t_pkey  i                        ASC
 # #71552).
 statement ok
 CREATE TABLE t71553 (a INT PRIMARY KEY, b INT NOT NULL);
+
+statement ok
 INSERT INTO t71553 VALUES (1, 1);
+
+statement ok
 ALTER TABLE t71553 ALTER PRIMARY KEY USING COLUMNS (b);
 
 query II
@@ -1394,9 +1550,15 @@ subtest pkey-comment-drop
 # Create a table with a primary key and add a comment on it.
 statement ok
 CREATE TABLE pkey_comment (a INT8, b INT8, c INT8, CONSTRAINT pkey PRIMARY KEY (a, b));
+
+statement ok
 COMMENT ON INDEX pkey IS 'idx';
 COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
+
+statement ok
 CREATE UNIQUE INDEX i2 ON pkey_comment(c);
+
+statement ok
 COMMENT ON INDEX i2 IS 'idx2';
 COMMENT ON CONSTRAINT i2 ON pkey_comment IS 'idx3';
 

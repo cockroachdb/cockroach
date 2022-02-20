@@ -105,6 +105,9 @@ events (1 found):
 
 exec idx=2
 PREPARE max_staleness_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1;
+----
+
+exec idx=2
 PREPARE min_timestamp_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
 ----
 
@@ -205,7 +208,13 @@ events (7 found):
 # with the schema not existing if none of the followers have caught up.
 exec
 CREATE TABLE t2(pk INT PRIMARY KEY);
+----
+
+exec
 INSERT INTO t2 VALUES (2);
+----
+
+exec
 ALTER TABLE t2 ADD COLUMN new_col INT
 ----
 

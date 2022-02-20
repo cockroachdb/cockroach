@@ -153,16 +153,38 @@ i3      NULL
 # don't all start from 1.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT, y INT, z INT);
+
+statement ok
 ALTER TABLE t DROP COLUMN y;
+
+statement ok
 ALTER TABLE t ADD COLUMN y INT;
+
+statement ok
 ALTER TABLE t DROP COLUMN y;
+
+statement ok
 ALTER TABLE t ADD COLUMN y INT;
+
+statement ok
 CREATE INDEX i ON t (x);
+
+statement ok
 DROP INDEX t@i;
+
+statement ok
 CREATE INDEX i ON t (x);
+
+statement ok
 DROP INDEX t@i;
+
+statement ok
 CREATE INDEX i ON t (x);
+
+statement ok
 COMMENT ON COLUMN t.y IS 'hello1';
 COMMENT ON INDEX t@i IS 'hello2'
 

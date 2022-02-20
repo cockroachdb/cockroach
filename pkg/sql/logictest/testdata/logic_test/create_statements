@@ -6610,14 +6610,23 @@ CREATE INDEX a_idx ON a(b) WITH (fillfactor=50)
 ----
 NOTICE: storage parameter "fillfactor" is ignored
 
+statement ok
+DROP TABLE a CASCADE;
+
 query T noticetrace
-DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=off)
+CREATE TABLE a (b INT) WITH (autovacuum_enabled=off)
 ----
 NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
 
+statement ok
+DROP TABLE a CASCADE;
+
 query T noticetrace
-DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=on)
+CREATE TABLE a (b INT) WITH (autovacuum_enabled=on)
 ----
 
+statement ok
+DROP TABLE a CASCADE;
+
 statement error parameter "autovacuum_enabled" requires a Boolean value
-DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled='11')
+CREATE TABLE a (b INT) WITH (autovacuum_enabled='11')

@@ -72,8 +72,14 @@ SET on_update_rehome_row_enabled = true
 # Re-homing still works even after locality change.
 statement ok
 DROP TABLE rbr;
+
+statement ok
 CREATE TABLE rbr (p INT PRIMARY KEY, s STRING);
+
+statement ok
 ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW;
+
+statement ok
 INSERT INTO rbr (p, s) VALUES (1, 'hi')
 
 query TIT
