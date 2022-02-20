@@ -499,7 +499,7 @@ func prepareNewTablesForIngestion(
 	// GenerateUniqueDescID if there's any kind of error above.
 	// Reserving a table ID now means we can avoid the rekey work during restore.
 	//
-	// schemaRewrites may contain information which is used in RewriteTableDescs
+	// schemaRewrites may contain information which is used in rewrite.TableDescs
 	// to rewrite the parent schema ID in the table desc to point to the correct
 	// schema ID.
 	tableRewrites := schemaRewrites
@@ -524,7 +524,7 @@ func prepareNewTablesForIngestion(
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-	if err := rewrite.RewriteTableDescs(
+	if err := rewrite.TableDescs(
 		newMutableTableDescriptors, tableRewrites, "",
 	); err != nil {
 		return nil, err

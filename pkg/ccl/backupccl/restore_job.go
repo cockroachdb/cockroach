@@ -718,7 +718,7 @@ func createImportingDescriptors(
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
-	if err := rewrite.RewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
+	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -741,7 +741,7 @@ func createImportingDescriptors(
 		}
 	}
 
-	if err := rewrite.RewriteSchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
+	if err := rewrite.SchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -751,7 +751,7 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewrite.RewriteTableDescs(
+	if err := rewrite.TableDescs(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
 	); err != nil {
 		return nil, nil, err
@@ -791,7 +791,7 @@ func createImportingDescriptors(
 	// the ID the descriptor had when it was backed up. Changes to existing type
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
-	if err := rewrite.RewriteTypeDescs(types, details.DescriptorRewrites); err != nil {
+	if err := rewrite.TypeDescs(types, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
