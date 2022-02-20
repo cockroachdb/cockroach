@@ -163,9 +163,9 @@ message MVCCStats {
   // intent_age is the cumulative age of the tracked intents.
   // See the comment on MVCCStats.
   optional sfixed64 intent_age = 2 [(gogoproto.nullable) = false];
-  // gc_bytes_age is the cumulative age of the non-live data (i.e.
-  // data included in key_bytes and val_bytes, but not live_bytes).
-  // See the comment on MVCCStats.
+  // gc_bytes_age is the cumulative age of the non-live data (i.e. data included
+  // in key_bytes, val_bytes, and range_key_bytes, and range_val_bytes, but not
+  // live_bytes). See the comment on MVCCStats.
   optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
   // live_bytes is the number of bytes stored in keys and values which can in
   // principle be read by means of a Scan or Get in the far future, including
@@ -177,7 +177,7 @@ message MVCCStats {
   // live_count is the number of meta keys tracked under live_bytes.
   optional sfixed64 live_count = 5 [(gogoproto.nullable) = false];
   // key_bytes is the number of bytes stored in all non-system
-  // keys, including live, meta, old, and deleted keys.
+  // point keys, including live, meta, old, and deleted keys.
   // Only meta keys really account for the "full" key; value
   // keys only for the timestamp suffix.
   optional sfixed64 key_bytes = 6 [(gogoproto.nullable) = false];
@@ -201,6 +201,31 @@ message MVCCStats {
   // intents, so mixed-version clusters with nodes preceding this knowledge
   // will always have a 0 value for this field.
   optional sfixed64 separated_intent_count = 16 [(gogoproto.nullable) = false];
+  // range_key_count is the number of range keys tracked under range_key_bytes.
+  // Overlapping range keys may fragment into version stacks with the same
+  // start/end bounds, thus writing a single range key may cause range_key_count
+  // to increase by more than 1 due to fragmentation. Multiple range key
+  // versions with the same bounds count as a single range key, but are
+  // tracked under range_val_count.
+  // 
+  // Range keys that straddle range split boundaries will become two separate
+  // logical range keys (one in each range), and merge back to one range key
+  // when the ranges merge.
+  //
+  // NB: Currently, all range keys are MVCC range tombstones. Therefore, these
+  // do not contribute to live_count nor live_bytes.
+  optional sfixed64 range_key_count = 17 [(gogoproto.nullable) = false];
+  // range_key_bytes is the encoded size of range keys. Only the latest
+  // version in a range key fragment stack contributes the key bounds,
+  // but each version contributes the version timestamp.
+  optional sfixed64 range_key_bytes = 18 [(gogoproto.nullable) = false];
+  // range_val_count is the number of range key values tracked under
+  // range_val_bytes, i.e. the number of range key versions.
+  optional sfixed64 range_val_count = 19 [(gogoproto.nullable) = false];
+  // range_val_bytes is the number of bytes stored in range keys. Even tough
+  // all range keys are currently MVCC range tombstones with no value, the
+  // MVCCValueHeader contribution can be non-zero.
+  optional sfixed64 range_val_bytes = 20 [(gogoproto.nullable) = false];
 
   // sys_bytes is the number of bytes stored in system-local kv-pairs.
   // This tracks the same quantity as (key_bytes + val_bytes), but

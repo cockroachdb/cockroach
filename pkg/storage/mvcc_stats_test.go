@@ -58,7 +58,11 @@ func assertEqImpl(
 		keyMin = keys.LocalMax
 		keyMax = roachpb.KeyMax
 	}
-	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: keyMax})
+	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: keyMin,
+		UpperBound: keyMax,
+	})
 	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
@@ -1624,6 +1628,8 @@ func (s *randomTest) step(t *testing.T) {
 	}
 }
 
+// TODO(erikgrinaker): Add ExperimentalMVCCDeleteRangeUsingTombstone operations
+// once they are fully integrated with other MVCC operations.
 func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1797,7 +1803,11 @@ func TestMVCCComputeStatsError(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: roachpb.LocalMax,
+				UpperBound: roachpb.KeyMax,
+			})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {

@@ -169,6 +169,19 @@ func declareKeysEndTxn(
 				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key: keys.RangePriorReadSummaryKey(mt.LeftDesc.RangeID),
 				})
+				// Merges need to adjust MVCC stats for merged MVCC range tombstones
+				// that straddle the ranges, by peeking to the left and right of the RHS
+				// start key. Since Prevish() is imprecise, we must also ensure we don't
+				// go outside of the LHS bounds.
+				leftPeekBound := mt.RightDesc.StartKey.AsRawKey().Prevish(roachpb.PrevishKeyLength)
+				rightPeekBound := mt.RightDesc.StartKey.AsRawKey().Next()
+				if leftPeekBound.Compare(mt.LeftDesc.StartKey.AsRawKey()) < 0 {
+					leftPeekBound = mt.LeftDesc.StartKey.AsRawKey()
+				}
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+					Key:    leftPeekBound,
+					EndKey: rightPeekBound,
+				})
 			}
 		}
 	}
@@ -896,9 +909,17 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
+	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(
+		batch, split.LeftDesc, split.RightDesc, ts.WallTime)
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to compute range key stats delta for RHS")
+	}
+
 	h := splitStatsHelperInput{
 		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
 		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKey:            rangeKeyDeltaMS,
 		AbsPostSplitLeftFn:       makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
 		AbsPostSplitRightFn:      makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
 		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
@@ -1172,15 +1193,27 @@ func mergeTrigger(
 		}
 	}
 
-	// The stats for the merged range are the sum of the LHS and RHS stats, less
-	// the RHS's replicated range ID stats. The only replicated range ID keys we
-	// copy from the RHS are the keys in the abort span, and we've already
-	// accounted for those stats above.
+	// The stats for the merged range are the sum of the LHS and RHS stats
+	// adjusted for range key merges (which is the inverse of the split
+	// adjustment). The RHS's replicated range ID stats are subtracted -- the only
+	// replicated range ID keys we copy from the RHS are the keys in the abort
+	// span, and we've already accounted for those stats above.
 	ms.Add(merge.RightMVCCStats)
+	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(
+		batch, merge.LeftDesc, merge.RightDesc, ts.WallTime)
+	if err != nil {
+		return result.Result{}, err
+	}
+	ms.Subtract(msRangeKeyDelta)
+
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
 		// NB: Range-ID local keys have no versions and no intents.
-		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: ridPrefix,
+			UpperBound: ridPrefix.PrefixEnd(),
+		})
 		defer iter.Close()
 		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
@@ -1224,6 +1257,78 @@ func changeReplicasTrigger(
 	}
 
 	return pd
+}
+
+// computeSplitRangeKeyStatsDelta computes the delta in MVCCStats caused by
+// the splitting of range keys that straddle the range split point. The inverse
+// applies during range merges. Consider a range key [a-foo)@1 split at cc:
+//
+// Before: [a-foo)@1  RangeKeyCount=1 RangeKeyBytes=15
+// LHS:    [a-cc)@1   RangeKeyCount=1 RangeKeyBytes=14
+// RHS:    [cc-foo)@1 RangeKeyCount=1 RangeKeyBytes=16
+//
+// If the LHS is computed directly then the RHS is calculated as:
+//
+// RHS = Before - LHS = RangeKeyCount=0 RangeKeyBytes=1
+//
+// This is clearly incorrect. This function determines the delta such that:
+//
+// RHS = Before - LHS + Delta = RangeKeyCount=1 RangeKeyBytes=16
+//
+// The same calculation can be used for merges, since Pebble will already have
+// merged the range keys into one when appropriate.
+func computeSplitRangeKeyStatsDelta(
+	r storage.Reader, lhs, rhs roachpb.RangeDescriptor, nowNanos int64,
+) (enginepb.MVCCStats, error) {
+	var delta enginepb.MVCCStats
+	delta.AgeTo(nowNanos)
+
+	// NB: When called during a merge trigger (for the inverse adjustment), lhs
+	// will contain the descriptor for the full, merged range. We therefore have
+	// to use the rhs start key as the reference split point. We also have to make
+	// sure the bounds fall within the ranges, since Prevish is imprecise.
+	splitKey := rhs.StartKey.AsRawKey()
+	lowerBound := splitKey.Prevish(roachpb.PrevishKeyLength)
+	if lowerBound.Compare(lhs.StartKey.AsRawKey()) < 0 {
+		lowerBound = lhs.StartKey.AsRawKey()
+	}
+	upperBound := splitKey.Next()
+
+	// Check for range keys that straddle the split point.
+	iter := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+		LowerBound: lowerBound,
+		UpperBound: upperBound,
+	})
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: splitKey})
+	if ok, err := iter.Valid(); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if !ok {
+		return delta, nil
+	} else if iter.RangeBounds().Key.Equal(splitKey) {
+		return delta, nil
+	}
+
+	// Calculate the RHS adjustment, which turns out to be equivalent to the stats
+	// contribution of the range key fragmentation. The naïve calculation would be
+	// rhs.EncodedSize() - (keyLen(rhs.EndKey) - keyLen(lhs.EndKey))
+	// which simplifies to 2 * keyLen(rhs.StartKey) + tsLen(rhs.Timestamp).
+	for i, rkv := range iter.RangeKeys() {
+		keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
+		valBytes := int64(len(rkv.Value))
+		if i == 0 {
+			delta.RangeKeyCount++
+			keyBytes += 2 * int64(storage.EncodedMVCCKeyPrefixLength(splitKey))
+		}
+		delta.RangeKeyBytes += keyBytes
+		delta.RangeValCount++
+		delta.RangeValBytes += valBytes
+		delta.GCBytesAge += (keyBytes + valBytes) * (nowNanos/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
+	}
+
+	return delta, nil
 }
 
 // txnAutoGC controls whether Transaction entries are automatically gc'ed upon

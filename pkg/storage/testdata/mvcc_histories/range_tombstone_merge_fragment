@@ -1,0 +1,120 @@
+# Tests MVCC range tombstone merging and fragmentation.
+
+# Writing range tombstones next to others will merge them. First write
+# two separate tombstones, then merge them in the middle, then extend
+# left and right.
+run stats trace ok
+del_range_ts k=b end=c ts=1
+del_range_ts k=d end=e ts=1
+del_range_ts k=c end=d ts=1
+del_range_ts k=a end=b ts=1
+del_range_ts k=e end=f ts=1
+----
+>> del_range_ts k=b end=c ts=1
+rangekey: {b-c}/[1.000000000,0=/<empty>]
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> del_range_ts k=d end=e ts=1
+rangekey: {b-c}/[1.000000000,0=/<empty>]
+rangekey: {d-e}/[1.000000000,0=/<empty>]
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> del_range_ts k=c end=d ts=1
+rangekey: {b-e}/[1.000000000,0=/<empty>]
+stats: range_key_count=-1 range_key_bytes=-13 range_val_count=-1 gc_bytes_age=-1287
+>> del_range_ts k=a end=b ts=1
+rangekey: {a-e}/[1.000000000,0=/<empty>]
+stats: no change
+>> del_range_ts k=e end=f ts=1
+rangekey: {a-f}/[1.000000000,0=/<empty>]
+stats: no change
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1287
+
+# Writing the same sequence above these should fragment and merge the existing
+# ones too. We use different-length key bounds to test the stats contributions
+# of those, and also a lower localTs to test the value handling.
+run stats trace ok
+del_range_ts k=bbb end=cc ts=2 localTs=1
+del_range_ts k=d end=eee ts=2 localTs=1
+del_range_ts k=cc end=d ts=2 localTs=1
+del_range_ts k=a end=bbb ts=2 localTs=1
+del_range_ts k=eee end=f ts=2 localTs=1
+----
+>> del_range_ts k=bbb end=cc ts=2 localTs=1
+rangekey: {a-bbb}/[1.000000000,0=/<empty>]
+rangekey: {bbb-cc}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {cc-f}/[1.000000000,0=/<empty>]
+stats: range_key_count=+2 range_key_bytes=+41 range_val_count=+3 range_val_bytes=+13 gc_bytes_age=+5317
+>> del_range_ts k=d end=eee ts=2 localTs=1
+rangekey: {a-bbb}/[1.000000000,0=/<empty>]
+rangekey: {bbb-cc}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {cc-d}/[1.000000000,0=/<empty>]
+rangekey: {d-eee}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {eee-f}/[1.000000000,0=/<empty>]
+stats: range_key_count=+2 range_key_bytes=+39 range_val_count=+3 range_val_bytes=+13 gc_bytes_age=+5120
+>> del_range_ts k=cc end=d ts=2 localTs=1
+rangekey: {a-bbb}/[1.000000000,0=/<empty>]
+rangekey: {bbb-eee}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {eee-f}/[1.000000000,0=/<empty>]
+stats: range_key_count=-2 range_key_bytes=-37 range_val_count=-3 range_val_bytes=-13 gc_bytes_age=-4923
+>> del_range_ts k=a end=bbb ts=2 localTs=1
+rangekey: {a-eee}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {eee-f}/[1.000000000,0=/<empty>]
+stats: range_key_count=-1 range_key_bytes=-17 range_val_count=-1 gc_bytes_age=-1681
+>> del_range_ts k=eee end=f ts=2 localTs=1
+rangekey: {a-f}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+stats: range_key_count=-1 range_key_bytes=-17 range_val_count=-1 gc_bytes_age=-1681
+stats: range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=13 gc_bytes_age=3439
+
+# Writing a key from the middle of the existing stack to outside the bounds
+# should fragment appropriately.
+run stats trace ok
+del_range_ts k=d end=h ts=3
+----
+>> del_range_ts k=d end=h ts=3
+rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[3.000000000,0=/<empty>]
+stats: range_key_count=+2 range_key_bytes=+44 range_val_count=+4 range_val_bytes=+13 gc_bytes_age=+5569
+stats: range_key_count=3 range_key_bytes=66 range_val_count=6 range_val_bytes=26 gc_bytes_age=9008
+
+# Writing range tombstones at the same or higher local timestamp should
+# still merge, since the values are normalized to empty. However, writing
+# at a lower timestamp should not merge, since the values are different.
+# Extending a range tombstone with the same local timestamp should
+# merge with it, but different local timestamp should not merge.
+run stats trace ok
+del_range_ts k=h end=i ts=3 localTs=5
+del_range_ts k=i end=j ts=3 localTs=3
+del_range_ts k=j end=k ts=3 localTs=2
+del_range_ts k=k end=l ts=3 localTs=2
+del_range_ts k=l end=m ts=3 localTs=1
+----
+>> del_range_ts k=h end=i ts=3 localTs=5
+rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-i}/[3.000000000,0=/<empty>]
+stats: no change
+>> del_range_ts k=i end=j ts=3 localTs=3
+rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-j}/[3.000000000,0=/<empty>]
+stats: no change
+>> del_range_ts k=j end=k ts=3 localTs=2
+rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-j}/[3.000000000,0=/<empty>]
+rangekey: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
+>> del_range_ts k=k end=l ts=3 localTs=2
+rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-j}/[3.000000000,0=/<empty>]
+rangekey: {j-l}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+stats: no change
+>> del_range_ts k=l end=m ts=3 localTs=1
+rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-j}/[3.000000000,0=/<empty>]
+rangekey: {j-l}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+rangekey: {l-m}/[3.000000000,0={localTs=1.000000000,0}/<empty>]
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
+stats: range_key_count=5 range_key_bytes=92 range_val_count=8 range_val_bytes=52 gc_bytes_age=14052

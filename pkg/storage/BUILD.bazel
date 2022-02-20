@@ -147,7 +147,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/zerofields",
         "//pkg/util",
-        "//pkg/util/caller",
         "//pkg/util/encoding",
         "//pkg/util/fileutil",
         "//pkg/util/hlc",

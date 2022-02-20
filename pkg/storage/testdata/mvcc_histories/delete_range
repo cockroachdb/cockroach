@@ -49,15 +49,17 @@ stats: key_count=8 key_bytes=152 val_count=10 val_bytes=64 live_count=6 live_byt
 ## The delete tombstone is placed alongside each of the previous values, at the newer timestamp.
 ## The deleted keys are returned.
 
-run stat
+run stats ok
 with t=A
   txn_begin ts=46
   del_range k=b end=c returnKeys
   txn_remove
 ----
+>> del_range k=b end=c returnKeys t=A
 del_range: "b"-"c" -> deleted 2 key(s)
 del_range: returned "b"
 del_range: returned "b/123"
+stats: key_bytes=+24 val_count=+2 val_bytes=+100 live_count=-2 live_bytes=-48 gc_bytes_age=+9288 intent_count=+2 intent_bytes=+24 separated_intent_count=+2 intent_age=+108
 >> at end:
 data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
@@ -73,6 +75,7 @@ data: "c"/44.000000000,0 -> /BYTES/abc
 data: "c/123"/44.000000000,0 -> /BYTES/abc
 data: "d"/44.000000000,0 -> /BYTES/abc
 data: "d/123"/44.000000000,0 -> /BYTES/abc
+stats: key_count=8 key_bytes=176 val_count=12 val_bytes=164 live_count=4 live_bytes=96 gc_bytes_age=13248 intent_count=2 intent_bytes=24 separated_intent_count=2 intent_age=108
 
 
 # A limited non-txn that deletes a range of keys.
