@@ -612,6 +612,8 @@ ALTER TABLE enum_checks ADD CHECK (x = 'hello')
 # Check the above cases, but in a transaction.
 statement ok
 DROP TABLE enum_checks;
+
+statement ok
 BEGIN;
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
@@ -821,9 +823,11 @@ SELECT * FROM enum_ctas
 ----
 hi hello {hello} {hello,howdy,hi}
 
-# Test CTAS with a SELECT query in a transaction.
 statement ok
 DROP TABLE enum_ctas;
+
+# Test CTAS with a SELECT query in a transaction.
+statement ok
 BEGIN;
 CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
 
@@ -952,9 +956,11 @@ ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
 
-# Try the above, but in a transaction.
 statement ok
 DROP TABLE enum_referenced, enum_origin;
+
+# Try the above, but in a transaction.
+statement ok
 BEGIN;
 CREATE TABLE enum_origin (x greeting PRIMARY KEY);
 CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
@@ -985,7 +991,11 @@ statement ok
 SET enable_experimental_alter_column_type_general = true;
 CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
+
+statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
+
+statement ok
 INSERT INTO enum_data_type VALUES ('hi')
 
 query T rowsort
@@ -1511,9 +1521,17 @@ subtest regression_71388
 
 statement ok
 CREATE TYPE enum_test AS ENUM ('a', 'b');
+
+statement ok
 CREATE TABLE enum_table (id SERIAL PRIMARY KEY, elem enum_test);
+
+statement ok
 INSERT INTO enum_table (elem) VALUES ('a'), ('b');
+
+statement ok
 CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elems enum_test[]);
+
+statement ok
 INSERT INTO enum_array_table (elems) VALUES (array['a']), (array['b']), (array['a', 'b'])
 
 query TB
@@ -1582,6 +1600,8 @@ a
 
 statement ok
 ALTER TYPE enum_70378 ADD VALUE 'c';
+
+statement ok
 EXECUTE q('c')
 
 query T rowsort
@@ -1593,8 +1613,14 @@ c
 # Regression test for not hydrating an enum when it is used in a tuple.
 statement ok
 DROP TYPE IF EXISTS greeting;
+
+statement ok
 CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+
+statement ok
 CREATE TABLE seed AS SELECT g::INT8 AS _int8 FROM generate_series(1, 5) AS g;
+
+statement ok
 WITH
   cte1 (col1)
     AS (

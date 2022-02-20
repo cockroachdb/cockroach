@@ -1,8 +1,14 @@
 exec
 SET serial_normalization = sql_sequence_cached;
+----
+
+exec
 CREATE TABLE serial (
   cached SERIAL
 );
+----
+
+exec
 INSERT INTO serial (cached) VALUES (DEFAULT)
 ----
 
