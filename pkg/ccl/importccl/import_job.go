@@ -15,9 +15,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1219,7 +1219,7 @@ func ingestWithRetry(
 			break
 		}
 
-		if utilccl.IsPermanentBulkJobError(err) {
+		if joberror.IsPermanentBulkJobError(err) {
 			return res, err
 		}
 
