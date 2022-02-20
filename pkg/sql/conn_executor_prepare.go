@@ -35,6 +35,9 @@ func (ex *connExecutor) execPrepare(
 		return ex.makeErrEvent(err, parseCmd.AST)
 	}
 
+	// Preparing needs a transaction because it needs to retrieve db/table
+	// descriptors for type checking. This implicit txn will be open until
+	// the Sync message is handled.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		return ex.beginImplicitTxn(ctx, parseCmd.AST)
 	}
@@ -157,18 +160,8 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 
-	// Preparing needs a transaction because it needs to retrieve db/table
-	// descriptors for type checking. If we already have an open transaction for
-	// this planner, use it. Using the user's transaction here is critical for
-	// proper deadlock detection. At the time of writing, it is the case that any
-	// data read on behalf of this transaction is not cached for use in other
-	// transactions. It's critical that this fact remain true but nothing really
-	// enforces it. If we create a new transaction (newTxn is true), we'll need to
-	// finish it before we return.
-
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
-		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		p := &ex.planner
 		if origin != PreparedStatementOriginSQL {
 			// If the PREPARE command was issued as a SQL statement, then we
@@ -177,6 +170,7 @@ func (ex *connExecutor) prepare(
 			// instrumented the planner to collect execution statistics, and
 			// resetting the planner here would break the assumptions of the
 			// instrumentation.
+			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
 
@@ -305,6 +299,12 @@ func (ex *connExecutor) execBind(
 			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
 
+	// We need to make sure type resolution happens within a transaction.
+	// Otherwise, for user-defined types we won't take the correct leases and
+	// will get back out of date type information.
+	// This code path is only used by the wire-level Bind command. The
+	// SQL EXECUTE command (which also needs to bind and resolve types) is
+	// handled separately in conn_executor_exec.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		return ex.beginImplicitTxn(ctx, ps.AST)
 	}
@@ -372,22 +372,12 @@ func (ex *connExecutor) execBind(
 					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
 		}
 
-		// We need to make sure type resolution happens within a transaction.
-		// Otherwise, for user-defined types we won't take the correct leases and
-		// will get back out of date type information. However, if there are no
-		// user-defined types to resolve, then a transaction is not needed, so
-		// txn is allowed to be nil.
-		// This code path is only used by the wire-level Bind command. The
-		// SQL EXECUTE command (which also needs to bind and resolve types) is
-		// handled separately in conn_executor_exec.
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
-			if txn != nil {
-				ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
-				p := &ex.planner
-				ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
-				if err := ex.handleAOST(ctx, ps.AST); err != nil {
-					return err
-				}
+			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+			p := &ex.planner
+			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+			if err := ex.handleAOST(ctx, ps.AST); err != nil {
+				return err
 			}
 
 			for i, arg := range bindCmd.Args {
@@ -420,36 +410,9 @@ func (ex *connExecutor) execBind(
 			return nil
 		}
 
-		needsTxn := false
-		for i, arg := range bindCmd.Args {
-			t := ps.InferredTypes[i]
-			// User-defined types and OID types both need a transaction.
-			if typ, ok := types.OidToType[t]; arg != nil && (!ok || typ.Family() == types.OidFamily) {
-				needsTxn = true
-				break
-			}
-		}
-
-		if !needsTxn {
-			if err := resolve(ctx, nil /* txn */); err != nil {
-				return retErr(err)
-			}
-		} else if txn := ex.state.mu.txn; txn != nil && txn.IsOpen() {
-			// Use the existing transaction.
-			if err := resolve(ctx, txn); err != nil {
-				return retErr(err)
-			}
-		} else {
-			// Use a new transaction. This will handle retriable errors here rather
-			// than bubbling them up to the connExecutor state machine.
-			if err := ex.server.cfg.DB.Txn(ctx, resolve); err != nil {
-				return retErr(err)
-			}
-			// Bind with an implicit transaction will end up creating
-			// a new transaction. Once this transaction is complete,
-			// we can safely release the leases, otherwise we will
-			// incorrectly hold leases for later operations.
-			ex.extraTxnState.descCollection.ReleaseAll(ctx)
+		// Use the existing transaction.
+		if err := resolve(ctx, ex.state.mu.txn); err != nil {
+			return retErr(err)
 		}
 	}
 
