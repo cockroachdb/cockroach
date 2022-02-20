@@ -51,12 +51,12 @@ type MVCCRangeKeyIterOptions struct {
 // be buffered in memory. But see the Fragmented option to emit
 // non-deterministic range key fragments in StartKey,Timestamp order.
 type MVCCRangeKeyIterator struct {
-	iter        MVCCIterator
-	opts        MVCCRangeKeyIterOptions
-	incomplete  []*MVCCRangeKeyValue // defragmentation buffer
-	complete    []MVCCRangeKeyValue  // queued for emission
-	completeIdx int                  // current Key()
-	err         error
+	iter         MVCCIterator
+	opts         MVCCRangeKeyIterOptions
+	defragmenter *MVCCRangeKeyDefragmenter
+	complete     []MVCCRangeKeyValue // queued for emission
+	completeIdx  int                 // current Key()
+	err          error
 }
 
 // NewMVCCRangeKeyIterator sets up a new MVCCRangeKeyIterator and seeks to the
@@ -70,9 +70,9 @@ func NewMVCCRangeKeyIterator(r Reader, opts MVCCRangeKeyIterOptions) *MVCCRangeK
 			// TODO(erikgrinaker): We do not set Min/MaxTimestampHint here, because
 			// both are required and it's apparently not always safe to use.
 		}),
-		opts:       opts,
-		incomplete: make([]*MVCCRangeKeyValue, 0),
-		complete:   make([]MVCCRangeKeyValue, 0),
+		opts:         opts,
+		defragmenter: NewMVCCRangeKeyDefragmenter(),
+		complete:     make([]MVCCRangeKeyValue, 0),
 	}
 
 	// Seek the iterator to the lower bound and iterate until we've collected
@@ -87,8 +87,6 @@ func NewMVCCRangeKeyIterator(r Reader, opts MVCCRangeKeyIterOptions) *MVCCRangeK
 // and any subsequent iterator positions until it completes one or more range
 // keys, populating p.complete. Current p.complete is discarded.
 func (p *MVCCRangeKeyIterator) findCompleteRangeKeys() {
-	p.complete = p.complete[:0]
-	p.completeIdx = 0
 	p.updateRangeKeys()
 
 	for len(p.complete) == 0 {
@@ -106,11 +104,11 @@ func (p *MVCCRangeKeyIterator) findCompleteRangeKeys() {
 	}
 }
 
-// updateRangeKeys inspects the range keys at the current Pebble iterator
-// position, defragments them in p.incomplete, and moves any completed
-// range keys into p.complete.
+// updateRangeKeys defragments the range keys at the current Pebble iterator
+// position, storing any completes range keys in p.complete.
 func (p *MVCCRangeKeyIterator) updateRangeKeys() {
-	var startKey, endKey roachpb.Key
+	p.completeIdx = 0
+
 	var rangeKeys []MVCCRangeKeyValue
 
 	// If the iterator is exhausted, we still want to complete any remaining
@@ -119,106 +117,37 @@ func (p *MVCCRangeKeyIterator) updateRangeKeys() {
 		p.err = err
 		return
 	} else if ok {
-		startKey, endKey = p.iter.RangeBounds()
 		rangeKeys = p.iter.RangeKeys()
 	}
 
-	// Both rangeKeys and p.incomplete are sorted in descending timestamp order,
-	// so we iterate over them in lockstep and insert/update/delete p.incomplete
-	// as appropriate.
-	var tsIdx, rkIdx int
-
-	for rkIdx < len(rangeKeys) {
-		rangeKey := rangeKeys[rkIdx]
-
-		// Filter rangekeys by timestamp.
-		//
-		// TODO(erikgrinaker): This can be optimized to skip unnecessary comparisons
-		// since rangeKeys is sorted by timestamp. Maybe later.
-		if !p.opts.MinTimestamp.IsEmpty() && rangeKey.Key.Timestamp.Less(p.opts.MinTimestamp) {
-			rkIdx++
-			continue
-		}
-		if !p.opts.MaxTimestamp.IsEmpty() && p.opts.MaxTimestamp.Less(rangeKey.Key.Timestamp) {
-			rkIdx++
-			continue
-		}
-
-		// If we're at the end of p.incomplete, this range key must be new.
-		if tsIdx >= len(p.incomplete) {
-			p.incomplete = append(p.incomplete, &MVCCRangeKeyValue{
-				Key: MVCCRangeKey{
-					StartKey:  startKey.Clone(),
-					EndKey:    endKey.Clone(),
-					Timestamp: rangeKey.Key.Timestamp,
-				},
-				Value: append([]byte{}, rangeKey.Value...),
-			})
-			rkIdx++
-			tsIdx++
-			continue
-		}
-
-		incomplete := p.incomplete[tsIdx]
-		cmp := incomplete.Key.Timestamp.Compare(rangeKey.Key.Timestamp)
-		switch {
-		// If the timestamps match, the key spans are adjacent or overlapping, and
-		// the values match then this range key extends the incomplete one.
-		case cmp == 0 && bytes.Compare(startKey, incomplete.Key.EndKey) <= 0 &&
-			bytes.Equal(rangeKey.Value, incomplete.Value):
-			incomplete.Key.EndKey = append(incomplete.Key.EndKey[:0], endKey...)
-			tsIdx++
-			rkIdx++
-
-		// This is a different range key at the same timestamp: complete the
-		// existing one and start a new one.
-		case cmp == 0:
-			p.complete = append(p.complete, *incomplete)
-			// NB: can't reuse slices, since they were placed in the completed range key.
-			incomplete.Key.StartKey = startKey.Clone()
-			incomplete.Key.EndKey = endKey.Clone()
-			incomplete.Value = append([]byte{}, rangeKey.Value...)
-			tsIdx++
-			rkIdx++
-
-		// This incomplete range key is not present at this range key: complete it
-		// and remove it from the list, then try the current range key again.
-		case cmp == 1:
-			p.complete = append(p.complete, *incomplete)
-			p.incomplete = append(p.incomplete[:tsIdx], p.incomplete[tsIdx+1:]...)
-
-		// This range key is a new incomplete range key: start defragmenting it.
-		case cmp == -1:
-			p.incomplete = append(p.incomplete[:tsIdx+1], p.incomplete[tsIdx:]...)
-			p.incomplete[tsIdx] = &MVCCRangeKeyValue{
-				Key: MVCCRangeKey{
-					StartKey:  startKey.Clone(),
-					EndKey:    endKey.Clone(),
-					Timestamp: rangeKey.Key.Timestamp,
-				},
-				Value: append([]byte{}, rangeKey.Value...),
+	// Filter range keys by timestamp
+	//
+	// TODO(erikgrinaker): This can be optimized to skip unnecessary comparisons
+	// since rangeKeys is sorted by timestamp. Maybe later.
+	if !p.opts.MinTimestamp.IsEmpty() || !p.opts.MaxTimestamp.IsEmpty() {
+		filtered := make([]MVCCRangeKeyValue, 0, len(rangeKeys))
+		for _, rkv := range rangeKeys {
+			if !p.opts.MinTimestamp.IsEmpty() && rkv.Key.Timestamp.Less(p.opts.MinTimestamp) {
+				continue
 			}
-			tsIdx++
-			rkIdx++
-
-		default:
-			p.err = errors.AssertionFailedf("unexpected comparison result %d", cmp)
-			return
+			if !p.opts.MaxTimestamp.IsEmpty() && p.opts.MaxTimestamp.Less(rkv.Key.Timestamp) {
+				continue
+			}
+			filtered = append(filtered, rkv)
 		}
+		rangeKeys = filtered
 	}
 
-	// If the caller has requested fragments, we complete all range keys we found
-	// this iteration by resetting tsIdx to 0. The loop below handles the rest.
+	// Feed the fragments to the defragmenter.
+	p.complete = p.defragmenter.AppendFragments(rangeKeys)
+
+	// If the caller has requested fragments we complete the pending range keys by
+	// feeding the defragmenter an empty fragment stack. The defragmenter will
+	// then be empty on the next updateRangeKeys() call, so the above
+	// AppendFragments() call will always return an empty list.
 	if p.opts.Fragmented {
-		tsIdx = 0
+		p.complete = p.defragmenter.AppendFragments(nil)
 	}
-
-	// If there are any remaining incomplete range keys, they must be complete:
-	// make them so.
-	for _, ts := range p.incomplete[tsIdx:] {
-		p.complete = append(p.complete, *ts)
-	}
-	p.incomplete = p.incomplete[:tsIdx]
 }
 
 // Close frees up resources held by the iterator.
@@ -264,4 +193,92 @@ func (p *MVCCRangeKeyIterator) Valid() (bool, error) {
 		return false, err
 	}
 	return p.completeIdx < len(p.complete), nil
+}
+
+// MVCCRangeKeyDefragmenter defragments range keys into contiguous logical
+// range keys. Abutting range keys at the same timestamp with the same
+// value are considered the same logical range key.
+type MVCCRangeKeyDefragmenter struct {
+	incomplete []*MVCCRangeKeyValue
+}
+
+// NewMVCCRangeKeyDefragmenter creates a new range key defragmenter.
+func NewMVCCRangeKeyDefragmenter() *MVCCRangeKeyDefragmenter {
+	return &MVCCRangeKeyDefragmenter{}
+}
+
+// AppendFragments appends a new stack of range key fragments to the tracked
+// range keys, extending or creating logical range keys as appropriate. The
+// given fragments must be the next fragment stack when iterating across range
+// keys in sequential order, ordered in descending timestamp order. Any tracked
+// range keys that are not present in the given stack will be considered
+// fully defragmented and returned.
+func (d *MVCCRangeKeyDefragmenter) AppendFragments(
+	fragments []MVCCRangeKeyValue,
+) []MVCCRangeKeyValue {
+	var complete []MVCCRangeKeyValue
+
+	// Both fragments and d.incomplete are sorted in descending timestamp order,
+	// so we iterate over them in lockstep and insert/update/delete d.incomplete
+	// as appropriate.
+	var incompleteIdx, fragmentsIdx int
+
+	for fragmentsIdx < len(fragments) {
+		fragment := fragments[fragmentsIdx]
+
+		// If we're at the end of d.incomplete, this range key must be new.
+		if incompleteIdx >= len(d.incomplete) {
+			incomplete := fragment.Clone()
+			d.incomplete = append(d.incomplete, &incomplete)
+			fragmentsIdx++
+			incompleteIdx++
+			continue
+		}
+
+		incomplete := d.incomplete[incompleteIdx]
+		cmp := incomplete.Key.Timestamp.Compare(fragment.Key.Timestamp)
+		switch {
+		// If the timestamps match, the key spans abut, and the values match then
+		// this range key extends the incomplete one.
+		case cmp == 0 && bytes.Equal(fragment.Key.StartKey, incomplete.Key.EndKey) &&
+			bytes.Equal(fragment.Value, incomplete.Value):
+			incomplete.Key.EndKey = append(incomplete.Key.EndKey[:0], fragment.Key.EndKey...)
+			incompleteIdx++
+			fragmentsIdx++
+
+		// This is a different range key at the same timestamp: complete the
+		// existing one and start a new one.
+		case cmp == 0:
+			complete = append(complete, *incomplete)
+			*incomplete = fragment.Clone()
+			incompleteIdx++
+			fragmentsIdx++
+
+		// This incomplete range key is not present at this range key: complete it
+		// and remove it from the list, then try the current range key again.
+		case cmp == 1:
+			complete = append(complete, *incomplete)
+			d.incomplete = append(d.incomplete[:incompleteIdx], d.incomplete[incompleteIdx+1:]...)
+
+		// This range key is a new incomplete range key: start defragmenting it.
+		case cmp == -1:
+			incomplete := fragment.Clone()
+			d.incomplete = append(d.incomplete[:incompleteIdx+1], d.incomplete[incompleteIdx:]...)
+			d.incomplete[incompleteIdx] = &incomplete
+			incompleteIdx++
+			fragmentsIdx++
+
+		default:
+			panic(errors.AssertionFailedf("unexpected comparison result %d", cmp))
+		}
+	}
+
+	// If there are any remaining incomplete range keys, they must be complete:
+	// make them so.
+	for _, incomplete := range d.incomplete[incompleteIdx:] {
+		complete = append(complete, *incomplete)
+	}
+	d.incomplete = d.incomplete[:incompleteIdx]
+
+	return complete
 }
