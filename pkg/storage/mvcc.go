@@ -105,6 +105,15 @@ type MVCCRangeKeyValue struct {
 	Value []byte
 }
 
+// Clone copies the MVCCRangeKeyValue.
+func (rkv MVCCRangeKeyValue) Clone() MVCCRangeKeyValue {
+	c := MVCCRangeKeyValue{Key: rkv.Key.Clone()}
+	if rkv.Value != nil {
+		c.Value = append([]byte{}, rkv.Value...)
+	}
+	return c
+}
+
 // optionalValue represents an optional roachpb.Value. It is preferred
 // over a *roachpb.Value to avoid the forced heap allocation.
 type optionalValue struct {
