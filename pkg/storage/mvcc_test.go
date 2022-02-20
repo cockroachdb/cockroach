@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -124,6 +123,8 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		ValCount:             1,
 		IntentBytes:          1,
 		IntentCount:          1,
+		RangeKeyCount:        1,
+		RangeKeyBytes:        1,
 		SeparatedIntentCount: 1,
 		IntentAge:            1,
 		GCBytesAge:           1,
@@ -134,17 +135,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		LastUpdateNanos:      1,
 		AbortSpanBytes:       1,
 	}
-	if err := zerofields.NoZeroField(&goldMS); err != nil {
-		t.Fatal(err) // prevent rot as fields are added
-	}
-
-	cmp := func(act, exp enginepb.MVCCStats) {
-		t.Helper()
-		f, l, _ := caller.Lookup(1)
-		if !reflect.DeepEqual(act, exp) {
-			t.Fatalf("%s:%d: wanted %+v back, got %+v", f, l, exp, act)
-		}
-	}
+	require.NoError(t, zerofields.NoZeroField(&goldMS))
 
 	ms := goldMS
 	zeroWithLU := enginepb.MVCCStats{
@@ -153,10 +144,10 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	}
 
 	ms.Subtract(goldMS)
-	cmp(ms, zeroWithLU)
+	require.Equal(t, zeroWithLU, ms)
 
 	ms.Add(goldMS)
-	cmp(ms, goldMS)
+	require.Equal(t, goldMS, ms)
 
 	// Double-add double-sub guards against mistaking `+=` for `=`.
 	ms = zeroWithLU
@@ -164,7 +155,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	ms.Add(goldMS)
 	ms.Subtract(goldMS)
 	ms.Subtract(goldMS)
-	cmp(ms, zeroWithLU)
+	require.Equal(t, zeroWithLU, ms)
 
 	// Run some checks for Forward.
 	goldDelta := enginepb.MVCCStats{
@@ -174,31 +165,27 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	}
 	delta := goldDelta
 
-	for i, ns := range []int64{1, 1e9 - 1001, 1e9 - 1000, 1e9 - 1, 1e9, 1e9 + 1, 2e9 - 1} {
+	for _, ns := range []int64{1, 1e9 - 1001, 1e9 - 1000, 1e9 - 1, 1e9, 1e9 + 1, 2e9 - 1} {
 		oldDelta := delta
 		delta.AgeTo(ns)
-		if delta.LastUpdateNanos < ns {
-			t.Fatalf("%d: expected LastUpdateNanos < %d, got %d", i, ns, delta.LastUpdateNanos)
-		}
+		require.GreaterOrEqual(t, delta.LastUpdateNanos, ns, "LastUpdateNanos")
 		shouldAge := ns/1e9-oldDelta.LastUpdateNanos/1e9 > 0
 		didAge := delta.IntentAge != oldDelta.IntentAge &&
 			delta.GCBytesAge != oldDelta.GCBytesAge
-		if shouldAge != didAge {
-			t.Fatalf("%d: should age: %t, but had\n%+v\nand now\n%+v", i, shouldAge, oldDelta, delta)
-		}
+		require.Equal(t, shouldAge, didAge)
 	}
 
 	expDelta := goldDelta
 	expDelta.LastUpdateNanos = 2e9 - 1
 	expDelta.GCBytesAge = 42
 	expDelta.IntentAge = 11
-	cmp(delta, expDelta)
+	require.Equal(t, expDelta, delta)
 
 	delta.AgeTo(2e9)
 	expDelta.LastUpdateNanos = 2e9
 	expDelta.GCBytesAge += 42
 	expDelta.IntentAge += 11
-	cmp(delta, expDelta)
+	require.Equal(t, expDelta, delta)
 
 	{
 		// Verify that AgeTo can go backwards in time.
@@ -210,13 +197,13 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		expDelta.LastUpdateNanos = 2e9 - 1
 		expDelta.GCBytesAge -= 42
 		expDelta.IntentAge -= 11
-		cmp(tmpDelta, expDelta)
+		require.Equal(t, expDelta, tmpDelta)
 	}
 
 	delta.AgeTo(3e9 - 1)
 	delta.Forward(5) // should be noop
 	expDelta.LastUpdateNanos = 3e9 - 1
-	cmp(delta, expDelta)
+	require.Equal(t, expDelta, delta)
 
 	// Check that Add calls Forward appropriately.
 	mss := []enginepb.MVCCStats{goldMS, goldMS}
@@ -227,13 +214,13 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	expMS := goldMS
 	expMS.Add(goldMS)
 	expMS.LastUpdateNanos = 10e9 + 1
-	expMS.IntentAge += 9  // from aging 9 ticks from 2E9-1 to 10E9+1
-	expMS.GCBytesAge += 9 // ditto
+	expMS.IntentAge += 9      // from aging 9 ticks from 2E9-1 to 10E9+1
+	expMS.GCBytesAge += 2 * 9 // ditto
 
 	for i := range mss[:1] {
 		ms := mss[(1+i)%2]
 		ms.Add(mss[i])
-		cmp(ms, expMS)
+		require.Equal(t, expMS, ms)
 	}
 
 	// Finally, check Forward with negative counts (can happen).
@@ -244,9 +231,9 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	neg.AgeTo(2e9)
 
 	exp.LastUpdateNanos = 2e9
-	exp.GCBytesAge = -3
+	exp.GCBytesAge = -5
 	exp.IntentAge = -3
-	cmp(neg, exp)
+	require.Equal(t, exp, neg)
 }
 
 func TestMVCCGetNotExist(t *testing.T) {
@@ -911,7 +898,10 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					switch which {
 					case "get":
 						iterOptions.Prefix = true
-					case "scan", "findSplitKey", "computeStats":
+					case "computeStats":
+						iterOptions.KeyTypes = IterKeyTypePointsAndRanges
+						iterOptions.UpperBound = roachpb.KeyMax
+					case "scan", "findSplitKey":
 						iterOptions.UpperBound = roachpb.KeyMax
 					}
 
@@ -2302,13 +2292,23 @@ func computeStats(
 	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
 ) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: to})
-	defer iter.Close()
-	s, err := ComputeStatsForRange(iter, from, to, nowNanos)
-	if err != nil {
-		t.Fatalf("%+v", err)
+
+	if len(from) == 0 {
+		from = keys.LocalMax
 	}
-	return s
+	if len(to) == 0 {
+		to = keys.MaxKey
+	}
+
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: from,
+		UpperBound: to,
+	})
+	defer iter.Close()
+	ms, err := ComputeStatsForRange(iter, from, to, nowNanos)
+	require.NoError(t, err)
+	return ms
 }
 
 // TestMVCCClearTimeRangeOnRandomData sets up mostly random KVs and then picks

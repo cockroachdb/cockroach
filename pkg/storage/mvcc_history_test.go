@@ -58,6 +58,7 @@ import (
 // txn_status     t=<name> status=<txnstatus>
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
+// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
 //
 // cput           [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
@@ -467,9 +468,9 @@ var commands = map[string]cmd{
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
-	"resolve_intent": {typDataUpdate, cmdResolveIntent},
-	// TODO(nvanbenschoten): test "resolve_intent_range".
-	"check_intent": {typReadOnly, cmdCheckIntent},
+	"resolve_intent":       {typDataUpdate, cmdResolveIntent},
+	"resolve_intent_range": {typDataUpdate, cmdResolveIntentRange},
+	"check_intent":         {typReadOnly, cmdCheckIntent},
 
 	"clear_range":  {typDataUpdate, cmdClearRange},
 	"cput":         {typDataUpdate, cmdCPut},
@@ -632,6 +633,27 @@ func cmdResolveIntent(e *evalCtx) error {
 	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status)
 }
 
+func cmdResolveIntentRange(e *evalCtx) error {
+	txn := e.getTxn(mandatory)
+	start, end := e.getKeyRange()
+	status := e.getTxnStatus()
+
+	// TODO(erikgrinaker): We use a batch to hit the ConsistentIterators() path in
+	// MVCCResolveWriteIntentRange. This function will shortly be rewritten to
+	// remove the other path, so there's no point implementing it. See:
+	// https://github.com/cockroachdb/cockroach/pull/81063
+	batch := e.engine.NewBatch()
+	defer batch.Close()
+
+	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: start, EndKey: end})
+	intent.Status = status
+	_, _, err := MVCCResolveWriteIntentRange(e.ctx, e.tryWrapForIntentPrinting(batch), e.ms, intent, 0)
+	if err != nil {
+		return err
+	}
+	return batch.Commit(true)
+}
+
 func (e *evalCtx) resolveIntent(
 	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
 ) error {
@@ -751,7 +773,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	ts := e.getTs(nil)
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, 0)
+		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, nil, nil, 0)
 	})
 }
 

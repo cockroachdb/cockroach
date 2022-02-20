@@ -90,15 +90,17 @@ func (t TxnMeta) Short() redact.SafeString {
 }
 
 // Total returns the range size as the sum of the key and value
-// bytes. This includes all non-live keys and all versioned values.
+// bytes. This includes all non-live keys and all versioned values,
+// both for point and range keys.
 func (ms MVCCStats) Total() int64 {
-	return ms.KeyBytes + ms.ValBytes
+	return ms.KeyBytes + ms.ValBytes + ms.RangeKeyBytes
 }
 
 // GCBytes is a convenience function which returns the number of gc bytes,
-// that is the key and value bytes excluding the live bytes.
+// that is the key and value bytes excluding the live bytes, both for
+// point keys and range keys.
 func (ms MVCCStats) GCBytes() int64 {
-	return ms.KeyBytes + ms.ValBytes - ms.LiveBytes
+	return ms.Total() - ms.LiveBytes
 }
 
 // AvgIntentAge returns the average age of outstanding intents,
@@ -169,6 +171,8 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
 	ms.SeparatedIntentCount += oms.SeparatedIntentCount
+	ms.RangeKeyCount += oms.RangeKeyCount
+	ms.RangeKeyBytes += oms.RangeKeyBytes
 	ms.SysBytes += oms.SysBytes
 	ms.SysCount += oms.SysCount
 	ms.AbortSpanBytes += oms.AbortSpanBytes
@@ -196,6 +200,8 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
 	ms.SeparatedIntentCount -= oms.SeparatedIntentCount
+	ms.RangeKeyCount -= oms.RangeKeyCount
+	ms.RangeKeyBytes -= oms.RangeKeyBytes
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
 	ms.AbortSpanBytes -= oms.AbortSpanBytes
