@@ -5,7 +5,13 @@
 # TODO(yuzefovich): clean up the tracing in the vectorized engine and remove
 # adjustment of vectorize mode (#55821).
 statement ok
-SET vectorize=off; SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off; RESET vectorize
+SET vectorize=off; SET tracing = on
+
+statement ok
+BEGIN; SELECT 1; COMMIT; SELECT 2
+
+statement ok
+SET tracing = off; RESET vectorize
 
 # Inspect the trace: we exclude messages containing newlines as these
 # may contain non-deterministic txn object descriptions.
@@ -20,22 +26,26 @@ FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
 0   === SPAN START: session recording ===                session recording
+1   === SPAN START: session tracing ===                  session tracing
+1   [Open pos:?] executing Sync                          session tracing
+2   === SPAN START: commit sql txn ===                   commit sql txn
 0   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
-1   === SPAN START: sql txn ===                          sql txn
-1   [Open pos:?] executing ExecStmt: SELECT 1            sql txn
-2   === SPAN START: sql query ===                        sql query
-3   === SPAN START: consuming rows ===                   consuming rows
-4   === SPAN START: flow ===                             flow
-1   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
-5   === SPAN START: sql query ===                        sql query
-6   === SPAN START: commit sql txn ===                   commit sql txn
+3   === SPAN START: sql txn ===                          sql txn
+3   [Open pos:?] executing ExecStmt: SELECT 1            sql txn
+4   === SPAN START: sql query ===                        sql query
+5   === SPAN START: consuming rows ===                   consuming rows
+6   === SPAN START: flow ===                             flow
+3   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
+7   === SPAN START: sql query ===                        sql query
+8   === SPAN START: commit sql txn ===                   commit sql txn
 0   [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
-7   === SPAN START: sql txn ===                          sql txn
-7   [Open pos:?] executing ExecStmt: SELECT 2            sql txn
-8   === SPAN START: sql query ===                        sql query
-9   === SPAN START: consuming rows ===                   consuming rows
-10  === SPAN START: flow ===                             flow
-11  === SPAN START: commit sql txn ===                   commit sql txn
+9   === SPAN START: sql txn ===                          sql txn
+9   [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+10  === SPAN START: sql query ===                        sql query
+11  === SPAN START: consuming rows ===                   consuming rows
+12  === SPAN START: flow ===                             flow
+13  === SPAN START: commit sql txn ===                   commit sql txn
+0   [NoTxn pos:?] executing Sync                         session recording
 0   [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
 
 statement ok

@@ -336,17 +336,15 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-USE t;
-CREATE TYPE t AS ENUM ('hello');
-CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));
-INSERT INTO tt VALUES ('hello');
-CREATE STATISTICS s FROM tt;
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `USE t;`)
+	sqlRunner.Exec(t, `CREATE TYPE t AS ENUM ('hello');`)
+	sqlRunner.Exec(t, `CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));`)
+	sqlRunner.Exec(t, `INSERT INTO tt VALUES ('hello');`)
+	sqlRunner.Exec(t, `CREATE STATISTICS s FROM tt;`)
+
 	_ = kvDB
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(
@@ -371,9 +369,8 @@ CREATE STATISTICS s FROM tt;
 	}
 
 	// Drop the table and the type.
-	if _, err := sqlDB.Exec(`DROP TABLE tt; DROP TYPE t;`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `DROP TABLE tt;`)
+	sqlRunner.Exec(t, `DROP TYPE t;`)
 	// Purge the cache.
 	sc.InvalidateTableStats(ctx, tbl.GetID())
 	// Verify that GetTableStats ignores the statistic on the now unknown type and

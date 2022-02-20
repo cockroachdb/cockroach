@@ -4,9 +4,17 @@ user root
 
 statement ok
 CREATE DATABASE db;
+
+statement ok
 CREATE TABLE db.t();
+
+statement ok
 GRANT CREATE ON DATABASE db TO testuser;
+
+statement ok
 CREATE TABLE db.t2();
+
+statement ok
 ALTER USER testuser CREATEDB;
 
 user testuser
@@ -131,8 +139,14 @@ user testuser
 
 statement ok
 ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+
+statement ok
 ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+
+statement ok
 ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+
+statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
 user root
@@ -146,8 +160,14 @@ user testuser
 
 statement ok
 ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+
+statement ok
 ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+
+statement ok
 ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+
+statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
 user root
@@ -161,8 +181,14 @@ user testuser
 
 statement ok
 ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+
+statement ok
 ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+
+statement ok
 ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+
+statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
 subtest add_drop_region_repartitioning_privs

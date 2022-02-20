@@ -48,13 +48,16 @@ func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) e
 func CreateKVTable(sqlDB *gosql.DB, name string, numRows int) error {
 	// Fix the column families so the key counts don't change if the family
 	// heuristics are updated.
-	schema := fmt.Sprintf(`
-		CREATE DATABASE IF NOT EXISTS t;
-		CREATE TABLE t.%s (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
-		CREATE INDEX foo on t.%s (v);`, name, name)
+	schemaStmts := []string{
+		`CREATE DATABASE IF NOT EXISTS t;`,
+		fmt.Sprintf(`CREATE TABLE t.%s (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));`, name),
+		fmt.Sprintf(`CREATE INDEX foo on t.%s (v);`, name),
+	}
 
-	if _, err := sqlDB.Exec(schema); err != nil {
-		return err
+	for _, stmt := range schemaStmts {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			return err
+		}
 	}
 
 	// Bulk insert.

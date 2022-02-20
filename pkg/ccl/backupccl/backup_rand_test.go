@@ -115,7 +115,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 	// and per-table restores) work properly with two kinds of table backups
 	// (full database backups and per-table backups).
 	for _, backup := range dbBackups {
-		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb; CREATE DATABASE restoredb")
+		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
+		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 		if err := verifyBackupRestoreStatementResult(
 			t, sqlDB, "RESTORE rand.* FROM $1 WITH OPTIONS (into_db='restoredb')", backup,
 		); err != nil {
@@ -135,7 +136,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 	tableNameCombos := powerset(tableNames)
 
 	for i, combo := range tableNameCombos {
-		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb; CREATE DATABASE restoredb")
+		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
+		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 		backupTarget := fmt.Sprintf("%s%d", localFoo, i)
 		if len(combo) == 0 {
 			continue

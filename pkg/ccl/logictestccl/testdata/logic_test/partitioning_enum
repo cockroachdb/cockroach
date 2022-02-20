@@ -61,7 +61,9 @@ subtest drop_enum_partitioning_value
 
 statement ok
 drop table if exists tbl;
-drop type if exists t;
+drop type if exists t
+
+statement ok
 create type t as enum('a', 'b', 'c');
 create table tbl (pk t PRIMARY KEY) PARTITION BY LIST (pk) (PARTITION "a" VALUES IN ('a'))
 
@@ -70,7 +72,9 @@ alter type t drop value 'a'
 
 statement ok
 drop table if exists tbl;
-drop type if exists t;
+drop type if exists t
+
+statement ok
 create type t as enum('a', 'b', 'c');
 create table tbl (i INT, k t,  PRIMARY KEY (i, k)) PARTITION BY LIST (i) (PARTITION "one" VALUES IN (1) PARTITION BY RANGE (k) (PARTITION "a" VALUES FROM ('a') TO ('b')))
 
@@ -79,7 +83,9 @@ alter type t drop value 'a'
 
 statement ok
 drop table if exists tbl;
-drop type if exists t;
+drop type if exists t
+
+statement ok
 create type t as enum('a', 'b', 'c');
 create table tbl (i INT, k t,  PRIMARY KEY (i, k), INDEX idx (k) PARTITION BY RANGE (k) (PARTITION "a" VALUES FROM ('a') TO ('b')))
 

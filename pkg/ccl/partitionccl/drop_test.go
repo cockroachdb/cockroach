@@ -196,18 +196,17 @@ SELECT job_id
 
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
+		tdb.Exec(t, `CREATE TYPE typ AS ENUM ('a', 'b', 'c')`)
 		tdb.Exec(t, `
-	  CREATE TYPE typ AS ENUM ('a', 'b', 'c');
-	  CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
+    CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
 	              PARTITION a VALUES IN ('a'),
 	              PARTITION b VALUES IN ('b'),
 	              PARTITION c VALUES IN ('c')
-	  );
-	  CREATE INDEX idx ON t (e);
-	  ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
-	  ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
-	  DROP INDEX t@idx;
-	  `)
+	  )`)
+		tdb.Exec(t, `CREATE INDEX idx ON t (e)`)
+		tdb.Exec(t, `ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321`)
+		tdb.Exec(t, `ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1`)
+		tdb.Exec(t, `DROP INDEX t@idx`)
 
 		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
 	})
@@ -237,28 +236,29 @@ SELECT job_id
 
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
+		tdb.Exec(t, `CREATE TYPE typ AS ENUM ('a', 'b', 'c')`)
 		tdb.Exec(t, `
-	  CREATE TYPE typ AS ENUM ('a', 'b', 'c');
-	  CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
+    CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
 	              PARTITION a VALUES IN ('a'),
 	              PARTITION b VALUES IN ('b'),
 	              PARTITION c VALUES IN ('c')
-	  );
-	  CREATE INDEX idx
+	  )`)
+		tdb.Exec(t, `
+    CREATE INDEX idx
 	      ON t (e)
 	      PARTITION BY LIST (e)
 	          (
 	              PARTITION ai VALUES IN ('a'),
 	              PARTITION bi VALUES IN ('b'),
 	              PARTITION ci VALUES IN ('c')
-	          );
-	  ALTER PARTITION ai OF INDEX t@idx CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
-	  ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
-	  ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
-	  DROP INDEX t@idx;
-	  DROP TABLE t;
-	  DROP TYPE typ;
-	  `)
+	          )`,
+		)
+		tdb.Exec(t, `ALTER PARTITION ai OF INDEX t@idx CONFIGURE ZONE USING range_min_bytes = 123456,range_max_bytes = 654321`)
+		tdb.Exec(t, `ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321`)
+		tdb.Exec(t, `ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1`)
+		tdb.Exec(t, `DROP INDEX t@idx`)
+		tdb.Exec(t, `DROP TABLE t`)
+		tdb.Exec(t, `DROP TYPE typ`)
 
 		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
 		tdb.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1`)

@@ -66,19 +66,37 @@ HINT: there are two ways you can resolve this issue: 1) update the cluster to wh
 # Create a database with no regions to check default primary regions.
 exec-sql
 CREATE DATABASE no_region_db;
+----
+
+exec-sql
 CREATE TABLE no_region_db.t (x INT);
 INSERT INTO no_region_db.t VALUES (1), (2), (3);
 CREATE DATABASE no_region_db_2;
 CREATE TABLE no_region_db_2.t (x INT);
 INSERT INTO no_region_db_2.t VALUES (1), (2), (3);
+----
+
+exec-sql
 BACKUP DATABASE no_region_db TO 'nodelocal://1/no_region_database_backup/';
+----
+
+exec-sql
 BACKUP TO 'nodelocal://1/no_region_cluster_backup/';
+----
+
+exec-sql
 DROP DATABASE no_region_db;
+----
+
+exec-sql
 DROP DATABASE no_region_db_2;
 ----
 
 exec-sql
 SET CLUSTER SETTING sql.defaults.primary_region = 'non-existent-region';
+----
+
+exec-sql
 RESTORE DATABASE no_region_db FROM 'nodelocal://1/no_region_database_backup/';
 ----
 pq: region "non-existent-region" does not exist
@@ -88,6 +106,9 @@ set the default PRIMARY REGION to a region that exists (see SHOW REGIONS FROM CL
 
 exec-sql
 SET CLUSTER SETTING sql.defaults.primary_region = 'eu-central-1';
+----
+
+exec-sql
 RESTORE DATABASE no_region_db FROM 'nodelocal://1/no_region_database_backup/';
 ----
 NOTICE: setting the PRIMARY REGION as eu-central-1 on database no_region_db
@@ -111,9 +132,12 @@ exec-sql
 CREATE DATABASE eu_central_db;
 CREATE TABLE eu_central_db.t (x INT);
 INSERT INTO eu_central_db.t VALUES (1), (2), (3);
-BACKUP DATABASE eu_central_db TO 'nodelocal://1/eu_central_database_backup/';
 ----
 NOTICE: setting eu-central-1 as the PRIMARY REGION as no PRIMARY REGION was specified
+
+exec-sql
+BACKUP DATABASE eu_central_db TO 'nodelocal://1/eu_central_database_backup/';
+----
 
 # New cluster for a cluster backup.
 new-server name=s4 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
@@ -121,6 +145,9 @@ new-server name=s4 share-io-dir=s1 allow-implicit-access localities=eu-central-1
 
 exec-sql
 SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
+----
+
+exec-sql
 RESTORE FROM 'nodelocal://1/no_region_cluster_backup/';
 ----
 NOTICE: setting the PRIMARY REGION as eu-north-1 on database defaultdb

@@ -1409,6 +1409,8 @@ ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 # database.
 statement ok
 DROP TYPE db_enum_name_clash.crdb_internal_region;
+
+statement ok
 ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 
 
@@ -1418,8 +1420,12 @@ subtest regional_by_row_view
 
 statement ok
 CREATE DATABASE db;
+
+statement ok
 USE db;
 ALTER DATABASE db PRIMARY REGION "us-east-1";
+
+statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
 
 statement ok

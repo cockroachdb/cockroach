@@ -523,9 +523,8 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
-		// BEGIN is only allowed if we are in an implicit txn that was started
-		// in the extended protocol.
-		if isExtendedProtocol && os.ImplicitTxn.Get() {
+		// BEGIN is only allowed if we are in an implicit txn.
+		if os.ImplicitTxn.Get() {
 			ex.sessionDataStack.PushTopClone()
 			return eventTxnUpgradeToExplicit{}, nil, nil
 		}
