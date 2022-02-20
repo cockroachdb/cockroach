@@ -8,12 +8,18 @@ new-server name=s1
 # descriptor will add the span for index 2 /Table/55/{2-3}. These spans should
 # be allowed to overlap.
 exec-sql
-CREATE DATABASE d;
+CREATE DATABASE d
+----
+
+exec-sql
 CREATE TABLE d.t (a INT PRIMARY KEY, b INT, c INT);
 CREATE INDEX test_idx_2 ON d.t(b);
 CREATE INDEX test_idx_3 ON d.t(c);
 DROP INDEX d.test_idx_2;
-BACKUP DATABASE d INTO 'nodelocal://0/my_backups' WITH revision_history;
 ----
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/my_backups' WITH revision_history;
+----

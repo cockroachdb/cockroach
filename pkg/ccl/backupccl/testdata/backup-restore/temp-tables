@@ -47,13 +47,22 @@ BACKUP d1.* TO 'nodelocal://0/d1_star_backup/'
 
 exec-sql
 COMMENT ON TABLE temp_table IS 'should not show up in restore';
+----
+
+exec-sql
 BACKUP TO 'nodelocal://0/full_cluster_backup/';
 ----
 
 exec-sql
 USE defaultdb;
-DROP DATABASE d1;
-RESTORE DATABASE d1 FROM 'nodelocal://0/d1_backup/';
+DROP DATABASE d1
+----
+
+exec-sql
+RESTORE DATABASE d1 FROM 'nodelocal://0/d1_backup/'
+----
+
+exec-sql
 USE d1
 ----
 
@@ -75,8 +84,14 @@ perm_table
 
 exec-sql
 USE defaultdb;
-DROP DATABASE d1;
-RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/';
+DROP DATABASE d1
+----
+
+exec-sql
+RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/'
+----
+
+exec-sql
 USE d1
 ----
 
@@ -102,6 +117,9 @@ new-server name=s2 share-io-dir=s1 temp-cleanup-freq=5s
 
 exec-sql
 USE defaultdb;
+----
+
+exec-sql
 RESTORE FROM 'nodelocal://0/full_cluster_backup/';
 ----
 

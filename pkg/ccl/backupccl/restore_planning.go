@@ -1142,8 +1142,8 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnImplicit || restoreStmt.Options.Detached) {
-			return errors.Errorf("RESTORE cannot be used inside a transaction without DETACHED option")
+		if !(p.IsAutoCommit() || restoreStmt.Options.Detached) {
+			return errors.Errorf("RESTORE cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
 		subdir, err := subdirFn()

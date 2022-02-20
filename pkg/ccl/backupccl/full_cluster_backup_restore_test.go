@@ -1042,15 +1042,13 @@ func TestClusterRevisionDoesNotBackupOptOutSystemTables(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	defer cleanup()
 
-	sqlDB.Exec(t, `
-CREATE DATABASE test;
-USE test;
-CREATE TABLE foo (id INT);
-BACKUP TO 'nodelocal://1/foo' WITH revision_history;
-BACKUP TO 'nodelocal://1/foo' WITH revision_history;
-CREATE TABLE bar (id INT);
-BACKUP TO 'nodelocal://1/foo' WITH revision_history;
-`)
+	sqlDB.Exec(t, `CREATE DATABASE test;`)
+	sqlDB.Exec(t, `USE test;`)
+	sqlDB.Exec(t, `CREATE TABLE foo (id INT);`)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `CREATE TABLE bar (id INT);`)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
 }
 
 func TestRestoreWithRecreatedDefaultDB(t *testing.T) {

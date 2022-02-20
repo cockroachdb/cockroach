@@ -123,8 +123,8 @@ func (ef *execFactory) ConstructExport(
 		return nil, err
 	}
 
-	if !ef.planner.ExtendedEvalContext().TxnImplicit {
-		return nil, errors.Errorf("EXPORT cannot be used inside a transaction")
+	if !ef.planner.IsAutoCommit() {
+		return nil, errors.Errorf("EXPORT cannot be used inside a multi-statement transaction")
 	}
 
 	if fileSuffix != csvSuffix && fileSuffix != parquetSuffix {

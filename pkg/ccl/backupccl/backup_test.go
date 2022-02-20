@@ -5481,7 +5481,7 @@ func TestDetachedBackup(t *testing.T) {
 		return tx.QueryRow(`BACKUP DATABASE data TO $1`, localFoo).Scan(&jobID)
 	})
 	require.True(t, testutils.IsError(err,
-		"BACKUP cannot be used inside a transaction without DETACHED option"))
+		"BACKUP cannot be used inside a multi-statement transaction without DETACHED option"))
 
 	// Okay to run DETACHED backup, even w/out explicit transaction.
 	sqlDB.QueryRow(t, `BACKUP DATABASE data TO $1 WITH DETACHED`, localFoo).Scan(&jobID)
@@ -5535,7 +5535,7 @@ func TestDetachedRestore(t *testing.T) {
 		return tx.QueryRow(`RESTORE TABLE t FROM $1 WITH INTO_DB=test`, localFoo).Scan(&jobID)
 	})
 	require.True(t, testutils.IsError(err,
-		"RESTORE cannot be used inside a transaction without DETACHED option"))
+		"RESTORE cannot be used inside a multi-statement transaction without DETACHED option"))
 
 	// Okay to run DETACHED RESTORE, even w/out explicit transaction.
 	sqlDB.QueryRow(t, `RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`,
@@ -9054,11 +9054,9 @@ func TestDroppedDescriptorRevisionAndSystemDBIDClash(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `
-CREATE TABLE foo (id INT);
-BACKUP TO 'nodelocal://0/foo' WITH revision_history;
-DROP TABLE foo;
-`)
+	sqlDB.Exec(t, `CREATE TABLE foo (id INT);`)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://0/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `DROP TABLE foo;`)
 
 	var aost string
 	sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&aost)
@@ -9134,15 +9132,13 @@ func TestRestoreRemappingOfExistingUDTInColExpr(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `
-CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
-CREATE TABLE foo (id INT PRIMARY KEY, what status default 'open');
-BACKUP DATABASE data to 'nodelocal://0/foo';
-DROP TABLE foo CASCADE;
-DROP TYPE status;
-CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
-RESTORE TABLE foo FROM 'nodelocal://0/foo';
-`)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');`)
+	sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, what status default 'open');`)
+	sqlDB.Exec(t, `BACKUP DATABASE data to 'nodelocal://0/foo';`)
+	sqlDB.Exec(t, `DROP TABLE foo CASCADE;`)
+	sqlDB.Exec(t, `DROP TYPE status;`)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');`)
+	sqlDB.Exec(t, `RESTORE TABLE foo FROM 'nodelocal://0/foo';`)
 }
 
 // TestGCDropIndexSpanExpansion is a regression test for
@@ -9173,13 +9169,12 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(conn)
 	sqlRunner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
 
-	sqlRunner.Exec(t, `
-CREATE DATABASE test; USE test;
-CREATE TABLE foo (id INT PRIMARY KEY, id2 INT, id3 INT, INDEX bar (id2), INDEX baz(id3));
-ALTER INDEX foo@bar CONFIGURE ZONE USING gc.ttlseconds = '1';
-INSERT INTO foo VALUES (1, 2, 3);
-DROP INDEX foo@bar;
-`)
+	sqlRunner.Exec(t, `CREATE DATABASE test;`)
+	sqlRunner.Exec(t, ` USE test;`)
+	sqlRunner.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, id2 INT, id3 INT, INDEX bar (id2), INDEX baz(id3));`)
+	sqlRunner.Exec(t, `ALTER INDEX foo@bar CONFIGURE ZONE USING gc.ttlseconds = '1';`)
+	sqlRunner.Exec(t, `INSERT INTO foo VALUES (1, 2, 3);`)
+	sqlRunner.Exec(t, `DROP INDEX foo@bar;`)
 
 	// Wait until the index is about to get gc'ed.
 	<-aboutToGC

@@ -6605,7 +6605,7 @@ func TestDetachedImport(t *testing.T) {
 	}
 	err := crdb.ExecuteTx(ctx, connDB, nil, importWithoutDetached)
 	require.True(t,
-		testutils.IsError(err, "IMPORT cannot be used inside a transaction without DETACHED option"))
+		testutils.IsError(err, "IMPORT cannot be used inside a multi-statement transaction without DETACHED option"))
 
 	// We can execute IMPORT under transaction with detached option.
 	importWithDetached := func(txn *gosql.Tx) error {
