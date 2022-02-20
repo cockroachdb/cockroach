@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -546,7 +547,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			break
 		}
 
-		if utilccl.IsPermanentBulkJobError(err) {
+		if joberror.IsPermanentBulkJobError(err) {
 			return errors.Wrap(err, "failed to run backup")
 		}
 

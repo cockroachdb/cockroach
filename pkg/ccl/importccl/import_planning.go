@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -166,17 +165,22 @@ var avroAllowedOptions = makeStringSet(
 	avroStrict, avroBinRecords, avroJSONRecords,
 	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize, csvRowLimit,
 )
+
 var csvAllowedOptions = makeStringSet(
 	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit,
 )
+
 var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
 	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
-var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
-var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
-	pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
+
+var (
+	mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
+	pgCopyAllowedOptions    = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
+	pgDumpAllowedOptions    = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
+		pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
+)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -792,7 +796,7 @@ func importPlanHook(
 
 			// Validate target columns.
 			var intoCols []string
-			var isTargetCol = make(map[string]bool)
+			isTargetCol := make(map[string]bool)
 			for _, name := range importStmt.IntoCols {
 				active, err := tabledesc.FindPublicColumnsWithNames(found, tree.NameList{name})
 				if err != nil {

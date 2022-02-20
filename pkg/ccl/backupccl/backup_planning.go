@@ -104,11 +104,13 @@ func (p *backupKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 	return p.conf
 }
 
-type plaintextMasterKeyID string
-type hashedMasterKeyID string
-type encryptedDataKeyMap struct {
-	m map[hashedMasterKeyID][]byte
-}
+type (
+	plaintextMasterKeyID string
+	hashedMasterKeyID    string
+	encryptedDataKeyMap  struct {
+		m map[hashedMasterKeyID][]byte
+	}
+)
 
 func newEncryptedDataKeyMap() *encryptedDataKeyMap {
 	return &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
@@ -1261,7 +1263,8 @@ func makeNewEncryptionOptions(
 		encryptionInfo = &jobspb.EncryptionInfo{Salt: salt}
 		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), salt)}
+			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), salt),
+		}
 	case jobspb.EncryptionMode_KMS:
 		// Generate a 32 byte/256-bit crypto-random number which will serve as
 		// the data key for encrypting the BACKUP data and manifest files.
@@ -1286,7 +1289,8 @@ func makeNewEncryptionOptions(
 		encryptionInfo = &jobspb.EncryptionInfo{EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto}
 		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode:    jobspb.EncryptionMode_KMS,
-			KMSInfo: defaultKMSInfo}
+			KMSInfo: defaultKMSInfo,
+		}
 	}
 	return encryptionOptions, encryptionInfo, nil
 }

@@ -47,6 +47,7 @@ go_library(
         "//pkg/featureflag",
         "//pkg/gossip",
         "//pkg/jobs",
+        "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
