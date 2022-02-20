@@ -133,8 +133,9 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
+	t *testing.T, rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
+	t.Helper()
 	stopper := stop.NewStopper()
 
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
@@ -153,7 +154,7 @@ func newTestProcessorWithTxnPusher(
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
 	})
-	p.Start(stopper, makeIntentScannerConstructor(rtsIter))
+	require.NoError(t, p.Start(stopper, makeIntentScannerConstructor(rtsIter)))
 	return p, stopper
 }
 
@@ -164,13 +165,16 @@ func makeIntentScannerConstructor(rtsIter storage.SimpleMVCCIterator) IntentScan
 	return func() IntentScanner { return NewLegacyIntentScanner(rtsIter) }
 }
 
-func newTestProcessor(rtsIter storage.SimpleMVCCIterator) (*Processor, *stop.Stopper) {
-	return newTestProcessorWithTxnPusher(rtsIter, nil /* pusher */)
+func newTestProcessor(
+	t *testing.T, rtsIter storage.SimpleMVCCIterator,
+) (*Processor, *stop.Stopper) {
+	t.Helper()
+	return newTestProcessorWithTxnPusher(t, rtsIter, nil /* pusher */)
 }
 
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, stopper := newTestProcessor(nil /* rtsIter */)
+	p, stopper := newTestProcessor(t, nil /* rtsIter */)
 	defer stopper.Stop(context.Background())
 
 	// Test processor without registrations.
@@ -433,13 +437,13 @@ func TestNilProcessor(t *testing.T) {
 	// to call on a nil Processor.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	require.Panics(t, func() { p.Start(stopper, nil) })
+	require.Panics(t, func() { _ = p.Start(stopper, nil) })
 	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil, nil) })
 }
 
 func TestProcessorSlowConsumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, stopper := newTestProcessor(nil /* rtsIter */)
+	p, stopper := newTestProcessor(t, nil /* rtsIter */)
 	defer stopper.Stop(context.Background())
 
 	// Add a registration.
@@ -565,7 +569,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	}, nil)
 	rtsIter.block = make(chan struct{})
 
-	p, stopper := newTestProcessor(rtsIter)
+	p, stopper := newTestProcessor(t, rtsIter)
 	defer stopper.Stop(context.Background())
 
 	// The resolved timestamp should not be initialized.
@@ -727,7 +731,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 		return nil
 	})
 
-	p, stopper := newTestProcessorWithTxnPusher(nil /* rtsIter */, &tp)
+	p, stopper := newTestProcessorWithTxnPusher(t, nil /* rtsIter */, &tp)
 	defer stopper.Stop(context.Background())
 
 	// Add a few intents and move the closed timestamp forward.
@@ -817,7 +821,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const trials = 10
 	for i := 0; i < trials; i++ {
-		p, stopper := newTestProcessor(nil /* rtsIter */)
+		p, stopper := newTestProcessor(t, nil /* rtsIter */)
 
 		var wg sync.WaitGroup
 		wg.Add(6)
@@ -863,7 +867,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 // observes only operations that are consumed after it has registered.
 func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, stopper := newTestProcessor(nil /* rtsIter */)
+	p, stopper := newTestProcessor(t, nil /* rtsIter */)
 	defer stopper.Stop(context.Background())
 
 	firstC := make(chan int64)
