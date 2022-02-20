@@ -64,7 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
@@ -507,7 +507,7 @@ func restore(
 		for progress := range progCh {
 			mu.Lock()
 			var progDetails RestoreProgress
-			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+			if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
 				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 			}
 
@@ -1074,6 +1074,16 @@ func createImportingDescriptors(
 				}
 			}
 
+			// Allocate no schedule to the row-level TTL.
+			// This will be re-written when the descriptor is published.
+			if details.DescriptorCoverage != tree.AllDescriptors {
+				for _, table := range mutableTables {
+					if table.HasRowLevelTTL() {
+						table.RowLevelTTL.ScheduleID = 0
+					}
+				}
+			}
+
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(
 				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
@@ -1503,7 +1513,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
+			return r.publishDescriptors(ctx, txn, p.ExecCfg(), p.User(), descsCol, details, nil)
 		}
 		if err := sql.DescsTxn(ctx, r.execCfg, publishDescriptors); err != nil {
 			return err
@@ -1608,7 +1618,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
+		err = r.publishDescriptors(ctx, txn, p.ExecCfg(), p.User(), descsCol, details, devalidateIndexes)
 		return err
 	}
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), publishDescriptors); err != nil {
@@ -1865,6 +1875,8 @@ func insertStats(
 func (r *restoreResumer) publishDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
+	execCfg *sql.ExecutorConfig,
+	user security.SQLUsername,
 	descsCol *descs.Collection,
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,
@@ -1934,6 +1946,21 @@ func (r *restoreResumer) publishDescriptors(
 		version := r.settings.Version.ActiveVersion(ctx)
 		if err := mutTable.AllocateIDs(ctx, version); err != nil {
 			return err
+		}
+		// Assign a TTL schedule before publishing.
+		if details.DescriptorCoverage != tree.AllDescriptors && mutTable.HasRowLevelTTL() {
+			j, err := sql.CreateRowLevelTTLScheduledJob(
+				ctx,
+				execCfg,
+				txn,
+				user,
+				mutTable.GetID(),
+				mutTable.GetRowLevelTTL(),
+			)
+			if err != nil {
+				return err
+			}
+			mutTable.RowLevelTTL.ScheduleID = j.ScheduleID()
 		}
 		newTables = append(newTables, mutTable.TableDesc())
 		// For cluster restores, all the jobs are restored directly from the jobs
@@ -2189,6 +2216,19 @@ func (r *restoreResumer) dropDescriptors(
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
+
+		// Drop any schedules we may have implicitly created.
+		if tableToDrop.HasRowLevelTTL() {
+			scheduleID := tableToDrop.RowLevelTTL.ScheduleID
+			if scheduleID != 0 {
+				if err := sql.DeleteSchedule(
+					ctx, r.execCfg, txn, scheduleID,
+				); err != nil {
+					return err
+				}
+			}
+		}
+
 		// If the DropTime is set, a table uses RangeClear for fast data removal. This
 		// operation starts at DropTime + the GC TTL. If we used now() here, it would
 		// not clean up data until the TTL from the time of the error. Instead, use 1
