@@ -911,7 +911,10 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					switch which {
 					case "get":
 						iterOptions.Prefix = true
-					case "scan", "findSplitKey", "computeStats":
+					case "computeStats":
+						iterOptions.KeyTypes = IterKeyTypePointsAndRanges
+						iterOptions.UpperBound = roachpb.KeyMax
+					case "scan", "findSplitKey":
 						iterOptions.UpperBound = roachpb.KeyMax
 					}
 
@@ -2302,7 +2305,10 @@ func computeStats(
 	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
 ) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: to})
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		UpperBound: to,
+	})
 	defer iter.Close()
 	s, err := ComputeStatsForRange(iter, from, to, nowNanos)
 	if err != nil {
