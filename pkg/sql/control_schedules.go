@@ -97,8 +97,8 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 	)
 }
 
-// deleteSchedule deletes specified schedule.
-func deleteSchedule(
+// DeleteSchedule deletes specified schedule.
+func DeleteSchedule(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, scheduleID int64,
 ) error {
 	env := JobSchedulerEnv(execCfg)
@@ -164,7 +164,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
 			}
-			err = deleteSchedule(params.ctx, params.ExecCfg(), params.p.txn, schedule.ScheduleID())
+			err = DeleteSchedule(params.ctx, params.ExecCfg(), params.p.txn, schedule.ScheduleID())
 		default:
 			err = errors.AssertionFailedf("unhandled command %s", n.command)
 		}

@@ -399,7 +399,7 @@ func (sc *SchemaChanger) maybeUpdateScheduledJobsForRowLevelTTL(
 			scheduleID := tableDesc.GetRowLevelTTL().ScheduleID
 			if scheduleID > 0 {
 				log.Infof(ctx, "dropping TTL schedule %d", scheduleID)
-				return deleteSchedule(ctx, sc.execCfg, txn, scheduleID)
+				return DeleteSchedule(ctx, sc.execCfg, txn, scheduleID)
 			}
 			return nil
 		}); err != nil {
@@ -1499,7 +1499,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 
 					if shouldCreateScheduledJob {
-						j, err := createRowLevelTTLScheduledJob(
+						j, err := CreateRowLevelTTLScheduledJob(
 							ctx,
 							sc.execCfg,
 							txn,
@@ -1514,7 +1514,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				} else if m.Dropped() {
 					if ttl := scTable.RowLevelTTL; ttl != nil {
-						if err := deleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
+						if err := DeleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
 							return err
 						}
 					}
