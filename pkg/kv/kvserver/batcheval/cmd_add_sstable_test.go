@@ -1489,12 +1489,11 @@ func engineStats(t *testing.T, engine storage.Engine, nowNanos int64) *enginepb.
 	t.Helper()
 
 	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	})
 	defer iter.Close()
-	// We don't care about nowNanos, because the SST can't contain intents or
-	// tombstones and all existing intents will be resolved.
 	stats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, nowNanos)
 	require.NoError(t, err)
 	return &stats

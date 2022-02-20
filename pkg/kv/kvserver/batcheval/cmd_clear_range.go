@@ -157,8 +157,14 @@ func computeStatsDelta(
 
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
+	//
+	// TODO(erikgrinaker): This must handle range key stats adjustments.
 	if !fast || util.RaceEnabled {
-		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: to})
+		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: from,
+			UpperBound: to,
+		})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {
