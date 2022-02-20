@@ -11419,7 +11419,7 @@ func TestRangeStatsRequest(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	keyPrefix := roachpb.RKey("dummy-prefix")
+	keyPrefix := roachpb.Key("dummy-prefix")
 
 	// Write some random data to the range and verify that a RangeStatsRequest
 	// returns the same MVCC stats as the replica's in-memory state.

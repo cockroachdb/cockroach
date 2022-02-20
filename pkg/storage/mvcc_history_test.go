@@ -59,6 +59,7 @@ import (
 // txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
+// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
 //
 // cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
@@ -478,9 +479,9 @@ var commands = map[string]cmd{
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
-	"resolve_intent": {typDataUpdate, cmdResolveIntent},
-	// TODO(nvanbenschoten): test "resolve_intent_range".
-	"check_intent": {typReadOnly, cmdCheckIntent},
+	"resolve_intent":       {typDataUpdate, cmdResolveIntent},
+	"resolve_intent_range": {typDataUpdate, cmdResolveIntentRange},
+	"check_intent":         {typReadOnly, cmdCheckIntent},
 
 	"clear":          {typDataUpdate, cmdClear},
 	"clear_range":    {typDataUpdate, cmdClearRange},
@@ -645,6 +646,17 @@ func cmdResolveIntent(e *evalCtx) error {
 	status := e.getTxnStatus()
 	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
 	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status, clockWhilePending)
+}
+
+func cmdResolveIntentRange(e *evalCtx) error {
+	txn := e.getTxn(mandatory)
+	start, end := e.getKeyRange()
+	status := e.getTxnStatus()
+
+	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: start, EndKey: end})
+	intent.Status = status
+	_, _, err := MVCCResolveWriteIntentRange(e.ctx, e.tryWrapForIntentPrinting(e.engine), e.ms, intent, 0)
+	return err
 }
 
 func (e *evalCtx) resolveIntent(
@@ -815,7 +827,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, nil, key, endKey, ts, localTs, 0)
+		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, 0)
 	})
 }
 
@@ -1193,6 +1205,7 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	// TODO(erikgrinaker): Consider just reordering the MVCCStats struct fields
 	// instead, which determines the order of MVCCStats.String().
 	order := []string{"key_count", "key_bytes", "val_count", "val_bytes",
+		"range_key_count", "range_key_bytes", "range_val_count", "range_val_bytes",
 		"live_count", "live_bytes", "gc_bytes_age",
 		"intent_count", "intent_bytes", "separated_intent_count", "intent_age"}
 	sort.SliceStable(fields, func(i, j int) bool {

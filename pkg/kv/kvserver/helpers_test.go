@@ -18,7 +18,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -485,24 +485,40 @@ func (t *RaftTransport) GetCircuitBreaker(
 }
 
 func WriteRandomDataToRange(
-	t testing.TB, store *Store, rangeID roachpb.RangeID, keyPrefix []byte,
-) (midpoint []byte) {
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < 100; i++ {
-		key := append([]byte(nil), keyPrefix...)
-		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val)
-		if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-			RangeID: rangeID,
-		}, &pArgs); pErr != nil {
-			t.Fatal(pErr)
+	t testing.TB, store *Store, rangeID roachpb.RangeID, keyPrefix roachpb.Key,
+) (splitKey []byte) {
+	t.Helper()
+
+	ctx := context.Background()
+	src, _ := randutil.NewTestRand()
+	for i := 0; i < 1000; i++ {
+		var req roachpb.Request
+		if src.Float64() < 0.05 {
+			// Write some occasional range tombstones.
+			startKey := append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
+			var endKey roachpb.Key
+			for startKey.Compare(endKey) >= 0 {
+				endKey = append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
+			}
+			req = &roachpb.DeleteRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    startKey,
+					EndKey: endKey,
+				},
+				UseExperimentalRangeTombstone: true,
+			}
+		} else {
+			// Write regular point keys.
+			key := append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
+			val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
+			pArgs := putArgs(key, val)
+			req = &pArgs
 		}
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{RangeID: rangeID}, req)
+		require.NoError(t, pErr.GoError())
 	}
-	// Return approximate midway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	midKey := append([]byte(nil), keyPrefix...)
-	midKey = append(midKey, []byte("Z")...)
-	return midKey
+	// Return a random non-empty split key.
+	return append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4))+1)...)
 }
 
 func WatchForDisappearingReplicas(t testing.TB, store *Store) {
