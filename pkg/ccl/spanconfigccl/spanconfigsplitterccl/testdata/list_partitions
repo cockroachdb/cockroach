@@ -55,6 +55,9 @@ splits database=db table=list_partitions
 # Try the same thing on a secondary index.
 exec-sql
 CREATE INDEX idx ON db.list_partitions (j);
+----
+
+exec-sql
 ALTER INDEX db.list_partitions@idx PARTITION BY LIST (j) (
   PARTITION one_and_five    VALUES IN (2, 5),
   PARTITION four_and_three  VALUES IN (4, 3),

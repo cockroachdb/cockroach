@@ -535,7 +535,10 @@ TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
-DROP TABLE regional_by_row; CREATE TABLE regional_by_row (
+DROP TABLE regional_by_row
+
+statement ok
+CREATE TABLE regional_by_row (
   pk INT PRIMARY KEY,
   i INT,
   INDEX idx(i),

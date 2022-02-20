@@ -2730,7 +2730,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	tests := []struct {
-		stmts    string
+		stmts    []string
 		tbl      string
 		expected string
 	}{
@@ -2738,23 +2738,29 @@ func TestExportImportRoundTrip(t *testing.T) {
 		// need to differ across runs, so we let the test runner format the stmts field
 		// with a unique directory name per run.
 		{
-			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY['a', 'b', 'c'];
-							CREATE TABLE t (x TEXT[]);
-							IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+			stmts: []string{
+				`EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY['a', 'b', 'c']`,
+				`CREATE TABLE t (%[1]s TEXT[])`,
+				`IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+			},
 			tbl:      "t",
 			expected: `SELECT ARRAY['a', 'b', 'c']`,
 		},
 		{
-			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
-							CREATE TABLE t (x BYTES[]);
-							IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+			stmts: []string{
+				`EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
+				`CREATE TABLE t (%[1]s BYTES[])`,
+				`IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+			},
 			tbl:      "t",
 			expected: `SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
 		},
 		{
-			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT 'dog' COLLATE en;
-							CREATE TABLE t (x STRING COLLATE en);
-							IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+			stmts: []string{
+				`EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT 'dog' COLLATE en`,
+				`CREATE TABLE t (%[1]s STRING COLLATE en)`,
+				`IMPORT INTO t CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
+			},
 			tbl:      "t",
 			expected: `SELECT 'dog' COLLATE en`,
 		},
@@ -2762,7 +2768,9 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 	for i, test := range tests {
 		sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, test.tbl))
-		sqlDB.Exec(t, fmt.Sprintf(test.stmts, fmt.Sprintf("run%d", i)))
+		for _, stmt := range test.stmts {
+			sqlDB.Exec(t, fmt.Sprintf(stmt, fmt.Sprintf("run%d", i)))
+		}
 		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, test.tbl), sqlDB.QueryStr(t, test.expected))
 	}
 }
@@ -6606,7 +6614,7 @@ func TestDetachedImport(t *testing.T) {
 	}
 	err := crdb.ExecuteTx(ctx, connDB, nil, importWithoutDetached)
 	require.True(t,
-		testutils.IsError(err, "IMPORT cannot be used inside a transaction without DETACHED option"))
+		testutils.IsError(err, "IMPORT cannot be used inside a multi-statement transaction without DETACHED option"))
 
 	// We can execute IMPORT under transaction with detached option.
 	importWithDetached := func(txn *gosql.Tx) error {

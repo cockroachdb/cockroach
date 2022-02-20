@@ -167,6 +167,8 @@ func verifySystemJob(
 	sort.Sort(expected.DescriptorIDs)
 	expected.Details = nil
 	if e, a := expected, actual; !reflect.DeepEqual(e, a) {
+		fmt.Printf("%+v\n", expected)
+		fmt.Printf("%+v\n", actual)
 		return errors.Errorf("job %d did not match:\n%s",
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}

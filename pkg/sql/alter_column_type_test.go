@@ -263,15 +263,12 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
+	sqlDB.Exec(t, `CREATE DATABASE t;`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (x STRING);`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');`)
 
 	expected := "pq: could not parse \"HELLO\" as type int: strconv.ParseInt: parsing \"HELLO\": invalid syntax"
-
-	sqlDB.ExpectErr(t, expected, `
-CREATE DATABASE t;
-CREATE TABLE t.test (x STRING);
-INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');
-ALTER TABLE t.test ALTER COLUMN x TYPE INT;
-`)
+	sqlDB.ExpectErr(t, expected, `ALTER TABLE t.test ALTER COLUMN x TYPE INT;`)
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
@@ -300,12 +297,10 @@ func TestQueryIntToString(t *testing.T) {
 
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
 
-	sqlDB.Exec(t, `
-CREATE DATABASE t;
-CREATE TABLE t.test (x INT, y INT, z INT);
-INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2);
-ALTER TABLE t.test ALTER COLUMN y TYPE STRING;
-`)
+	sqlDB.Exec(t, `CREATE DATABASE t;`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (x INT, y INT, z INT);`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2);`)
+	sqlDB.Exec(t, `ALTER TABLE t.test ALTER COLUMN y TYPE STRING;`)
 
 	sqlDB.ExecSucceedsSoon(t, `INSERT INTO t.test VALUES (3, 'HELLO', 3);`)
 
