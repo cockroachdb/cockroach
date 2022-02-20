@@ -911,7 +911,10 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					switch which {
 					case "get":
 						iterOptions.Prefix = true
-					case "scan", "findSplitKey", "computeStats":
+					case "computeStats":
+						iterOptions.KeyTypes = IterKeyTypePointsAndRanges
+						iterOptions.UpperBound = roachpb.KeyMax
+					case "scan", "findSplitKey":
 						iterOptions.UpperBound = roachpb.KeyMax
 					}
 
@@ -2302,13 +2305,23 @@ func computeStats(
 	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
 ) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: to})
-	defer iter.Close()
-	s, err := ComputeStatsForRange(iter, from, to, nowNanos)
-	if err != nil {
-		t.Fatalf("%+v", err)
+
+	if len(from) == 0 {
+		from = keys.LocalMax
 	}
-	return s
+	if len(to) == 0 {
+		to = keys.MaxKey
+	}
+
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: from,
+		UpperBound: to,
+	})
+	defer iter.Close()
+	ms, err := ComputeStatsForRange(iter, from, to, nowNanos)
+	require.NoError(t, err)
+	return ms
 }
 
 // TestMVCCClearTimeRangeOnRandomData sets up mostly random KVs and then picks

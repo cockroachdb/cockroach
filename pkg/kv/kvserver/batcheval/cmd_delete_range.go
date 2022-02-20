@@ -39,6 +39,14 @@ func declareKeysDeleteRange(
 	} else {
 		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	}
+
+	// When writing range tombstones, we must read the adjacent range tombstones
+	// in case we merge with or fragment them, to update MVCC stats accordingly.
+	// But we make sure to keep within the range bounds.
+	if args.UseExperimentalRangeTombstone {
+		l, r := rangeTombstoneReadBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+		latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
+	}
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
@@ -62,9 +70,14 @@ func DeleteRange(
 			return result.Result{}, errors.AssertionFailedf(
 				"ReturnKeys can't be used with range tombstones")
 		}
+
+		desc := cArgs.EvalCtx.Desc()
+		leftBound, rightBound := rangeTombstoneReadBounds(
+			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(
-			ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.Timestamp, maxIntents)
+
+		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
+			args.Key, args.EndKey, h.Timestamp, leftBound, rightBound, maxIntents)
 		return result.Result{}, err
 	}
 
@@ -94,4 +107,26 @@ func DeleteRange(
 	// have been written even when an error is returned. This is harmless if the
 	// error is not consumed by the caller because the result will be discarded.
 	return result.FromAcquiredLocks(h.Txn, deleted...), err
+}
+
+// rangeTombstoneReadBounds returns the left and right bounds that
+// ExperimentalMVCCDeleteRangeUsingTombstone can scan to in order to detect
+// adjacent range tombstones to merge with or fragment. The bounds will be
+// truncated to the Raft range bounds.
+func rangeTombstoneReadBounds(
+	startKey, endKey, rangeStart, rangeEnd roachpb.Key,
+) (roachpb.Key, roachpb.Key) {
+	const prevKeyLength = 8192
+
+	leftBound := startKey.Prevish(prevKeyLength)
+	if len(rangeStart) > 0 && leftBound.Compare(rangeStart) <= 0 {
+		leftBound = rangeStart
+	}
+
+	rightBound := endKey.Next()
+	if len(rangeEnd) > 0 && rightBound.Compare(rangeEnd) >= 0 {
+		rightBound = rangeEnd
+	}
+
+	return leftBound, rightBound
 }

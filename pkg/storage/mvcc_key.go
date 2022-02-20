@@ -13,6 +13,7 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -361,6 +362,19 @@ func (k MVCCRangeKey) Compare(o MVCCRangeKey) int {
 	return k.EndKey.Compare(o.EndKey)
 }
 
+// EncodedSize returns the encoded size of this range key. This does not
+// accurately reflect the on-disk size of the key, due to Pebble range key
+// stacking and fragmentation.
+//
+// NB: This calculation differs from MVCCKey in that MVCCKey.EncodedSize()
+// incorrectly always uses 13 bytes for the timestamp while this method
+// calculates the actual encoded size.
+func (k MVCCRangeKey) EncodedSize() int {
+	return EncodedMVCCKeyPrefixLength(k.StartKey) +
+		EncodedMVCCKeyPrefixLength(k.EndKey) +
+		EncodedMVCCTimestampSuffixLength(k.Timestamp)
+}
+
 // String formats the range key.
 func (k MVCCRangeKey) String() string {
 	s := roachpb.Span{Key: k.StartKey, EndKey: k.EndKey}.String()
@@ -394,4 +408,20 @@ func (k MVCCRangeKey) Validate() (err error) {
 	default:
 		return nil
 	}
+}
+
+// firstRangeKeyAbove does a binary search for the first range key at or above
+// the given timestamp. It assumes the range keys are ordered in descending
+// timestamp order, as returned by SimpleMVCCIterator.RangeKeys(). Returns false
+// if no matching range key was found.
+func firstRangeKeyAbove(rangeKeys []MVCCRangeKey, ts hlc.Timestamp) (MVCCRangeKey, bool) {
+	// This is kind of odd due to sort.Search() semantics: we do a binary search
+	// for the first range tombstone that's below the timestamp, then return the
+	// previous range tombstone if any.
+	if i := sort.Search(len(rangeKeys), func(i int) bool {
+		return rangeKeys[i].Timestamp.Less(ts)
+	}); i > 0 {
+		return rangeKeys[i-1], true
+	}
+	return MVCCRangeKey{}, false
 }

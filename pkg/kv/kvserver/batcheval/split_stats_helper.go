@@ -10,7 +10,9 @@
 
 package batcheval
 
-import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+)
 
 // splitStatsHelper codifies and explains the stats computations related to a
 // split. The quantities known during a split (i.e. while the split trigger
@@ -30,6 +32,9 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 //   related to the shrunk keyrange.
 //   In practice, we obtain this by recomputing the stats, and so we don't
 //   expect ContainsEstimates to be set in them.
+// - DeltaRangeKeyRight: the stats delta that must be added to the RHS stats to
+//   account for the splitting of range keys straddling the split point. See
+//   computeSplitRangeKeyStatsDelta() for details.
 //
 // We are interested in computing from this the quantities
 //
@@ -59,7 +64,7 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 // The two unknown quantities can be expressed in terms of the known quantities
 // because
 //
-// (1) AbsPreSplitBoth + DeltaBatch
+// (1) AbsPreSplitBoth + DeltaBatch + DeltaRangeKeyRight
 // 	                   - CombinedErrorDelta = AbsPostSplitLeft + AbsPostSplitRight
 //
 // In words, this corresponds to "all bytes are accounted for": from the initial
@@ -87,14 +92,16 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 //
 // For AbsPostSplitRight(), there are two cases. First, due to the identity
 //
-//     CombinedErrorDelta =   AbsPreSplitBothEstimated + DeltaBatchEstimated
+//     CombinedErrorDelta = AbsPreSplitBothEstimated + DeltaBatchEstimated
 //                          -(AbsPostSplitLeft + AbsPostSplitRight)
+//                          + DeltaRangeKeyRight.
 //
-// and the fact that the second line contains no estimates, we know that
-// CombinedErrorDelta is zero if the first line contains no estimates. Using
-// this, we can rearrange as
+// and the fact that the second and third lines contain no estimates, we know
+// that CombinedErrorDelta is zero if the first line contains no estimates.
+// Using this, we can rearrange as
 //
-//     AbsPostSplitRight() = AbsPreSplitBoth + DeltaBatch - AbsPostSplitLeft.
+//     AbsPostSplitRight() = AbsPreSplitBoth + DeltaBatch - AbsPostSplitLeft
+//                           + DeltaRangeKeyRight.
 //
 // where all quantities on the right are known. If CombinedErrorDelta is
 // nonzero, we effectively have one more unknown in our linear system and we
@@ -111,6 +118,7 @@ type splitStatsHelperInput struct {
 	AbsPreSplitBothEstimated enginepb.MVCCStats
 	DeltaBatchEstimated      enginepb.MVCCStats
 	AbsPostSplitLeft         enginepb.MVCCStats
+	DeltaRangeKeyRight       enginepb.MVCCStats
 	// AbsPostSplitRightFn returns the stats for the right hand side of the
 	// split. This is only called (and only once) when either of the first two
 	// fields above contains estimates, so that we can guarantee that the
@@ -135,6 +143,7 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 		ms := h.in.AbsPreSplitBothEstimated
 		ms.Subtract(h.in.AbsPostSplitLeft)
 		ms.Add(h.in.DeltaBatchEstimated)
+		ms.Add(h.in.DeltaRangeKeyRight)
 		h.absPostSplitRight = &ms
 		return h, nil
 	}

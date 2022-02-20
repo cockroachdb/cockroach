@@ -57,7 +57,11 @@ func assertEqImpl(
 		keyMin = keys.LocalMax
 		keyMax = roachpb.KeyMax
 	}
-	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: keyMax})
+	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: keyMin,
+		UpperBound: keyMax,
+	})
 	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
@@ -1362,6 +1366,108 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 	}
 }
 
+func TestMVCCStatsRangeKeysOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	type stats = enginepb.MVCCStats
+	const now = 10 * 1e9
+
+	// Add range keys one by one and assert their stats contribution.
+	testcases := []struct {
+		rangeKey MVCCRangeKey
+		stats    enginepb.MVCCStats
+	}{
+		{rangeKey("a", "f", 8e9), stats{RangeKeyCount: 1, RangeKeyBytes: 13, GCBytesAge: 2 * 13}},
+		// Historical version of [a-f)@8.
+		{rangeKey("a", "f", 1e9), stats{RangeKeyBytes: 9, GCBytesAge: 9 * 9}},
+		// Fragment [a-f) into [a-e) and [e-f).
+		{rangeKey("e", "f", 2e9), stats{RangeKeyCount: 1, RangeKeyBytes: 13 + 2*9, GCBytesAge: 2*13 + 8*9 + 9*9}},
+		// Fragment [a-e) in the middle into [a-bb), [bb-ccc), and [ccc-e).
+		{rangeKey("bb", "ccc", 5e9), stats{
+			RangeKeyCount: 2,                 // creates bb-ccc and ccc-e
+			RangeKeyBytes: 1 + 16 + 15 + 3*9, // [a-e) becomes [a-bb), adds keys [bb-ccc)@8 and [ccc-e)@8, plus versions [bb-ccc)@5, [bb-ccc)@1, [ccc-e)@1
+			GCBytesAge:    2*1 + 2*16 + 2*15 + 5*9 + 9*9 + 9*9,
+		}},
+		// Extending the range keys below others should only add itself, but it will
+		// create new versions across existing fragments.
+		{rangeKey("a", "p", 3e9), stats{RangeKeyCount: 1, RangeKeyBytes: 13 + 4*9, GCBytesAge: 7 * (13 + 4*9)}},
+		// Dropping a range key covering all existing fragments will create new
+		// versions of each fragment with no GCBytesAge contribution, but will also
+		// reduce the GCBytesAge contribution of the key bounds of the topmost keys
+		// since these are now moved up to the latest version at timestamp 10. The
+		// topmost fragments before this were:
+		//
+		// [a-bb)@8 [bb-ccc)@8 [ccc-e)@8 [e-f)@8 [f-p)@3
+		{rangeKey("a", "p", 10e9), stats{RangeKeyBytes: 5 * 9, GCBytesAge: -2*(14-9) - 2*(16-9) - 2*(15-9) - 2*(13-9) - 7*(13-9)}},
+	}
+
+	for _, tc := range testcases {
+		// We don't use t.Run() because the test cases are dependant.
+		before := computeStats(t, eng, roachpb.Key("a"), roachpb.Key("z"), now)
+		require.NoError(t, eng.ExperimentalPutMVCCRangeKey(tc.rangeKey))
+		after := computeStats(t, eng, roachpb.Key("a"), roachpb.Key("z"), now)
+
+		delta := after
+		delta.Subtract(before)
+		delta.LastUpdateNanos = 0
+		require.Equal(t, tc.stats, delta, "range key %s", tc.rangeKey)
+	}
+}
+
+func TestMVCCStatsRangeKeysAndPointKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	const now = 10e9
+
+	rangeKeys := []MVCCRangeKey{
+		rangeKey("a", "z", 8e9), // RangeKeyCount:1 RangeKeyBytes:13 GCBytesAge:26
+		rangeKey("k", "z", 5e9), // RangeKeyCount:1 RangeKeyBytes:13+9 GCBytesAge:5*13+3*2
+	}
+	for _, rk := range rangeKeys {
+		require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rk))
+	}
+
+	pointKVs := []MVCCKeyValue{
+		pointKV("a", 9e9, "a9"), // LiveCount:1 LiveBytes:16 KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2
+		pointKV("b", 5e9, ""),   // KeyCount:1 KeyBytes:14 ValCount:1 GCBytesAge:70
+		pointKV("c", 5e9, "c5"), // KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2 GCBytesAge:32
+		pointKV("d", 7e9, ""),   // KeyCount:1 KeyBytes:14 ValCount:1 GCBytesAge:42
+		pointKV("d", 6e9, "d6"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:42
+		pointKV("d", 5e9, "d5"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:56
+		pointKV("e", 9e9, "e9"), // LiveCount:1 LiveBytes:16 KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2
+		pointKV("e", 5e9, "e5"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:28
+		pointKV("m", 6e9, "m6"), // KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2 GCBytesAge:32
+		pointKV("m", 3e9, "m3"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:70
+		pointKV("o", 9e9, "o9"), // LiveCount:1 LiveBytes:16 KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2
+		pointKV("o", 3e9, ""),   // KeyBytes:12 ValCount:1 GCBytesAge:84
+		pointKV("o", 1e9, "o1"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:98
+	}
+	for _, kv := range pointKVs {
+		require.NoError(t, eng.PutMVCC(kv.Key, kv.Value))
+	}
+
+	require.Equal(t, enginepb.MVCCStats{
+		LiveCount:       3,
+		LiveBytes:       48,
+		KeyCount:        7,
+		KeyBytes:        170,
+		ValCount:        13,
+		ValBytes:        20,
+		RangeKeyCount:   2,
+		RangeKeyBytes:   35,
+		GCBytesAge:      651,
+		LastUpdateNanos: now,
+	}, computeStats(t, eng, nil, nil, now))
+}
+
 var mvccStatsTests = []struct {
 	name string
 	fn   func(MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
@@ -1480,6 +1586,8 @@ func (s *randomTest) step(t *testing.T) {
 	}
 }
 
+// TODO(erikgrinaker): Add ExperimentalMVCCDeleteRangeUsingTombstone operations
+// once they are fully integrated with other MVCC operations.
 func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1651,7 +1759,11 @@ func TestMVCCComputeStatsError(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: roachpb.LocalMax,
+				UpperBound: roachpb.KeyMax,
+			})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
