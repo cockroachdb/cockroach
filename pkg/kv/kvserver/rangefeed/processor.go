@@ -198,15 +198,16 @@ type CatchUpIteratorConstructor func() *CatchUpIterator
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) error {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
 		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
 	}); err != nil {
-		pErr := roachpb.NewError(err)
-		p.reg.DisconnectWithErr(all, pErr)
+		p.reg.DisconnectWithErr(all, roachpb.NewError(err))
 		close(p.stoppedC)
+		return err
 	}
+	return nil
 }
 
 // run is called from Start and runs the rangefeed.
