@@ -1183,3 +1183,84 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 		}
 	})
 }
+
+func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rangeKey := func(start, end string, ts int) storage.MVCCRangeKey {
+		return storage.MVCCRangeKey{
+			StartKey:  roachpb.Key(start),
+			EndKey:    roachpb.Key(end),
+			Timestamp: hlc.Timestamp{WallTime: int64(ts)},
+		}
+	}
+
+	const nowNanos = 10e9
+	lhsDesc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("l")}
+	rhsDesc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("l"), EndKey: roachpb.RKey("z").PrefixEnd()}
+
+	testcases := map[string]struct {
+		rangeKeys []storage.MVCCRangeKey
+		expect    enginepb.MVCCStats
+	}{
+		// Empty stats shouldn't do anything.
+		"empty": {nil, enginepb.MVCCStats{}},
+		// a-z splits into a-l and l-z: simple +1 range key
+		"full": {[]storage.MVCCRangeKey{rangeKey("a", "z", 1e9)}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			GCBytesAge:    117,
+		}},
+		// foo-zz splits into foo-l and l-zzzz: contribution is same as for short
+		// keys, because we have to adjust for the change in LHS end key which ends
+		// up only depending on the split key, and that doesn't change.
+		"different key length": {[]storage.MVCCRangeKey{rangeKey("foo", "zzzz", 1e9)}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			GCBytesAge:    117,
+		}},
+		// Two abutting keys at different timestamps at the split point should not
+		// require a delta.
+		"no straddling": {[]storage.MVCCRangeKey{
+			rangeKey("a", "l", 1e9),
+			rangeKey("l", "z", 2e9),
+		}, enginepb.MVCCStats{}},
+		// Fragments at split point should be equivalent to a single key.
+		"fragments at split": {[]storage.MVCCRangeKey{
+			rangeKey("a", "l", 1e9),
+			rangeKey("l", "z", 1e9),
+		}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			GCBytesAge:    117,
+		}},
+		// Multiple straddling keys.
+		"multiple": {
+			[]storage.MVCCRangeKey{
+				rangeKey("a", "z", 1e9),
+				rangeKey("k", "p", 2e9),
+				rangeKey("foo", "m", 3e9),
+			}, enginepb.MVCCStats{
+				RangeKeyCount: 1,
+				RangeKeyBytes: 31,
+				GCBytesAge:    244,
+			}},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+
+			for _, rk := range tc.rangeKeys {
+				require.NoError(t, engine.ExperimentalPutMVCCRangeKey(rk))
+			}
+
+			tc.expect.LastUpdateNanos = nowNanos
+
+			msDelta, err := computeSplitRangeKeyStatsDelta(engine, lhsDesc, rhsDesc, nowNanos)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, msDelta)
+		})
+	}
+}

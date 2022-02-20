@@ -751,7 +751,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	ts := e.getTs(nil)
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, 0)
+		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, nil, nil, 0)
 	})
 }
 

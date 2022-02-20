@@ -1,16 +1,40 @@
 # Tests MVCC stats calculations.
 
 run stats trace
+# Tombstone above point key.
 put k=a ts=2 v=a2
 del k=a ts=4
+# Lone tombstone.
 del k=b ts=4
+# Lone point key (will be below range tombstone).
+put k=c ts=4 v=c4
+# Point keys above each others.
 put k=d ts=2 v=d2
 put k=d ts=4 v=d4
+# Lone point key.
+put k=e ts=2 v=e2
+# Lone inline key.
 put k=i ts=0 v=inline
+# Intents at d (existing key) and j (new key).
 with t=A
   txn_begin ts=7
   put k=d v=d7
   put k=j v=j7
+# Range tombstone covering b (tombstone) and c (point key), but not touching
+# points and intent at d.
+del_range_ts k=b end=d ts=5
+# Another range tombstone across b and c. The GCBytesAge contribution of a live
+# point key's prefix (roachpb.Key) begins at the lowest range tombstone, which
+# must be corrected for when we write a new point key above it.
+del_range_ts k=b end=d ts=6
+# Point keys above range tombstones above existing point tombstone and key.
+put k=b ts=7 v=b7
+put k=c ts=7 v=c7
+# Point above tombstones above point (mirroring c with range tombstones).
+put k=f ts=2 v=f2
+del k=f ts=5
+del k=f ts=6
+put k=f ts=7 v=f7
 ----
 >> put k=a ts=2 v=a2
 stats: live_bytes:+21 live_count:+1 key_bytes:+14 key_count:+1 val_bytes:+7 val_count:+1
@@ -24,26 +48,45 @@ stats: key_bytes:+14 key_count:+1 val_count:+1
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
+>> put k=c ts=4 v=c4
+stats: live_bytes:+21 live_count:+1 key_bytes:+14 key_count:+1 val_bytes:+7 val_count:+1
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
 >> put k=d ts=2 v=d2
 stats: live_bytes:+21 live_count:+1 key_bytes:+14 key_count:+1 val_bytes:+7 val_count:+1
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
 data: "d"/2.000000000,0 -> /BYTES/d2
 >> put k=d ts=4 v=d4
 stats: key_bytes:+12 val_bytes:+7 val_count:+1
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
+>> put k=e ts=2 v=e2
+stats: live_bytes:+21 live_count:+1 key_bytes:+14 key_count:+1 val_bytes:+7 val_count:+1
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
 >> put k=i ts=0 v=inline
 stats: live_bytes:+27 live_count:+1 key_bytes:+2 key_count:+1 val_bytes:+25 val_count:+1
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 >> txn_begin ts=7 t=A
 stats: 
@@ -54,10 +97,12 @@ stats: live_bytes:+48 key_bytes:+12 val_bytes:+55 val_count:+1 intent_bytes:+19 
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 >> put k=j v=j7 t=A
 called PutIntent("j", _, 00000000-0000-0000-0000-000000000001)
@@ -65,10 +110,153 @@ stats: live_bytes:+69 live_count:+1 key_bytes:+14 key_count:+1 val_bytes:+55 val
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> del_range_ts k=b end=d ts=5
+stats: live_bytes:-21 live_count:-1 range_key_count:+1 range_key_bytes:+13
+rangekey: {b-d}/[5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> del_range_ts k=b end=d ts=6
+stats: gc_bytes_age:-4 range_key_bytes:+9
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> put k=b ts=7 v=b7
+stats: gc_bytes_age:-6 live_bytes:+21 live_count:+1 key_bytes:+12 val_bytes:+7 val_count:+1
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/7.000000000,0 -> /BYTES/b7
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> put k=c ts=7 v=c7
+stats: gc_bytes_age:-4 live_bytes:+21 live_count:+1 key_bytes:+12 val_bytes:+7 val_count:+1
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/7.000000000,0 -> /BYTES/b7
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/7.000000000,0 -> /BYTES/c7
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> put k=f ts=2 v=f2
+stats: live_bytes:+21 live_count:+1 key_bytes:+14 key_count:+1 val_bytes:+7 val_count:+1
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/7.000000000,0 -> /BYTES/b7
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/7.000000000,0 -> /BYTES/c7
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/2.000000000,0 -> /BYTES/f2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> del k=f ts=5
+stats: live_bytes:-21 live_count:-1 key_bytes:+12 val_count:+1
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/7.000000000,0 -> /BYTES/b7
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/7.000000000,0 -> /BYTES/c7
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/5.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/f2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> del k=f ts=6
+stats: gc_bytes_age:-2 key_bytes:+12 val_count:+1
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/7.000000000,0 -> /BYTES/b7
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/7.000000000,0 -> /BYTES/c7
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/5.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/f2
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+>> put k=f ts=7 v=f7
+stats: gc_bytes_age:-2 live_bytes:+21 live_count:+1 key_bytes:+12 val_bytes:+7 val_count:+1
+rangekey: {b-d}/[6.000000000,0 5.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/7.000000000,0 -> /BYTES/b7
+data: "b"/4.000000000,0 -> /<empty>
+data: "c"/7.000000000,0 -> /BYTES/c7
+data: "c"/4.000000000,0 -> /BYTES/c4
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/7.000000000,0 -> /BYTES/f7
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/5.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/f2
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/7.000000000,0 -> /BYTES/j7
@@ -76,16 +264,18 @@ stats: {
   contains_estimates:0
   last_update_nanos:1000000000000
   intent_age:1986
-  gc_bytes_age:84603
-  live_bytes:165
-  live_count:3
-  key_bytes:94
-  key_count:5
-  val_bytes:156
-  val_count:8
+  gc_bytes_age:166166
+  live_bytes:249
+  live_count:7
+  key_bytes:196
+  key_count:8
+  val_bytes:198
+  val_count:16
   intent_bytes:38
   intent_count:2
   separated_intent_count:2
+  range_key_count:1
+  range_key_bytes:22
   sys_bytes:0
   sys_count:0
   abort_span_bytes:0

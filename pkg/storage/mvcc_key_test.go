@@ -439,6 +439,31 @@ func TestMVCCRangeKeyCompare(t *testing.T) {
 	}
 }
 
+func TestMVCCRangeKeyEncodedSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testcases := map[string]struct {
+		rk     MVCCRangeKey
+		expect int
+	}{
+		"empty":         {MVCCRangeKey{}, 2}, // sentinel byte for start and end
+		"only start":    {MVCCRangeKey{StartKey: roachpb.Key("foo")}, 5},
+		"only end":      {MVCCRangeKey{EndKey: roachpb.Key("foo")}, 5},
+		"only walltime": {MVCCRangeKey{Timestamp: hlc.Timestamp{WallTime: 1}}, 11},
+		"only logical":  {MVCCRangeKey{Timestamp: hlc.Timestamp{Logical: 1}}, 15},
+		"all": {MVCCRangeKey{
+			StartKey:  roachpb.Key("start"),
+			EndKey:    roachpb.Key("end"),
+			Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Synthetic: true},
+		}, 24},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.rk.EncodedSize())
+		})
+	}
+}
+
 func TestMVCCRangeKeyValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -468,6 +493,43 @@ func TestMVCCRangeKeyValidate(t *testing.T) {
 			} else {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectErr)
+			}
+		})
+	}
+}
+
+func TestFirstRangeKeyAbove(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeKeys := []MVCCRangeKey{
+		rangeKey("a", "f", 6),
+		rangeKey("a", "f", 4),
+		rangeKey("a", "f", 3),
+		rangeKey("a", "f", 1),
+	}
+
+	testcases := []struct {
+		ts     int64
+		expect int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 3},
+		{3, 3},
+		{4, 4},
+		{5, 6},
+		{6, 6},
+		{7, 0},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
+			rk, ok := firstRangeKeyAbove(rangeKeys, hlc.Timestamp{WallTime: tc.ts})
+			if tc.expect == 0 {
+				require.False(t, ok)
+				require.Empty(t, rk)
+			} else {
+				require.True(t, ok)
+				require.Equal(t, rangeKey("a", "f", int(tc.expect)), rk)
 			}
 		})
 	}
