@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -168,7 +167,6 @@ func TestExportNullWithEmptyNullAs(t *testing.T) {
 	db.CheckQueryResults(t,
 		"SELECT * FROM accounts2", db.QueryStr(t, "SELECT * FROM accounts"),
 	)
-
 }
 
 func TestMultiNodeExportStmt(t *testing.T) {
@@ -354,7 +352,7 @@ func TestExportOrderCompressed(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	var close = func(c io.Closer) {
+	close := func(c io.Closer) {
 		if err := c.Close(); err != nil {
 			t.Fatalf("failed to close stream, got error %s", err)
 		}
@@ -519,30 +517,4 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 	zipFiles, err := ioutil.ReadDir(filepath.Join(dir, "foo-compressed"))
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(zipFiles), 6)
-}
-
-func TestExportInsideTenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	dir, cleanupDir := testutils.TempDir(t)
-	defer cleanupDir()
-
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
-	defer srv.Stopper().Stop(context.Background())
-
-	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
-	defer conn10.Close()
-	tenant10 := sqlutils.MakeSQLRunner(conn10)
-
-	tenant10.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
-	tenant10.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
-
-	tenant10.Exec(t, `EXPORT INTO CSV 'userfile:///order' FROM SELECT * FROM foo ORDER BY y ASC LIMIT 2`)
-	csvFileIDs := tenant10.QueryStr(t, `SELECT file_id FROM userfiles_root_upload_files WHERE filename LIKE '%csv'`)
-	require.Len(t, csvFileIDs, 1)
-	filePayloads := tenant10.QueryStr(t, `
-SELECT payload FROM userfiles_root_upload_payload WHERE file_id = $1`, csvFileIDs[0][0])
-	require.Len(t, filePayloads, 1)
-
-	require.Equal(t, filePayloads[0][0], "3,32,1,34\n2,22,2,24\n")
 }

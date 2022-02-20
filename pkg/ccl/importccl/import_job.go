@@ -65,6 +65,10 @@ type importResumer struct {
 	}
 }
 
+func (r *importResumer) TestingSetAfterImportKnob(fn func(summary roachpb.RowCount) error) {
+	r.testingKnobs.afterImport = fn
+}
+
 var _ jobs.TraceableJob = &importResumer{}
 
 func (r *importResumer) ForceRealSpan() bool {
