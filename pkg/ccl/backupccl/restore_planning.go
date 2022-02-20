@@ -1661,16 +1661,16 @@ func doRestorePlan(
 
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	if err := rewrite.RewriteTableDescs(tables, descriptorRewrites, intoDB); err != nil {
+	if err := rewrite.TableDescs(tables, descriptorRewrites, intoDB); err != nil {
 		return err
 	}
-	if err := rewrite.RewriteDatabaseDescs(databases, descriptorRewrites); err != nil {
+	if err := rewrite.DatabaseDescs(databases, descriptorRewrites); err != nil {
 		return err
 	}
-	if err := rewrite.RewriteSchemaDescs(schemas, descriptorRewrites); err != nil {
+	if err := rewrite.SchemaDescs(schemas, descriptorRewrites); err != nil {
 		return err
 	}
-	if err := rewrite.RewriteTypeDescs(types, descriptorRewrites); err != nil {
+	if err := rewrite.TypeDescs(types, descriptorRewrites); err != nil {
 		return err
 	}
 	for i := range revalidateIndexes {
