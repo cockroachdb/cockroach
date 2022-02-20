@@ -223,22 +223,53 @@ statement ok
 ALTER DATABASE db1 RENAME TO db3
 
 statement ok
-DROP DATABASE db2 CASCADE; DROP DATABASE db3 CASCADE
+DROP DATABASE db2 CASCADE;
 
 statement ok
-CREATE DATABASE db1; CREATE SEQUENCE db1.a_seq; CREATE SEQUENCE db1.b_seq; USE db1;
+DROP DATABASE db3 CASCADE
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SEQUENCE db1.a_seq;
+CREATE SEQUENCE db1.b_seq;
+
+statement ok
+USE db1;
 
 statement ok
 CREATE TABLE db1.a (a int default nextval('a_seq') + nextval('b_seq') + 1); ALTER DATABASE db1 RENAME TO db2; USE db2;
 
 statement ok
-DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.b_seq') + 1); ALTER DATABASE db2 RENAME TO db1; ALTER DATABASE db1 RENAME TO db2
+DROP TABLE db2.a;
 
 statement ok
-DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.public.b_seq') + 1); ALTER DATABASE db2 RENAME TO db1; ALTER DATABASE db1 RENAME TO db2
+CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.b_seq') + 1);
 
 statement ok
-DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('public.b_seq') + 1); ALTER DATABASE db2 RENAME TO db1
+ALTER DATABASE db2 RENAME TO db1;
+
+statement ok
+ALTER DATABASE db1 RENAME TO db2
+
+statement ok
+DROP TABLE db2.a;
+
+statement ok
+CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.public.b_seq') + 1);
+
+statement ok
+ALTER DATABASE db2 RENAME TO db1; ALTER DATABASE db1 RENAME TO db2
+
+statement ok
+DROP TABLE db2.a;
+
+statement ok
+CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('public.b_seq') + 1);
+
+statement ok
+ALTER DATABASE db2 RENAME TO db1
 
 statement ok
 USE defaultdb; DROP DATABASE db1 CASCADE

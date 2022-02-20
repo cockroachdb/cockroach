@@ -303,6 +303,8 @@ DROP SEQUENCE seq_72116
 
 statement ok
 DROP TABLE table_72116;
+
+statement ok
 CREATE TABLE table_72116 (a INT DEFAULT nextval('seq_72116') ON UPDATE NULL)
 
 statement error pq: cannot drop sequence seq_72116 because other objects depend on it
@@ -310,7 +312,11 @@ DROP SEQUENCE seq_72116
 
 statement ok
 DROP TABLE table_72116;
+
+statement ok
 CREATE TABLE table_72116 (a INT);
+
+statement ok
 ALTER TABLE table_72116 ADD COLUMN b INT DEFAULT (1) ON UPDATE nextval('seq_72116')
 
 statement error pq: cannot drop sequence seq_72116 because other objects depend on it

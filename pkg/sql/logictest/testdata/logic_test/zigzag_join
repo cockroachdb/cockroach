@@ -58,9 +58,13 @@ SET enable_zigzag_join = true
 statement ok
 DROP INDEX a@a_idx;
 DROP INDEX a@b_idx;
+
+statement ok
 CREATE INDEX c_idx ON a(c);
 CREATE INDEX a_idx ON a(a);
 CREATE INDEX b_idx ON a(b);
+
+statement ok
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
 
 # Regression test for 48003 ("non-values node passed as fixed value to zigzag
