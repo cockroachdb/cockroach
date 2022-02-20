@@ -60,9 +60,10 @@ func EncodeIndexKey(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
+	keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+	keyCols := keyAndSuffixCols[:index.NumKeyColumns()]
 	key, containsNull, err = EncodePartialIndexKey(
-		index,
-		index.NumKeyColumns(), /* encode all columns */
+		keyCols,
 		colMap,
 		values,
 		keyPrefix,
@@ -77,59 +78,49 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	index catalog.Index,
-	numCols int,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
 	var key roachpb.Key
-	key, containsNull, err = EncodePartialIndexKey(index, numCols, colMap, values, keyPrefix)
+	key, containsNull, err = EncodePartialIndexKey(keyCols, colMap, values, keyPrefix)
 	if err != nil {
 		return span, false, err
 	}
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, containsNull, nil
 }
 
-// EncodePartialIndexKey encodes a partial index key; only the first numCols of
-// the index key columns are encoded. The index key columns are
-//  - index.KeyColumnIDs for unique indexes, and
-//  - append(index.KeyColumnIDs, index.KeySuffixColumnIDs) for non-unique indexes.
+// EncodePartialIndexKey encodes a partial index key; only the given key (or key
+// suffix) columns are encoded; these can be a prefix of the index key columns.
+// Does not directly append to keyPrefix.
 func EncodePartialIndexKey(
-	index catalog.Index,
-	numCols int,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, _ error) {
-	var colIDs, keySuffixColIDs []descpb.ColumnID
-	if numCols <= index.NumKeyColumns() {
-		colIDs = index.IndexDesc().KeyColumnIDs[:numCols]
-	} else {
-		if index.IsUnique() || numCols > index.NumKeyColumns()+index.NumKeySuffixColumns() {
-			return nil, false, errors.Errorf("encoding too many columns (%d)", numCols)
-		}
-		colIDs = index.IndexDesc().KeyColumnIDs
-		keySuffixColIDs = index.IndexDesc().KeySuffixColumnIDs[:numCols-index.NumKeyColumns()]
-	}
-
 	// We know we will append to the key which will cause the capacity to grow so
 	// make it bigger from the get-go.
 	// Add the length of the key prefix as an initial guess.
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
 	key = growKey(keyPrefix, len(keyPrefix)+2*len(values))
 
-	dirs := directions(index.IndexDesc().KeyColumnDirections)
+	for i := range keyCols {
+		keyCol := &keyCols[i]
+		val := findColumnValue(keyCol.ColumnID, colMap, values)
+		if val == tree.DNull {
+			containsNull = true
+		}
 
-	key, containsNull, err := EncodeColumns(colIDs, dirs, colMap, values, key)
-	if err != nil {
-		return nil, false, err
-	}
+		dir, err := keyCol.Direction.ToEncodingDirection()
+		if err != nil {
+			return nil, false, err
+		}
 
-	key, suffixContainsNull, err := EncodeColumns(keySuffixColIDs, nil /* directions */, colMap, values, key)
-	containsNull = containsNull || suffixContainsNull
-	if err != nil {
-		return nil, false, err
+		if key, err = keyside.Encode(key, val, dir); err != nil {
+			return nil, false, err
+		}
 	}
 	return key, containsNull, nil
 }
@@ -152,13 +143,11 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // specified in the same order as the index key columns and may be a prefix.
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	types []*types.T,
-	dirs []descpb.IndexDescriptor_Direction,
-	index catalog.Index,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, _, containsNull, err := MakeKeyFromEncDatums(values, types, dirs, index, alloc, keyPrefix)
+	startKey, containsNull, err := MakeKeyFromEncDatums(values, keyCols, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -334,40 +323,37 @@ func SplitRowKeyIntoFamilySpans(
 }
 
 // MakeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
-// encodings of the given EncDatum values. The values, types, and dirs
-// parameters should be specified in the same order as the index key columns and
-// may be a prefix. The complete return value is true if the resultant key
-// fully constrains the index.
+// encodings of the given EncDatum values.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
-	types []*types.T,
-	dirs []descpb.IndexDescriptor_Direction,
-	index catalog.Index,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
-) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
+) (_ roachpb.Key, containsNull bool, _ error) {
 	// Values may be a prefix of the index columns.
-	if len(values) > len(dirs) {
-		return nil, false, false, errors.Errorf("%d values, %d directions", len(values), len(dirs))
-	}
-	if len(values) != len(types) {
-		return nil, false, false, errors.Errorf("%d values, %d types", len(values), len(types))
+	if len(values) > len(keyCols) {
+		return nil, false, errors.Errorf("%d values, %d key cols", len(values), len(keyCols))
 	}
 	// We know we will append to the key which will cause the capacity to grow
 	// so make it bigger from the get-go.
 	key := make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
 	copy(key, keyPrefix)
 
-	var (
-		err error
-		n   bool
-	)
-	key, n, err = appendEncDatumsToKey(key, types, values, dirs, alloc)
-	if err != nil {
-		return key, false, false, err
+	for i, val := range values {
+		encoding := descpb.DatumEncoding_ASCENDING_KEY
+		if keyCols[i].Direction == descpb.IndexDescriptor_DESC {
+			encoding = descpb.DatumEncoding_DESCENDING_KEY
+		}
+		if val.IsNull() {
+			containsNull = true
+		}
+		var err error
+		key, err = val.Encode(keyCols[i].Type, alloc, encoding, key)
+		if err != nil {
+			return nil, false, err
+		}
 	}
-	containsNull = containsNull || n
-	return key, len(types) == index.NumKeyColumns(), containsNull, err
+	return key, containsNull, nil
 }
 
 // findColumnValue returns the value corresponding to the column. If

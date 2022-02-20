@@ -454,15 +454,14 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				for prefixIdx, colIdx := range ij.prefixEqualityCols {
 					ij.indexRow[prefixIdx] = row[colIdx]
 				}
-				// TODO(mgartner): MakeKeyFromEncDatums will allocate and grow a
+				// TODO(mgartner): MakeKeyFromEncDatumsDeprecated will allocate and grow a
 				// new roachpb.Key. Many rows will share the same prefix or
 				// encode to the same length roachpb.Key. We can optimize this
 				// by reusing a pre-allocated key.
-				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+				keyCols := ij.desc.IndexFetchSpecKeyAndSuffixColumns(ij.index)
+				prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
 					ij.indexRow[:len(ij.prefixEqualityCols)],
-					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-					ij.index.IndexDesc().KeyColumnDirections,
-					ij.index,
+					keyCols,
 					&ij.alloc,
 					nil, /* keyPrefix */
 				)
@@ -548,15 +547,14 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 		encInvertedVal := scannedRow[idx].EncodedBytes()
 		var encFullVal []byte
 		if len(ij.prefixEqualityCols) > 0 {
-			// TODO(mgartner): MakeKeyFromEncDatums will allocate and grow a
+			// TODO(mgartner): MakeKeyFromEncDatumsDeprecated will allocate and grow a
 			// new roachpb.Key. Many rows will share the same prefix or
 			// encode to the same length roachpb.Key. We can optimize this
 			// by reusing a pre-allocated key.
-			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+			keyCols := ij.desc.IndexFetchSpecKeyAndSuffixColumns(ij.index)
+			prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
 				ij.indexRow[:len(ij.prefixEqualityCols)],
-				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-				ij.index.IndexDesc().KeyColumnDirections,
-				ij.index,
+				keyCols,
 				&ij.alloc,
 				nil, /* keyPrefix */
 			)
