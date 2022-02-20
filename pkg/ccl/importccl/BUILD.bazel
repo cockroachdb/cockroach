@@ -1,5 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/ccl/importerccl:__subpackages__"],
+)
+
 go_library(
     name = "importccl",
     srcs = [
@@ -147,11 +153,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
-        "//pkg/ccl/kvccl",
-        "//pkg/ccl/multiregionccl",
-        "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/ccl/partitionccl",
-        "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl/format",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
