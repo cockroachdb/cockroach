@@ -332,6 +332,10 @@ func init() {
 			// Same as httptest, but for the datadriven package.
 			flag.Hidden = true
 		}
+		if strings.EqualFold(flag.Name, "log_err_stacks") {
+			// Vitess registers flags directly.
+			flag.Hidden = true
+		}
 		if flag.Name == logflags.ShowLogsName || flag.Name == logflags.TestLogConfigName {
 			// test-only flag
 			flag.Hidden = true
