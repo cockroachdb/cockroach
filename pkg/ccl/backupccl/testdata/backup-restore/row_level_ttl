@@ -1,0 +1,116 @@
+new-server name=s1 allow-implicit-access
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes')
+----
+
+exec-sql
+BACKUP DATABASE d TO 'nodelocal://1/database_backup/'
+----
+
+exec-sql
+BACKUP TO 'nodelocal://1/full_cluster_backup/'
+----
+
+new-server name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+exec-sql
+RESTORE FROM 'nodelocal://0/full_cluster_backup/'
+----
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE d.public.t]
+----
+CREATE TABLE public.t (
+	id INT8 NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+	CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+1
+
+exec-sql
+DROP DATABASE d
+----
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+exec-sql
+RESTORE DATABASE d FROM 'nodelocal://0/database_backup/'
+----
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE d.public.t]
+----
+CREATE TABLE public.t (
+	id INT8 NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+	CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+1
+
+exec-sql
+DROP DATABASE d
+----
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+exec-sql
+CREATE DATABASE d
+----
+
+exec-sql
+RESTORE TABLE d.public.t FROM 'nodelocal://0/database_backup/'
+----
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE d.public.t]
+----
+CREATE TABLE public.t (
+	id INT8 NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+	CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+1
+
+exec-sql
+DROP TABLE d.public.t
+----
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0

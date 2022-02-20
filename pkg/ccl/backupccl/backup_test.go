@@ -2118,6 +2118,72 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 }
 
+func TestRestoreFailCleansUpTTLSchedules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	injectedErr := errors.New("injected error")
+	testCases := []struct {
+		desc                        string
+		beforePublishingDescriptors func() error
+		afterPublishingDescriptors  func() error
+	}{
+		{
+			desc: "error before publishing descriptors",
+			beforePublishingDescriptors: func() error {
+				return injectedErr
+			},
+		},
+		{
+			desc: "error after publishing descriptors",
+			afterPublishingDescriptors: func() error {
+				return injectedErr
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			c, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+			defer cleanup()
+			for _, server := range c.Servers {
+				registry := server.JobRegistry().(*jobs.Registry)
+				registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+					jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+						r := raw.(*restoreResumer)
+						r.testingKnobs.beforePublishingDescriptors = tc.beforePublishingDescriptors
+						r.testingKnobs.afterPublishingDescriptors = tc.afterPublishingDescriptors
+						return r
+					},
+				}
+			}
+
+			// Create a database with a TTL table.
+			sqlDB.Exec(t, `
+CREATE DATABASE d;
+CREATE TABLE d.tb (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes')
+`)
+
+			// Backup d.tb.
+			sqlDB.Exec(t, `BACKUP DATABASE d TO $1`, localFoo)
+
+			// Drop d so that it can be restored.
+			sqlDB.Exec(t, `DROP DATABASE d`)
+
+			// Attempt the restore and check it fails.
+			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM $1`, localFoo)
+			require.Error(t, err)
+			require.Regexp(t, injectedErr.Error(), err.Error())
+
+			var count int
+			sqlDB.QueryRow(t, `SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&count)
+			require.Equal(t, 0, count)
+		})
+	}
+}
+
 func TestRestoreFailCleansUpTypeBackReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
