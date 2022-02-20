@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,6 +40,22 @@ func declareKeysDeleteRange(
 	} else {
 		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	}
+
+	// When writing range tombstones, we must look for adjacent range tombstones
+	// that we merge with or fragment, to update MVCC stats accordingly. But we
+	// make sure to stay within the range bounds.
+	if args.UseExperimentalRangeTombstone {
+		// NB: The range end key is not available, so this will pessimistically
+		// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
+		// span will be tightened during evaluation.
+		l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+		latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
+
+		// We need to read the range descriptor to determine the bounds during eval.
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+			Key: keys.RangeDescriptorKey(rs.GetStartKey()),
+		})
+	}
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
@@ -62,9 +79,14 @@ func DeleteRange(
 			return result.Result{}, errors.AssertionFailedf(
 				"ReturnKeys can't be used with range tombstones")
 		}
+
+		desc := cArgs.EvalCtx.Desc()
+		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(
-			ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.Timestamp, cArgs.Now, maxIntents)
+
+		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
+			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
 		return result.Result{}, err
 	}
 
@@ -94,4 +116,24 @@ func DeleteRange(
 	// have been written even when an error is returned. This is harmless if the
 	// error is not consumed by the caller because the result will be discarded.
 	return result.FromAcquiredLocks(h.Txn, deleted...), err
+}
+
+// rangeTombstonePeekBounds returns the left and right bounds that
+// ExperimentalMVCCDeleteRangeUsingTombstone can read in order to detect
+// adjacent range tombstones to merge with or fragment. The bounds will be
+// truncated to the Raft range bounds if given.
+func rangeTombstonePeekBounds(
+	startKey, endKey, rangeStart, rangeEnd roachpb.Key,
+) (roachpb.Key, roachpb.Key) {
+	leftPeekBound := startKey.Prevish(roachpb.PrevishKeyLength)
+	if len(rangeStart) > 0 && leftPeekBound.Compare(rangeStart) <= 0 {
+		leftPeekBound = rangeStart
+	}
+
+	rightPeekBound := endKey.Next()
+	if len(rangeEnd) > 0 && rightPeekBound.Compare(rangeEnd) >= 0 {
+		rightPeekBound = rangeEnd
+	}
+
+	return leftPeekBound.Clone(), rightPeekBound.Clone()
 }

@@ -1506,6 +1506,7 @@ func engineStats(t *testing.T, engine storage.Engine, nowNanos int64) *enginepb.
 	t.Helper()
 
 	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	})
