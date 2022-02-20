@@ -1,0 +1,408 @@
+# Tests MVCC stats calculations for intent resolution of aborted txn.
+#
+# Intermediate states are tested through stats traces. Final state before resolution:
+#
+# (x is tombstone, o---o is range tombstone, [] is intent)
+#
+# 6 [a6][b6][c6][x] [x] [x] [g6][h6][i6][x] [x] [x]
+# 5
+# 4                          o-----------------------o   Two range tombstones: the lowest is the
+# 3                          o-----------------------o   one that matters for point key GCBytesAge.
+# 2 
+# 1      b1  x       e1  x       h1  x       k1  x
+#    a   b   c   d   e   f   g   h   i   j   k   l   m
+
+run stats
+with ts=1
+  put k=b v=b1
+  del k=c
+  put k=e v=e1
+  del k=f
+  put k=g v=g1
+  del k=h
+  put k=i v=i1
+  del k=j
+del_range_ts k=g end=m ts=3
+del_range_ts k=g end=m ts=4
+with t=A
+  txn_begin ts=6
+  put k=a v=a6
+  put k=b v=b6
+  put k=c v=c6
+  del k=d
+  del k=e
+  del k=f
+  put k=g v=g6
+  put k=h v=h6
+  put k=i v=i6
+  del k=j
+  del k=k
+  del k=l
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/6.000000000,0 -> /BYTES/a6
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/6.000000000,0 -> /BYTES/b6
+data: "b"/1.000000000,0 -> /BYTES/b1
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/6.000000000,0 -> /BYTES/c6
+data: "c"/1.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/6.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+stats: {
+  contains_estimates:0
+  last_update_nanos:1000000000000
+  intent_age:11928
+  gc_bytes_age:515299
+  live_bytes:414
+  live_count:6
+  key_bytes:264
+  key_count:12
+  val_bytes:646
+  val_count:20
+  intent_bytes:186
+  intent_count:12
+  separated_intent_count:12
+  range_key_count:1
+  range_key_bytes:22
+  sys_bytes:0
+  sys_count:0
+  abort_span_bytes:0
+}
+
+run stats trace
+with t=A status=ABORTED
+  resolve_intent k=a
+  resolve_intent k=b
+  resolve_intent k=c
+  resolve_intent k=d
+  resolve_intent k=e
+  resolve_intent k=f
+  resolve_intent k=g
+  resolve_intent k=h
+  resolve_intent k=i
+  resolve_intent k=j
+  resolve_intent k=k
+  resolve_intent k=l
+----
+>> resolve_intent k=a t=A status=ABORTED
+called ClearIntent("a", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: live_bytes:-69 live_count:-1 key_bytes:-14 key_count:-1 val_bytes:-55 val_count:-1 intent_bytes:-19 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/6.000000000,0 -> /BYTES/b6
+data: "b"/1.000000000,0 -> /BYTES/b1
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/6.000000000,0 -> /BYTES/c6
+data: "c"/1.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/6.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=b t=A status=ABORTED
+called ClearIntent("b", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: live_bytes:-48 key_bytes:-12 val_bytes:-55 val_count:-1 intent_bytes:-19 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/6.000000000,0 -> /BYTES/c6
+data: "c"/1.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/6.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=c t=A status=ABORTED
+called ClearIntent("c", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: gc_bytes_age:+10 live_bytes:-69 live_count:-1 key_bytes:-12 val_bytes:-55 val_count:-1 intent_bytes:-19 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/6.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=d t=A status=ABORTED
+called ClearIntent("d", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: key_bytes:-14 key_count:-1 val_bytes:-48 val_count:-1 intent_bytes:-12 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=e t=A status=ABORTED
+called ClearIntent("e", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: live_bytes:+21 live_count:+1 key_bytes:-12 val_bytes:-48 val_count:-1 intent_bytes:-12 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> /<empty>
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=f t=A status=ABORTED
+called ClearIntent("f", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: gc_bytes_age:+10 key_bytes:-12 val_bytes:-48 val_count:-1 intent_bytes:-12 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/6.000000000,0 -> /BYTES/g6
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=g t=A status=ABORTED
+called ClearIntent("g", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: gc_bytes_age:+6 live_bytes:-69 live_count:-1 key_bytes:-12 val_bytes:-55 val_count:-1 intent_bytes:-19 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/g1
+meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "h"/6.000000000,0 -> /BYTES/h6
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=h t=A status=ABORTED
+called ClearIntent("h", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: gc_bytes_age:+10 live_bytes:-69 live_count:-1 key_bytes:-12 val_bytes:-55 val_count:-1 intent_bytes:-19 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/g1
+data: "h"/1.000000000,0 -> /<empty>
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=i t=A status=ABORTED
+called ClearIntent("i", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: gc_bytes_age:+6 live_bytes:-69 live_count:-1 key_bytes:-12 val_bytes:-55 val_count:-1 intent_bytes:-19 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/g1
+data: "h"/1.000000000,0 -> /<empty>
+data: "i"/1.000000000,0 -> /BYTES/i1
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=j t=A status=ABORTED
+called ClearIntent("j", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: gc_bytes_age:+10 key_bytes:-12 val_bytes:-48 val_count:-1 intent_bytes:-12 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/g1
+data: "h"/1.000000000,0 -> /<empty>
+data: "i"/1.000000000,0 -> /BYTES/i1
+data: "j"/1.000000000,0 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/6.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=k t=A status=ABORTED
+called ClearIntent("k", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: key_bytes:-14 key_count:-1 val_bytes:-48 val_count:-1 intent_bytes:-12 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/g1
+data: "h"/1.000000000,0 -> /<empty>
+data: "i"/1.000000000,0 -> /BYTES/i1
+data: "j"/1.000000000,0 -> /<empty>
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> /<empty>
+>> resolve_intent k=l t=A status=ABORTED
+called ClearIntent("l", TDNUM(false), 00000000-0000-0000-0000-000000000001)
+stats: key_bytes:-14 key_count:-1 val_bytes:-48 val_count:-1 intent_bytes:-12 intent_count:-1 separated_intent_count:-1
+rangekey: {g-m}/[4.000000000,0 3.000000000,0]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+data: "f"/1.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/g1
+data: "h"/1.000000000,0 -> /<empty>
+data: "i"/1.000000000,0 -> /BYTES/i1
+data: "j"/1.000000000,0 -> /<empty>
+stats: {
+  contains_estimates:0
+  last_update_nanos:1000000000000
+  intent_age:0
+  gc_bytes_age:119739
+  live_bytes:42
+  live_count:2
+  key_bytes:112
+  key_count:8
+  val_bytes:28
+  val_count:8
+  intent_bytes:0
+  intent_count:0
+  separated_intent_count:0
+  range_key_count:1
+  range_key_bytes:22
+  sys_bytes:0
+  sys_count:0
+  abort_span_bytes:0
+}

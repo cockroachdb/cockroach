@@ -13,6 +13,7 @@
 run ok
 put k=a ts=2 v=a2
 del k=a ts=4
+put k=b ts=3 v=b3
 put k=d ts=4 v=d4
 put k=f ts=4 v=f4
 put k=g ts=2 v=g2
@@ -29,6 +30,7 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -47,6 +49,7 @@ del_range_ts k=z end=x ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -65,6 +68,7 @@ del_range_ts k=x end=z ts=0
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -83,6 +87,7 @@ del_range_ts k=x end=x ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -103,6 +108,7 @@ del_range_ts k=a end=b ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -121,6 +127,7 @@ del_range_ts k=a end=b ts=4
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -139,6 +146,7 @@ del_range_ts k=e end=g ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -159,6 +167,7 @@ del_range_ts k=k end=p ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -177,6 +186,7 @@ del_range_ts k=k end=p ts=4
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -195,6 +205,7 @@ del_range_ts k=j end=m ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -213,6 +224,7 @@ del_range_ts k=o end=q ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -231,6 +243,7 @@ del_range_ts k=j end=q ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -249,6 +262,7 @@ del_range_ts k=k end=n ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -269,6 +283,7 @@ del_range_ts k=d end=e ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -287,6 +302,7 @@ del_range_ts k=d end=e ts=5
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -305,6 +321,7 @@ del_range_ts k=i end=j ts=5
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -323,6 +340,7 @@ del_range_ts k=i end=j ts=7
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -341,6 +359,7 @@ del_range_ts k=i end=j ts=10
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -360,6 +379,7 @@ del_range_ts k=h end=i ts=3
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -371,17 +391,20 @@ meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*withstack.withStack:) can't write range tombstone across inline key "h"/0,0
 
-# Writing next to or above point keys and tombstones should work.
-run ok
+# Writing next to or above point keys and tombstones should work, and should
+# update MVCC stats accordingly.
+run stats trace
 del_range_ts k=a end=b ts=10
 del_range_ts k=b end=d ts=4
+del_range_ts k=f end=h ts=10
 ----
->> at end:
+>> del_range_ts k=a end=b ts=10
+stats: range_key_count:+1 range_key_bytes:+13
 rangekey: {a-b}/[10.000000000,0]
-rangekey: {b-d}/[4.000000000,0]
 rangekey: {k-p}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -391,21 +414,14 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-
-# Writing range tombstones next to other range tombstones will merge them, but
-# only at same timestamp.
-run ok
-del_range_ts k=s end=x ts=4
-del_range_ts k=p end=s ts=3
-----
->> at end:
+>> del_range_ts k=b end=d ts=4
+stats: live_bytes:-21 live_count:-1 range_key_count:+1 range_key_bytes:+13
 rangekey: {a-b}/[10.000000000,0]
 rangekey: {b-d}/[4.000000000,0]
 rangekey: {k-p}/[4.000000000,0]
-rangekey: {p-s}/[3.000000000,0]
-rangekey: {s-x}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -415,18 +431,107 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
+>> del_range_ts k=f end=h ts=10
+stats: live_bytes:-21 live_count:-1 range_key_count:+1 range_key_bytes:+13
+rangekey: {a-b}/[10.000000000,0]
+rangekey: {b-d}/[4.000000000,0]
+rangekey: {f-h}/[10.000000000,0]
+rangekey: {k-p}/[4.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: {
+  contains_estimates:0
+  last_update_nanos:1000000000000
+  intent_age:1986
+  gc_bytes_age:177945
+  live_bytes:165
+  live_count:3
+  key_bytes:122
+  key_count:7
+  val_bytes:170
+  val_count:10
+  intent_bytes:38
+  intent_count:2
+  separated_intent_count:2
+  range_key_count:4
+  range_key_bytes:52
+  sys_bytes:0
+  sys_count:0
+  abort_span_bytes:0
+}
 
-run ok
+# Writing a range tombstone above another should not affect stats, except for
+# its own contribution.
+run stats trace
+del_range_ts k=a end=d ts=11
+----
+>> del_range_ts k=a end=d ts=11
+stats: gc_bytes_age:-32 range_key_bytes:+18
+rangekey: {a-b}/[11.000000000,0 10.000000000,0]
+rangekey: {b-d}/[11.000000000,0 4.000000000,0]
+rangekey: {f-h}/[10.000000000,0]
+rangekey: {k-p}/[4.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: {
+  contains_estimates:0
+  last_update_nanos:1000000000000
+  intent_age:1986
+  gc_bytes_age:195715
+  live_bytes:165
+  live_count:3
+  key_bytes:122
+  key_count:7
+  val_bytes:170
+  val_count:10
+  intent_bytes:38
+  intent_count:2
+  separated_intent_count:2
+  range_key_count:4
+  range_key_bytes:70
+  sys_bytes:0
+  sys_count:0
+  abort_span_bytes:0
+}
+
+# Writing range tombstones next to other range tombstones will merge them, and
+# stats take this into account.
+run stats trace
+del_range_ts k=www end=xxx ts=4
+del_range_ts k=xxx end=z ts=4
+del_range_ts k=s end=www ts=4
 del_range_ts k=p end=s ts=4
 ----
->> at end:
-rangekey: {a-b}/[10.000000000,0]
-rangekey: {b-d}/[4.000000000,0]
+>> del_range_ts k=www end=xxx ts=4
+stats: range_key_count:+1 range_key_bytes:+17
+rangekey: {a-b}/[11.000000000,0 10.000000000,0]
+rangekey: {b-d}/[11.000000000,0 4.000000000,0]
+rangekey: {f-h}/[10.000000000,0]
 rangekey: {k-p}/[4.000000000,0]
-rangekey: {p-s}/[4.000000000,0 3.000000000,0]
-rangekey: {s-x}/[4.000000000,0]
+rangekey: {www-xxx}/[4.000000000,0]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -436,3 +541,79 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
+>> del_range_ts k=xxx end=z ts=4
+stats: range_key_bytes:-2
+rangekey: {a-b}/[11.000000000,0 10.000000000,0]
+rangekey: {b-d}/[11.000000000,0 4.000000000,0]
+rangekey: {f-h}/[10.000000000,0]
+rangekey: {k-p}/[4.000000000,0]
+rangekey: {www-z}/[4.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+>> del_range_ts k=s end=www ts=4
+stats: range_key_bytes:-2
+rangekey: {a-b}/[11.000000000,0 10.000000000,0]
+rangekey: {b-d}/[11.000000000,0 4.000000000,0]
+rangekey: {f-h}/[10.000000000,0]
+rangekey: {k-p}/[4.000000000,0]
+rangekey: {s-z}/[4.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+>> del_range_ts k=p end=s ts=4
+stats: range_key_count:-1 range_key_bytes:-13
+rangekey: {a-b}/[11.000000000,0 10.000000000,0]
+rangekey: {b-d}/[11.000000000,0 4.000000000,0]
+rangekey: {f-h}/[10.000000000,0]
+rangekey: {k-z}/[4.000000000,0]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: {
+  contains_estimates:0
+  last_update_nanos:1000000000000
+  intent_age:1986
+  gc_bytes_age:195715
+  live_bytes:165
+  live_count:3
+  key_bytes:122
+  key_count:7
+  val_bytes:170
+  val_count:10
+  intent_bytes:38
+  intent_count:2
+  separated_intent_count:2
+  range_key_count:4
+  range_key_bytes:70
+  sys_bytes:0
+  sys_count:0
+  abort_span_bytes:0
+}
