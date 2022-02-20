@@ -43,7 +43,6 @@ go_test(
     embed = [":partitionccl"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/importccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
@@ -66,6 +65,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
+        "//pkg/sql/importer",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
