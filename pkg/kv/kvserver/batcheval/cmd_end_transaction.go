@@ -924,14 +924,21 @@ func splitTrigger(
 	}
 	log.Event(ctx, "computed stats for left hand side range")
 
+	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(
+		batch, split.LeftDesc, split.RightDesc, ts.WallTime)
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to compute range key stats delta for RHS")
+	}
+	log.Event(ctx, "computed range key delta stats for right hand side range")
+
 	h := splitStatsHelperInput{
 		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
 		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKeyRight:       rangeKeyDeltaMS,
 		AbsPostSplitLeft:         leftMS,
 		AbsPostSplitRightFn: func() (enginepb.MVCCStats, error) {
-			rightMS, err := rditer.ComputeStatsForRange(
-				&split.RightDesc, batch, ts.WallTime,
-			)
+			rightMS, err := rditer.ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
 			return rightMS, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		},
 	}
@@ -1157,15 +1164,27 @@ func mergeTrigger(
 		}
 	}
 
-	// The stats for the merged range are the sum of the LHS and RHS stats, less
-	// the RHS's replicated range ID stats. The only replicated range ID keys we
-	// copy from the RHS are the keys in the abort span, and we've already
-	// accounted for those stats above.
+	// The stats for the merged range are the sum of the LHS and RHS stats
+	// adjusted for range key merges (which is the inverse of the split
+	// adjustment). The RHS's replicated range ID stats are subtracted -- the only
+	// replicated range ID keys we copy from the RHS are the keys in the abort
+	// span, and we've already accounted for those stats above.
 	ms.Add(merge.RightMVCCStats)
+	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(
+		batch, merge.LeftDesc, merge.RightDesc, ts.WallTime)
+	if err != nil {
+		return result.Result{}, err
+	}
+	ms.Subtract(msRangeKeyDelta)
+
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
 		// NB: Range-ID local keys have no versions and no intents.
-		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: ridPrefix,
+			UpperBound: ridPrefix.PrefixEnd(),
+		})
 		defer iter.Close()
 		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
@@ -1209,6 +1228,72 @@ func changeReplicasTrigger(
 	}
 
 	return pd
+}
+
+// computeSplitRangeKeyStatsDelta computes the delta in RHS MVCCStats caused by
+// the splitting of range keys that straddle the range split point. The inverse
+// applies during range merges. Consider a range key [a-foo)@1 split at cc:
+//
+// Before: [a-foo)@1  RangeKeyCount=1 RangeKeyBytes=15
+// LHS:    [a-cc)@1   RangeKeyCount=1 RangeKeyBytes=14
+// RHS:    [cc-foo)@1 RangeKeyCount=1 RangeKeyBytes=16
+//
+// However, LHS is computed directly and the RHS is then calculated as:
+//
+// RHS = Before - LHS = RangeKeyCount=0 RangeKeyBytes=1
+//
+// This is clearly incorrect. This function determines the delta such that:
+//
+// RHS = Before - LHS + Delta = RangeKeyCount=1 RangeKeyBytes=16
+func computeSplitRangeKeyStatsDelta(
+	r storage.Reader, lhs, rhs roachpb.RangeDescriptor, nowNanos int64,
+) (enginepb.MVCCStats, error) {
+	var delta enginepb.MVCCStats
+	delta.AgeTo(nowNanos)
+
+	// NB: When called during a merge trigger (for the inverse adjustment), lhs
+	// will contain the descriptor for the full, merged range. We therefore have
+	// to use the rhs start key as the reference split point. We also have to make
+	// sure the bounds fall within the ranges.
+	splitKey := rhs.StartKey.AsRawKey()
+	lowerBound := splitKey.Prevish(8192)
+	if lowerBound.Compare(lhs.StartKey.AsRawKey()) < 0 {
+		lowerBound = lhs.StartKey.AsRawKey()
+	}
+	upperBound := splitKey.Next()
+
+	// Check for range keys that straddle the split point.
+	iter := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+		LowerBound: lowerBound,
+		UpperBound: upperBound,
+	})
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: splitKey})
+	if ok, err := iter.Valid(); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if !ok {
+		return delta, nil
+	} else if rangeStart, _ := iter.RangeBounds(); rangeStart.Equal(splitKey) {
+		return delta, nil
+	}
+
+	// Calculate the RHS adjustment, which turns out to be equivalent to the stats
+	// contribution of the range key fragmentation. The naïve calculation would be
+	// rhs.EncodedSize() - (keyLen(rhs.EndKey) - keyLen(lhs.EndKey))
+	// which simplifies to 2 * keyLen(rhs.StartKey) + tsLen(rhs.Timestamp)
+	for i, rk := range iter.RangeKeys() {
+		keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(rk.Timestamp))
+		if i == 0 {
+			delta.RangeKeyCount++
+			keyBytes += 2 * int64(storage.EncodedMVCCKeyPrefixLength(splitKey))
+		}
+		delta.RangeKeyBytes += keyBytes
+		delta.GCBytesAge += keyBytes * (nowNanos/1e9 - rk.Timestamp.WallTime/1e9)
+	}
+
+	return delta, nil
 }
 
 // txnAutoGC controls whether Transaction entries are automatically gc'ed upon
