@@ -201,6 +201,7 @@ go_test(
         "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/bulk",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
