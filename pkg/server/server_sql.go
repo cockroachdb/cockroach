@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1244,6 +1245,8 @@ func (s *SQLServer) preStart(
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
+
+	scheduledlogging.StartCapturingIndexUsageStats(ctx, stopper, s.execCfg.DB, s.execCfg.Settings, s.internalExecutor)
 
 	return nil
 }
