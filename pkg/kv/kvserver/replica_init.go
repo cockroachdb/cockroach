@@ -137,14 +137,8 @@ func newUnloadedReplica(
 	onReset := func() {
 		store.Metrics().ReplicaCircuitBreakerCurTripped.Dec(1)
 	}
-	var cancelStorage CancelStorage
-	if f := r.store.cfg.TestingKnobs.CancelStorageFactory; f != nil {
-		cancelStorage = f()
-	} else {
-		cancelStorage = &MapCancelStorage{}
-	}
 	r.breaker = newReplicaCircuitBreaker(
-		store.cfg.Settings, store.stopper, r.AmbientContext, r, cancelStorage, onTrip, onReset,
+		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
 	return r
 }

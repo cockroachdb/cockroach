@@ -54,9 +54,10 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
+// poison       req=<req-name>
 // finish       req=<req-name>
 //
 // handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
@@ -169,6 +170,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
 
+				pp := scanPoisonPolicy(t, d)
+
 				// Each roachpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
@@ -184,6 +187,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					Requests:               reqUnions,
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
+					PoisonPolicy:           pp,
 				}
 				return ""
 
@@ -257,6 +261,20 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
+			case "poison":
+				var reqName string
+				d.ScanArgs(t, "req", &reqName)
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
+				opName := fmt.Sprintf("poison %s", reqName)
+				mon.runSync(opName, func(ctx context.Context) {
+					log.Event(ctx, "poisoning request")
+					m.PoisonReq(guard)
+				})
+				return c.waitAndCollect(t, mon)
 			case "handle-write-intent-error":
 				var reqName string
 				d.ScanArgs(t, "req", &reqName)
