@@ -300,7 +300,9 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
-
+	// BackupResolutionInJob defaults to resolving backup destinations during the
+	// execution of a backup job rather than during planning.
+	BackupResolutionInJob
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -485,6 +487,10 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 74},
 	},
 
+	{
+		Key:     BackupResolutionInJob,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 76},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
