@@ -131,8 +131,9 @@ func randAndOrExpr(rng *rand.Rand, left, right tree.Expr) tree.Expr {
 // have a NotNull nullability.
 func randExpr(
 	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, nullOk bool,
-) (tree.Expr, *types.T, tree.Nullability) {
+) (_ tree.Expr, _ *types.T, _ tree.Nullability, referencedCols map[tree.Name]struct{}) {
 	nullability := tree.NotNull
+	referencedCols = make(map[tree.Name]struct{})
 
 	if rng.Intn(2) == 0 {
 		// Try to find a set of numeric columns with the same type; the computed
@@ -168,14 +169,16 @@ func randExpr(
 
 			var expr tree.Expr
 			expr = tree.NewUnresolvedName(string(cols[0].Name))
+			referencedCols[cols[0].Name] = struct{}{}
 			for _, x := range cols[1:] {
 				expr = &tree.BinaryExpr{
 					Operator: treebin.MakeBinaryOperator(treebin.Plus),
 					Left:     expr,
 					Right:    tree.NewUnresolvedName(string(x.Name)),
 				}
+				referencedCols[x.Name] = struct{}{}
 			}
-			return expr, cols[0].Type.(*types.T), nullability
+			return expr, cols[0].Type.(*types.T), nullability, referencedCols
 		}
 	}
 
@@ -188,6 +191,7 @@ func randExpr(
 	//  - otherwise, the expression is `CASE WHEN x IS NULL THEN 'foo' ELSE 'bar'`.
 	x := normalColDefs[randutil.RandIntInRange(rng, 0, len(normalColDefs))]
 	xTyp := x.Type.(*types.T)
+	referencedCols[x.Name] = struct{}{}
 
 	// Match the nullability with the nullability of the reference column.
 	nullability = x.Nullable.Nullability
@@ -244,7 +248,7 @@ func randExpr(
 		}
 	}
 
-	return expr, typ, nullability
+	return expr, typ, nullability, referencedCols
 }
 
 // typeToStringCastHasIncorrectVolatility returns true for a given type if the
