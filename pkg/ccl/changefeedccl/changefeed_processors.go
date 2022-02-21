@@ -351,7 +351,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, AllTargets(ca.spec.Feed),
-			initialHighWater, &ca.metrics.SchemaFeedMetrics)
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, ca.spec.Feed.Opts)
 	}
 
 	return kvfeed.Config{
@@ -768,13 +768,15 @@ func (c *kvEventToRowConsumer) eventToRow(
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
-	desc, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, schemaTimestamp)
+	desc, family, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, schemaTimestamp)
 	if err != nil {
 		return r, err
 	}
 
 	r.tableDesc = desc
-	rf, err := c.rfCache.RowFetcherForTableDesc(desc)
+	r.familyID = family
+	var rf *row.Fetcher
+	rf, err = c.rfCache.RowFetcherForColumnFamily(desc, family)
 	if err != nil {
 		return r, err
 	}
@@ -818,17 +820,20 @@ func (c *kvEventToRowConsumer) eventToRow(
 	if withDiff {
 		prevRF := rf
 		r.prevTableDesc = r.tableDesc
+		r.prevFamilyID = r.familyID
 		if prevSchemaTimestamp != schemaTimestamp {
 			// If the previous value is being interpreted under a different
 			// version of the schema, fetch the correct table descriptor and
 			// create a new row.Fetcher with it.
-			prevDesc, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, prevSchemaTimestamp)
+			prevDesc, family, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, prevSchemaTimestamp)
+
 			if err != nil {
 				return r, err
 			}
-
 			r.prevTableDesc = prevDesc
-			prevRF, err = c.rfCache.RowFetcherForTableDesc(prevDesc)
+			r.prevFamilyID = family
+			prevRF, err = c.rfCache.RowFetcherForColumnFamily(prevDesc, family)
+
 			if err != nil {
 				return r, err
 			}
