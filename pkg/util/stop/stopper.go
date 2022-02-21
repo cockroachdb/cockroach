@@ -158,6 +158,7 @@ type Stopper struct {
 	stopped  chan struct{}     // Closed when stopped completely
 	onPanic  func(interface{}) // called with recover() on panic on any goroutine
 	tracer   *tracing.Tracer   // tracer used to create spans for tasks
+	stopOnce sync.Once         // for Stop
 
 	mu struct {
 		syncutil.RWMutex
@@ -167,11 +168,13 @@ type Stopper struct {
 		// stopping bools set below. When simply reading or decrementing the number
 		// of tasks, the lock is not necessary.
 		_numTasks int32
-		// quiescing and stopping are set in Quiesce and Stop (which calls
-		// Quiesce). When either is set, no new tasks are allowed and closers
-		// should execute immediately.
-		quiescing, stopping bool
-		closers             []Closer
+		// quiescing is set in Quiesce and Stop (which calls Quiesce). When it is
+		// set, no new tasks are allowed and closers should execute immediately.
+		//
+		// TODO(tbg): we shouldn't need quiescing if we can instead check for
+		// ShouldQuiesce() being closed.
+		quiescing bool
+		closers   []Closer
 
 		// idAlloc is incremented atomically under the read lock when adding a
 		// context to be canceled.
@@ -257,9 +260,13 @@ func (s *Stopper) addTask(delta int32) (updated int32) {
 }
 
 // refuseRLocked returns true if the stopper refuses new tasks. This
-// means that the stopper is either quiescing or stopping.
+// means that the stopper is about to shut down.
 func (s *Stopper) refuseRLocked() bool {
-	return s.mu.stopping || s.mu.quiescing
+	// NB: intentionally don't check s.mu.stopping. If we're stopping, soon enough
+	// we'll also be quiescing, and we want the invariant that ShouldQuiesce is
+	// already closed whenever a task is refused.
+	// See #76825.
+	return s.mu.quiescing
 }
 
 // AddCloser adds an object to close after the stopper has been stopped.
@@ -523,17 +530,12 @@ func (s *Stopper) NumTasks() int {
 //
 // Stop is idempotent; concurrent calls will block on each other.
 func (s *Stopper) Stop(ctx context.Context) {
-	s.mu.Lock()
-	stopCalled := s.mu.stopping
-	s.mu.stopping = true
-	s.mu.Unlock()
+	s.stopOnce.Do(func() {
+		s.stop(ctx)
+	})
+}
 
-	if stopCalled {
-		// Wait for the concurrent Stop() to complete.
-		<-s.stopped
-		return
-	}
-
+func (s *Stopper) stop(ctx context.Context) {
 	defer func() {
 		s.Recover(ctx)
 		unregister(s)
