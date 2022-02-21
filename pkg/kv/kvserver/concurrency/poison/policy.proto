@@ -1,0 +1,35 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.concurrency.poison;
+option go_package = "poison";
+
+import "gogoproto/gogo.proto";
+
+// Policy determines how a request will react to encountering a poisoned
+// latch. A poisoned latch is a latch for which the holder is unable to make
+// progress. That is, waiters of this latch should not expect to be able to
+// acquire this latch "for some time"; in practice this is the case of an
+// unavailable Replica.
+//
+// The name is inspired by Rust's mutexes, which undergo poisoning[^1] when a
+// thread panics while holding the mutex.
+//
+// [^1]: https://doc.rust-lang.org/std/sync/struct.Mutex.html#poisoning
+enum Policy {
+  // Policy_Wait instructs a request to return an error upon encountering
+  // a poisoned latch.
+  Wait = 0;
+
+  // Policy_Error instructs a request to return an error upon encountering
+  // a poisoned latch.
+  Error = 1;
+}

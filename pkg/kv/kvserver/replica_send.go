@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -138,20 +139,6 @@ func (r *Replica) sendWithoutRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Circuit breaker handling.
-	ctx, cancel := context.WithCancel(ctx)
-	if bypassReplicaCircuitBreakerForBatch(ba) {
-		ctx = withBypassCircuitBreakerMarker(ctx)
-	}
-	tok, brSig, err := r.breaker.Register(ctx, cancel)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	defer func() {
-		rErr = r.breaker.UnregisterAndAdjustError(tok, brSig, rErr)
-		cancel()
-	}()
-
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -163,7 +150,7 @@ func (r *Replica) sendWithoutRangeID(
 	}
 
 	// NB: must be performed before collecting request spans.
-	ba, err = maybeStripInFlightWrites(ba)
+	ba, err := maybeStripInFlightWrites(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -414,6 +401,12 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
+	pp := poison.Policy_Error
+	if r.signallerForBatch(ba).C() == nil {
+		// The request wishes to ignore the circuit breaker, i.e. attempt to propose
+		// commands and wait even if the circuit breaker is tripped.
+		pp = poison.Policy_Wait
+	}
 	for first := true; ; first = false {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
@@ -451,11 +444,24 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
 			LockTimeout:     ba.LockTimeout,
+			PoisonPolicy:    pp,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
 		}, requestEvalKind)
 		if pErr != nil {
+			if errors.HasType(pErr.GoError(), (*poison.PoisonedError)(nil)) {
+				brErr := r.breaker.Signal().Err()
+				if brErr == nil {
+					// The breaker may have healed in the meantime.
+					//
+					// TODO(tbg): it would be nicer if poisoning took an err and it
+					// came wrapped with the PoisonedError instead. Or we could
+					// retry the request.
+					brErr = r.replicaUnavailableError()
+				}
+				pErr = roachpb.NewError(errors.CombineErrors(brErr, pErr.GoError()))
+			}
 			return nil, pErr
 		} else if resp != nil {
 			br = new(roachpb.BatchResponse)
@@ -799,7 +805,7 @@ func (r *Replica) handleInvalidLeaseError(
 	// On an invalid lease error, attempt to acquire a new lease. If in the
 	// process of doing so, we determine that the lease now lives elsewhere,
 	// redirect.
-	_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp)
+	_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp, r.signallerForBatch(ba))
 	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
 	// will be retried.
 	return pErr
@@ -877,13 +883,16 @@ func (r *Replica) executeAdminBatch(
 
 		_, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */)
 		if err == nil {
+			err = r.signallerForBatch(ba).Err()
+		}
+		if err == nil {
 			break
 		}
 		switch {
 		case errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)):
 			// If the replica does not have the lease, attempt to acquire it, or
 			// redirect to the current leaseholder by returning an error.
-			_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp)
+			_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp, r.signallerForBatch(ba))
 			if pErr != nil {
 				return nil, pErr
 			}
@@ -1154,6 +1163,14 @@ func (ec *endCmds) move() endCmds {
 	res := *ec
 	*ec = endCmds{}
 	return res
+}
+
+func (ec *endCmds) poison() {
+	if ec.repl == nil {
+		// Already cleared.
+		return
+	}
+	ec.repl.concMgr.PoisonReq(ec.g)
 }
 
 // done releases the latches acquired by the command and updates the timestamp
