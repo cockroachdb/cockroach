@@ -1,0 +1,410 @@
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, b INT);
+INSERT INTO a VALUES (1, 2), (2, 2)
+
+statement error DECLARE CURSOR can only be used in transaction blocks
+DECLARE foo CURSOR FOR SELECT * FROM a
+
+statement error cursor \"foo\" does not exist
+CLOSE foo
+
+statement error cursor \"foo\" does not exist
+FETCH 2 foo
+
+statement ok
+BEGIN
+
+statement error cursor \"foo\" does not exist
+FETCH 2 foo
+
+statement ok
+ROLLBACK;
+BEGIN;
+
+statement ok
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH 1 foo
+----
+1  2
+
+query II
+FETCH 1 foo
+----
+2  2
+
+query II
+FETCH 2 foo
+----
+
+statement ok
+CLOSE foo
+
+statement ok
+COMMIT;
+
+statement error cursor \"foo\" does not exist
+BEGIN;
+CLOSE foo
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+# Test "cursor sensitivity". All Postgres cursors are "insensitive", meaning
+# that mutations to the underlying data that occur after a cursor is declared
+# are not visible to the cursor. We mimic this behavior.
+
+statement ok
+INSERT INTO a VALUES(3, 2)
+
+query II
+FETCH 3 foo
+----
+1  2
+2  2
+
+statement ok
+CLOSE foo;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH 3 foo
+----
+1  2
+2  2
+3  2
+
+statement ok
+COMMIT
+
+# Make sure also that the cursor is sensitive on a "large" table that will
+# require fetching more than once. Since we fetch a batch as soon as we run
+# the DECLARE, and the scan would end after that first batch if we didn't
+# have more than 1 batch of data inside, we need to make sure that the table
+# has more than 1 batch of data inside!
+
+statement ok
+CREATE TABLE big (a PRIMARY KEY, b) AS SELECT g, repeat('a', 1024 * 1024) FROM generate_series(1,11) g(g)
+
+statement ok
+BEGIN;
+INSERT INTO big VALUES(100,'blargh');
+DECLARE foo CURSOR FOR SELECT * FROM big ORDER BY a;
+INSERT INTO big VALUES(101,'argh')
+
+query IT
+FETCH RELATIVE 12 foo
+----
+100 blargh
+
+# Ensure that a read outside of the cursors can still see the mutation, and
+# make sure that the transaction's seq num state was not corrupted.
+query IT
+SELECT * FROM big WHERE a > 100
+----
+101 argh
+
+# Make sure that a mutation after a fetch is also not noticed by a subsequent
+# fetch.
+statement ok
+INSERT INTO big VALUES(102,'argh2')
+
+# Ensure that a read outside of the cursors can still see the mutation, and
+# make sure that the transaction's seq num state was not corrupted.
+query IT
+SELECT * FROM big WHERE a > 100 ORDER BY a
+----
+101 argh
+102 argh2
+
+# Make sure that the cursor can't see the 101 or 102 rows, which would indicate
+# that the cursor is in fact "sensitive" to writes after it was declared.
+query IT
+FETCH 1 foo
+----
+
+statement ok
+COMMIT
+
+# Sanity check that mutations were committed despite doing weird stuff during
+# the transaction with read seq numbers.
+query IT
+SELECT * FROM big WHERE a > 100 ORDER BY a
+----
+101 argh
+102 argh2
+
+# Test cursor fetch directions.
+statement ok
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH ALL foo
+----
+1  2
+2  2
+3  2
+
+query II
+FETCH ALL foo
+----
+
+statement ok
+CLOSE foo;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH FORWARD ALL foo
+----
+1  2
+2  2
+3  2
+
+query II
+FETCH FORWARD ALL foo
+----
+
+statement ok
+COMMIT;
+INSERT INTO a SELECT g,g+1 FROM generate_series(4, 100) g(g);
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH 0 foo
+----
+
+query II
+FETCH FIRST foo
+----
+1  2
+
+query II
+FETCH FIRST foo
+----
+1  2
+
+query II
+FETCH NEXT foo
+----
+2  2
+
+query II
+FETCH NEXT foo
+----
+3  2
+
+query II
+FETCH FORWARD 3 foo
+----
+4  5
+5  6
+6  7
+
+query II
+FETCH FORWARD 3 foo
+----
+7  8
+8  9
+9  10
+
+query II
+FETCH RELATIVE 3 foo
+----
+12  13
+
+query II
+FETCH FORWARD foo
+----
+13  14
+
+query II
+FETCH ABSOLUTE 13 foo
+----
+13  14
+
+query II
+FETCH ABSOLUTE 14 foo
+----
+14  15
+
+query II
+FETCH ABSOLUTE 14 foo
+----
+14  15
+
+query II
+FETCH ABSOLUTE 16 foo
+----
+16  17
+
+query II
+FETCH ABSOLUTE 100 foo
+----
+100 101
+
+query II
+FETCH ABSOLUTE 101 foo
+----
+
+query II
+FETCH ABSOLUTE 102 foo
+----
+
+statement ok
+COMMIT
+
+# Test error cases (Backward iteration)
+# It's annoying to test these because each will cause an error, which will
+# require a new transaction. That's why all the long statements.
+
+statement error cursor can only scan forward
+BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH BACKWARD 1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH FORWARD -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH LAST foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH LAST foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH 10 foo;
+FETCH ABSOLUTE 9 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH 10 foo;
+FETCH RELATIVE -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH 10 foo;
+FETCH FIRST foo;
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH ABSOLUTE -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH PRIOR foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+FETCH BACKWARD ALL foo
+
+statement ok
+ROLLBACK
+
+
+# Test pg_catalog.pg_cursors
+query TTBBBT colnames
+SELECT * FROM pg_catalog.pg_cursors
+----
+name  statement  is_holdable  is_binary  is_scrollable  creation_time
+
+statement ok
+BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+
+query TTBBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary, now() - creation_time < '1 second'::interval FROM pg_catalog.pg_cursors
+----
+foo  SELECT * FROM a ORDER BY a  false  false  false  true
+
+statement ok
+DECLARE bar CURSOR FOR SELECT 1,2,3;
+
+query T rowsort
+SELECT statement FROM pg_catalog.pg_cursors
+----
+SELECT * FROM a ORDER BY a
+SELECT 1, 2, 3
+
+statement ok
+CLOSE foo
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+bar  SELECT 1, 2, 3  false  false  false
+
+statement ok
+ROLLBACK
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+
+statement ok
+BEGIN; DECLARE bar CURSOR FOR SELECT 1,2,3
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+bar  SELECT 1, 2, 3  false  false  false
+
+statement ok
+COMMIT
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+
+# Make sure that CTEs with mutations are banned.
+statement error DECLARE CURSOR must not contain data-modifying statements in WITH
+BEGIN;
+DECLARE foo CURSOR FOR WITH x AS (INSERT INTO a VALUES (1, 2) RETURNING a) SELECT * FROM x
+
+# Make sure that declaring a cursor against an invalid query is eagerly
+# returned as an error.
+statement error relation \"doesntexist\" does not exist
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM doesntexist
+
+statement ok
+ROLLBACK;
+BEGIN
+
+# Ensure that a cursor fails if selecting a non-existant column from a table.
+statement error column \"teeth\" does not exist
+DECLARE foo CURSOR FOR SELECT teeth FROM a
+
+# Test that schema changes cannot be created in the same transaction as open
+# cursors.
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 1;
+FETCH foo
+
+statement error cannot run schema change in a transaction with open DECLARE cursors
+ALTER TABLE a ADD COLUMN c INT
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 1;
+CLOSE foo
+
+# Cursor is closed; make sure schema change is allowed again.
+
+statement ok
+ALTER TABLE a ADD COLUMN c INT
