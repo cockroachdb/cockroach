@@ -34,8 +34,9 @@ message RangeTombstone {
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
-// RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
-// all of the range's data and metadata, including the raft log, abort span, etc.
+// RaftSnapshotData is a historical vestige that used to carry snapshot data,
+// but is now only used in CollectChecksumResponse to carry range KV data to
+// generate diffs for checksum mismatches.
 message RaftSnapshotData {
   message KeyValue {
     optional bytes key = 1;
@@ -44,6 +45,16 @@ message RaftSnapshotData {
   }
   repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "KV"];
+
+  message RangeKeyValue {
+    optional bytes start_key = 1;
+    optional bytes end_key = 2;
+    optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+    optional bytes value = 4;
+  }
+  repeated RangeKeyValue range_kv = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeKV"];
+
   // These are really raftpb.Entry, but we model them as raw bytes to avoid
   // roundtripping through memory.
   repeated bytes log_entries = 3;
