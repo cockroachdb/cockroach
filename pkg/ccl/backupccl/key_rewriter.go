@@ -137,7 +137,7 @@ func makeKeyRewriter(
 ) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	var tenantPrefixes prefixRewriter
-	tenantPrefixes.rewrites = make([]prefixRewrite, len(tenants))
+	tenantPrefixes.rewrites = make([]prefixRewrite, 0, len(tenants))
 
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
@@ -179,13 +179,10 @@ func makeKeyRewriter(
 			fromSystemTenant = true
 			continue
 		}
-		tenantPrefixes.rewrites[i] = prefixRewrite{
-			OldPrefix: keys.MakeSQLCodec(tenants[i].OldID).TenantPrefix(),
-			NewPrefix: keys.MakeSQLCodec(tenants[i].NewID).TenantPrefix(),
-		}
-		tenantPrefixes.rewrites[i].noop = bytes.Equal(
-			tenantPrefixes.rewrites[i].OldPrefix, tenantPrefixes.rewrites[i].NewPrefix,
-		)
+		from, to := keys.MakeSQLCodec(tenants[i].OldID).TenantPrefix(), keys.MakeSQLCodec(tenants[i].NewID).TenantPrefix()
+		tenantPrefixes.rewrites = append(tenantPrefixes.rewrites, prefixRewrite{
+			OldPrefix: from, NewPrefix: to, noop: bytes.Equal(from, to),
+		})
 	}
 	sort.Slice(tenantPrefixes.rewrites, func(i, j int) bool {
 		return bytes.Compare(tenantPrefixes.rewrites[i].OldPrefix, tenantPrefixes.rewrites[j].OldPrefix) < 0
