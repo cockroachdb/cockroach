@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -188,6 +189,15 @@ type RequestSequencer interface {
 	// directly, in which case it will return a Response for the request. If it
 	// does so, it will not return a request guard.
 	SequenceReq(context.Context, *Guard, Request, RequestEvalKind) (*Guard, Response, *Error)
+
+	// PoisonReq idempotently marks a Guard as poisoned, indicating that its
+	// latches may be held for an indefinite amount of time. Requests waiting on
+	// this Guard will be notified. Latch acquisitions under poison.Policy_Error
+	// react to this by failing with a poison.PoisonedError, while requests under
+	// poison.Policy_Wait continue waiting, but propagate the poisoning upwards.
+	//
+	// See poison.Policy for details.
+	PoisonReq(*Guard)
 
 	// FinishReq marks the request as complete, releasing any protection
 	// the request had against conflicting requests and allowing conflicting
@@ -385,6 +395,9 @@ type Request struct {
 	// with a WriteIntentError instead of entering the queue and waiting.
 	MaxLockWaitQueueLength int
 
+	// The poison.Policy to use for this Request.
+	PoisonPolicy poison.Policy
+
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
 
@@ -464,9 +477,12 @@ type latchManager interface {
 	// WaitFor waits for conflicting latches on the specified spans without adding
 	// any latches itself. Fast path for operations that only require flushing out
 	// old operations without blocking any new ones.
-	WaitFor(ctx context.Context, spans *spanset.SpanSet) *Error
+	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy) *Error
 
-	// Releases latches, relinquish its protection from conflicting requests.
+	// Poison a guard's latches, allowing waiters to fail fast.
+	Poison(latchGuard)
+
+	// Release a guard's latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)
 
 	// Metrics returns information about the state of the latchManager.

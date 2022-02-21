@@ -158,6 +158,16 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr
 		proposal.doneCh = nil
+		// Need to remove any span from the proposal, as the signalled caller
+		// will likely finish it, and if we then end up applying this proposal
+		// we'll try to make a ChildSpan off `proposal.ctx` and this will
+		// trigger the Span use-after-finish assertions.
+		//
+		// See: https://github.com/cockroachdb/cockroach/pull/76858#issuecomment-1048179588
+		//
+		// NB: `proposal.ec.repl` might already have been cleared if we arrive here
+		// through finishApplication.
+		proposal.ctx = context.Background()
 	}
 }
 
