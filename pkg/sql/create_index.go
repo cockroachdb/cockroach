@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -171,8 +170,6 @@ func makeIndexDescriptor(
 		n.Inverted,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
-		params.EvalContext(),
-		params.SessionData(),
 	); err != nil {
 		return nil, err
 	}
@@ -362,9 +359,16 @@ func replaceExpressionElemsWithVirtualCols(
 	isInverted bool,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	sessionData *sessiondata.SessionData,
 ) error {
+	findExistingExprIndexCol := func(expr string) (colName string, ok bool) {
+		for _, col := range desc.AllColumns() {
+			if col.IsExpressionIndexColumn() && col.GetComputeExpr() == expr {
+				return col.GetName(), true
+			}
+		}
+		return "", false
+	}
+
 	lastColumnIdx := len(elems) - 1
 	for i := range elems {
 		elem := &elems[i]
@@ -390,6 +394,17 @@ func replaceExpressionElemsWithVirtualCols(
 			)
 			if err != nil {
 				return err
+			}
+
+			// Use an existing expression index column if one exists, rather
+			// than creating a new one.
+			if existingColName, ok := findExistingExprIndexCol(expr); ok {
+				// Set the column name and unset the expression.
+				elem.Column = tree.Name(existingColName)
+				elem.Expr = nil
+				// Increment expression index telemetry.
+				telemetry.Inc(sqltelemetry.ExpressionIndexCounter)
+				continue
 			}
 
 			// The expression type cannot be ambiguous.

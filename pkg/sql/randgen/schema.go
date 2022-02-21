@@ -402,7 +402,7 @@ func randComputedColumnTableDef(
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = (rng.Intn(2) == 0)
 
-	expr, typ, nullability := randExpr(rng, normalColDefs, true /* nullOk */)
+	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */)
 	newDef.Computed.Expr = expr
 	newDef.Type = typ
 	newDef.Nullable.Nullability = nullability
@@ -423,6 +423,25 @@ func randIndexTableDefFromCols(
 
 	cols := cpy[:nCols]
 
+	// Expression indexes do not currently support references to computed
+	// columns, so we only make expressions with non-computed columns. Also,
+	// duplicate expressions in an index are not allowed, so columns are removed
+	// from the list of eligible columns when they are referenced in an
+	// expression. This ensures that no two expressions reference the same
+	// columns, therefore no expressions can be duplicated.
+	eligibleExprIndexRefs := nonComputedColumnTableDefs(columnTableDefs)
+	removeColsFromExprIndexRefCols := func(cols map[tree.Name]struct{}) {
+		i := 0
+		for j := range eligibleExprIndexRefs {
+			eligibleExprIndexRefs[i] = eligibleExprIndexRefs[j]
+			name := eligibleExprIndexRefs[j].Name
+			if _, ok := cols[name]; !ok {
+				i++
+			}
+		}
+		eligibleExprIndexRefs = eligibleExprIndexRefs[:i]
+	}
+
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
@@ -432,13 +451,13 @@ func randIndexTableDefFromCols(
 		}
 
 		// Replace the column with an expression 10% of the time.
-		if allowExpressions && rng.Intn(10) == 0 {
+		if allowExpressions && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
 			var expr tree.Expr
-			// Expression indexes do not currently support references to
-			// computed columns, so only make expressions with non-computed
-			// columns. Do not allow NULL in expressions to avoid expressions
-			// that have an ambiguous type.
-			expr, semType, _ = randExpr(rng, nonComputedColumnTableDefs(columnTableDefs), false /* nullOk */)
+			// Do not allow NULL in expressions to avoid expressions that have
+			// an ambiguous type.
+			var referencedCols map[tree.Name]struct{}
+			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
+			removeColsFromExprIndexRefCols(referencedCols)
 			elem.Expr = expr
 			elem.Column = ""
 		}

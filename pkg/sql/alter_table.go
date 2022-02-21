@@ -250,8 +250,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					false, /* isInverted */
 					false, /* isNewTable */
 					params.p.SemaCtx(),
-					params.EvalContext(),
-					params.SessionData(),
 				); err != nil {
 					return err
 				}

@@ -125,9 +125,23 @@ func (n *dropIndexNode) startExec(params runParams) error {
 			shardColName = idx.GetShardColumnName()
 		}
 
-		// Drop inaccessible indexed columns. They are created for expression
-		// indexes. They cannot be referenced in constraints, computed columns,
-		// or other indexes, so they are safe to drop.
+		// keyColumnOfOtherIndex returns true if the given column is a key
+		// column of an index in the table other than idx.
+		keyColumnOfOtherIndex := func(colID descpb.ColumnID) bool {
+			for _, otherIdx := range tableDesc.AllIndexes() {
+				if otherIdx.GetID() == idx.GetID() {
+					continue
+				}
+				if otherIdx.CollectKeyColumnIDs().Contains(colID) {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Drop expression index columns if they are not key columns in any
+		// other index. They cannot be referenced in constraints, computed
+		// columns, or other indexes, so they are safe to drop.
 		columnsDropped := false
 		if idx != nil {
 			for i, count := 0, idx.NumKeyColumns(); i < count; i++ {
@@ -136,7 +150,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				if col.IsExpressionIndexColumn() {
+				if col.IsExpressionIndexColumn() && !keyColumnOfOtherIndex(col.GetID()) {
 					n.queueDropColumn(tableDesc, col)
 					columnsDropped = true
 				}
