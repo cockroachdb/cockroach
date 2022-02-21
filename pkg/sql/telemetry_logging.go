@@ -21,7 +21,7 @@ import (
 
 // Default value used to designate the maximum frequency at which events
 // are logged to the telemetry channel.
-const defaultMaxEventFrequency = 10
+const defaultMaxEventFrequency = 8
 
 var telemetryMaxEventFrequency = settings.RegisterIntSetting(
 	settings.TenantWritable,
