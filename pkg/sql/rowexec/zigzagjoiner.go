@@ -411,7 +411,7 @@ type zigzagJoinerInfo struct {
 	// fixedValues.
 	endKey roachpb.Key
 
-	spanBuilder *span.Builder
+	spanBuilder span.Builder
 }
 
 // Setup the curInfo struct for the current z.side, which specifies the side
@@ -523,9 +523,6 @@ func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
 			z.infos[i].fetcher.Close(z.Ctx)
-			if sb := z.infos[i].spanBuilder; sb != nil {
-				sb.Release()
-			}
 		}
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}

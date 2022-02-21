@@ -60,7 +60,7 @@ var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
 
 type defaultSpanGenerator struct {
-	spanBuilder  *span.Builder
+	spanBuilder  span.Builder
 	spanSplitter span.Splitter
 	numKeyCols   int
 	lookupCols   []uint32
@@ -181,7 +181,6 @@ func (g *defaultSpanGenerator) memUsage() int64 {
 
 func (g *defaultSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
-	g.spanBuilder.Release()
 	*g = defaultSpanGenerator{}
 }
 
@@ -223,7 +222,7 @@ func (s spanRowIndices) memUsage() int64 {
 // In this case, the multiSpanGenerator would generate two spans for each input
 // row: [/'east'/<val_a> - /'east'/<val_a>] [/'west'/<val_a> - /'west'/<val_a>].
 type multiSpanGenerator struct {
-	spanBuilder  *span.Builder
+	spanBuilder  span.Builder
 	spanSplitter span.Splitter
 
 	// indexColInfos stores info about the values that each index column can
@@ -345,7 +344,7 @@ func (g *multiSpanGenerator) maxLookupCols() int {
 // init must be called before the multiSpanGenerator can be used to generate
 // spans.
 func (g *multiSpanGenerator) init(
-	spanBuilder *span.Builder,
+	spanBuilder span.Builder,
 	spanSplitter span.Splitter,
 	numKeyCols int,
 	numInputCols int,
@@ -733,7 +732,6 @@ func (g *multiSpanGenerator) memUsage() int64 {
 
 func (g *multiSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
-	g.spanBuilder.Release()
 	*g = multiSpanGenerator{}
 }
 
@@ -751,9 +749,9 @@ type localityOptimizedSpanGenerator struct {
 // local and remote span generators could release their own when they are
 // close()d.
 func (g *localityOptimizedSpanGenerator) init(
-	localSpanBuilder *span.Builder,
+	localSpanBuilder span.Builder,
 	localSpanSplitter span.Splitter,
-	remoteSpanBuilder *span.Builder,
+	remoteSpanBuilder span.Builder,
 	remoteSpanSplitter span.Splitter,
 	numKeyCols int,
 	numInputCols int,

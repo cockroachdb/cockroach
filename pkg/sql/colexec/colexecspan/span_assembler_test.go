@@ -169,7 +169,7 @@ func TestSpanAssembler(t *testing.T) {
 // pertains to index joins.
 func spanGeneratorOracle(
 	t *testing.T,
-	spanBuilder *span.Builder,
+	spanBuilder span.Builder,
 	spanSplitter span.Splitter,
 	rows []rowenc.EncDatumRow,
 	lookupCols int,

@@ -142,7 +142,6 @@ func generateScanSpans(
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
 	sb := span.MakeBuilder(evalCtx, codec, tabDesc, index)
-	defer sb.Release()
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
@@ -1732,7 +1731,6 @@ func (ef *execFactory) ConstructDeleteRange(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
-	defer sb.Release()
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err

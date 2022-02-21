@@ -166,7 +166,7 @@ type invertedJoiner struct {
 		seenMatch bool
 	}
 
-	spanBuilder           *span.Builder
+	spanBuilder           span.Builder
 	outputContinuationCol bool
 
 	scanStats execinfra.ScanStats
@@ -768,9 +768,6 @@ func (ij *invertedJoiner) close() {
 		ij.MemMonitor.Stop(ij.Ctx)
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx)
-		}
-		if ij.spanBuilder != nil {
-			ij.spanBuilder.Release()
 		}
 	}
 }
