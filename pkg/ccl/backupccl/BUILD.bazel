@@ -194,6 +194,7 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/azure",
+        "//pkg/cloud/gcp",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/config",
