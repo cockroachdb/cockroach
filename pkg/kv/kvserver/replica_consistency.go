@@ -579,7 +579,7 @@ type replicaHash struct {
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
 // It will dump all the kv data into snapshot if it is provided.
-func (r *Replica) sha512(
+func (*Replica) sha512(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
 	snap storage.Reader,
