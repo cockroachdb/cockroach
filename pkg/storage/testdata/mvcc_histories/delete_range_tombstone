@@ -1,0 +1,138 @@
+# TODO(erikgrinaker): The MVCC API does not respect range tombstones yet, so
+# we don't test point keys because they remain unaffected.
+# TODO(erikgrinaker): This needs conflict tests, implement later.
+
+# Write some range tombstones. Some will abut and merge.
+run ok
+del_range_ts k=b end=c ts=3
+del_range_ts k=e end=g ts=3
+del_range_ts k=d end=f ts=5
+del_range_ts k=d end=f ts=2
+del_range_ts k=m end=z ts=1
+del_range_ts k=a end=m ts=4
+del_range_ts k=m end=z ts=4
+----
+del_range_ts: {b-c}/3.000000000,0
+del_range_ts: {e-g}/3.000000000,0
+del_range_ts: {d-f}/5.000000000,0
+del_range_ts: {d-f}/2.000000000,0
+del_range_ts: {m-z}/1.000000000,0
+del_range_ts: {a-m}/4.000000000,0
+del_range_ts: {m-z}/4.000000000,0
+>> at end:
+range key: {b-c}/3.000000000,0 -> []
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {e-g}/3.000000000,0 -> []
+range key: {a-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
+
+# Iterate over all tombstones.
+run ok
+iter_range_keys k=a end=z
+----
+iter_range_keys: {b-c}/3.000000000,0 -> []
+iter_range_keys: {d-f}/5.000000000,0 -> []
+iter_range_keys: {d-f}/2.000000000,0 -> []
+iter_range_keys: {e-g}/3.000000000,0 -> []
+iter_range_keys: {a-z}/4.000000000,0 -> []
+iter_range_keys: {m-z}/1.000000000,0 -> []
+
+# Iterator truncates to range bounds.
+run ok
+iter_range_keys k=c end=e
+----
+iter_range_keys: {d-e}/5.000000000,0 -> []
+iter_range_keys: {c-e}/4.000000000,0 -> []
+iter_range_keys: {d-e}/2.000000000,0 -> []
+
+# Iterator truncates to bounds between range key bounds.
+run ok
+iter_range_keys k=ccc end=eee
+----
+iter_range_keys: {d-eee}/5.000000000,0 -> []
+iter_range_keys: {ccc-eee}/4.000000000,0 -> []
+iter_range_keys: e{-ee}/3.000000000,0 -> []
+iter_range_keys: {d-eee}/2.000000000,0 -> []
+
+# Iterator with constrained timestamps.
+run ok
+iter_range_keys k=a end=z minTS=2 maxTS=3
+----
+iter_range_keys: {b-c}/3.000000000,0 -> []
+iter_range_keys: {d-f}/2.000000000,0 -> []
+iter_range_keys: {e-g}/3.000000000,0 -> []
+
+# Fragmented iteration.
+run ok
+iter_range_keys k=a end=z fragmented
+----
+iter_range_keys: {a-b}/4.000000000,0 -> []
+iter_range_keys: {b-c}/4.000000000,0 -> []
+iter_range_keys: {b-c}/3.000000000,0 -> []
+iter_range_keys: {c-d}/4.000000000,0 -> []
+iter_range_keys: {d-e}/5.000000000,0 -> []
+iter_range_keys: {d-e}/4.000000000,0 -> []
+iter_range_keys: {d-e}/2.000000000,0 -> []
+iter_range_keys: {e-f}/5.000000000,0 -> []
+iter_range_keys: {e-f}/4.000000000,0 -> []
+iter_range_keys: {e-f}/3.000000000,0 -> []
+iter_range_keys: {e-f}/2.000000000,0 -> []
+iter_range_keys: {f-g}/4.000000000,0 -> []
+iter_range_keys: {f-g}/3.000000000,0 -> []
+iter_range_keys: {g-m}/4.000000000,0 -> []
+iter_range_keys: {m-z}/4.000000000,0 -> []
+iter_range_keys: {m-z}/1.000000000,0 -> []
+
+# Fragmented iteration with key and time bounds.
+run ok
+iter_range_keys k=ccc end=eee fragmented minTS=3 maxTS=4
+----
+iter_range_keys: {ccc-d}/4.000000000,0 -> []
+iter_range_keys: {d-e}/4.000000000,0 -> []
+iter_range_keys: e{-ee}/4.000000000,0 -> []
+iter_range_keys: e{-ee}/3.000000000,0 -> []
+
+# Empty iterations.
+run ok
+iter_range_keys k=A end=Z
+iter_range_keys k=c end=c
+iter_range_keys k=z end=a
+----
+iter_range_keys: "A"-"Z" -> <no data>
+iter_range_keys: "c"-"c" -> <no data>
+iter_range_keys: "z"-"a" -> <no data>
+
+# Remove some range keys, both a non-existant one and a span across two.
+run ok
+clear_range_key k=a end=z ts=10
+clear_range_key k=b end=g ts=3
+----
+>> at end:
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {a-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
+
+# Remove the middle section of [a-z)@4, twice for idempotency.
+run ok
+clear_range_key k=k end=n ts=4
+clear_range_key k=k end=n ts=4
+----
+>> at end:
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {a-k}/4.000000000,0 -> []
+range key: {n-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
+
+# Remove portions of the [a-k)@4 and [n-z)@4 range keys in one operation.
+run ok
+clear_range_key k=eee end=ttt ts=4
+----
+>> at end:
+range key: {a-eee}/4.000000000,0 -> []
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {ttt-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
