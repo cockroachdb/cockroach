@@ -1294,8 +1294,9 @@ func (*AdminChangeReplicasRequest) flags() flag { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() flag  { return isAdmin | isAlone }
 
 func (*GCRequest) flags() flag {
-	// We let GCRequest bypass the circuit breaker because otherwise, the GC queue may
-	// busy loop on an unavailable range, doing lots of work but never making progress.
+	// We defensively let GCRequest bypass the circuit breaker because otherwise,
+	// the GC queue might busy loop on an unavailable range, doing lots of work
+	// but never making progress.
 	return isWrite | isRange | bypassesReplicaCircuitBreaker
 }
 
@@ -1321,7 +1322,9 @@ func (*ResolveIntentRequest) flags() flag      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange }
 func (*TruncateLogRequest) flags() flag        { return isWrite }
 func (*MergeRequest) flags() flag              { return isWrite | canBackpressure }
-func (*RequestLeaseRequest) flags() flag       { return isWrite | isAlone | skipsLeaseCheck }
+func (*RequestLeaseRequest) flags() flag {
+	return isWrite | isAlone | skipsLeaseCheck | bypassesReplicaCircuitBreaker
+}
 
 // LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
 // effect of the `skipsLeaseCheck` flag that lease write operations have.
@@ -1339,6 +1342,11 @@ func (*TransferLeaseRequest) flags() flag {
 	// the store has registered that a transfer is in progress and
 	// `redirectOnOrAcquireLease` would already tentatively redirect to the future
 	// lease holder.
+	//
+	// Note that we intentionally don't let TransferLease bypass the Replica
+	// circuit breaker. Transferring a lease while the replication layer is
+	// unavailable results in the "old" leaseholder relinquishing the ability
+	// to serve (strong) reads, without being able to hand over the lease.
 	return isWrite | isAlone | skipsLeaseCheck
 }
 func (*ProbeRequest) flags() flag {
