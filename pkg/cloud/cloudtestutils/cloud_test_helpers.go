@@ -467,7 +467,103 @@ func CheckListFilesCanonical(
 				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
 					actual = append(actual, f)
 					return nil
-				}))
+				}, 0 /*limit*/))
+				sort.Strings(actual)
+				require.Equal(t, tc.expected, actual)
+			})
+		}
+	})
+
+	// Similar test as above but with the limit not set to 0.
+	t.Run("List-with-limit", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			uri       string
+			prefix    string
+			delimiter string
+			expected  []string
+			limit     int
+		}{
+			{
+				"root",
+				storeURI,
+				"",
+				"",
+				[]string{"/file/abc/A.csv", "/file/abc/B.csv", "/file/abc/C.csv"},
+				3,
+			},
+			{
+				"file-slash-numbers-slash",
+				storeURI,
+				"file/numbers/",
+				"",
+				[]string{"data1.csv", "data2.csv"},
+				2,
+			},
+			{
+				"root-slash",
+				storeURI,
+				"/",
+				"",
+				[]string{"file/abc/A.csv", "file/abc/B.csv", "file/abc/C.csv"},
+				3,
+			},
+			{
+				"file",
+				storeURI,
+				"file",
+				"",
+				[]string{"/abc/A.csv", "/abc/B.csv", "/abc/C.csv"},
+				3,
+			},
+			{
+				"file-slash",
+				storeURI,
+				"file/",
+				"",
+				[]string{"abc/A.csv", "abc/B.csv", "abc/C.csv"},
+				3,
+			},
+			{
+				"slash-f",
+				storeURI,
+				"/f",
+				"",
+				[]string{"ile/abc/A.csv", "ile/abc/B.csv", "ile/abc/C.csv"},
+				3,
+			},
+			{
+				"nothing",
+				storeURI,
+				"nothing",
+				"",
+				nil,
+				1,
+			},
+			{
+				"delim-slash-file-slash",
+				storeURI,
+				"file/",
+				"/",
+				[]string{"abc/", "letters/"},
+				2,
+			},
+			{
+				"delim-data",
+				storeURI,
+				"",
+				"data",
+				[]string{"/file/abc/A.csv", "/file/abc/B.csv"},
+				2,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				s := storeFromURI(ctx, t, tc.uri, clientFactory, user, ie, kvDB, testSettings)
+				var actual []string
+				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
+					actual = append(actual, f)
+					return nil
+				}, tc.limit /*limit*/))
 				sort.Strings(actual)
 				require.Equal(t, tc.expected, actual)
 			})

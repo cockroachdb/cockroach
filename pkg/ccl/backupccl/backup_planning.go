@@ -9,11 +9,13 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -51,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -940,7 +943,7 @@ func backupPlanHook(
 			}
 
 			if err := writeBackupManifestCheckpoint(
-				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
 			); err != nil {
 				return err
 			}
@@ -965,8 +968,9 @@ func backupPlanHook(
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
+
 			if err := writeBackupManifestCheckpoint(
-				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
 			); err != nil {
 				return err
 			}
@@ -1077,26 +1081,114 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
+// writeBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST
+// and CHECKSUM file. If it is a pure v22.1 cluster or later, it will write
+// a timestamped BACKUP-CHECKPOINT to the /progress directory.
+// If it is a mixed cluster version, it will write a non timestamped BACKUP-CHECKPOINT
+// to the base directory in order to not break backup jobs that resume
+// on a v21.2 node.
 func writeBackupManifestCheckpoint(
 	ctx context.Context,
-	jobID jobspb.JobID,
-	backupDetails jobspb.BackupDetails,
-	backupManifest *BackupManifest,
+	storageURI string,
+	encryption *jobspb.BackupEncryptionOptions,
+	desc *BackupManifest,
 	execCfg *sql.ExecutorConfig,
 	user security.SQLUsername,
 ) error {
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, user)
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, storageURI, user)
 	if err != nil {
 		return err
 	}
 	defer defaultStore.Close()
 
-	if err := writeBackupManifest(
-		ctx, execCfg.Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
-		backupDetails.EncryptionOptions, backupManifest,
-	); err != nil {
-		return errors.Wrapf(err, "writing checkpoint file")
+	sort.Sort(BackupFileDescriptors(desc.Files))
+
+	descBuf, err := protoutil.Marshal(desc)
+	if err != nil {
+		return err
 	}
+
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup manifest")
+	}
+
+	if encryption != nil {
+		encryptionKey, err := getEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	// If the cluster is still running on a mixed version, we want to write
+	// to the base directory instead of the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		// We want to overwrite the latest checkpoint in the base directory,
+		// just write to the non versioned BACKUP-CHECKPOINT file.
+		err = cloud.WriteFile(ctx, defaultStore, backupManifestCheckpointName, bytes.NewReader(descBuf))
+		if err != nil {
+			return err
+		}
+
+		checksum, err := getChecksum(descBuf)
+		if err != nil {
+			return err
+		}
+
+		return cloud.WriteFile(ctx, defaultStore, backupManifestCheckpointName+backupManifestChecksumSuffix, bytes.NewReader(checksum))
+	}
+
+	// We timestamp the checkpoint files in order to enforce write once backups.
+	// When the job goes to read these timestamped files, it will List
+	// the checkpoints and pick the file whose name is lexicographically
+	// sorted to the top. This will be the last checkpoint we write, for
+	// details refer to newTimestampedCheckpointFileName.
+	filename := newTimestampedCheckpointFileName()
+
+	// HTTP storage does not support listing and so we cannot rely on the
+	// above-mentioned List method to return us the latest checkpoint file.
+	// Instead, we will write a checkpoint once with a well-known filename,
+	// and teach the job to always reach for that filename in the face of
+	// a resume. We may lose progress, but this is a cost we are willing
+	// to pay to uphold write-once semantics.
+	if defaultStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
+		// TODO (darryl): We should do this only for file not found or directory
+		// does not exist errors. As of right now we only specifically wrap
+		// ReadFile errors for file not found so this is not possible yet.
+		if r, err := defaultStore.ReadFile(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName); err != nil {
+			// Since we did not find the checkpoint file this is the first time
+			// we are going to write a checkpoint, so write it with the well
+			// known filename.
+			filename = backupManifestCheckpointName
+		} else {
+			err = r.Close(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err = cloud.WriteFile(ctx, defaultStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	// Write the checksum file after we've successfully wrote the checkpoint.
+	checksum, err := getChecksum(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	err = cloud.WriteFile(ctx, defaultStore, backupProgressDirectory+"/"+filename+backupManifestChecksumSuffix, bytes.NewReader(checksum))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

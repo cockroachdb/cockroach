@@ -932,6 +932,9 @@ func (f *FileToTableSystem) NewFileWriter(
 	//
 	// NB: userfile upload will error out on the client side if a file with the
 	// same name already exists.
+	// TODO (darrylwong): Latest files are still overwritten during backups,
+	// but once backups no longer overwrite them, we will no longer need
+	// this in non mixed clusters.
 	err = f.deleteFileWithoutTxn(ctx, filename, e.ie)
 	if err != nil {
 		return nil, err
