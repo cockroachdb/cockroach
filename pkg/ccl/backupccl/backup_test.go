@@ -7414,6 +7414,27 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		// Check the all-tenant override.
 		restoreTenant11.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_read_cost_per_megabyte`, [][]string{{"123"}})
+
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(20, true)`)
+
+		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant = '20'`)
+		_, restoreConn20 := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), Existing: true},
+		)
+		defer restoreConn20.Close()
+		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
+
+		// Tenant 20 gets results that matched the backed up tenant 11.
+		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
+		// Check the all-tenant override.
+		restoreTenant20.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_read_cost_per_megabyte`, [][]string{{"123"}})
+
+		// Remove tenant 11, then confirm restoring 11 over 10 fails.
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(11, true)`)
+		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant = '10'`)
+
+		// Verify tenant 20 is still unaffected.
+		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
 	})
 
 	t.Run("restore-tenant10-to-ts1", func(t *testing.T) {
