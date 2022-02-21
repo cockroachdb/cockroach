@@ -2384,6 +2384,41 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL", "Row Level TTL"}},
+		Charts: []chartDescription{
+			{
+				Title: "Active Range Deletes",
+				Metrics: []string{
+					"jobs.row_level_ttl.num_active_ranges",
+				},
+				AxisLabel: "Num Running",
+			},
+			{
+				Title: "Processing Count",
+				Metrics: []string{
+					"jobs.row_level_ttl.rows_selected",
+					"jobs.row_level_ttl.rows_deleted",
+				},
+				AxisLabel: "Count",
+			},
+			{
+				Title: "Processing Latency",
+				Metrics: []string{
+					"jobs.row_level_ttl.select_duration",
+					"jobs.row_level_ttl.delete_duration",
+				},
+				AxisLabel: "Latency (nanoseconds)",
+			},
+			{
+				Title: "Net Processing Latency",
+				Metrics: []string{
+					"jobs.row_level_ttl.range_total_duration",
+				},
+				AxisLabel: "Latency (nanoseconds)",
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL", "Feature Flag"}},
 		Charts: []chartDescription{
 			{
