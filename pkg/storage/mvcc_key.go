@@ -61,6 +61,23 @@ func (k MVCCKey) Next() MVCCKey {
 	}
 }
 
+// Compare returns -1 if this key is less than the given key, 0 if they're
+// equal, or 1 if this is greater. Comparison is by key,timestamp, where larger
+// timestamps sort before smaller ones except empty ones which sort first (like
+// elsewhere in MVCC).
+func (k MVCCKey) Compare(o MVCCKey) int {
+	if c := k.Key.Compare(o.Key); c != 0 {
+		return c
+	}
+	if k.Timestamp.IsEmpty() && !o.Timestamp.IsEmpty() {
+		return -1
+	} else if !k.Timestamp.IsEmpty() && o.Timestamp.IsEmpty() {
+		return 1
+	} else {
+		return -k.Timestamp.Compare(o.Timestamp) // timestamps sort in reverse
+	}
+}
+
 // Less compares two keys.
 func (k MVCCKey) Less(l MVCCKey) bool {
 	if c := k.Key.Compare(l.Key); c != 0 {
