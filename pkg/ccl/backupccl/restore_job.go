@@ -92,11 +92,6 @@ var restoreStatsInsertBatchSize = 10
 func rewriteBackupSpanKey(
 	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
-	// TODO(dt): support rewriting tenant keys.
-	if bytes.HasPrefix(key, keys.TenantPrefix) {
-		return key, nil
-	}
-
 	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -107,6 +102,10 @@ func rewriteBackupSpanKey(
 		return nil, errors.AssertionFailedf(
 			"no rewrite for span start key: %s", key)
 	}
+	if bytes.HasPrefix(newKey, keys.TenantPrefix) {
+		return newKey, nil
+	}
+
 	// Modify all spans that begin at the primary index to instead begin at the
 	// start of the table. That is, change a span start key from /Table/51/1 to
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
@@ -1339,9 +1338,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	for _, tenant := range details.Tenants {
-		// TODO(dt): extend the job to keep track of new ID.
-		id := roachpb.MakeTenantID(tenant.ID)
-		mainData.addTenant(id, id)
+		to := roachpb.MakeTenantID(tenant.ID)
+		from := to
+		if details.PreRewriteTenantId != nil {
+			from = *details.PreRewriteTenantId
+		}
+		mainData.addTenant(from, to)
 	}
 
 	numNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
