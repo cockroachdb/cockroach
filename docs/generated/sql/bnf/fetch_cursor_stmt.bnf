@@ -1,0 +1,2 @@
+fetch_cursor_stmt ::=
+	'FETCH' fetch_specifier

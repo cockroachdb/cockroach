@@ -1112,7 +1112,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if closeType != panicClose {
-		// Close all statements and prepared portals.
+		// Close all statements, prepared portals, and cursors.
 		ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -1120,6 +1120,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
+		ex.extraTxnState.sqlCursors.closeAll()
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -1296,6 +1297,12 @@ type connExecutor struct {
 		// tracks the memory usage of portals and should be closed upon
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
+
+		// sqlCursors contains the list of SQL CURSORs the session currently has
+		// access to.
+		// Cursors are bound to an explicit transaction and they're all destroyed
+		// once the transaction finishes.
+		sqlCursors cursorMap
 
 		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
 		// when txn is finished (either committed or aborted). It is true when
@@ -1612,6 +1619,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 	}
+
+	// Close all cursors.
+	ex.extraTxnState.sqlCursors.closeAll()
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -2678,6 +2688,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
+	p.sqlCursors = ex.getCursorAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -3032,6 +3043,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 	return connExPrepStmtsAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCursorAccessor() sqlCursors {
+	return connExCursorAccessor{
 		ex: ex,
 	}
 }
