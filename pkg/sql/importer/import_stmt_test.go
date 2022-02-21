@@ -5744,7 +5744,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 					files = append(files, f)
 				}
 				return err
-			}))
+			}, /*limit*/ 0))
 			for i, file := range files {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
 				content, err := store.ReadFile(ctx, file)

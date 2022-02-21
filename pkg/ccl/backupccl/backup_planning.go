@@ -14,6 +14,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -939,8 +941,14 @@ func backupPlanHook(
 				return err
 			}
 
+			defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, p.User())
+			if err != nil {
+				return err
+			}
+			defer defaultStore.Close()
+
 			if err := writeBackupManifestCheckpoint(
-				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+				ctx, p.ExecCfg().Settings, defaultStore, backupDetails.EncryptionOptions, &backupManifest,
 			); err != nil {
 				return err
 			}
@@ -965,8 +973,15 @@ func backupPlanHook(
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
+
+			defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, p.User())
+			if err != nil {
+				return err
+			}
+			defer defaultStore.Close()
+
 			if err := writeBackupManifestCheckpoint(
-				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+				ctx, p.ExecCfg().Settings, defaultStore, backupDetails.EncryptionOptions, &backupManifest,
 			); err != nil {
 				return err
 			}
@@ -1079,24 +1094,50 @@ func getScheduledBackupExecutionArgsFromSchedule(
 
 func writeBackupManifestCheckpoint(
 	ctx context.Context,
-	jobID jobspb.JobID,
-	backupDetails jobspb.BackupDetails,
-	backupManifest *BackupManifest,
-	execCfg *sql.ExecutorConfig,
-	user security.SQLUsername,
+	settings *cluster.Settings,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	desc *BackupManifest,
 ) error {
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, user)
+	sort.Sort(BackupFileDescriptors(desc.Files))
+
+	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
 	}
-	defer defaultStore.Close()
 
-	if err := writeBackupManifest(
-		ctx, execCfg.Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
-		backupDetails.EncryptionOptions, backupManifest,
-	); err != nil {
-		return errors.Wrapf(err, "writing checkpoint file")
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup manifest")
 	}
+
+	if encryption != nil {
+		encryptionKey, err := getEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	filename := newTimestampedCheckpointFileName()
+
+	if err := writeNewCheckpointFile(ctx, settings, exportStore, filename, descBuf); err != nil {
+		return err
+	}
+
+	// Write the checksum file after we've successfully wrote the checkpoint.
+	checksum, err := getChecksum(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	if err := writeNewCheckpointFile(ctx, settings, exportStore, filename+backupManifestChecksumSuffix, checksum); err != nil {
+		return errors.Wrap(err, "writing checkpoint manifest checksum")
+	}
+
 	return nil
 }
 
