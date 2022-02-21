@@ -53,6 +53,9 @@ type encodeRow struct {
 	// tableDesc is a TableDescriptor for the table containing `datums`.
 	// It's valid for interpreting the row at `updated`.
 	tableDesc catalog.TableDescriptor
+	// familyID indicates which column family is populated on this row.
+	// It's valid for interpreting the row at `updated`.
+	familyID descpb.FamilyID
 	// prevDatums is the old value of a changed table row. The field is set
 	// to nil if the before value for changes was not requested (OptDiff).
 	prevDatums rowenc.EncDatumRow
@@ -61,6 +64,8 @@ type encodeRow struct {
 	// prevTableDesc is a TableDescriptor for the table containing `prevDatums`.
 	// It's valid for interpreting the row at `updated.Prev()`.
 	prevTableDesc catalog.TableDescriptor
+	// prevFamilyID indicates which column family is populated in prevDatums.
+	prevFamilyID descpb.FamilyID
 }
 
 // Encoder turns a row into a serialized changefeed key, value, or resolved
@@ -186,9 +191,18 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
 	descID := row.tableDesc.GetID()
 	// use the target list since row.tableDesc.GetName() will not have fully qualified names
-	for _, topic := range e.targets {
-		if topic.TableID == descID {
-			return topic.StatementTimeName, nil
+	for _, target := range e.targets {
+		if target.TableID == descID {
+			switch target.Type {
+			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+				return target.StatementTimeName, nil
+			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+				return fmt.Sprintf("%s.%d", target.StatementTimeName, row.familyID), nil
+			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+				// Not implemented yet
+			default:
+				// fall through to error
+			}
 		}
 	}
 	return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
@@ -203,48 +217,64 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 
 	var after map[string]interface{}
 	if !row.deleted {
-		columns := row.tableDesc.PublicColumns()
+		family, err := row.tableDesc.FindFamilyByID(row.familyID)
+		if err != nil {
+			return nil, err
+		}
+		include := make(map[descpb.ColumnID]struct{}, len(family.ColumnIDs))
+		var yes struct{}
+		for _, colID := range family.ColumnIDs {
+			include[colID] = yes
+		}
 		after = make(map[string]interface{})
-		for i, col := range columns {
-			if col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsOmitted) {
-				continue
-			}
-			datum := row.datums[i]
-			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-				return nil, err
-			}
-			var err error
-			after[col.GetName()], err = tree.AsJSON(
-				datum.Datum,
-				sessiondatapb.DataConversionConfig{},
-				time.UTC,
-			)
-			if err != nil {
-				return nil, err
+		for i, col := range row.tableDesc.PublicColumns() {
+			_, inFamily := include[col.GetID()]
+			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+			if inFamily || virtual {
+				datum := row.datums[i]
+				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
+					return nil, err
+				}
+				after[col.GetName()], err = tree.AsJSON(
+					datum.Datum,
+					sessiondatapb.DataConversionConfig{},
+					time.UTC,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 
 	var before map[string]interface{}
 	if row.prevDatums != nil && !row.prevDeleted {
-		columns := row.prevTableDesc.PublicColumns()
+		family, err := row.prevTableDesc.FindFamilyByID(row.prevFamilyID)
+		if err != nil {
+			return nil, err
+		}
+		include := make(map[descpb.ColumnID]struct{})
+		var yes struct{}
+		for _, colID := range family.ColumnIDs {
+			include[colID] = yes
+		}
 		before = make(map[string]interface{})
-		for i, col := range columns {
-			if col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsOmitted) {
-				continue
-			}
-			datum := row.prevDatums[i]
-			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-				return nil, err
-			}
-			var err error
-			before[col.GetName()], err = tree.AsJSON(
-				datum.Datum,
-				sessiondatapb.DataConversionConfig{},
-				time.UTC,
-			)
-			if err != nil {
-				return nil, err
+		for i, col := range row.prevTableDesc.PublicColumns() {
+			_, inFamily := include[col.GetID()]
+			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+			if inFamily || virtual {
+				datum := row.prevDatums[i]
+				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
+					return nil, err
+				}
+				before[col.GetName()], err = tree.AsJSON(
+					datum.Datum,
+					sessiondatapb.DataConversionConfig{},
+					time.UTC,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -342,12 +372,12 @@ type confluentAvroEncoder struct {
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
 }
 
-type tableIDAndVersion uint64
-type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
-
-func makeTableIDAndVersion(id descpb.ID, version descpb.DescriptorVersion) tableIDAndVersion {
-	return tableIDAndVersion(id)<<32 + tableIDAndVersion(version)
+type tableIDAndVersion struct {
+	tableID  descpb.ID
+	version  descpb.DescriptorVersion
+	familyID descpb.FamilyID
 }
+type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
 
 type confluentRegisteredKeySchema struct {
 	schema     *avroDataRecord
@@ -424,10 +454,21 @@ func newConfluentAvroEncoder(
 
 // Get the raw SQL-formatted string for a table name
 // and apply full_table_name and avro_schema_prefix options
-func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string {
-	for _, spec := range e.targets {
-		if spec.TableID == desc.GetID() {
-			return e.schemaPrefix + spec.StatementTimeName
+func (e *confluentAvroEncoder) rawTableName(
+	desc catalog.TableDescriptor, familyID descpb.FamilyID,
+) string {
+	for _, target := range e.targets {
+		if target.TableID == desc.GetID() {
+			switch target.Type {
+			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+				return e.schemaPrefix + target.StatementTimeName
+			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+				return fmt.Sprintf("%s%s.%d", e.schemaPrefix, target.StatementTimeName, familyID)
+			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+				// Not implemented yet
+			default:
+				// fall through to error
+			}
 		}
 	}
 	//TODO (zinger): error here
@@ -436,7 +477,8 @@ func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string
 
 // EncodeKey implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
-	cacheKey := makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
+	// No familyID in the cache key for keys because it's the same schema for all families
+	cacheKey := tableIDAndVersion{tableID: row.tableDesc.GetID(), version: row.tableDesc.GetVersion()}
 
 	var registered confluentRegisteredKeySchema
 	v, ok := e.keyCache.Get(cacheKey)
@@ -445,7 +487,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 		registered.schema.refreshTypeMetadata(row.tableDesc)
 	} else {
 		var err error
-		tableName := e.rawTableName(row.tableDesc)
+		tableName := e.rawTableName(row.tableDesc, row.familyID)
 		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
 		if err != nil {
 			return nil, err
@@ -478,9 +520,13 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 
 	var cacheKey tableIDAndVersionPair
 	if e.beforeField && row.prevTableDesc != nil {
-		cacheKey[0] = makeTableIDAndVersion(row.prevTableDesc.GetID(), row.prevTableDesc.GetVersion())
+		cacheKey[0] = tableIDAndVersion{
+			tableID: row.prevTableDesc.GetID(), version: row.prevTableDesc.GetVersion(), familyID: row.prevFamilyID,
+		}
 	}
-	cacheKey[1] = makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
+	cacheKey[1] = tableIDAndVersion{
+		tableID: row.tableDesc.GetID(), version: row.tableDesc.GetVersion(), familyID: row.familyID,
+	}
 
 	var registered confluentRegisteredEnvelopeSchema
 	v, ok := e.valueCache.Get(cacheKey)
@@ -494,19 +540,19 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 		var beforeDataSchema *avroDataRecord
 		if e.beforeField && row.prevTableDesc != nil {
 			var err error
-			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, `before`, e.schemaPrefix, e.virtualColumnVisibility)
+			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, row.prevFamilyID, `before`, e.schemaPrefix, e.virtualColumnVisibility)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		afterDataSchema, err := tableToAvroSchema(row.tableDesc, avroSchemaNoSuffix, e.schemaPrefix, e.virtualColumnVisibility)
+		afterDataSchema, err := tableToAvroSchema(row.tableDesc, row.familyID, avroSchemaNoSuffix, e.schemaPrefix, e.virtualColumnVisibility)
 		if err != nil {
 			return nil, err
 		}
 
 		opts := avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
-		registered.schema, err = envelopeToAvroSchema(e.rawTableName(row.tableDesc), opts, beforeDataSchema, afterDataSchema, e.schemaPrefix)
+		registered.schema, err = envelopeToAvroSchema(e.rawTableName(row.tableDesc, row.familyID), opts, beforeDataSchema, afterDataSchema, e.schemaPrefix)
 
 		if err != nil {
 			return nil, err
@@ -514,7 +560,7 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(e.rawTableName(row.tableDesc)) + confluentSubjectSuffixValue
+		subject := SQLNameToKafkaName(e.rawTableName(row.tableDesc, row.familyID)) + confluentSubjectSuffixValue
 		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
