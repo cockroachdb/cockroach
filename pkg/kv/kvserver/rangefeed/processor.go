@@ -191,15 +191,16 @@ type IteratorConstructor func() storage.SimpleMVCCIterator
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor) error {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
 		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
 	}); err != nil {
-		pErr := roachpb.NewError(err)
-		p.reg.DisconnectWithErr(all, pErr)
+		p.reg.DisconnectWithErr(all, roachpb.NewError(err))
 		close(p.stoppedC)
+		return err
 	}
+	return nil
 }
 
 // run is called from Start and runs the rangefeed.

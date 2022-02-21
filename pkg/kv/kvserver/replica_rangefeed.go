@@ -392,7 +392,16 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			// MinTimestampHint: r.ResolvedTimestamp,
 		})
 	}
-	p.Start(r.store.Stopper(), rtsIter)
+
+	// NB: This only errors if the stopper is stopping, and we have to return here
+	// in that case. We do check ShouldQuiesce() below, but that's not sufficient
+	// because the stopper has two states: stopping and quiescing. If this errors
+	// due to stopping, but before it enters the quiescing state, then the select
+	// below will fall through to the panic.
+	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
+		errC <- roachpb.NewError(err)
+		return nil
+	}
 
 	// Register with the processor *before* we attach its reference to the
 	// Replica struct. This ensures that the registration is in place before
