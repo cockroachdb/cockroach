@@ -40,8 +40,6 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-const jobEnabledClusterSettingName = "sql.ttl.job.enabled"
-
 var (
 	defaultSelectBatchSize = settings.RegisterIntSetting(
 		settings.TenantWritable,
@@ -70,11 +68,11 @@ var (
 		"default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.",
 		0,
 		settings.NonNegativeInt,
-	)
+	).WithPublic()
 
 	jobEnabled = settings.RegisterBoolSetting(
 		settings.TenantWritable,
-		jobEnabledClusterSettingName,
+		"sql.ttl.job.enabled",
 		"whether the TTL job is enabled",
 		true,
 	).WithPublic()
@@ -223,7 +221,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if enabled := jobEnabled.Get(p.ExecCfg().SV()); !enabled {
 		return errors.Newf(
 			"ttl jobs are currently disabled by CLUSTER SETTING %s",
-			jobEnabledClusterSettingName,
+			jobEnabled.Key(),
 		)
 	}
 
@@ -285,6 +283,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		ttl := desc.GetRowLevelTTL()
 		if ttl == nil {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
+		}
+
+		if ttl.Pause {
+			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
 		_, dbDesc, err := descs.GetImmutableDatabaseByID(
@@ -523,7 +525,7 @@ func runTTLOnRange(
 		if enabled := jobEnabled.Get(execCfg.SV()); !enabled {
 			return errors.Newf(
 				"ttl jobs are currently disabled by CLUSTER SETTING %s",
-				jobEnabledClusterSettingName,
+				jobEnabled.Key(),
 			)
 		}
 

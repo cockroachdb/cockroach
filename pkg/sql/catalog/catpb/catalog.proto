@@ -208,4 +208,6 @@ message RowLevelTTL {
   optional int64 range_concurrency = 6 [(gogoproto.nullable)=false];
   // DeleteRateLimit is the maximum amount of rows to delete per second.
   optional int64 delete_rate_limit = 7 [(gogoproto.nullable)=false];
+  // Pause is set if the TTL job should not run.
+  optional bool pause = 8 [(gogoproto.nullable)=false];
 }
