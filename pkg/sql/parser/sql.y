@@ -3221,6 +3221,11 @@ restore_options:
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
 	}
+| TENANT '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
+  }
+
 import_format:
   name
   {
