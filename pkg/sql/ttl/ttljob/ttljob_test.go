@@ -216,31 +216,44 @@ func TestRowLevelTTLJobDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	createTable := `CREATE TABLE t (
+	createTable := func(addPause bool) string {
+		var pauseStr string
+		if addPause {
+			pauseStr = `, ttl_pause = true`
+		}
+		return fmt.Sprintf(`CREATE TABLE t (
 	id INT PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2);
+) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2%s);
 ALTER TABLE t SPLIT AT VALUES (1), (2);
-INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`
+INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`, pauseStr)
+	}
 
 	testCases := []struct {
 		desc             string
 		expectedTTLError string
-		extraSetup       string
+		setup            string
 	}{
 		{
 			desc:             "disabled by cluster setting",
 			expectedTTLError: "ttl jobs are currently disabled by CLUSTER SETTING sql.ttl.job.enabled",
-			extraSetup:       `SET CLUSTER SETTING sql.ttl.job.enabled = false`,
+			setup:            createTable(false) + `SET CLUSTER SETTING sql.ttl.job.enabled = false`,
+		},
+		{
+			desc:             "disabled by TTL pause",
+			expectedTTLError: "ttl jobs on table t are currently paused",
+			setup:            createTable(true),
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{})
+			var zeroDuration time.Duration
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+				AOSTDuration: &zeroDuration,
+			})
 			defer cleanupFunc()
 
-			th.sqlDB.Exec(t, createTable)
-			th.sqlDB.Exec(t, tc.extraSetup)
+			th.sqlDB.Exec(t, tc.setup)
 
 			// Force the schedule to execute.
 			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
