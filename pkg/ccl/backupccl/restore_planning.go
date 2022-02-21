@@ -76,6 +76,7 @@ const (
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 	restoreOptDebugPauseOn              = "debug_pause_on"
+	restoreOptAsTenant                  = "tenant"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -1656,6 +1657,36 @@ func restorePlanHook(
 		}
 	}
 
+	var newTenantIDFn func() (*roachpb.TenantID, error)
+	if restoreStmt.Options.AsTenant != nil {
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.Tenant.IsSet() {
+			err := errors.Errorf("%q can only be used when running RESTORE TENANT for a single tenant", restoreOptAsTenant)
+			return nil, nil, nil, false, err
+		}
+		// TODO(dt): it'd be nice to have TypeAsInt or TypeAsTenantID and then in
+		// sql.y an int_or_placeholder, but right now the hook view of planner only
+		// has TypeAsString so we'll just atoi it.
+		fn, err := p.TypeAsString(ctx, restoreStmt.Options.AsTenant, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		newTenantIDFn = func() (*roachpb.TenantID, error) {
+			s, err := fn()
+			if err != nil {
+				return nil, err
+			}
+			x, err := strconv.Atoi(s)
+			if err != nil {
+				return nil, err
+			}
+			if x < int(roachpb.MinTenantID.ToUint64()) {
+				return nil, errors.New("invalid tenant ID value")
+			}
+			id := roachpb.MakeTenantID(uint64(x))
+			return &id, nil
+		}
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -1722,6 +1753,13 @@ func restorePlanHook(
 				return err
 			}
 		}
+		var newTenantID *roachpb.TenantID
+		if newTenantIDFn != nil {
+			newTenantID, err = newTenantIDFn()
+			if err != nil {
+				return err
+			}
+		}
 
 		// incFrom will contain the directory URIs for incremental backups (i.e.
 		// <prefix>/<subdir>) iff len(From)==1, regardless of the
@@ -1772,7 +1810,7 @@ func restorePlanHook(
 		}
 
 		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
-			newDBName, endTime, resultsCh)
+			newDBName, newTenantID, endTime, resultsCh)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1896,6 +1934,7 @@ func doRestorePlan(
 	kms []string,
 	intoDB string,
 	newDBName string,
+	newTenantID *roachpb.TenantID,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -2087,20 +2126,40 @@ func doRestorePlan(
 		}
 	}
 
+	var oldTenantID *roachpb.TenantID
 	if len(tenants) > 0 {
 		if !p.ExecCfg().Codec.ForSystemTenant() {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can restore other tenants")
 		}
-		for _, i := range tenants {
+		if newTenantID != nil {
+			if restoreStmt.DescriptorCoverage == tree.AllDescriptors || len(tenants) != 1 {
+				errors.Errorf("%q option can only be used when restoring a single tenant", restoreOptAsTenant)
+			}
 			res, err := p.ExecCfg().InternalExecutor.QueryRow(
 				ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
-				`SELECT active FROM system.tenants WHERE id = $1`, i.ID,
+				`SELECT active FROM system.tenants WHERE id = $1`, newTenantID.ToUint64(),
 			)
 			if err != nil {
 				return err
 			}
 			if res != nil {
-				return errors.Errorf("tenant %d already exists", i.ID)
+				return errors.Errorf("tenant %s already exists", newTenantID)
+			}
+			old := roachpb.MakeTenantID(tenants[0].ID)
+			tenants[0].ID = newTenantID.ToUint64()
+			oldTenantID = &old
+		} else {
+			for _, i := range tenants {
+				res, err := p.ExecCfg().InternalExecutor.QueryRow(
+					ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
+					`SELECT active FROM system.tenants WHERE id = $1`, i.ID,
+				)
+				if err != nil {
+					return err
+				}
+				if res != nil {
+					return errors.Errorf("tenant %d already exists", i.ID)
+				}
 			}
 		}
 	}
@@ -2260,6 +2319,7 @@ func doRestorePlan(
 			DatabaseModifiers:  databaseModifiers,
 			DebugPauseOn:       debugPauseOn,
 			RestoreSystemUsers: restoreStmt.SystemUsers,
+			PreRewriteTenantId: oldTenantID,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
