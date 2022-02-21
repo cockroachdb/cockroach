@@ -43,6 +43,14 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// How long to keep consistency checker checksums in-memory for collection.
+// Typically a long-poll waits for the result of the computation, so it's almost
+// immediately collected. However, the consistency checker synchronously
+// collects the first replica's checksum before all others, so if the first one
+// is slow the checksum may not be collected right away, and that first
+// consistency check can take a long time due to rate limiting and range size.
+const replicaChecksumGCInterval = time.Hour
+
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
 // stats mismatch is the event in which
 // - the consistency checker finds that all replicas are consistent
@@ -551,7 +559,7 @@ func (r *Replica) computeChecksumDone(
 			c.Delta = enginepb.MVCCStatsDelta(delta)
 			c.Persisted = result.PersistedMS
 		}
-		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
+		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
 		c.Snapshot = snapshot
 		r.mu.checksums[id] = c
 		// Notify

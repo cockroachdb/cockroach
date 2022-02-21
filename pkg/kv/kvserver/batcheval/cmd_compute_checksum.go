@@ -46,12 +46,9 @@ func declareKeysComputeChecksum(
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
-// Version numbers for Replica checksum computation. Requests silently no-op
-// unless the versions are compatible.
-const (
-	ReplicaChecksumVersion    = 4
-	ReplicaChecksumGCInterval = time.Hour
-)
+// ReplicaChecksumVersion versions the checksum computation. Requests silently no-op
+// unless the versions between the requesting and requested replica are compatible.
+const ReplicaChecksumVersion = 4
 
 // ComputeChecksum starts the process of computing a checksum on the replica at
 // a particular snapshot. The checksum is later verified through a
