@@ -106,10 +106,10 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 			require.Equal(t, len(encoded),
 				encodedMVCCKeyPrefixLength(mvccKey.Key)+encodedMVCCTimestampSuffixLength(mvccKey.Timestamp))
 
-			// Test encodeMVCCKeyPrefix.
+			// Test EncodeMVCCKeyPrefix.
 			expectPrefix, err := hex.DecodeString(tc.encoded[:2*len(tc.key)+2])
 			require.NoError(t, err)
-			require.Equal(t, expectPrefix, encodeMVCCKeyPrefix(roachpb.Key(tc.key)))
+			require.Equal(t, expectPrefix, EncodeMVCCKeyPrefix(roachpb.Key(tc.key)))
 
 			// Test encode/decodeMVCCTimestampSuffix too, since we can trivially do so.
 			expectTS, err := hex.DecodeString(tc.encoded[2*len(tc.key)+2:])
@@ -118,7 +118,7 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 				expectTS = nil
 			}
 
-			encodedTS := encodeMVCCTimestampSuffix(tc.ts)
+			encodedTS := EncodeMVCCTimestampSuffix(tc.ts)
 			require.Equal(t, expectTS, encodedTS)
 
 			decodedTS, err := decodeMVCCTimestampSuffix(encodedTS)

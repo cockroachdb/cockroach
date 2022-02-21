@@ -204,21 +204,21 @@ func TestMVCCIRangeKeyteratorTimestampBounds(t *testing.T) {
 	require.NoError(t, db.Experimental().RangeKeySet( // [b-b@5)
 		EncodeMVCCKey(pointKey("b", 0)),
 		EncodeMVCCKey(pointKey("b", 5)),
-		encodeMVCCTimestampSuffix(hlc.Timestamp{Logical: 5}),
+		EncodeMVCCTimestampSuffix(hlc.Timestamp{Logical: 5}),
 		[]byte("be5"),
 		nil,
 	))
 	require.NoError(t, db.Experimental().RangeKeySet( // [b@5-d@2)
 		EncodeMVCCKey(pointKey("b", 5)),
 		EncodeMVCCKey(pointKey("d", 2)),
-		encodeMVCCTimestampSuffix(hlc.Timestamp{Logical: 5}),
+		EncodeMVCCTimestampSuffix(hlc.Timestamp{Logical: 5}),
 		[]byte("be5"),
 		nil,
 	))
 	require.NoError(t, db.Experimental().RangeKeySet( // [d@2-e)
 		EncodeMVCCKey(pointKey("d", 2)),
 		EncodeMVCCKey(pointKey("e", 0)),
-		encodeMVCCTimestampSuffix(hlc.Timestamp{Logical: 5}),
+		EncodeMVCCTimestampSuffix(hlc.Timestamp{Logical: 5}),
 		[]byte("be5"),
 		nil,
 	))

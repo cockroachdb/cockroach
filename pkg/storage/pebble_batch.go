@@ -423,17 +423,17 @@ func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
 		return err
 	}
 	return p.batch.Experimental().RangeKeyUnset(
-		encodeMVCCKeyPrefix(rangeKey.StartKey),
-		encodeMVCCKeyPrefix(rangeKey.EndKey),
-		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
 		nil)
 }
 
 // ExperimentalClearMVCCRangeKeys implements the Engine interface.
 func (p *pebbleBatch) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
 	return p.batch.Experimental().RangeKeyDelete(
-		encodeMVCCKeyPrefix(start),
-		encodeMVCCKeyPrefix(end),
+		EncodeMVCCKeyPrefix(start),
+		EncodeMVCCKeyPrefix(end),
 		nil)
 }
 
@@ -443,9 +443,9 @@ func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value [
 		return err
 	}
 	return p.batch.Experimental().RangeKeySet(
-		encodeMVCCKeyPrefix(rangeKey.StartKey),
-		encodeMVCCKeyPrefix(rangeKey.EndKey),
-		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
 		value,
 		nil)
 }

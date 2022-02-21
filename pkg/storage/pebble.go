@@ -1132,17 +1132,17 @@ func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		return err
 	}
 	return p.db.Experimental().RangeKeyUnset(
-		encodeMVCCKeyPrefix(rangeKey.StartKey),
-		encodeMVCCKeyPrefix(rangeKey.EndKey),
-		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
 		pebble.Sync)
 }
 
 // ExperimentalClearMVCCRangeKeys implements the Engine interface.
 func (p *Pebble) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
 	return p.db.Experimental().RangeKeyDelete(
-		encodeMVCCKeyPrefix(start),
-		encodeMVCCKeyPrefix(end),
+		EncodeMVCCKeyPrefix(start),
+		EncodeMVCCKeyPrefix(end),
 		pebble.Sync)
 }
 
@@ -1152,9 +1152,9 @@ func (p *Pebble) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value []byte
 		return err
 	}
 	return p.db.Experimental().RangeKeySet(
-		encodeMVCCKeyPrefix(rangeKey.StartKey),
-		encodeMVCCKeyPrefix(rangeKey.EndKey),
-		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
 		value,
 		pebble.Sync)
 }
