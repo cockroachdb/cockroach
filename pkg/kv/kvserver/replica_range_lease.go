@@ -318,20 +318,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
-	if hasBypassCircuitBreakerMarker(ctx) {
-		// If the caller bypasses the circuit breaker, allow the lease to do the
-		// same. Otherwise, the lease will be refused by the circuit breaker as
-		// well.
-		//
-		// Note that there is a tiny race: if a request is in flight, but the
-		// request that triggered it (i.e. parentCtx here) does *not* bypass the
-		// probe, and before the circuit breaker rejects the inflight lease another
-		// request that *does* want to bypass the probe joins the request, it too
-		// will receive the circuit breaker error. This is special-cased in
-		// `redirectOnOrAcquireLease`, where such a caller needs to retry instead of
-		// propagating the error.
-		ctx = withBypassCircuitBreakerMarker(ctx)
-	}
+
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
 	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
@@ -452,12 +439,26 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			if pErr == nil {
 				// The Replica circuit breakers together with round-tripping a ProbeRequest
 				// here before asking for the lease could provide an alternative, simpler
-				// solution to the the below issue:
+				// solution to the below issue:
 				//
 				// https://github.com/cockroachdb/cockroach/issues/37906
 				ba := roachpb.BatchRequest{}
 				ba.Timestamp = p.repl.store.Clock().Now()
 				ba.RangeID = p.repl.RangeID
+				// NB:
+				// RequestLease always bypasses the circuit breaker (i.e. will prefer to
+				// get stuck on an unavailable range rather than failing fast; see
+				// `(*RequestLeaseRequest).flags()`). This enables the caller to chose
+				// between either behavior for themselves: if they too want to bypass
+				// the circuit breaker, they simply don't check for the circuit breaker
+				// while waiting for their lease handle. If they want to fail-fast, they
+				// do. If the lease instead adopted the caller's preference, we'd have
+				// to handle the case of multiple preferences joining onto one lease
+				// request, which is more difficult.
+				//
+				// TransferLease will observe the circuit breaker, as transferring a
+				// lease when the range is unavailable results in, essentially, giving
+				// up on the lease and thus worsening the situation.
 				ba.Add(leaseReq)
 				_, pErr = p.repl.Send(ctx, ba)
 			}
@@ -779,6 +780,7 @@ func (r *Replica) requestLeaseLocked(
 			newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
 				"refusing to take the lease; node is draining")))
 	}
+
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
@@ -1109,7 +1111,7 @@ func (r *Replica) leaseGoodToGo(
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
-	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{})
+	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{}, r.breaker.Signal())
 }
 
 // TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
@@ -1124,13 +1126,8 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
-	ctx context.Context, reqTS hlc.Timestamp,
+	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
-	if hasBypassCircuitBreakerMarker(ctx) {
-		defer func() {
-			log.Infof(ctx, "hello")
-		}()
-	}
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
@@ -1143,6 +1140,10 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		} else if !errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)) {
 			return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
 		}
+	}
+
+	if err := brSig.Err(); err != nil {
+		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
 	}
 
 	// Loop until the lease is held or the replica ascertains the actual lease
@@ -1264,12 +1265,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 							// cannot be reproposed so we get this ambiguity.
 							// We'll just loop around.
 							return nil
-						case r.breaker.HasMark(goErr) && hasBypassCircuitBreakerMarker(ctx):
-							// If this request wanted to bypass the circuit breaker but still got a
-							// breaker error back, it joined a lease request started by an operation
-							// that did not bypass circuit breaker errors. Loop around and try again.
-							// See requestLeaseAsync for details.
-							return nil
 						case errors.HasType(goErr, (*roachpb.LeaseRejectedError)(nil)):
 							var tErr *roachpb.LeaseRejectedError
 							errors.As(goErr, &tErr)
@@ -1302,6 +1297,11 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", status.Lease)
 					return nil
+				case <-brSig.C():
+					llHandle.Cancel()
+					err := brSig.Err()
+					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", err)
+					return roachpb.NewError(err)
 				case <-slowTimer.C:
 					slowTimer.Read = true
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
@@ -1361,6 +1361,11 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
+	//
+	// TODO(tbg): this ctx is likely cancelled very soon, which will in turn
+	// cancel the lease acquisition (unless joined by another more long-lived
+	// ctx). So this possibly isn't working as advertised (which only plays a role
+	// for expiration-based leases, at least).
 	_ = r.requestLeaseLocked(ctx, st)
 }
 

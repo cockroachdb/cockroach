@@ -94,6 +94,12 @@ func (r *Replica) executeWriteBatch(
 		return nil, g, roachpb.NewError(err)
 	}
 
+	// Check the breaker. Note that we do this after checkExecutionCanProceed,
+	// so that NotLeaseholderError has precedence.
+	if err := r.signallerForBatch(ba).Err(); err != nil {
+		return nil, g, roachpb.NewError(err)
+	}
+
 	// Compute the transaction's local uncertainty limit using observed
 	// timestamps, which can help avoid uncertainty restarts.
 	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
