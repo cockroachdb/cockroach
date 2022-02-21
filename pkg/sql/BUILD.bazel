@@ -358,6 +358,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/rowinfra",
+        "//pkg/sql/scheduledlogging",
         "//pkg/sql/schemachange",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps",

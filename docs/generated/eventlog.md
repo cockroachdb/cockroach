@@ -2305,6 +2305,32 @@ are automatically converted server-side.
 Events in this category are logged to the `TELEMETRY` channel.
 
 
+### `captured_index_usage_stats`
+
+An event of type `captured_index_usage_stats`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TotalReadCount` | TotalReadCount is the number of times this index has been read from. | no |
+| `LastRead` | LastRead is the timestamp that this index was last being read from. | yes |
+| `TableID` | TableID is the ID of the table this index is created on. This is same as descpb.TableID and is unique within the cluster. | no |
+| `IndexID` | IndexID is the ID of the index within the scope of the given table. | no |
+| `DatabaseName` |  | yes |
+| `TableName` |  | yes |
+| `IndexName` |  | yes |
+| `IndexType` |  | yes |
+| `IsUnique` |  | no |
+| `IsInverted` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `sampled_query`
 
 An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It

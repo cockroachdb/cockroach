@@ -45,3 +45,29 @@ message SampledQuery {
   string distribution = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// CapturedIndexUsageStats
+message CapturedIndexUsageStats {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // Couldn't use roachpb.CollectedIndexUsageStatistics due to circular dependency.
+
+  // TotalReadCount is the number of times this index has been read from.
+  uint64 total_read_count = 2;
+
+  // LastRead is the timestamp that this index was last being read from.
+  string last_read = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TableID is the ID of the table this index is created on. This is same as
+  // descpb.TableID and is unique within the cluster.
+  uint32 table_id = 4 [(gogoproto.customname) = "TableID"];
+
+  // IndexID is the ID of the index within the scope of the given table.
+  uint32 index_id = 5 [(gogoproto.customname) = "IndexID"];
+
+  string database_name = 6 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 7 [(gogoproto.jsontag) = ",omitempty"];
+  string index_name = 8 [(gogoproto.jsontag) = ",omitempty"];
+  string index_type = 9 [(gogoproto.jsontag) = ",omitempty"];
+  bool is_unique = 10 [(gogoproto.jsontag) = ",omitempty"];
+  bool is_inverted = 11 [(gogoproto.jsontag) = ",omitempty"];
+}
