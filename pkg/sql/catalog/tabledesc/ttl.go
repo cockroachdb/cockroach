@@ -11,6 +11,8 @@
 package tabledesc
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -53,6 +55,11 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 			return err
 		}
 	}
+	if ttl.AutomaticStatsPollInterval != 0 {
+		if err := ValidateTTLAutomaticStatsPollInterval("ttl_automatic_stats_poll_interval", ttl.AutomaticStatsPollInterval); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -87,6 +94,19 @@ func ValidateTTLCronExpr(key string, str string) error {
 			err,
 			pgcode.InvalidParameterValue,
 			`invalid cron expression for "%s"`,
+			key,
+		)
+	}
+	return nil
+}
+
+// ValidateTTLAutomaticStatsPollInterval validates the automatic statistics field
+// of TTL.
+func ValidateTTLAutomaticStatsPollInterval(key string, val time.Duration) error {
+	if val <= 0 {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`"%s" must be at least 1`,
 			key,
 		)
 	}

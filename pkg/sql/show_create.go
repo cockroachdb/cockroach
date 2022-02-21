@@ -203,6 +203,9 @@ func ShowCreateTable(
 		if pause := ttl.Pause; pause {
 			storageParams = append(storageParams, fmt.Sprintf(`ttl_pause = %t`, pause))
 		}
+		if p := ttl.AutomaticStatsPollInterval; p != 0 {
+			storageParams = append(storageParams, fmt.Sprintf(`ttl_automatic_stats_poll_interval = '%s'`, p.String()))
+		}
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		storageParams = append(storageParams, `exclude_data_from_backup = true`)

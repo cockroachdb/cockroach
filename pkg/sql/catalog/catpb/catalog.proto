@@ -210,4 +210,7 @@ message RowLevelTTL {
   optional int64 delete_rate_limit = 7 [(gogoproto.nullable)=false];
   // Pause is set if the TTL job should not run.
   optional bool pause = 8 [(gogoproto.nullable)=false];
+  // AutomaticStatsPollIntervals is the interval to report row statistics (number of rows on table, number of expired
+  // rows on table) during row level TTL. If zero, no statistics are reported.
+  optional int64 automatic_stats_poll_interval = 9 [(gogoproto.nullable)=false, (gogoproto.casttype)="time.Duration"];
 }
