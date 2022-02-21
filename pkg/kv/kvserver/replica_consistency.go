@@ -598,9 +598,8 @@ func (*Replica) sha512(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
-	// TODO(erikgrinaker): add a range key visitor to hash range keys.
 	pointKeyVisitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
-		// Rate Limit the scan through the range
+		// Rate limit the scan through the range.
 		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err
 		}
@@ -643,6 +642,53 @@ func (*Replica) sha512(
 		return err
 	}
 
+	rangeKeyVisitor := func(unsafeKey storage.MVCCRangeKey) error {
+		// Rate limit the scan through the range.
+		err := limiter.WaitN(ctx, int64(len(unsafeKey.StartKey)+len(unsafeKey.EndKey)))
+		if err != nil {
+			return err
+		}
+
+		if snapshot != nil {
+			// Add (a copy of) the range key into the debug message.
+			rk := roachpb.RaftSnapshotData_RangeKey{
+				Timestamp: unsafeKey.Timestamp,
+			}
+			alloc, rk.StartKey = alloc.Copy(unsafeKey.StartKey, 0)
+			alloc, rk.EndKey = alloc.Copy(unsafeKey.EndKey, 0)
+			snapshot.RangeKeys = append(snapshot.RangeKeys, rk)
+		}
+
+		// Encode the length of the start key and end key.
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.StartKey)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
+			return err
+		}
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.EndKey)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
+			return err
+		}
+		if _, err := hasher.Write(unsafeKey.StartKey); err != nil {
+			return err
+		}
+		if _, err := hasher.Write(unsafeKey.EndKey); err != nil {
+			return err
+		}
+		legacyTimestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
+		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
+			timestampBuf = make([]byte, size)
+		} else {
+			timestampBuf = timestampBuf[:size]
+		}
+		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
+			return err
+		}
+		if _, err := hasher.Write(timestampBuf); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	var ms enginepb.MVCCStats
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
 	// all of the replicated key space.
@@ -660,7 +706,7 @@ func (*Replica) sha512(
 				UpperBound: span.End,
 			})
 			spanMS, err := storage.ComputeStatsForRangeWithVisitors(
-				iter, span.Start, span.End, 0 /* nowNanos */, pointKeyVisitor, nil /* rangeKeyVisitor */)
+				iter, span.Start, span.End, 0 /* nowNanos */, pointKeyVisitor, rangeKeyVisitor)
 			iter.Close()
 			if err != nil {
 				return nil, err
