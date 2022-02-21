@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -47,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,13 +87,6 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
-
-var resolveDuringExec = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.backup.resolve_destination_in_job.enabled",
-	"defer the interaction with the external storage used to resolve backup destination until the job starts",
-	util.ConstantWithMetamorphicTestBool("backup-resolve-exec", false),
 ).WithPublic()
 
 func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
@@ -795,8 +788,7 @@ func backupPlanHook(
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
-		// TODO(dt): replace setting with cluster version gate.
-		if resolveDuringExec.Get(p.ExecCfg().SV()) {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.BackupResolutionInJob) {
 			description, err := backupJobDescription(p,
 				backupStmt.Backup, to, incrementalFrom,
 				encryptionParams.RawKmsUris,
@@ -862,7 +854,7 @@ func backupPlanHook(
 			return sj.ReportExecutionResults(ctx, resultsCh)
 		}
 
-		// TODO(dt): move this to job execution phase.
+		// TODO(dt): delete this in 22.2.
 		backupDetails, backupManifest, err := getBackupDetailAndManifest(
 			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(),
 		)
