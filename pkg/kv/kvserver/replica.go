@@ -370,6 +370,8 @@ type Replica struct {
 	// timestamp, independent of the source.
 	sideTransportClosedTimestamp sidetransportAccess
 
+	checksumStorage checksumStorage
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
@@ -555,9 +557,6 @@ type Replica struct {
 		// this kind of risk though: a replica that gets stuck on an otherwise
 		// live node will not lose leaseholdership.
 		lastUpdateTimes lastUpdateTimesMap
-
-		// Computed checksum at a snapshot UUID.
-		checksums map[uuid.UUID]replicaChecksum
 
 		// proposalQuota is the quota pool maintained by the lease holder where
 		// incoming writes acquire quota from a fixed quota pool before going

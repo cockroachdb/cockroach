@@ -231,7 +231,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// This test prints a consistency checker diff, so it's
-	// good to make sure we're overly redacting said diff.
+	// good to make sure we're not overly redacting said diff.
 	defer log.TestingSetRedactable(true)()
 
 	// Test uses sticky registry to have persistent pebble state that could

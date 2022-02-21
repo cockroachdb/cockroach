@@ -56,15 +56,16 @@ func (is Server) CollectChecksum(
 	resp := &CollectChecksumResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
 			r, err := s.GetReplica(req.RangeID)
 			if err != nil {
 				return err
 			}
-			c, err := r.getChecksum(ctx, req.ChecksumID)
+			ccr, err := getChecksum(ctx, &r.checksumStorage, req.ChecksumID)
 			if err != nil {
 				return err
 			}
-			ccr := c.CollectChecksumResponse
 			if !bytes.Equal(req.Checksum, ccr.Checksum) {
 				// If this check is false, then this request is the replica carrying out
 				// the consistency check. The message is spurious, but we want to leave the
@@ -78,7 +79,7 @@ func (is Server) CollectChecksum(
 			} else {
 				ccr.Snapshot = nil
 			}
-			resp = &ccr
+			resp = ccr
 			return nil
 		})
 	return resp, err
