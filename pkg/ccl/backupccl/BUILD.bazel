@@ -194,6 +194,7 @@ go_test(
         "//pkg/cloud/azure",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
+        "//pkg/cloud/userfile/filetable",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
