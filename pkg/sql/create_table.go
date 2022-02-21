@@ -1750,8 +1750,6 @@ func NewTableDesc(
 				d.Inverted,
 				true, /* isNewTable */
 				semaCtx,
-				evalCtx,
-				sessionData,
 			); err != nil {
 				return nil, err
 			}
@@ -1870,8 +1868,6 @@ func NewTableDesc(
 				false, /* isInverted */
 				true,  /* isNewTable */
 				semaCtx,
-				evalCtx,
-				sessionData,
 			); err != nil {
 				return nil, err
 			}
