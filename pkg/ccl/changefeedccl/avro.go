@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -756,11 +757,21 @@ const (
 // appended to the end of the avro record's name.
 func tableToAvroSchema(
 	tableDesc catalog.TableDescriptor,
+	familyID descpb.FamilyID,
 	nameSuffix string,
 	namespace string,
 	virtualColumnVisibility string,
 ) (*avroDataRecord, error) {
-	name := SQLNameToAvroName(tableDesc.GetName())
+	family, err := tableDesc.FindFamilyByID(familyID)
+	if err != nil {
+		return nil, err
+	}
+	var name string
+	if tableDesc.NumFamilies() > 1 {
+		name = SQLNameToAvroName(tableDesc.GetName() + family.Name)
+	} else {
+		name = SQLNameToAvroName(tableDesc.GetName())
+	}
 	if nameSuffix != avroSchemaNoSuffix {
 		name = name + `_` + nameSuffix
 	}
@@ -774,18 +785,29 @@ func tableToAvroSchema(
 		colIdxByFieldIdx: make(map[int]int),
 		fieldIdxByColIdx: make(map[int]int),
 	}
+
+	include := make(map[descpb.ColumnID]struct{}, len(family.ColumnIDs))
+	var yes struct{}
+	for _, colID := range family.ColumnIDs {
+		include[colID] = yes
+	}
+
 	for _, col := range tableDesc.PublicColumns() {
-		if col.IsVirtual() && virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsOmitted) {
-			continue
-		}
-		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
-		schema.colIdxByFieldIdx[len(schema.Fields)] = col.Ordinal()
-		schema.fieldIdxByName[field.Name] = len(schema.Fields)
-		schema.fieldIdxByColIdx[col.Ordinal()] = len(schema.Fields)
-		schema.Fields = append(schema.Fields, field)
+		_, inFamily := include[col.GetID()]
+		virtual := col.IsVirtual() && virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+		if inFamily || virtual {
+			field, err := columnToAvroSchema(col)
+			if err != nil {
+				return nil, err
+			}
+			schema.colIdxByFieldIdx[len(schema.Fields)] = col.Ordinal()
+			schema.fieldIdxByName[field.Name] = len(schema.Fields)
+			schema.fieldIdxByColIdx[col.Ordinal()] = len(schema.Fields)
+			schema.Fields = append(schema.Fields, field)
+		}
 	}
 	schemaJSON, err := json.Marshal(schema)
 	if err != nil {

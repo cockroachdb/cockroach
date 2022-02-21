@@ -49,6 +49,7 @@ const (
 	OptCompression              = `compression`
 	OptSchemaChangeEvents       = `schema_change_events`
 	OptSchemaChangePolicy       = `schema_change_policy`
+	OptSplitColumnFamilies      = `split_column_families`
 	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
 	OptWebhookAuthHeader        = `webhook_auth_header`
 	OptWebhookClientTimeout     = `webhook_client_timeout`
@@ -178,6 +179,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptCompression:              sql.KVStringOptRequireValue,
 	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
 	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
+	OptSplitColumnFamilies:      sql.KVStringOptRequireNoValue,
 	OptInitialScan:              sql.KVStringOptRequireNoValue,
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
@@ -203,7 +205,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
 	OptFormat, OptFullTableName,
 	OptKeyInValue, OptTopicInValue,
 	OptResolvedTimestamps, OptUpdatedTimestamps,
-	OptMVCCTimestamps, OptDiff,
+	OptMVCCTimestamps, OptDiff, OptSplitColumnFamilies,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan,

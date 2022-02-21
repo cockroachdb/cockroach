@@ -112,6 +112,7 @@ func changefeedPlanHook(
 		}
 	}
 
+	//TODO: We're passing around the full output of optsFn a lot, make it a type.
 	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -538,12 +539,16 @@ func getTargetsAndTables(
 			tables[table.GetID()] = jobspb.ChangefeedTargetTable{
 				StatementTimeName: name,
 			}
+			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+			if len(table.GetFamilies()) > 1 {
+				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			}
 			ts := jobspb.ChangefeedTargetSpecification{
-				Type:    jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				Type:    typ,
 				TableID: table.GetID(),
 			}
 			targets = append(targets, ts)
-			if err := changefeedbase.ValidateTable(targets, table); err != nil {
+			if err := changefeedbase.ValidateTable(targets, table, opts); err != nil {
 				return nil, nil, err
 			}
 			for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
