@@ -285,6 +285,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
 		}
 
+		if ttl.Pause {
+			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
+		}
+
 		_, dbDesc, err := descs.GetImmutableDatabaseByID(
 			ctx,
 			txn,
