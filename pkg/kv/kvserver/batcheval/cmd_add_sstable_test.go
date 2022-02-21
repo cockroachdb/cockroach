@@ -1055,7 +1055,7 @@ func runTestDBAddSSTable(
 		value.InitChecksum([]byte("foo"))
 
 		sstFile := &storage.MemFile{}
-		w := storage.MakeBackupSSTWriter(sstFile)
+		w := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
 		defer w.Close()
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
