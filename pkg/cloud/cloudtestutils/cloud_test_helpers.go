@@ -467,7 +467,7 @@ func CheckListFilesCanonical(
 				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
 					actual = append(actual, f)
 					return nil
-				}))
+				}, 0))
 				sort.Strings(actual)
 				require.Equal(t, tc.expected, actual)
 			})

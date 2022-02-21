@@ -228,14 +228,14 @@ func backup(
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
 
+				lastCheckpoint = timeutil.Now()
+
 				err := writeBackupManifest(
-					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
+					ctx, settings, defaultStore, NewCheckpointFilename(lastCheckpoint.String()), encryption, backupManifest,
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
 				}
-
-				lastCheckpoint = timeutil.Now()
 			}
 		}
 		return nil
@@ -578,8 +578,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if err != nil {
 		return errors.Wrap(err, "exhausted retries")
 	}
-
-	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
+	// Don't think we need this anymore?
+	//b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
 	var backupDetails jobspb.BackupDetails
 	var ok bool
@@ -713,7 +713,7 @@ func (b *backupResumer) readManifestOnResume(
 
 		// "Rename" temp checkpoint.
 		if err := writeBackupManifest(
-			ctx, cfg.Settings, defaultStore, backupManifestCheckpointName,
+			ctx, cfg.Settings, defaultStore, NewCheckpointFilename(timeutil.Now().String()),
 			details.EncryptionOptions, &desc,
 		); err != nil {
 			mem.Shrink(ctx, memSize)
@@ -808,7 +808,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 func (b *backupResumer) deleteCheckpoint(
 	ctx context.Context, cfg *sql.ExecutorConfig, user security.SQLUsername,
 ) {
-	// Attempt to delete BACKUP-CHECKPOINT.
+	// Attempt to delete BACKUP-CHECKPOINT(s) in /progress directory.
 	if err := func() error {
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
@@ -824,7 +824,12 @@ func (b *backupResumer) deleteCheckpoint(
 		if err != nil {
 			log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
 		}
-		return exportStore.Delete(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName)
+		// Delete will not delete a nonempty directory, so we have to go through
+		// all files and delete each file one by one.
+		err = exportStore.List(ctx, backupProgressDirectory, "", func(p string) error {
+			return exportStore.Delete(ctx, backupProgressDirectory+p)
+		}, 0)
+		return err
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}

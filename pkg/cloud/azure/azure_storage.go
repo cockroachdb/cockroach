@@ -180,7 +180,9 @@ func (s *azureStorage) ReadFileAt(
 	return ioctx.ReadCloserAdapter(reader), size, nil
 }
 
-func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (s *azureStorage) List(
+	ctx context.Context, prefix, delim string, fn cloud.ListingFn, limit int,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.List")
 	defer sp.Finish()
 
@@ -188,6 +190,7 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.List: %s", dest)})
 
 	var marker azblob.Marker
+	count := 0
 	for marker.NotDone() {
 		response, err := s.container.ListBlobsHierarchySegment(
 			ctx, marker, delim, azblob.ListBlobsSegmentOptions{Prefix: dest},
@@ -206,6 +209,10 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 			}
 		}
 		marker = response.NextMarker
+
+		if count++; limit != 0 && count >= limit {
+			return nil
+		}
 	}
 	return nil
 }

@@ -64,6 +64,7 @@ type InternalFileToTableExecutor struct {
 }
 
 var _ FileToTableSystemExecutor = &InternalFileToTableExecutor{}
+var testingKnobs = TestingKnobs{}
 
 // MakeInternalFileToTableExecutor returns an instance of a
 // InternalFileToTableExecutor.
@@ -163,6 +164,13 @@ type FileToTableSystem struct {
 	qualifiedTableName string
 	executor           FileToTableSystemExecutor
 	username           security.SQLUsername
+	testingKnobs       TestingKnobs
+}
+
+// TestingKnobs is flags used for tests that manipulate userfile reader
+// and writer.
+type TestingKnobs struct {
+	EnforceNoOverwrite bool
 }
 
 // FileTable which contains records for every uploaded file.
@@ -250,7 +258,7 @@ func NewFileToTableSystem(
 	}
 
 	f := FileToTableSystem{
-		qualifiedTableName: qualifiedTableName, executor: executor, username: username,
+		qualifiedTableName: qualifiedTableName, executor: executor, username: username, testingKnobs: testingKnobs,
 	}
 
 	// A SQLConnFileToTableExecutor should not perform any of the init steps as it
@@ -926,17 +934,28 @@ func (f *FileToTableSystem) NewFileWriter(
 		return nil, err
 	}
 
-	// BACKUP must allow overwriting of files. Since userfile is backed by a SQL
-	// table with filename as a PK, this would cause a constraint violation if
-	// we did not delete the file and its contents before writing.
-	//
-	// NB: userfile upload will error out on the client side if a file with the
-	// same name already exists.
-	err = f.deleteFileWithoutTxn(ctx, filename, e.ie)
+	// For testing purposes we sometimes want to check to see that the files
+	// we write are not being overwritten, and skipping this delete is an
+	// easy way to do so as it will throw an error if the file already exists.
+	if !f.testingKnobs.EnforceNoOverwrite {
+		// BACKUP must allow overwriting of files. Since userfile is backed by a SQL
+		// table with filename as a PK, this would cause a constraint violation if
+		// we did not delete the file and its contents before writing.
+		//
+		// NB: userfile upload will error out on the client side if a file with the
+		// same name already exists.
+		err = f.deleteFileWithoutTxn(ctx, filename, e.ie)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	return newChunkWriter(ctx, chunkSize, filename, f.username, f.GetFQFileTableName(),
 		f.GetFQPayloadTableName(), e.ie, e.db)
+}
+
+// SetTestingKnobs sets the testing knobs that all subsequent file table
+// storage will have.
+func SetTestingKnobs(newTestingKnobs TestingKnobs) {
+	testingKnobs = newTestingKnobs
 }
