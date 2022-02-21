@@ -672,6 +672,26 @@ func TestAvroSchemaNaming(t *testing.T) {
 		//Both changes to the subject are also reflected in the schema name in the posted schemas
 		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
 		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
+
+		sqlDB.Exec(t, `ALTER TABLE movr.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
+		multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies))
+		defer closeFeed(t, multiFamilyFeed)
+		foo = multiFamilyFeed.(*kafkaFeed)
+
+		sqlDB.Exec(t, `UPDATE movr.drivers SET vehicle_id = 1 WHERE id=1`)
+
+		assertPayloads(t, multiFamilyFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"driversprimary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			`drivers: {"id":{"long":1}}->{"after":{"driversvolatile":{"vehicle_id":{"long":1}}}}`,
+		})
+
+		assertRegisteredSubjects(t, foo.registry, []string{
+			`drivers.primary-key`,
+			`drivers.primary-value`,
+			`drivers.volatile-value`,
+		})
+
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn))
