@@ -16,7 +16,9 @@ import (
 
 // ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
 func ValidateTable(
-	targets []jobspb.ChangefeedTargetSpecification, tableDesc catalog.TableDescriptor,
+	targets []jobspb.ChangefeedTargetSpecification,
+	tableDesc catalog.TableDescriptor,
+	opts map[string]string,
 ) error {
 	var t jobspb.ChangefeedTargetSpecification
 	var found bool
@@ -48,10 +50,16 @@ func ValidateTable(
 	if tableDesc.IsSequence() {
 		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
-	if len(tableDesc.GetFamilies()) != 1 {
+	if t.Type == jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY && len(tableDesc.GetFamilies()) != 1 {
 		return errors.Errorf(
-			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
+			`CHANGEFEED created on a table with a single column family (%s) cannot now target a table with %d families.`,
 			tableDesc.GetName(), len(tableDesc.GetFamilies()))
+	}
+	_, columnFamiliesOpt := opts[OptSplitColumnFamilies]
+	if !columnFamiliesOpt && len(tableDesc.GetFamilies()) != 1 {
+		return errors.Errorf(
+			`CHANGEFEED targeting a table (%s) with multiple column families requires WITH %s and will emit multiple events per row.`,
+			OptSplitColumnFamilies, tableDesc.GetName())
 	}
 
 	if tableDesc.Dropped() {
@@ -78,6 +86,12 @@ func WarningsForTable(
 				)
 			}
 		}
+	}
+	if tableDesc.NumFamilies() > 1 {
+		warnings = append(warnings,
+			errors.Errorf("Table %s has %d underlying column families. Messages will be emitted separately for each family.",
+				tableDesc.GetName(), tableDesc.NumFamilies(),
+			))
 	}
 	return warnings
 }

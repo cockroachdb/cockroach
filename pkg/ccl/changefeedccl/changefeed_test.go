@@ -1702,15 +1702,48 @@ func TestChangefeedColumnFamily(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		// Table with 2 column families.
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY (a), FAMILY (b))`)
-		if strings.Contains(t.Name(), `enterprise`) {
-			sqlDB.ExpectErr(t, `exactly 1 column family`, `CREATE CHANGEFEED FOR foo`)
-		} else {
-			sqlDB.ExpectErr(t, `exactly 1 column family`, `EXPERIMENTAL CHANGEFEED FOR foo`)
-		}
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY (a,b), FAMILY (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+
+		// Must specify WITH split_column_families
+		sqlDB.ExpectErr(t, `multiple column families`, `CREATE CHANGEFEED FOR foo`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`foo: [0]->{"after": {"c": "cat"}}`,
+		})
+
+		// No messages for unaffected column families.
+		sqlDB.Exec(t, `UPDATE foo SET c='lion' WHERE a=0`)
+		sqlDB.Exec(t, `UPDATE foo SET c='tiger' WHERE a=0`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"c": "lion"}}`,
+			`foo: [0]->{"after": {"c": "tiger"}}`,
+		})
+
+		// No messages on insert for families where no non-null values were set.
+		sqlDB.Exec(t, `INSERT INTO foo values (1, 'puppy', null)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (2, null, 'kitten')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "puppy"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": null}}`,
+			`foo: [2]->{"after": {"c": "kitten"}}`,
+		})
+
+		// Deletes send a message for each column family.
+		fooWithDiff := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families, diff, no_initial_scan, resolved='1s'`)
+		defer closeFeed(t, fooWithDiff)
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a=0`)
+		assertPayloads(t, fooWithDiff, []string{
+			`foo: [0]->{"after": null, "before": {"a": 0, "b": "dog"}}`,
+			`foo: [0]->{"after": null, "before": {"c": "tiger"}}`,
+		})
 
 		// Table with a second column family added after the changefeed starts.
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, FAMILY f_a (a))`)
@@ -1722,16 +1755,116 @@ func TestChangefeedColumnFamily(t *testing.T) {
 		})
 		sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b STRING CREATE FAMILY f_b`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
-		if _, err := bar.Next(); !testutils.IsError(err, `exactly 1 column family`) {
-			t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
+		if _, err := bar.Next(); !testutils.IsError(err, `created on a table with a single column family`) {
+			t.Errorf(`expected "column family" error got: %+v`, err)
 		}
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+}
+
+func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Table with 2 column families.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`foo: [0]->{"after": {"c": "cat"}}`,
+		})
+
+		// Add a column to an existing family
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d string DEFAULT 'hi' FAMILY f2`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"c": "cat", "d": "hi"}}`,
+		})
+
+		// Add a column to a new family.
+		// Behavior here is a little wonky with default values in a way
+		// that's likely to change with declarative schema changer,
+		// so not asserting anything either way about that.
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN e string CREATE FAMILY f3`)
+		sqlDB.Exec(t, `UPDATE foo SET e='hello' WHERE a=0`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"e": "hello"}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedEachColumnFamilyVirtualColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Table with 2 column families.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`foo: [0]->{"after": {"c": "cat"}}`,
+		})
+
+		// Add a column to an existing family
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d string DEFAULT 'hi' FAMILY f2`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"c": "cat", "d": "hi"}}`,
+		})
+
+		// Add a column to a new family.
+		// Behavior here is a little wonky with default values in a way
+		// that's likely to change with declarative schema changer,
+		// so not asserting anything either way about that.
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN e string CREATE FAMILY f3`)
+		sqlDB.Exec(t, `UPDATE foo SET e='hello' WHERE a=0`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"e": "hello"}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedColumnFamilyAvro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY justc (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families, format=avro`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: {"a":{"long":0}}->{"after":{"foomost":{"a":{"long":0},"b":{"string":"dog"}}}}`,
+			`foo: {"a":{"long":0}}->{"after":{"foojustc":{"c":{"string":"cat"}}}}`,
+		})
+
+	}
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestChangefeedAuthorization(t *testing.T) {
