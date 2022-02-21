@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -55,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -78,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -845,7 +849,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 					files = append(files, f)
 				}
 				return err
-			}))
+			}, /*limit*/ 0 /*limit*/))
 			full1 = strings.TrimSuffix(files[0], backupManifestName)
 			full2 = strings.TrimSuffix(files[1], backupManifestName)
 
@@ -859,7 +863,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 					subdirFiles = append(subdirFiles, f)
 				}
 				return err
-			}))
+			}, 0 /*limit*/))
 			require.NoError(t, err)
 			subdirFull1 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[0], "foo"),
 				backupManifestName)
@@ -1818,64 +1822,79 @@ func TestBackupRestoreResume(t *testing.T) {
 	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), keys.SystemSQLCodec, "data", "bank")
 
 	t.Run("backup", func(t *testing.T) {
-		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-		backupStartKey := backupTableDesc.PrimaryIndexSpan(keys.SystemSQLCodec).Key
-		backupEndKey, err := randgen.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
-		mockManifest, err := protoutil.Marshal(&BackupManifest{
-			ClusterID: tc.Servers[0].ClusterID(),
-			Files: []BackupManifest_File{
-				{Path: "garbage-checkpoint", Span: backupCompletedSpan},
-			},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		backupDir := dir + "/backup"
-		if err := os.MkdirAll(backupDir+"/"+backupProgressDirectory, 0755); err != nil {
-			t.Fatal(err)
-		}
-		checkpointFile := backupDir + "/" + backupProgressDirectory + "/" + backupManifestCheckpointName
-		if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
-			t.Fatal(err)
-		}
-		createAndWaitForJob(
-			t, sqlDB, []descpb.ID{backupTableDesc.GetID()},
-			jobspb.BackupDetails{
-				EndTime: tc.Servers[0].Clock().Now(),
-				URI:     "nodelocal://0/backup",
-			},
-			jobspb.BackupProgress{},
-		)
+		for _, item := range []struct {
+			testName            string
+			checkpointDirectory string
+		}{
+			{testName: "backup-progress-directory", checkpointDirectory: "/" + backupProgressDirectory},
+			{testName: "backup-base-directory", checkpointDirectory: ""},
+		} {
+			item := item
+			t.Run(item.testName, func(t *testing.T) {
+				sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
+				backupStartKey := backupTableDesc.PrimaryIndexSpan(keys.SystemSQLCodec).Key
+				backupEndKey, err := randgen.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+				if err != nil {
+					t.Fatal(err)
+				}
+				backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
+				mockManifest, err := protoutil.Marshal(&BackupManifest{
+					ClusterID: tc.Servers[0].ClusterID(),
+					Files: []BackupManifest_File{
+						{Path: "garbage-checkpoint", Span: backupCompletedSpan},
+					},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				backupDir := dir + "/backup" + "-" + item.testName
 
-		// If the backup properly took the (incorrect) checkpoint into account, it
-		// won't have tried to re-export any keys within backupCompletedSpan.
-		backupManifestFile := backupDir + "/" + backupManifestName
-		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if isGZipped(backupManifestBytes) {
-			backupManifestBytes, err = decompressData(ctx, nil, backupManifestBytes)
-			require.NoError(t, err)
-		}
-		var backupManifest BackupManifest
-		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
-			t.Fatal(err)
-		}
-		for _, file := range backupManifest.Files {
-			if file.Span.Overlaps(backupCompletedSpan) && file.Path != "garbage-checkpoint" {
-				t.Fatalf("backup re-exported checkpointed span %s", file.Span)
-			}
+				if err := os.MkdirAll(backupDir+item.checkpointDirectory, 0755); err != nil {
+					t.Fatal(err)
+				}
+				checkpointFile := backupDir + item.checkpointDirectory + "/" + backupManifestCheckpointName
+				if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
+					t.Fatal(err)
+				}
+				createAndWaitForJob(
+					t, sqlDB, []descpb.ID{backupTableDesc.GetID()},
+					jobspb.BackupDetails{
+						EndTime: tc.Servers[0].Clock().Now(),
+						URI:     "nodelocal://0/backup" + "-" + item.testName,
+					},
+					jobspb.BackupProgress{},
+				)
+
+				// If the backup properly took the (incorrect) checkpoint into account, it
+				// won't have tried to re-export any keys within backupCompletedSpan.
+				backupManifestFile := backupDir + "/" + backupManifestName
+				backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if isGZipped(backupManifestBytes) {
+					backupManifestBytes, err = decompressData(ctx, nil, backupManifestBytes)
+					require.NoError(t, err)
+				}
+				var backupManifest BackupManifest
+				if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
+					t.Fatal(err)
+				}
+				for _, file := range backupManifest.Files {
+					if file.Span.Overlaps(backupCompletedSpan) && file.Path != "garbage-checkpoint" {
+						t.Fatalf("backup re-exported checkpointed span %s", file.Span)
+					}
+				}
+			})
 		}
 	})
 
 	t.Run("restore", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-		restoreDir := "nodelocal://0/restore"
+		// We backup into two different directories in the tests above so
+		// as to not intefere with each other. However, they should both be
+		// the same to RESTORE so we arbitrarily pick this directory.
+		restoreDir := "nodelocal://0/restore-backup-progress-directory"
 		sqlDB.Exec(t, `BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 		restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
@@ -10124,4 +10143,83 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE trad_fkdb;")
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
 	}
+}
+
+// TestBackupNoOverwriteCheckpoint tests BACKUP to see that it no longer
+// overwrites the checkpoint file, while still correctly handling older
+// backups that do.
+func TestBackupNoOverwriteCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer func(oldInterval time.Duration) {
+		BackupCheckpointInterval = oldInterval
+	}(BackupCheckpointInterval)
+	BackupCheckpointInterval = 0
+
+	// We want the backup to be large enough so that it doesn't finish in
+	// one iteration, which wouldn't test if checkpoints overwrite.
+	const numAccounts = 1000
+	const userfile = "'userfile:///a'"
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Set the testing knobs so that userfile does not delete the filename
+	// is trying to write first. This means that if the file already exists
+	// it will throw an error when it tries to write. Make sure to set it
+	// back to true at the end of the test.
+	filetable.SetTestingKnobs(filetable.TestingKnobs{EnforceNoOverwrite: true})
+	defer filetable.SetTestingKnobs(filetable.TestingKnobs{EnforceNoOverwrite: false})
+	query := fmt.Sprintf("BACKUP TO %s", userfile)
+	sqlDB.Exec(t, query)
+}
+
+// TestBackupCheckpointInBaseDirectory tests to see that a checkpoint
+// file in the base directory can be properly read when one is not found
+// in progress. This can occur when an older version node creates the backup.
+func TestBackupCheckpointInBaseDirectory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	const userfile = "'userfile:///a'"
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint - 1),
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+		},
+	}
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	ctx := context.Background()
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	require.NoError(t, err)
+
+	query := fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+
+	// Find the latest file so we know where the directory is that we want
+	// to delete the checkpoint from.
+	r, err := store.ReadFile(ctx, latestFileName)
+	require.NoError(t, err)
+	latest, err := ioctx.ReadAll(ctx, r)
+	require.NoError(t, err)
+	r.Close(ctx)
+
+	// Check that the BACKUP-CHECKPOINT file was written to the base directory
+	// and the progress directory.
+	r, err = store.ReadFile(ctx, string(latest)+"/"+backupManifestCheckpointName)
+	require.NoError(t, err)
+	r.Close(ctx)
+
+	// Test that if we try an incremental backup it correctly find the CHECKPOINT
+	// file in the base directory.
+	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
+	sqlDB.Exec(t, query)
 }
