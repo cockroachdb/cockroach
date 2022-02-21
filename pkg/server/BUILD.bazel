@@ -146,6 +146,8 @@ go_library(
         "//pkg/sql/querycache",
         "//pkg/sql/roleoption",
         "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/scheduledlogging",
+        "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scjob",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

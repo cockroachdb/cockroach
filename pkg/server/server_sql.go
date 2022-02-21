@@ -68,38 +68,44 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
-	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
-	"google.golang.org/grpc"
+<<<<<<< HEAD
+"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+=======
+"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
+"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+>>>>>>> d09a45ebd2 (sql: scheduled logger to capture index usage stats)
+"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
+"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
+"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+"github.com/cockroachdb/cockroach/pkg/sql/stats"
+"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+"github.com/cockroachdb/cockroach/pkg/startupmigrations"
+"github.com/cockroachdb/cockroach/pkg/storage"
+"github.com/cockroachdb/cockroach/pkg/util/admission"
+"github.com/cockroachdb/cockroach/pkg/util/envutil"
+"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+"github.com/cockroachdb/cockroach/pkg/util/hlc"
+"github.com/cockroachdb/cockroach/pkg/util/log"
+"github.com/cockroachdb/cockroach/pkg/util/metric"
+"github.com/cockroachdb/cockroach/pkg/util/mon"
+"github.com/cockroachdb/cockroach/pkg/util/netutil"
+"github.com/cockroachdb/cockroach/pkg/util/stop"
+"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
+"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
+"github.com/cockroachdb/errors"
+"github.com/marusama/semaphore"
+"google.golang.org/grpc"
 )
 
 // SQLServer encapsulates the part of a CRDB server that is dedicated to SQL
@@ -735,6 +741,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if telemetryLoggingKnobs := cfg.TestingKnobs.TelemetryLoggingKnobs; telemetryLoggingKnobs != nil {
 		execCfg.TelemetryLoggingTestingKnobs = telemetryLoggingKnobs.(*sql.TelemetryLoggingTestingKnobs)
 	}
+	if spanConfigKnobs := cfg.TestingKnobs.SpanConfig; spanConfigKnobs != nil {
+		execCfg.SpanConfigTestingKnobs = spanConfigKnobs.(*spanconfig.TestingKnobs)
+	}
+	if capturedIndexUsageStatsKnobs := cfg.TestingKnobs.CapturedIndexUsageStatsKnobs; capturedIndexUsageStatsKnobs != nil {
+		execCfg.CaptureIndexUsageStatsKnobs = capturedIndexUsageStatsKnobs.(*scheduledlogging.CaptureIndexUsageStatsTestingKnobs)
+	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.Settings,
@@ -1124,6 +1136,7 @@ func (s *SQLServer) preStart(
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
 
+	scheduledlogging.Start(ctx, stopper, s.execCfg.DB, s.execCfg.Settings, s.internalExecutor, s.execCfg.CaptureIndexUsageStatsKnobs)
 	return nil
 }
 

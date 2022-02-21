@@ -72,7 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1088,20 +1088,24 @@ type ExecutorConfig struct {
 	RowMetrics           *row.Metrics
 	InternalRowMetrics   *row.Metrics
 
-	TestingKnobs                  ExecutorTestingKnobs
-	MigrationTestingKnobs         *migration.TestingKnobs
-	PGWireTestingKnobs            *PGWireTestingKnobs
-	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
-	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
-	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
-	GCJobTestingKnobs             *GCJobTestingKnobs
-	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
-	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
-	TenantTestingKnobs            *TenantTestingKnobs
-	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
-	StreamingTestingKnobs         *StreamingTestingKnobs
-	SQLStatsTestingKnobs          *sqlstats.TestingKnobs
-	TelemetryLoggingTestingKnobs  *TelemetryLoggingTestingKnobs
+	TestingKnobs                         ExecutorTestingKnobs
+	MigrationTestingKnobs                *migration.TestingKnobs
+	PGWireTestingKnobs                   *PGWireTestingKnobs
+	SchemaChangerTestingKnobs            *SchemaChangerTestingKnobs
+	DeclarativeSchemaChangerTestingKnobs *scrun.TestingKnobs
+	TypeSchemaChangerTestingKnobs        *TypeSchemaChangerTestingKnobs
+	GCJobTestingKnobs                    *GCJobTestingKnobs
+	DistSQLRunTestingKnobs               *execinfra.TestingKnobs
+	EvalContextTestingKnobs              tree.EvalContextTestingKnobs
+	TenantTestingKnobs                   *TenantTestingKnobs
+	TTLTestingKnobs                      *TTLTestingKnobs
+	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
+	StreamingTestingKnobs                *StreamingTestingKnobs
+	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
+	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
+	SpanConfigTestingKnobs               *spanconfig.TestingKnobs
+	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
+
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
