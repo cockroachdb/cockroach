@@ -134,6 +134,7 @@ go_test(
         "import_into_test.go",
         "import_processor_test.go",
         "import_stmt_test.go",
+        "importer_upgrade_test.go",
         "main_test.go",
         "mysql_testdata_helpers_test.go",
         "pg_testdata_helpers_test.go",

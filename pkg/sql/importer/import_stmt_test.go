@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -63,7 +61,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -1264,10 +1261,10 @@ func TestImportIntoUserDefinedTypes(t *testing.T) {
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	tc := testcluster.StartTestCluster(
+	tc := serverutils.StartNewTestCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	// Set up some initial state for the tests.
 	sqlDB.Exec(t, `CREATE TYPE greeting AS ENUM ('hello', 'hi')`)
@@ -1558,9 +1555,9 @@ func TestImportRowLimit(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	avroField := []map[string]interface{}{
@@ -1875,7 +1872,7 @@ func TestFailedImportGC(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
 		Knobs: base.TestingKnobs{
@@ -1883,10 +1880,10 @@ func TestFailedImportGC(t *testing.T) {
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
-	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
@@ -1973,15 +1970,15 @@ func TestImportCSVStmt(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
-	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
@@ -2485,9 +2482,9 @@ func TestImportFeatureFlag(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	data := `
 CREATE TABLE t (id INT);
@@ -2523,12 +2520,12 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		ExternalIODir:     baseDir,
 		SQLMemoryPoolSize: 256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	rootDB := sqlutils.MakeSQLRunner(conn)
 
 	rootDB.Exec(t, `CREATE USER testuser`)
@@ -2631,11 +2628,11 @@ func TestURIRequiresAdminRole(t *testing.T) {
 	const nodes = 3
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	rootDB := sqlutils.MakeSQLRunner(conn)
 
 	rootDB.Exec(t, `CREATE USER testuser`)
@@ -2725,11 +2722,11 @@ func TestExportImportRoundTrip(t *testing.T) {
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	tc := testcluster.StartTestCluster(
+	tc := serverutils.StartNewTestCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	tests := []struct {
@@ -2790,16 +2787,16 @@ func TestImportIntoCSV(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	var forceFailure bool
 	var importBodyFinished chan struct{}
 	var delayImportFinish chan struct{}
 
-	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
@@ -3602,9 +3599,9 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	require.NoError(b, err)
 	testFileBase := fmt.Sprintf("/%s", filepath.Base(f.Name()))
 
-	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartNewTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Every row (int, string) generated by the CSVGenerator is ~25 bytes.
 	// So numRows gives us ~25 MiB of generated CSV content.
@@ -3842,9 +3839,9 @@ func TestImportDefault(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	var data string
@@ -4232,9 +4229,9 @@ func TestUniqueUUID(t *testing.T) {
 	)
 	ctx := context.Background()
 	args := base.TestServerArgs{}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	connDB := tc.Conns[0]
+	connDB := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 
 	dataSize := parallelImporterReaderBatchSize * 100
@@ -4269,9 +4266,9 @@ func TestImportDefaultNextVal(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -4530,9 +4527,9 @@ func TestImportComputed(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	var data string
@@ -4902,9 +4899,9 @@ func TestImportControlJobRBAC(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	rootDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	rootDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
@@ -5019,9 +5016,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, params)
+	tc := serverutils.StartNewTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5107,9 +5104,9 @@ func TestImportMysql(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
@@ -5236,9 +5233,9 @@ func TestImportIntoMysql(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	data := `INSERT INTO t VALUES (1, 2), (3, 4)`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -5263,9 +5260,9 @@ func TestImportDelimited(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "mysqlout")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
@@ -5343,9 +5340,9 @@ func TestImportPgCopy(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgcopy")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
@@ -5429,9 +5426,9 @@ func TestImportPgDump(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
@@ -5618,9 +5615,9 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	data := `
@@ -5721,10 +5718,10 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 		// Read the unsupported log and verify its contents.
 		store, err := cloud.ExternalStorageFromURI(ctx, ignoredLog,
 			base.ExternalIODirConfig{},
-			tc.Servers[0].ClusterSettings(),
+			tc.Server(0).ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,
 			security.RootUserName(),
-			tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
+			tc.Server(0).InternalExecutor().(*sql.InternalExecutor), tc.Server(0).DB())
 		require.NoError(t, err)
 		defer store.Close()
 
@@ -5797,9 +5794,9 @@ func TestImportPgDumpGeo(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 
 	t.Run("geo_shp2pgsql.sql", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
-		conn := tc.Conns[0]
+		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
@@ -5840,9 +5837,9 @@ func TestImportPgDumpGeo(t *testing.T) {
 	})
 
 	t.Run("geo_ogr2ogr.sql", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
-		conn := tc.Conns[0]
+		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
@@ -5870,9 +5867,9 @@ func TestImportPgDumpDropTable(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	var data string
@@ -5958,9 +5955,9 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	// Simple schema test which creates 3 schemas with a single `test` table in
 	// each schema.
 	t.Run("schema.sql", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
-		conn := tc.Conns[0]
+		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE schemadb; SET DATABASE = schemadb`)
@@ -6011,9 +6008,9 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	})
 
 	t.Run("target-table-schema.sql", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
-		conn := tc.Conns[0]
+		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		sqlDB.Exec(t, `CREATE DATABASE schemadb; SET DATABASE = schemadb`)
@@ -6054,9 +6051,9 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 	t.Run("inject-error-ensure-cleanup", func(t *testing.T) {
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
-		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
-		conn := tc.Conns[0]
+		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
@@ -6064,8 +6061,8 @@ func TestImportPgDumpSchemas(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		for i := range tc.Servers {
-			tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
+		for i := 0; i < tc.NumServers(); i++ {
+			tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
 				map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 					jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 						r := raw.(*importResumer)
@@ -6168,9 +6165,9 @@ func TestImportCockroachDump(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", "nodelocal://0/cockroachdump/dump.sql")
@@ -6220,9 +6217,9 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
@@ -6255,9 +6252,9 @@ func TestImportAvro(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
@@ -6393,10 +6390,11 @@ func TestImportClientDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := base.TestClusterArgs{}
-	tc := testcluster.StartTestCluster(t, 1, args)
+	tc := serverutils.StartNewTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
-	tc.WaitForNodeLiveness(t)
+	// TODO(dt): add this to testcluster interface and uncomment.
+	// tc.WaitForNodeLiveness(t)
 	require.NoError(t, tc.WaitForFullReplication())
 
 	conn := tc.ServerConn(0)
@@ -6558,7 +6556,7 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 }
 
 func waitForJobResult(
-	t *testing.T, tc *testcluster.TestCluster, id jobspb.JobID, expected jobs.Status,
+	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.Status,
 ) {
 	// Force newly created job to be adopted and verify its result.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
@@ -6580,9 +6578,9 @@ func TestDetachedImport(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	connDB := tc.Conns[0]
+	connDB := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
@@ -6653,8 +6651,8 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 		_, _ = w.Write([]byte("\n"))
 	}))
 	defer srv.Close()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	connDB := tc.Conns[0]
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	connDB := tc.ServerConn(0)
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 	// Our input file has an 8MB row
@@ -6683,12 +6681,12 @@ func TestImportJobEventLogging(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	params := base.TestClusterArgs{ServerArgs: args}
-	tc := testcluster.StartTestCluster(t, nodes, params)
+	tc := serverutils.StartNewTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
 
 	var forceFailure bool
-	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
@@ -6702,7 +6700,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		}
 	}
 
-	connDB := tc.Conns[0]
+	connDB := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 
 	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
@@ -6747,10 +6745,10 @@ func TestImportDefautIntSizeSetting(t *testing.T) {
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	tc := testcluster.StartTestCluster(
+	tc := serverutils.StartNewTestCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	intSizes := []int32{4, 8}
@@ -6888,7 +6886,7 @@ func TestUDTChangeDuringImport(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requestReceived := make(chan struct{})
 			allowResponse := make(chan struct{})
-			tc := testcluster.StartTestCluster(
+			tc := serverutils.StartNewTestCluster(
 				t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 					ExternalIODir: baseDir,
 					Knobs: base.TestingKnobs{
@@ -6908,7 +6906,7 @@ func TestUDTChangeDuringImport(t *testing.T) {
 					},
 				}})
 			defer tc.Stopper().Stop(ctx)
-			conn := tc.Conns[0]
+			conn := tc.ServerConn(0)
 			sqlDB := sqlutils.MakeSQLRunner(conn)
 
 			// Create a database with a type.
@@ -6948,86 +6946,5 @@ CREATE TABLE t (a INT, b greeting);
 				require.NoError(t, err)
 			}
 		})
-	}
-}
-
-func TestImportMixedVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	tests := []struct {
-		name        string
-		create      string
-		typ         string
-		with        string
-		data        string
-		verifyQuery string
-		err         string
-		expected    [][]string
-	}{
-		{
-			name: "pgdump multiple inserts same table",
-			typ:  "PGDUMP",
-			data: `CREATE TABLE t (a INT, b INT);
-				INSERT INTO t (a, b) VALUES (1, 2);
-				INSERT INTO t (a, b) VALUES (3, 4);
-				INSERT INTO t (a, b) VALUES (5, 6);
-				INSERT INTO t (a, b) VALUES (7, 8);
-				`,
-			with:        `WITH row_limit = '2'`,
-			verifyQuery: `SELECT * from t`,
-			expected:    [][]string{{"1", "2"}, {"3", "4"}},
-		},
-		// Test Mysql imports.
-		{
-			name: "mysqldump single table",
-			typ:  "MYSQLDUMP",
-			data: `CREATE TABLE t (a INT, b INT);
-				INSERT INTO t (a, b) VALUES (5, 6), (7, 8);
-				`,
-			with:        `WITH row_limit = '1'`,
-			verifyQuery: `SELECT * from t`,
-			expected:    [][]string{{"5", "6"}},
-		},
-	}
-
-	tc := testcluster.StartTestCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
-				},
-			},
-		}})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-
-	for _, test := range tests {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(test.data))
-			}
-		}))
-		importDumpQuery := fmt.Sprintf(`IMPORT TABLE t FROM %s ($1) %s`, test.typ, test.with)
-
-		sqlDB.Exec(t, importDumpQuery, srv.URL)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, test.expected)
-
-		var parentSchemaID int
-		row := sqlDB.QueryRow(t, `SELECT "parentSchemaID" FROM system.namespace WHERE name='t'`)
-		row.Scan(&parentSchemaID)
-
-		// We're in the mixed version where databases do not yet have descriptor
-		// backed public schemas. We expect the imported table to be in the
-		// synthetic public schemas.
-		require.Equal(t, parentSchemaID, keys.PublicSchemaIDForBackup)
-
-		srv.Close()
-		sqlDB.Exec(t, `DROP TABLE IF EXISTS t`)
 	}
 }
