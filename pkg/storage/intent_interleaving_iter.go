@@ -311,8 +311,12 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 	if err := i.tryDecodeKey(); err != nil {
 		return
 	}
+	hasPoint, _ := i.iter.HasPointAndRange()
 	var intentSeekKey roachpb.Key
-	if key.Timestamp.IsEmpty() {
+	if !hasPoint {
+		// TODO(erikgrinaker): This needs handling of intents above range keys.
+		i.intentKey = nil
+	} else if key.Timestamp.IsEmpty() {
 		// Common case.
 		intentSeekKey, i.intentKeyBuf = keys.LockTableSingleKey(key.Key, i.intentKeyBuf)
 	} else if !i.prefix {

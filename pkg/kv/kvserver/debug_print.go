@@ -56,6 +56,16 @@ func SprintMVCCKey(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeMVCCKey(key))
 }
 
+// SprintMVCCKey pretty-prints the specified MVCCRangeKey.
+func SprintMVCCRangeKey(key storage.MVCCRangeKey) string {
+	return fmt.Sprintf("%s %s (%#x - %#x @ %#x): ",
+		key.Timestamp,
+		roachpb.Span{Key: key.StartKey, EndKey: key.EndKey},
+		storage.EncodeMVCCKeyPrefix(key.StartKey),
+		storage.EncodeMVCCKeyPrefix(key.EndKey),
+		storage.EncodeMVCCTimestampSuffix(key.Timestamp))
+}
+
 // SprintEngineKeyValue is like PrintEngineKeyValue, but returns a string.  In
 // the case of an MVCCKey, it will utilize SprintMVCCKeyValue for proper MVCC
 // formatting.
@@ -110,6 +120,18 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 		return sb.String()
 	}
 	panic("unreachable")
+}
+
+// SprintMVCCRangeKeyValue is like SprintMVCCKeyValue, but for a range key.
+func SprintMVCCRangeKeyValue(kv storage.MVCCRangeKeyValue, printKey bool) string {
+	var sb strings.Builder
+	if printKey {
+		sb.WriteString(SprintMVCCRangeKey(kv.Key))
+	}
+
+	// No better idea, just print raw bytes and hope that folks use `less -S`.
+	sb.WriteString(fmt.Sprintf("%q", kv.Value))
+	return sb.String()
 }
 
 // SprintIntent pretty-prints the specified intent value.
