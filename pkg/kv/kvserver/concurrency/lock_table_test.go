@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -870,7 +871,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error)
 			if err != nil {
 				return err
 			}
@@ -1414,7 +1415,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1449,7 +1450,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
 		doneCh <- err
 		return
 	}

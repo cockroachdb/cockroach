@@ -41,9 +41,17 @@ type signal struct {
 }
 
 func (s *signal) signal() {
+	s.signalWithChoice(false /* idempotent */)
+}
+
+func (s *signal) signalWithChoice(idempotent bool) {
 	if !atomic.CompareAndSwapInt32(&s.a, noSig, sig) {
+		if idempotent {
+			return
+		}
 		panic("signaled twice")
 	}
+
 	// Close the channel if it was ever initialized.
 	if cPtr := atomic.LoadPointer(&s.c); cPtr != nil {
 		// Coordinate with signalChan to avoid double-closing.
@@ -80,6 +88,19 @@ func (s *signal) signalChan() <-chan struct{} {
 		close(c)
 	}
 	return c
+}
+
+// poisonSignal is like signal, but its signal method is idempotent.
+type poisonSignal struct {
+	sig signal
+}
+
+func (s *poisonSignal) signal() {
+	s.sig.signalWithChoice(true /* idempotent */)
+}
+
+func (s *poisonSignal) signalChan() <-chan struct{} {
+	return s.sig.signalChan()
 }
 
 func chanToPtr(c chan struct{}) unsafe.Pointer {

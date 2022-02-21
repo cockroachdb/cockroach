@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -1219,7 +1220,12 @@ func (r *Replica) refreshProposalsLocked(
 	// which could avoid build-up of raft log entries during outages, see
 	// for example:
 	// https://github.com/cockroachdb/cockroach/issues/60612
-	if r.breaker.Signal().Err() == nil && maxSlowProposalDuration > 0 {
+	//
+	// NB: the call to Err() here also re-triggers the probe if the breaker is
+	// already tripped and no probe is running, thus ensuring that even if a
+	// request got added in while the probe was about to shut down, there will
+	// be regular attempts at healing the breaker.
+	if maxSlowProposalDuration > 0 && r.breaker.Signal().Err() == nil {
 		log.Warningf(ctx,
 			"have been waiting %.2fs for slow proposal %s",
 			maxSlowProposalDuration.Seconds(), maxSlowProposalDurationRequest,
@@ -1252,6 +1258,21 @@ func (r *Replica) refreshProposalsLocked(
 			p.finishApplication(ctx, proposalResult{
 				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
 			})
+		}
+	}
+}
+
+func (r *Replica) poisonInflightLatches(err error) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.mu.proposals {
+		p.ec.poison()
+		if p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
+			aErr := roachpb.NewAmbiguousResultError("circuit breaker tripped")
+			aErr.WrappedErr = roachpb.NewError(err)
+			p.signalProposalResult(proposalResult{Err: roachpb.NewError(aErr)})
 		}
 	}
 }

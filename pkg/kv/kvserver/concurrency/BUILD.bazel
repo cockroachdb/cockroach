@@ -18,6 +18,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",
@@ -54,6 +55,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",

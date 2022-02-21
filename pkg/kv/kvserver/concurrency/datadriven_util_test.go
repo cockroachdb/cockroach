@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -71,6 +72,24 @@ func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.Wa
 		return lock.WaitPolicy_Error
 	default:
 		d.Fatalf(t, "unknown wait policy: %s", policy)
+		return 0
+	}
+}
+
+func scanPoisonPolicy(t *testing.T, d *datadriven.TestData) poison.Policy {
+	const key = "poison-policy"
+	if !d.HasArg(key) {
+		return poison.Policy_Error
+	}
+	var policy string
+	d.ScanArgs(t, key, &policy)
+	switch policy {
+	case "error":
+		return poison.Policy_Error
+	case "wait":
+		return poison.Policy_Wait
+	default:
+		d.Fatalf(t, "unknown poison policy: %s", policy)
 		return 0
 	}
 }

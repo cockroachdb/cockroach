@@ -20,11 +20,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,35 +93,40 @@ func testLatchBlocks(t *testing.T, lgC <-chan *Guard) {
 // MustAcquire is like Acquire, except it can't return context cancellation
 // errors.
 func (m *Manager) MustAcquire(spans *spanset.SpanSet) *Guard {
-	lg, err := m.Acquire(context.Background(), spans)
+	lg, err := m.Acquire(context.Background(), spans, poison.Policy_Error)
 	if err != nil {
 		panic(err)
 	}
 	return lg
 }
 
-// MustAcquireCh is like Acquire, except it only sequences the latch latch
-// attempt synchronously and waits on dependent latches asynchronously. It
-// returns a channel that provides the Guard when the latches are acquired (i.e.
-// after waiting). If the context expires, a nil Guard will be delivered on the
-// channel.
+// MustAcquireCh is like Acquire, except it only sequences the latch attempt
+// synchronously and waits on dependent latches asynchronously. It returns a
+// a channel that is signaled with the *Guard returned after waiting (and nil
+// on error). Use MustAcquireChExt if more control is desired.
 func (m *Manager) MustAcquireCh(spans *spanset.SpanSet) <-chan *Guard {
-	return m.MustAcquireChCtx(context.Background(), spans)
+	chG, _ := m.MustAcquireChExt(context.Background(), spans, poison.Policy_Error)
+	return chG
 }
 
-// MustAcquireChCtx is like MustAcquireCh, except it accepts a context.
-func (m *Manager) MustAcquireChCtx(ctx context.Context, spans *spanset.SpanSet) <-chan *Guard {
-	ch := make(chan *Guard)
-	lg, snap := m.sequence(spans)
+// MustAcquireChExt is like MustAcquireCh, except it accepts a context and
+// poison.Policy, and returns an additional channel that returns an error
+// if a nil guard is returned on the first channel.
+func (m *Manager) MustAcquireChExt(
+	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy,
+) (<-chan *Guard, <-chan error) {
+	chErr := make(chan error, 1)
+	chG := make(chan *Guard, 1)
+	lg, snap := m.sequence(spans, pp)
 	go func() {
 		err := m.wait(ctx, lg, snap)
 		if err != nil {
 			m.Release(lg)
-			lg = nil
 		}
-		ch <- lg
+		chErr <- err
+		chG <- lg
 	}()
-	return ch
+	return chG, chErr
 }
 
 func TestLatchManager(t *testing.T) {
@@ -509,6 +516,39 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 	}
 }
 
+func TestLatchManagerPoison(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	var m Manager
+
+	cha1, _ := m.MustAcquireChExt(ctx, spans("a", "", write, zeroTS), poison.Policy_Wait)
+	cha2, erra2 := m.MustAcquireChExt(ctx, spans("a", "", write, zeroTS), poison.Policy_Error)
+	cha3, erra3 := m.MustAcquireChExt(ctx, spans("a", "", write, zeroTS), poison.Policy_Error)
+
+	ga1 := testLatchSucceeds(t, cha1)
+	defer m.Release(ga1)
+
+	// cha3 blocks on cha2 blocks on cha1.
+	testLatchBlocks(t, cha3)
+	testLatchBlocks(t, cha2)
+
+	// Poison a1.
+	ga1.poison.signal()
+
+	testLatchPoisons := func(t *testing.T, ch <-chan error) {
+		t.Helper()
+		select {
+		case err := <-ch:
+			require.True(t, errors.HasType(err, (*poison.PoisonedError)(nil)), "%+v", err)
+		case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			t.Fatal("timed out")
+		}
+	}
+
+	testLatchPoisons(t, erra2)
+	testLatchPoisons(t, erra3)
+}
+
 func TestLatchManagerContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var m Manager
@@ -517,7 +557,7 @@ func TestLatchManagerContextCancellation(t *testing.T) {
 	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
 	// The second one is given a cancelable context.
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	lg2C := m.MustAcquireChCtx(ctx2, spans("a", "", write, zeroTS))
+	lg2C, _ := m.MustAcquireChExt(ctx2, spans("a", "", write, zeroTS), poison.Policy_Error)
 	lg3C := m.MustAcquireCh(spans("a", "", write, zeroTS))
 
 	// The second and third latch attempt block on the first.
@@ -541,13 +581,13 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	var m Manager
 
 	// Acquire latches, no conflict.
-	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS))
-	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)))
+	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS), poison.Policy_Error)
+	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)), poison.Policy_Error)
 	lg1, err := m.WaitUntilAcquired(context.Background(), lg1)
 	require.NoError(t, err)
 
 	// Optimistic acquire encounters conflict in some cases.
-	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS))
+	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS), poison.Policy_Error)
 	require.False(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "e", read, zeroTS)))
 	require.True(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "d", read, zeroTS)))
 	waitUntilAcquiredCh := func(g *Guard) <-chan *Guard {
@@ -565,7 +605,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	testLatchSucceeds(t, ch2)
 
 	// Optimistic acquire encounters conflict.
-	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS))
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error)
 	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	m.Release(lg2)
 	// There is still a conflict even though lg2 has been released.
@@ -577,7 +617,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	// Optimistic acquire for read below write encounters no conflict.
 	oneTS, twoTS := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}
 	lg4 := m.MustAcquire(spans("c", "e", write, twoTS))
-	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS))
+	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS), poison.Policy_Error)
 	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "e", read, oneTS)))
 	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "c", read, oneTS)))
 	lg5, err = m.WaitUntilAcquired(context.Background(), lg5)
@@ -591,14 +631,14 @@ func TestLatchManagerWaitFor(t *testing.T) {
 	var m Manager
 
 	// Acquire latches, no conflict.
-	lg1, err := m.Acquire(context.Background(), spans("d", "f", write, zeroTS))
+	lg1, err := m.Acquire(context.Background(), spans("d", "f", write, zeroTS), poison.Policy_Error)
 	require.NoError(t, err)
 
 	// See if WaitFor waits for above latch.
 	waitForCh := func() <-chan *Guard {
 		ch := make(chan *Guard)
 		go func() {
-			err := m.WaitFor(context.Background(), spans("a", "e", read, zeroTS))
+			err := m.WaitFor(context.Background(), spans("a", "e", read, zeroTS), poison.Policy_Error)
 			require.NoError(t, err)
 			ch <- &Guard{}
 		}()
@@ -611,7 +651,7 @@ func TestLatchManagerWaitFor(t *testing.T) {
 
 	// Optimistic acquire should _not_ encounter conflict - as WaitFor should
 	// not lay any latches.
-	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS))
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error)
 	require.True(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	lg3, err = m.WaitUntilAcquired(context.Background(), lg3)
 	require.NoError(t, err)
@@ -659,7 +699,7 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 
 			b.ResetTimer()
 			for i := range spans {
-				lg, snap := m.sequence(&spans[i])
+				lg, snap := m.sequence(&spans[i], poison.Policy_Error)
 				snap.close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(<-lgBuf)

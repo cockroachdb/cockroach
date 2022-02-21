@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -138,19 +139,13 @@ func (r *Replica) sendWithoutRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Circuit breaker handling.
-	ctx, cancel := context.WithCancel(ctx)
 	if bypassReplicaCircuitBreakerForBatch(ba) {
+		// NB: we use the context to propagate whether to observe the circuit
+		// breaker since this information matters in a few places that today don't
+		// have access to the batch, for example the redirectOnOrAcquireLeaseLocked,
+		// for which several callers don't even have a BatchRequest.
 		ctx = withBypassCircuitBreakerMarker(ctx)
 	}
-	tok, brSig, err := r.breaker.Register(ctx, cancel)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	defer func() {
-		rErr = r.breaker.UnregisterAndAdjustError(tok, brSig, rErr)
-		cancel()
-	}()
 
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -163,7 +158,7 @@ func (r *Replica) sendWithoutRangeID(
 	}
 
 	// NB: must be performed before collecting request spans.
-	ba, err = maybeStripInFlightWrites(ba)
+	ba, err := maybeStripInFlightWrites(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -414,6 +409,10 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
+	pp := poison.Policy_Wait
+	if !r.breaker.enabled() || !hasBypassCircuitBreakerMarker(ctx) {
+		pp = poison.Policy_Error
+	}
 	for first := true; ; first = false {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
@@ -454,8 +453,21 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
+			PoisonPolicy:    pp,
 		}, requestEvalKind)
 		if pErr != nil {
+			if errors.HasType(pErr.GoError(), (*poison.PoisonedError)(nil)) {
+				brErr := r.breaker.Signal().Err()
+				if brErr == nil {
+					// The breaker may have healed in the meantime.
+					//
+					// TODO(tbg): it would be nicer if poisoning took an err and it
+					// came wrapped with the PoisonedError instead. Or we could
+					// retry the request.
+					brErr = r.replicaUnavailableError()
+				}
+				pErr = roachpb.NewError(errors.CombineErrors(brErr, pErr.GoError()))
+			}
 			return nil, pErr
 		} else if resp != nil {
 			br = new(roachpb.BatchResponse)
@@ -876,6 +888,9 @@ func (r *Replica) executeAdminBatch(
 		}
 
 		_, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */)
+		if err == nil && !hasBypassCircuitBreakerMarker(ctx) {
+			err = r.breaker.Signal().Err()
+		}
 		if err == nil {
 			break
 		}
@@ -1154,6 +1169,14 @@ func (ec *endCmds) move() endCmds {
 	res := *ec
 	*ec = endCmds{}
 	return res
+}
+
+func (ec *endCmds) poison() {
+	if ec.repl == nil {
+		// Already cleared.
+		return
+	}
+	ec.repl.concMgr.PoisonReq(ec.g)
 }
 
 // done releases the latches acquired by the command and updates the timestamp
