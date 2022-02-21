@@ -91,7 +91,7 @@ func testLatchBlocks(t *testing.T, lgC <-chan *Guard) {
 // MustAcquire is like Acquire, except it can't return context cancellation
 // errors.
 func (m *Manager) MustAcquire(spans *spanset.SpanSet) *Guard {
-	lg, err := m.Acquire(context.Background(), spans)
+	lg, err := m.Acquire(context.Background(), spans, PoisonPolicyTODO)
 	if err != nil {
 		panic(err)
 	}
@@ -110,7 +110,7 @@ func (m *Manager) MustAcquireCh(spans *spanset.SpanSet) <-chan *Guard {
 // MustAcquireChCtx is like MustAcquireCh, except it accepts a context.
 func (m *Manager) MustAcquireChCtx(ctx context.Context, spans *spanset.SpanSet) <-chan *Guard {
 	ch := make(chan *Guard)
-	lg, snap := m.sequence(spans)
+	lg, snap := m.sequence(spans, PoisonPolicyTODO)
 	go func() {
 		err := m.wait(ctx, lg, snap)
 		if err != nil {
@@ -541,13 +541,13 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	var m Manager
 
 	// Acquire latches, no conflict.
-	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS))
-	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)))
+	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS), PoisonPolicyTODO)
+	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)), PoisonPolicyTODO)
 	lg1, err := m.WaitUntilAcquired(context.Background(), lg1)
 	require.NoError(t, err)
 
 	// Optimistic acquire encounters conflict in some cases.
-	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS))
+	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS), PoisonPolicyTODO)
 	require.False(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "e", read, zeroTS)))
 	require.True(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "d", read, zeroTS)))
 	waitUntilAcquiredCh := func(g *Guard) <-chan *Guard {
@@ -565,7 +565,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	testLatchSucceeds(t, ch2)
 
 	// Optimistic acquire encounters conflict.
-	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS))
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), PoisonPolicyTODO)
 	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	m.Release(lg2)
 	// There is still a conflict even though lg2 has been released.
@@ -577,7 +577,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	// Optimistic acquire for read below write encounters no conflict.
 	oneTS, twoTS := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}
 	lg4 := m.MustAcquire(spans("c", "e", write, twoTS))
-	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS))
+	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS), PoisonPolicyTODO)
 	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "e", read, oneTS)))
 	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "c", read, oneTS)))
 	lg5, err = m.WaitUntilAcquired(context.Background(), lg5)
@@ -591,14 +591,14 @@ func TestLatchManagerWaitFor(t *testing.T) {
 	var m Manager
 
 	// Acquire latches, no conflict.
-	lg1, err := m.Acquire(context.Background(), spans("d", "f", write, zeroTS))
+	lg1, err := m.Acquire(context.Background(), spans("d", "f", write, zeroTS), PoisonPolicyTODO)
 	require.NoError(t, err)
 
 	// See if WaitFor waits for above latch.
 	waitForCh := func() <-chan *Guard {
 		ch := make(chan *Guard)
 		go func() {
-			err := m.WaitFor(context.Background(), spans("a", "e", read, zeroTS))
+			err := m.WaitFor(context.Background(), spans("a", "e", read, zeroTS), PoisonPolicyTODO)
 			require.NoError(t, err)
 			ch <- &Guard{}
 		}()
@@ -611,7 +611,7 @@ func TestLatchManagerWaitFor(t *testing.T) {
 
 	// Optimistic acquire should _not_ encounter conflict - as WaitFor should
 	// not lay any latches.
-	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS))
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), PoisonPolicyTODO)
 	require.True(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	lg3, err = m.WaitUntilAcquired(context.Background(), lg3)
 	require.NoError(t, err)
@@ -659,7 +659,7 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 
 			b.ResetTimer()
 			for i := range spans {
-				lg, snap := m.sequence(&spans[i])
+				lg, snap := m.sequence(&spans[i], PoisonPolicyTODO)
 				snap.close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(<-lgBuf)

@@ -870,7 +870,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, spanlatch.PoisonPolicyError)
 			if err != nil {
 				return err
 			}
@@ -1414,7 +1414,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, spanlatch.PoisonPolicyError); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1449,7 +1449,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, spanlatch.PoisonPolicyError); err != nil {
 		doneCh <- err
 		return
 	}

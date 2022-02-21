@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -138,19 +139,30 @@ func (r *Replica) sendWithoutRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Circuit breaker handling.
-	ctx, cancel := context.WithCancel(ctx)
+	// TODO(during review): will need to (re-)address the race in which the
+	// breaker trips and the probe launches just before a proposal gets inserted,
+	// such that the probe's invocation of poisonInflightLatches misses the
+	// proposal. The ctx cancellation based setup avoids this (in Register) using
+	// an "insert first then check breaker" ordering. Translating that to proposals,
+	// it would be "insert proposal before checking breaker", which is reasonable;
+	// an additional earlier check should be added to avoid adding to the raft log
+	// though.
+	//
+	// TODO(during review): PoisonPolicyWait replaces withCircuitBreakerProbeMarker.
+	//
+	// TODO(during review): if a lease acquisition is triggered by a request that
+	// wants PoisonPolicyWait, it must also use PoisonPolicyWait. And we have to
+	// ensure that requests that want PoisonPolicyError don't join onto that
+	// lease request, or they won't get the fail-fast behavior that they want.
+	// This is not a problem that exists under ctx cancellation because in that
+	// case requests using PoisonPolicyError never get to acquire a lease. They
+	// get cancelled immediately and un-join the inflight lease request. (But the
+	// opposite race exists: a fail-slow request might join on a lease that then
+	// cancels when the breaker trips).
+	//ctx, cancel := context.WithCancel(ctx)
 	if bypassReplicaCircuitBreakerForBatch(ba) {
 		ctx = withBypassCircuitBreakerMarker(ctx)
 	}
-	tok, brSig, err := r.breaker.Register(ctx, cancel)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	defer func() {
-		rErr = r.breaker.UnregisterAndAdjustError(tok, brSig, rErr)
-		cancel()
-	}()
 
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -163,7 +175,7 @@ func (r *Replica) sendWithoutRangeID(
 	}
 
 	// NB: must be performed before collecting request spans.
-	ba, err = maybeStripInFlightWrites(ba)
+	ba, err := maybeStripInFlightWrites(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -414,6 +426,13 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
+	pp := spanlatch.PoisonPolicyError
+	if hasBypassCircuitBreakerMarker(ctx) {
+		// TODO(during review): if breakers are disabled via the cluster setting
+		// while a latch is poisoned, this should result in PoisonPolicyWait being
+		// applied to all requests.
+		pp = spanlatch.PoisonPolicyWait
+	}
 	for first := true; ; first = false {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
@@ -454,8 +473,16 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
+			PoisonPolicy:    pp,
 		}, requestEvalKind)
 		if pErr != nil {
+			if brErr := r.breaker.Signal().Err(); errors.Is(pErr.GoError(), spanlatch.ErrPoisonedLatch) && brErr != nil {
+				// TODO(during review): include the poisoned span.
+				// TODO(during review): the breaker could no longer be tripped at this point,
+				// so we'd need to manufacture an error. This is at odds with the old setup
+				// which tried to have the breaker be the source of the error.
+				pErr = roachpb.NewError(errors.CombineErrors(brErr, spanlatch.ErrPoisonedLatch))
+			}
 			return nil, pErr
 		} else if resp != nil {
 			br = new(roachpb.BatchResponse)
@@ -1154,6 +1181,14 @@ func (ec *endCmds) move() endCmds {
 	res := *ec
 	*ec = endCmds{}
 	return res
+}
+
+func (ec *endCmds) poison() {
+	if ec.repl == nil {
+		// Already cleared.
+		return
+	}
+	ec.repl.concMgr.PoisonReq(ec.g)
 }
 
 // done releases the latches acquired by the command and updates the timestamp

@@ -87,6 +87,7 @@ type latch struct {
 	span       roachpb.Span
 	ts         hlc.Timestamp
 	done       *signal
+	poison     *signal
 	next, prev *latch // readSet linked-list.
 }
 
@@ -109,7 +110,8 @@ func (la *latch) SetEndKey(v []byte) { la.span.EndKey = v }
 // Guard is a handle to a set of acquired latches. It is returned by
 // Manager.Acquire and accepted by Manager.Release.
 type Guard struct {
-	done signal
+	pp           PoisonPolicy
+	done, poison signal
 	// latches [spanset.NumSpanScope][spanset.NumSpanAccess][]latch, but half the size.
 	latchesPtrs [spanset.NumSpanScope][spanset.NumSpanAccess]unsafe.Pointer
 	latchesLens [spanset.NumSpanScope][spanset.NumSpanAccess]int32
@@ -166,9 +168,10 @@ func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
 	return new(Guard), make([]latch, nLatches)
 }
 
-func newGuard(spans *spanset.SpanSet) *Guard {
+func newGuard(spans *spanset.SpanSet, pp PoisonPolicy) *Guard {
 	nLatches := spans.Len()
 	guard, latches := allocGuardAndLatches(nLatches)
+	guard.pp = pp
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
 			ss := spans.GetSpans(a, s)
@@ -182,6 +185,7 @@ func newGuard(spans *spanset.SpanSet) *Guard {
 				latch := &latches[i]
 				latch.span = ss[i].Span
 				latch.done = &guard.done
+				latch.poison = &guard.poison
 				latch.ts = ss[i].Timestamp
 				// latch.setID() in Manager.insert, under lock.
 			}
@@ -203,8 +207,10 @@ func newGuard(spans *spanset.SpanSet) *Guard {
 // acquired.
 //
 // It returns a Guard which must be provided to Release.
-func (m *Manager) Acquire(ctx context.Context, spans *spanset.SpanSet) (*Guard, error) {
-	lg, snap := m.sequence(spans)
+func (m *Manager) Acquire(
+	ctx context.Context, spans *spanset.SpanSet, pp PoisonPolicy,
+) (*Guard, error) {
+	lg, snap := m.sequence(spans, pp)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -227,8 +233,8 @@ func (m *Manager) Acquire(ctx context.Context, spans *spanset.SpanSet) (*Guard, 
 //
 // The method returns a Guard which must be provided to the
 // CheckOptimisticNoConflicts, Release methods.
-func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet) *Guard {
-	lg, snap := m.sequence(spans)
+func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet, pp PoisonPolicy) *Guard {
+	lg, snap := m.sequence(spans, pp)
 	lg.snap = &snap
 	return lg
 }
@@ -236,10 +242,10 @@ func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet) *Guard {
 // WaitFor waits for conflicting latches on the spans without adding
 // any latches itself. Fast path for operations that only require past latches
 // to be released without blocking new latches.
-func (m *Manager) WaitFor(ctx context.Context, spans *spanset.SpanSet) error {
+func (m *Manager) WaitFor(ctx context.Context, spans *spanset.SpanSet, pp PoisonPolicy) error {
 	// The guard is only used to store latches by this request. These latches
 	// are not actually inserted using insertLocked.
-	lg := newGuard(spans)
+	lg := newGuard(spans, pp)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -335,8 +341,8 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 // for each of the specified spans into the manager's interval trees, and
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
-func (m *Manager) sequence(spans *spanset.SpanSet) (*Guard, snapshot) {
-	lg := newGuard(spans)
+func (m *Manager) sequence(spans *spanset.SpanSet, pp PoisonPolicy) (*Guard, snapshot) {
+	lg := newGuard(spans, pp)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -454,7 +460,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// Wait for writes at equal or lower timestamps.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreLater); err != nil {
+					if err := m.iterAndWait(ctx, timer, &it, lg.pp, a, a2, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -466,13 +472,13 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// to release their latches, so we wait on them first.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreNothing); err != nil {
+					if err := m.iterAndWait(ctx, timer, &it, lg.pp, a, a2, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
 					a2 = spanset.SpanReadOnly
 					it = tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreEarlier); err != nil {
+					if err := m.iterAndWait(ctx, timer, &it, lg.pp, a, a2, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -491,6 +497,7 @@ func (m *Manager) iterAndWait(
 	ctx context.Context,
 	t *timeutil.Timer,
 	it *iterator,
+	pp PoisonPolicy,
 	waitType, heldType spanset.SpanAccess,
 	wait *latch,
 	ignore ignoreFn,
@@ -503,22 +510,64 @@ func (m *Manager) iterAndWait(
 		if ignore(wait.ts, held.ts) {
 			continue
 		}
-		if err := m.waitForSignal(ctx, t, waitType, heldType, wait, held); err != nil {
+		if err := m.waitForSignal(ctx, t, pp, waitType, heldType, wait, held); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// A PoisonPolicy determines how a request will react to encountering a poisoned
+// latch.
+type PoisonPolicy byte
+
+const (
+	// PoisonPolicyError instructs a request to return an error upon encountering
+	// a poisoned latch.
+	PoisonPolicyError PoisonPolicy = iota
+	// PoisonPolicyWait instructs a request to treat poisoned latches like
+	// regular latches, i.e. to wait for them to be released.
+	PoisonPolicyWait
+)
+
+// PoisonPolicyTODO is a placeholder that will need to be replaced with
+// either of PoisonPolicy{Err,Wait}.
+const PoisonPolicyTODO = PoisonPolicyError
+
+// ErrPoisonedLatch is returned when a request using PoisonPolicyError
+// encounters a poisoned latch.
+var ErrPoisonedLatch = errors.Errorf("encountered poisoned latch")
+
 // waitForSignal waits for the latch that is currently held to be signaled.
 func (m *Manager) waitForSignal(
-	ctx context.Context, t *timeutil.Timer, waitType, heldType spanset.SpanAccess, wait, held *latch,
+	ctx context.Context,
+	t *timeutil.Timer,
+	pp PoisonPolicy,
+	waitType, heldType spanset.SpanAccess,
+	wait, held *latch,
 ) error {
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
+	poisonCh := held.poison.signalChan()
 	for {
 		select {
 		case <-held.done.signalChan():
 			return nil
+		case <-poisonCh:
+			// A dependent latch was poisoned, which poisons this latch as well
+			// (transitively notifying all waiters of this circumstance, giving them a
+			// chance to decide what to do). The current request can choose between
+			// failing fast (the common case) and waiting anyway (as poisoned latches
+			// could ultimately be released as well).
+			wait.poison.signal()
+			switch pp {
+			case PoisonPolicyError:
+				return ErrPoisonedLatch
+			case PoisonPolicyWait:
+				log.Eventf(ctx, "encountered poisoned latch; continuing to wait")
+				poisonCh = nil
+			default:
+				return errors.Errorf("unsupported PoisonPolicy %d", pp)
+			}
 		case <-t.C:
 			t.Read = true
 			defer t.Reset(base.SlowRequestThreshold)
@@ -539,6 +588,13 @@ func (m *Manager) waitForSignal(
 			return &roachpb.NodeUnavailableError{}
 		}
 	}
+}
+
+// Poison marks the Guard as poisoned, meaning that the request will not be
+// expected to be releasing its latches (any time soon). This gives requests
+// blocking on the Guard's latches an opportunity to fail fast.
+func (m *Manager) Poison(lg *Guard) {
+	lg.poison.signal()
 }
 
 // Release releases the latches held by the provided Guard. After being called,
