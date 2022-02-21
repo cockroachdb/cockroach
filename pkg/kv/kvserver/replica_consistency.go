@@ -65,8 +65,8 @@ const replicaChecksumGCInterval = time.Hour
 // know old CRDB versions (<19.1 at time of writing) were not involved.
 var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
 
-// ReplicaChecksum contains progress on a replica checksum computation.
-type ReplicaChecksum struct {
+// replicaChecksum contains progress on a replica checksum computation.
+type replicaChecksum struct {
 	CollectChecksumResponse
 	// started is true if the checksum computation has started.
 	started bool
@@ -442,7 +442,7 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 // getChecksum waits for the result of ComputeChecksum and returns it.
 // It returns false if there is no checksum being computed for the id,
 // or it has already been GCed.
-func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksum, error) {
+func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksum, error) {
 	now := timeutil.Now()
 	r.mu.Lock()
 	r.gcOldChecksumEntriesLocked(now)
@@ -462,14 +462,14 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 	// Wait for the checksum to compute or at least to start.
 	computed, err := r.checksumInitialWait(ctx, id, c.notify)
 	if err != nil {
-		return ReplicaChecksum{}, err
+		return replicaChecksum{}, err
 	}
 	// If the checksum started, but has not completed commit
 	// to waiting the full deadline.
 	if !computed {
 		_, err = r.checksumWait(ctx, id, c.notify, nil)
 		if err != nil {
-			return ReplicaChecksum{}, err
+			return replicaChecksum{}, err
 		}
 	}
 
@@ -483,7 +483,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 	// The latter case can occur when there's a version mismatch or, more generally,
 	// when the (async) checksum computation fails.
 	if !ok || c.Checksum == nil {
-		return ReplicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
+		return replicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
 	}
 	return c, nil
 }
@@ -724,7 +724,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[cc.ChecksumID] = ReplicaChecksum{started: true, notify: notify}
+	r.mu.checksums[cc.ChecksumID] = replicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 

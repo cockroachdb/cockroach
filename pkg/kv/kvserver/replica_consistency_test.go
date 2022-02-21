@@ -77,7 +77,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 
 	// Simple condition, the checksum is notified, but not computed.
 	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = ReplicaChecksum{notify: notify}
+	tc.repl.mu.checksums[id] = replicaChecksum{notify: notify}
 	tc.repl.mu.Unlock()
 	rc, err := tc.repl.getChecksum(ctx, id)
 	if !testutils.IsError(err, "no checksum found") {
@@ -88,7 +88,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	// this will take 10ms.
 	id = uuid.FastMakeV4()
 	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = ReplicaChecksum{notify: make(chan struct{})}
+	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
 	tc.repl.mu.Unlock()
 	rc, err = tc.repl.getChecksum(ctx, id)
 	if !testutils.IsError(err, "checksum computation did not start") {
@@ -99,7 +99,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	// so next step is for context deadline.
 	id = uuid.FastMakeV4()
 	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = ReplicaChecksum{notify: make(chan struct{}), started: true}
+	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{}), started: true}
 	tc.repl.mu.Unlock()
 	rc, err = tc.repl.getChecksum(ctx, id)
 	if !testutils.IsError(err, "context deadline exceeded") {
