@@ -48,9 +48,9 @@ func ValidateTable(
 	if tableDesc.IsSequence() {
 		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
-	if len(tableDesc.GetFamilies()) != 1 {
+	if t.Type == jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY && len(tableDesc.GetFamilies()) != 1 {
 		return errors.Errorf(
-			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
+			`going from single to multiple column families is not currently supported: %s now has %d`,
 			tableDesc.GetName(), len(tableDesc.GetFamilies()))
 	}
 

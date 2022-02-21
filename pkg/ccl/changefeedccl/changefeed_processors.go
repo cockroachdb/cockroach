@@ -768,13 +768,19 @@ func (c *kvEventToRowConsumer) eventToRow(
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
-	desc, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, schemaTimestamp)
+	desc, family, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, schemaTimestamp)
 	if err != nil {
 		return r, err
 	}
 
 	r.tableDesc = desc
-	rf, err := c.rfCache.RowFetcherForTableDesc(desc)
+	var rf *row.Fetcher
+	if desc.NumFamilies() > 1 {
+		rf, err = c.rfCache.RowFetcherForColumnFamily(desc, *family)
+		r.familyID = *family
+	} else {
+		rf, err = c.rfCache.RowFetcherForTableDesc(desc)
+	}
 	if err != nil {
 		return r, err
 	}
@@ -822,13 +828,18 @@ func (c *kvEventToRowConsumer) eventToRow(
 			// If the previous value is being interpreted under a different
 			// version of the schema, fetch the correct table descriptor and
 			// create a new row.Fetcher with it.
-			prevDesc, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, prevSchemaTimestamp)
+			prevDesc, family, err := c.rfCache.TableDescForKey(ctx, event.KV().Key, prevSchemaTimestamp)
 			if err != nil {
 				return r, err
 			}
-
 			r.prevTableDesc = prevDesc
-			prevRF, err = c.rfCache.RowFetcherForTableDesc(prevDesc)
+			if prevDesc.NumFamilies() > 1 {
+				prevRF, err = c.rfCache.RowFetcherForColumnFamily(prevDesc, *family)
+				r.prevFamilyID = *family
+			} else {
+				prevRF, err = c.rfCache.RowFetcherForTableDesc(prevDesc)
+			}
+
 			if err != nil {
 				return r, err
 			}

@@ -538,8 +538,12 @@ func getTargetsAndTables(
 			tables[table.GetID()] = jobspb.ChangefeedTargetTable{
 				StatementTimeName: name,
 			}
+			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+			if len(table.GetFamilies()) > 1 {
+				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			}
 			ts := jobspb.ChangefeedTargetSpecification{
-				Type:    jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				Type:    typ,
 				TableID: table.GetID(),
 			}
 			targets = append(targets, ts)
