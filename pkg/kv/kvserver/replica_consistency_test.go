@@ -12,15 +12,22 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -117,4 +124,87 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.Nil(t, rc.Checksum)
+}
+
+// TestReplicaChecksumSHA512 checks that a given dataset produces the expected
+// checksum.
+func TestReplicaChecksumSHA512(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	sb := &strings.Builder{}
+	lim := quotapool.NewRateLimiter("rate", 1e9, 0)
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	repl := &Replica{} // We don't actually need the replica at all, just the method.
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+
+	// Hash the empty state.
+	rh, err := repl.sha512(ctx, desc, eng, nil, roachpb.ChecksumMode_CHECK_FULL, lim)
+	require.NoError(t, err)
+	fmt.Fprintf(sb, "checksum0: %x\n", rh.SHA512[:])
+
+	// We incrementally add writes, and check the checksums after each write to
+	// make sure they differ such that each write affects the checksum.
+	kvs := []struct {
+		key    string
+		endKey string
+		ts     int64
+		value  string
+	}{
+		{"a", "", 1, "a1"},
+		{"a", "", 2, ""},
+		{"b", "", 3, "b3"},
+		{"x", "", 0, "x0"},
+		// Range keys can currently only be tombstones.
+		{"p", "q", 1, ""},
+		{"x", "z", 9, ""},
+	}
+
+	for i, kv := range kvs {
+		key, endKey := roachpb.Key(kv.key), roachpb.Key(kv.endKey)
+		ts := hlc.Timestamp{WallTime: kv.ts}
+		value := []byte(kv.value)
+
+		switch {
+		case len(endKey) > 0:
+			require.NoError(t, eng.ExperimentalPutMVCCRangeKey(
+				storage.MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts}))
+		case ts.IsEmpty():
+			require.NoError(t, eng.PutUnversioned(key, value))
+		default:
+			require.NoError(t, eng.PutMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, value))
+		}
+
+		rh, err = repl.sha512(ctx, desc, eng, nil, roachpb.ChecksumMode_CHECK_FULL, lim)
+		require.NoError(t, err)
+		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rh.SHA512[:])
+	}
+
+	// Run another check to obtain a snapshot and stats for the final state.
+	kvSnapshot := roachpb.RaftSnapshotData{}
+	rh, err = repl.sha512(ctx, desc, eng, &kvSnapshot, roachpb.ChecksumMode_CHECK_FULL, lim)
+	require.NoError(t, err)
+
+	jsonpb := protoutil.JSONPb{Indent: "  "}
+	json, err := jsonpb.Marshal(&rh.RecomputedMS)
+	require.NoError(t, err)
+	fmt.Fprintf(sb, "stats: %s\n", string(json))
+
+	fmt.Fprint(sb, "snapshot:\n")
+	for _, kv := range kvSnapshot.KV {
+		fmt.Fprintf(sb, "  %s=%q\n", storage.MVCCKey{Key: kv.Key, Timestamp: kv.Timestamp}, kv.Value)
+	}
+	for _, rkv := range kvSnapshot.RangeKeys {
+		fmt.Fprintf(sb, "  %s\n",
+			storage.MVCCRangeKey{StartKey: rkv.StartKey, EndKey: rkv.EndKey, Timestamp: rkv.Timestamp})
+	}
+
+	echotest.Require(t, sb.String(), testutils.TestDataPath(t, "replica_consistency_sha512"))
 }

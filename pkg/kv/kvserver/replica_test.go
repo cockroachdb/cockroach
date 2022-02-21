@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -7674,9 +7675,7 @@ func TestDiffRange(t *testing.T) {
 	// TODO(tschottdorf): this test should really pass the data through a
 	// RocksDB engine to verify that the original snapshots sort correctly.
 
-	if diff := diffRange(nil, nil); diff != nil {
-		t.Fatalf("diff of nils =  %v", diff)
-	}
+	require.Empty(t, diffRange(nil, nil))
 
 	timestamp := hlc.Timestamp{WallTime: 1729, Logical: 1}
 	value := []byte("foo")
@@ -7703,12 +7702,18 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
 			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
 		},
+		// Fragmented range keys.
+		RangeKeys: []roachpb.RaftSnapshotData_RangeKey{
+			{StartKey: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp},
+			{StartKey: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp.Add(0, -1)},
+			{StartKey: []byte("C"), EndKey: []byte("F"), Timestamp: timestamp},
+			{StartKey: []byte("P"), EndKey: []byte("R"), Timestamp: timestamp},
+			{StartKey: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp},
+		},
 	}
 
 	// No diff works.
-	if diff := diffRange(leaderSnapshot, leaderSnapshot); diff != nil {
-		t.Fatalf("diff of equal snapshots = %v", diff)
-	}
+	require.Empty(t, diffRange(leaderSnapshot, leaderSnapshot))
 
 	replicaSnapshot := &roachpb.RaftSnapshotData{
 		KV: []roachpb.RaftSnapshotData_KeyValue{
@@ -7726,6 +7731,12 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{}, Value: value},
 			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
 		},
+		RangeKeys: []roachpb.RaftSnapshotData_RangeKey{
+			{StartKey: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp},
+			{StartKey: []byte("E"), EndKey: []byte("G"), Timestamp: timestamp},
+			{StartKey: []byte("Q"), EndKey: []byte("R"), Timestamp: timestamp},
+			{StartKey: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp.Add(0, 1)},
+		},
 	}
 
 	// The expected diff.
@@ -7742,48 +7753,21 @@ func TestDiffRange(t *testing.T) {
 		{LeaseHolder: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: true, Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{}, Value: value},
 		{LeaseHolder: false, Key: []byte("zeroright"), Timestamp: hlc.Timestamp{}, Value: value},
-	}
 
+		{LeaseHolder: true, Key: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp.Add(0, -1)},
+		{LeaseHolder: true, Key: []byte("C"), EndKey: []byte("F"), Timestamp: timestamp},
+		{LeaseHolder: false, Key: []byte("E"), EndKey: []byte("G"), Timestamp: timestamp},
+		{LeaseHolder: true, Key: []byte("P"), EndKey: []byte("R"), Timestamp: timestamp},
+		{LeaseHolder: false, Key: []byte("Q"), EndKey: []byte("R"), Timestamp: timestamp},
+		{LeaseHolder: false, Key: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp.Add(0, 1)},
+		{LeaseHolder: true, Key: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp},
+	}
 	diff := diffRange(leaderSnapshot, replicaSnapshot)
+	require.Equal(t, eDiff, diff)
 
-	for i, e := range eDiff {
-		v := diff[i]
-		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || e.Timestamp != v.Timestamp || !bytes.Equal(e.Value, v.Value) {
-			t.Fatalf("diff varies at row %d, want %v and got %v\n\ngot:\n%s\nexpected:\n%s", i, e, v, diff, eDiff)
-		}
-	}
-
-	// Document the stringifed output. This is what the consistency checker
+	// Assert the stringifed output. This is what the consistency checker
 	// will actually print.
-	stringDiff := append(eDiff[:4],
-		ReplicaSnapshotDiff{Key: []byte("foo"), Value: value},
-	)
-
-	const expDiff = `--- leaseholder
-+++ follower
--0.000001729,1 "a"
--    ts:1970-01-01 00:00:00.000001729 +0000 UTC
--    value:"foo"
--    raw mvcc_key/value: 610000000000000006c1000000010d 666f6f
-+0.000001729,1 "ab"
-+    ts:1970-01-01 00:00:00.000001729 +0000 UTC
-+    value:"foo"
-+    raw mvcc_key/value: 61620000000000000006c1000000010d 666f6f
--0.000001729,1 "abcd"
--    ts:1970-01-01 00:00:00.000001729 +0000 UTC
--    value:"foo"
--    raw mvcc_key/value: 616263640000000000000006c1000000010d 666f6f
-+0.000001729,1 "abcdef"
-+    ts:1970-01-01 00:00:00.000001729 +0000 UTC
-+    value:"foo"
-+    raw mvcc_key/value: 6162636465660000000000000006c1000000010d 666f6f
-+0,0 "foo"
-+    ts:1970-01-01 00:00:00 +0000 UTC
-+    value:"foo"
-+    raw mvcc_key/value: 666f6f00 666f6f
-`
-
-	require.Equal(t, expDiff, stringDiff.String())
+	echotest.Require(t, diff.String(), testutils.TestDataPath(t, "replica_consistency_diff"))
 }
 
 func TestSyncSnapshot(t *testing.T) {
