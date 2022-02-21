@@ -318,7 +318,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
-	if hasBypassCircuitBreakerMarker(ctx) {
+	if hasBypassCircuitBreakerMarker(parentCtx) {
 		// If the caller bypasses the circuit breaker, allow the lease to do the
 		// same. Otherwise, the lease will be refused by the circuit breaker as
 		// well.
@@ -330,7 +330,21 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		// will receive the circuit breaker error. This is special-cased in
 		// `redirectOnOrAcquireLease`, where such a caller needs to retry instead of
 		// propagating the error.
+		//
+		// TODO(during review): just highlighting this code. When we switch to
+		// PoisonPolicy, we get new (undesired) behavior where a req with
+		// PoisonPolicyError might join on a fail-slow (PoisonPolicyWait) lease. So
+		// we'll need extra one-off checks while joining leases under an open
+		// breaker. I wonder why we can't use latches to join on an existing lease
+		// request. That way, poisoning could do the job for us (though more
+		// coarsely). Basically, before requesting or transferring a lease, go
+		// through latching for a lease-specific key (perhaps without inserting
+		// yourself, to avoid long chains, but then we get a thundering herd
+		// instead) using the caller's PoisonPolicy. When queue has resolved,
+		// reassess the situation. That way, fail-fast requests will fail-fast and
+		// fail-slow requests will wait.
 		ctx = withBypassCircuitBreakerMarker(ctx)
+		log.Event(ctx, "lease request bypasses circuit breaker")
 	}
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
@@ -452,7 +466,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			if pErr == nil {
 				// The Replica circuit breakers together with round-tripping a ProbeRequest
 				// here before asking for the lease could provide an alternative, simpler
-				// solution to the the below issue:
+				// solution to the below issue:
 				//
 				// https://github.com/cockroachdb/cockroach/issues/37906
 				ba := roachpb.BatchRequest{}
@@ -1126,11 +1140,6 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	ctx context.Context, reqTS hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
-	if hasBypassCircuitBreakerMarker(ctx) {
-		defer func() {
-			log.Infof(ctx, "hello")
-		}()
-	}
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
@@ -1269,6 +1278,9 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 							// breaker error back, it joined a lease request started by an operation
 							// that did not bypass circuit breaker errors. Loop around and try again.
 							// See requestLeaseAsync for details.
+							//
+							// TODO(during review): this case might go away if we're getting better
+							// about not joining leases with different PoisonPolicies.
 							return nil
 						case errors.HasType(goErr, (*roachpb.LeaseRejectedError)(nil)):
 							var tErr *roachpb.LeaseRejectedError

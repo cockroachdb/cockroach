@@ -42,7 +42,9 @@ type signal struct {
 
 func (s *signal) signal() {
 	if !atomic.CompareAndSwapInt32(&s.a, noSig, sig) {
-		panic("signaled twice")
+		// TODO(tbg): could add an assertion for signals that must only be signaled
+		// once.
+		return
 	}
 	// Close the channel if it was ever initialized.
 	if cPtr := atomic.LoadPointer(&s.c); cPtr != nil {

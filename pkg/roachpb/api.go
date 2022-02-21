@@ -1303,8 +1303,9 @@ func (*AdminChangeReplicasRequest) flags() flag { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() flag  { return isAdmin | isAlone }
 
 func (*GCRequest) flags() flag {
-	// We let GCRequest bypass the circuit breaker because otherwise, the GC queue may
-	// busy loop on an unavailable range, doing lots of work but never making progress.
+	// We defensively let GCRequest bypass the circuit breaker because otherwise,
+	// the GC queue might busy loop on an unavailable range, doing lots of work
+	// but never making progress.
 	return isWrite | isRange | bypassesReplicaCircuitBreaker
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1252,6 +1253,21 @@ func (r *Replica) refreshProposalsLocked(
 			p.finishApplication(ctx, proposalResult{
 				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
 			})
+		}
+	}
+}
+
+func (r *Replica) poisonInflightLatches(err error) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.mu.proposals {
+		p.ec.poison()
+		if p.ec.g.Req.PoisonPolicy == spanlatch.PoisonPolicyError {
+			aErr := roachpb.NewAmbiguousResultError("circuit breaker tripped")
+			aErr.WrappedErr = roachpb.NewError(err)
+			p.signalProposalResult(proposalResult{Err: roachpb.NewError(aErr)})
 		}
 	}
 }
