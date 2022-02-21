@@ -2391,6 +2391,9 @@ func (a *finalRegressionAccumulatorDecimalBase) combine(ctx context.Context) err
 	syy2 := a.otherTransitionValues[4]
 	sxy2 := a.otherTransitionValues[5]
 
+	fmt.Printf("combine BEFORE n1=%s sx1=%s sxx1=%s sy1=%s syy1=%s sxy1=%s\n", str(a.n), str(a.sx), str(a.sxx), str(a.sy), str(a.syy), str(a.sxy))
+	fmt.Printf("combine BEFORE n2=%s sx2=%s sxx2=%s sy2=%s syy2=%s sxy2=%s\n", str(*n2), str(*sx2), str(*sxx2), str(*sy2), str(*syy2), str(*sxy2))
+
 	/*
 	 * The transition values combine using a generalization of the
 	 * Youngs-Cramer algorithm as follows:
@@ -2464,6 +2467,8 @@ func (a *finalRegressionAccumulatorDecimalBase) combine(ctx context.Context) err
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
+	fmt.Printf("combine AFTER n1=%s sx1=%s sxx1=%s sy1=%s syy1=%s sxy1=%s\n", str(a.n), str(a.sx), str(a.sxx), str(a.sy), str(a.syy), str(a.sxy))
+	fmt.Printf("combine AFTER n2=%s sx2=%s sxx2=%s sy2=%s syy2=%s sxy2=%s\n", str(*n2), str(*sx2), str(*sxx2), str(*sy2), str(*syy2), str(*sxy2))
 
 	return a.ed.Err()
 }
@@ -2582,6 +2587,15 @@ func (a *finalRegressionAccumulatorDecimalBase) Reset(ctx context.Context) {
 	a.otherTransitionValues = [regrFieldsTotal]*apd.Decimal{}
 
 	a.reset(ctx)
+}
+
+func str(d apd.Decimal) string {
+	dd := &tree.DDecimal{}
+	dd.Set(&d)
+	tree.DecimalCtx.Round(&dd.Decimal, &dd.Decimal)
+	dd.Decimal.Reduce(&dd.Decimal)
+
+	return dd.String()
 }
 
 // Size implements tree.AggregateFunc interface.

@@ -3751,3 +3751,29 @@ query T
 SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY current_database()) FROM osagg
 ----
 test
+
+subtest corrupt_combine
+
+statement OK
+CREATE TABLE statistics_agg_test (
+  y float,
+  x float
+)
+
+statement OK
+INSERT INTO statistics_agg_test (y, x) VALUES
+  (1.0, 10.0),
+  (2.0, 25.0),
+  (3.0, 35.0)
+
+# this requires several runs to fail
+query FF
+select covar_pop(y, x), covar_samp(y, x) from statistics_agg_test
+----
+8.33333333333333 12.5
+
+# this fails most of the time
+# query FFFF
+# select covar_pop(y, x), covar_samp(y, x), regr_sxx(y, x), regr_syy(y, x) from statistics_agg_test
+# ----
+# 8.33333333333333 12.5 316.6666666666667 2
