@@ -245,6 +245,10 @@ type Flags struct {
 
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
+
+	// UseMultiColStats is the value for SessionData.OptimizerUseMultiColStats.
+	// It defaults to true in New.
+	UseMultiColStats bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -252,7 +256,7 @@ type Flags struct {
 func New(catalog cat.Catalog, sql string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
-		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit},
+		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit, UseMultiColStats: true},
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
@@ -269,7 +273,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
 	ot.evalCtx.SessionData().OptimizerUseHistograms = true
-	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
@@ -517,6 +520,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 	ot.evalCtx.SessionData().NullOrderedLast = ot.Flags.NullOrderedLast
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = ot.Flags.UseMultiColStats
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
@@ -1063,6 +1067,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "propagate-input-ordering":
 		f.PropagateInputOrdering = true
+
+	case "use-multi-col-stats":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("use-multi-col-stats requires a single argument")
+		}
+		b, err := strconv.ParseBool(arg.Vals[0])
+		if err != nil {
+			return errors.Wrap(err, "use-multi-col-stats")
+		}
+		f.UseMultiColStats = b
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
