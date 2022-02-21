@@ -318,6 +318,20 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
+	if hasBypassCircuitBreakerMarker(ctx) {
+		// If the caller bypasses the circuit breaker, allow the lease to do the
+		// same. Otherwise, the lease will be refused by the circuit breaker as
+		// well.
+		//
+		// Note that there is a tiny race: if a request is in flight, but the
+		// request that triggered it (i.e. parentCtx here) does *not* bypass the
+		// probe, and before the circuit breaker rejects the inflight lease another
+		// request that *does* want to bypass the probe joins the request, it too
+		// will receive the circuit breaker error. This is special-cased in
+		// `redirectOnOrAcquireLease`, where such a caller needs to retry instead of
+		// propagating the error.
+		ctx = withBypassCircuitBreakerMarker(ctx)
+	}
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
 	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
@@ -1112,6 +1126,11 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	ctx context.Context, reqTS hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
+	if hasBypassCircuitBreakerMarker(ctx) {
+		defer func() {
+			log.Infof(ctx, "hello")
+		}()
+	}
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
@@ -1209,6 +1228,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		}
 		if llHandle == nil {
 			// We own a valid lease.
+			log.Eventf(ctx, "valid lease %+v", status)
 			return status, nil
 		}
 
@@ -1243,6 +1263,12 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 							// applied locally through a snapshot: the RequestLeaseRequest
 							// cannot be reproposed so we get this ambiguity.
 							// We'll just loop around.
+							return nil
+						case r.breaker.HasMark(goErr) && hasBypassCircuitBreakerMarker(ctx):
+							// If this request wanted to bypass the circuit breaker but still got a
+							// breaker error back, it joined a lease request started by an operation
+							// that did not bypass circuit breaker errors. Loop around and try again.
+							// See requestLeaseAsync for details.
 							return nil
 						case errors.HasType(goErr, (*roachpb.LeaseRejectedError)(nil)):
 							var tErr *roachpb.LeaseRejectedError

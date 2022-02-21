@@ -127,7 +127,7 @@ func TestReplicaCircuitBreaker_Register(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	br, stopper := setupCircuitBreakerTest(t, "mutexmap-1")
 	defer stopper.Stop(context.Background())
-	ctx := withCircuitBreakerProbeMarker(context.Background())
+	ctx := withBypassCircuitBreakerMarker(context.Background())
 	tok, sig, err := br.Register(ctx, func() {})
 	require.NoError(t, err)
 	defer br.UnregisterAndAdjustError(tok, sig, nil /* pErr */)

@@ -96,8 +96,8 @@ func (br *replicaCircuitBreaker) Register(
 
 	// TODO(tbg): we may want to exclude more requests from this check, or allow
 	// requests to exclude themselves from the check (via their header). This
-	// latter mechanism could also replace isCircuitBreakerProbe.
-	if isCircuitBreakerProbe(ctx) {
+	// latter mechanism could also replace hasBypassCircuitBreakerMarker.
+	if hasBypassCircuitBreakerMarker(ctx) {
 		// NB: brSig.C() == nil.
 		brSig = neverTripSignaller{}
 	}
@@ -182,6 +182,10 @@ func (br *replicaCircuitBreaker) UnregisterAndAdjustError(
 		return roachpb.NewError(errors.CombineErrors(brErr, le))
 	}
 	return pErr
+}
+
+func (br *replicaCircuitBreaker) HasMark(err error) bool {
+	return br.wrapped.HasMark(err)
 }
 
 func (br *replicaCircuitBreaker) cancelAllTrackedContexts() {
@@ -297,11 +301,11 @@ func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker) {
 
 type probeKey struct{}
 
-func isCircuitBreakerProbe(ctx context.Context) bool {
+func hasBypassCircuitBreakerMarker(ctx context.Context) bool {
 	return ctx.Value(probeKey{}) != nil
 }
 
-func withCircuitBreakerProbeMarker(ctx context.Context) context.Context {
+func withBypassCircuitBreakerMarker(ctx context.Context) context.Context {
 	return context.WithValue(ctx, probeKey{}, probeKey{})
 }
 
@@ -330,7 +334,10 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 }
 
 func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
-	ctx = withCircuitBreakerProbeMarker(ctx)
+	// NB: we don't need to put this marker since ProbeRequest has the
+	// canBypassReplicaCircuitBreaker flag, but if in the future we do
+	// additional work in this method we may need it.
+	ctx = withBypassCircuitBreakerMarker(ctx)
 	desc := r.Desc()
 	if !desc.IsInitialized() {
 		return nil
