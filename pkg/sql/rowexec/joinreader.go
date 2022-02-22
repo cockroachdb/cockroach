@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -506,9 +505,6 @@ func (jr *joinReader) initJoinReaderStrategy(
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) error {
-	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
-	spanSplitter := span.MakeSplitter(jr.desc, jr.index, neededRightCols)
-
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
 	var generator joinReaderSpanGenerator
@@ -519,14 +515,19 @@ func (jr *joinReader) initJoinReaderStrategy(
 		if readerType != indexJoinReaderType {
 			keyToInputRowIndices = make(map[string][]int)
 		}
-		generator = &defaultSpanGenerator{
-			spanBuilder:          spanBuilder,
-			spanSplitter:         spanSplitter,
-			keyToInputRowIndices: keyToInputRowIndices,
-			numKeyCols:           numKeyCols,
-			lookupCols:           jr.lookupCols,
-			memAcc:               &spanGeneratorMemAcc,
-		}
+		defGen := &defaultSpanGenerator{}
+		defGen.init(
+			flowCtx.EvalCtx,
+			flowCtx.Codec(),
+			jr.desc,
+			jr.index,
+			neededRightCols,
+			numKeyCols,
+			keyToInputRowIndices,
+			jr.lookupCols,
+			&spanGeneratorMemAcc,
+		)
+		generator = defGen
 	} else {
 		// Since jr.lookupExpr is set, we need to use either multiSpanGenerator or
 		// localityOptimizedSpanGenerator, which support looking up multiple spans
@@ -546,8 +547,11 @@ func (jr *joinReader) initJoinReaderStrategy(
 		if jr.remoteLookupExpr.Expr == nil {
 			multiSpanGen := &multiSpanGenerator{}
 			if err := multiSpanGen.init(
-				spanBuilder,
-				spanSplitter,
+				flowCtx.EvalCtx,
+				flowCtx.Codec(),
+				jr.desc,
+				jr.index,
+				neededRightCols,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
@@ -559,14 +563,13 @@ func (jr *joinReader) initJoinReaderStrategy(
 			generator = multiSpanGen
 		} else {
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
-			remoteSpanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
-			remoteSpanSplitter := span.MakeSplitter(jr.desc, jr.index, neededRightCols)
 			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
 			if err := localityOptSpanGen.init(
-				spanBuilder,
-				spanSplitter,
-				remoteSpanBuilder,
-				remoteSpanSplitter,
+				flowCtx.EvalCtx,
+				flowCtx.Codec(),
+				jr.desc,
+				jr.index,
+				neededRightCols,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,

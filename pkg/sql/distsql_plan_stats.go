@@ -86,8 +86,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	for i, c := range scan.cols {
 		colIdxMap.Set(c.GetID(), i)
 	}
-	sb := span.MakeBuilder(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
-	defer sb.Release()
+	var sb span.Builder
+	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err
