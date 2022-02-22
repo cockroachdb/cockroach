@@ -100,7 +100,7 @@ func (g *defaultSpanGenerator) generateSpan(
 	for _, id := range g.lookupCols {
 		g.indexKeyRow = append(g.indexKeyRow, row[id])
 	}
-	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow, numLookupCols)
+	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow[:numLookupCols])
 }
 
 func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
@@ -609,7 +609,7 @@ func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roach
 		var err error
 		var containsNull bool
 		if g.inequalityColIdx == -1 {
-			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow, len(g.indexColInfos))
+			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow[:len(g.indexColInfos)])
 		} else {
 			s, containsNull, err = g.spanBuilder.SpanFromEncDatumsWithRange(indexKeyRow, len(g.indexColInfos),
 				inequalityInfo.start, inequalityInfo.startInclusive, inequalityInfo.end, inequalityInfo.endInclusive)
