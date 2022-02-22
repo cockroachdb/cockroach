@@ -665,7 +665,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
-	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums, len(neededDatums))
+	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums)
 	return s, err
 }
 
