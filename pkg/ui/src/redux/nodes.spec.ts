@@ -20,6 +20,7 @@ import {
   selectStoreIDsByNodeID,
   LivenessStatus,
   sumNodeStats,
+  numNodesByVersionsSelector,
 } from "./nodes";
 import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
 import { createAdminUIStore } from "./state";
@@ -182,6 +183,39 @@ describe("node data selectors", function () {
         2: ["4"],
         3: ["5", "6"],
       });
+    });
+  });
+
+  describe("numNodesByVersionsSelector", () => {
+    it("correctly returns the different binary versions and the number of associated nodes", () => {
+      const data = [
+        {
+          desc: { node_id: 1 },
+          build_info: {
+            tag: "v22.1",
+          },
+        },
+        {
+          desc: { node_id: 2 },
+          build_info: {
+            tag: "v22.1",
+          },
+        },
+        {
+          desc: { node_id: 3 },
+          build_info: {
+            tag: "v21.1.7",
+          },
+        },
+      ];
+      const store = createAdminUIStore(createHashHistory());
+      store.dispatch(nodesReducerObj.receiveData(data));
+      const state = store.getState();
+      const expectedResult = new Map([
+        ["v22.1", 2],
+        ["v21.1.7", 1],
+      ]);
+      assert.deepEqual(numNodesByVersionsSelector(state), expectedResult);
     });
   });
 });
