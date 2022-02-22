@@ -75,7 +75,7 @@ func (i *IntSetting) Validate(v int64) error {
 // For testing usage only.
 func (i *IntSetting) Override(ctx context.Context, sv *Values, v int64) {
 	sv.setInt64(ctx, i.slot, v)
-	sv.setDefaultOverrideInt64(i.slot, v)
+	sv.setDefaultOverride(i.slot, v)
 }
 
 func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {
@@ -88,11 +88,10 @@ func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {
 
 func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(i.slot)
-	if ok {
+	if val := sv.getDefaultOverride(i.slot); val != nil {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = i.set(ctx, sv, val)
+		_ = i.set(ctx, sv, val.(int64))
 		return
 	}
 	if err := i.set(ctx, sv, i.defaultValue); err != nil {
