@@ -207,6 +207,10 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		return iter
 	}
 
+	if opts.KeyTypes != IterKeyTypePointsOnly && p.db.FormatMajorVersion() < pebble.FormatRangeKeys {
+		opts.KeyTypes = IterKeyTypePointsOnly
+	}
+
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
 		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts))
@@ -256,6 +260,10 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 
 	if p.writeOnly {
 		panic("write-only batch")
+	}
+
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("range keys are not supported for engine iterators, only MVCC")
 	}
 
 	iter := &p.normalEngineIter

@@ -1000,6 +1000,12 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		}
 		return iter
 	}
+	// If this Pebble database does not support range keys yet, fall back to only
+	// iterating over point keys to avoid errors. This is effectively the same,
+	// since a database without range key support contains no range keys.
+	if opts.KeyTypes != IterKeyTypePointsOnly && p.db.FormatMajorVersion() < pebble.FormatRangeKeys {
+		opts.KeyTypes = IterKeyTypePointsOnly
+	}
 
 	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
@@ -1013,6 +1019,10 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
+	// TODO(erikgrinaker): Reconsider this if necessary.
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("range keys are not supported for engine iterators, only MVCC")
+	}
 	iter := newPebbleIterator(p.db, nil, opts)
 	if iter == nil {
 		panic("couldn't create a new iterator")
@@ -1457,8 +1467,9 @@ func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
 // NewSnapshot implements the Engine interface.
 func (p *Pebble) NewSnapshot() Reader {
 	return &pebbleSnapshot{
-		snapshot: p.db.NewSnapshot(),
-		settings: p.settings,
+		snapshot:           p.db.NewSnapshot(),
+		settings:           p.settings,
+		formatMajorVersion: p.db.FormatMajorVersion(),
 	}
 }
 
@@ -1799,6 +1810,11 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		return iter
 	}
 
+	if opts.KeyTypes != IterKeyTypePointsOnly &&
+		p.parent.db.FormatMajorVersion() < pebble.FormatRangeKeys {
+		opts.KeyTypes = IterKeyTypePointsOnly
+	}
+
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
 		iter := MVCCIterator(newPebbleIterator(p.parent.db, nil, opts))
@@ -1841,6 +1857,9 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
+	}
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("range keys are not supported for engine iterators, only MVCC")
 	}
 
 	iter := &p.normalEngineIter
@@ -1979,9 +1998,10 @@ func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
 type pebbleSnapshot struct {
-	snapshot *pebble.Snapshot
-	settings *cluster.Settings
-	closed   bool
+	snapshot           *pebble.Snapshot
+	settings           *cluster.Settings
+	formatMajorVersion pebble.FormatMajorVersion
+	closed             bool
 }
 
 var _ Reader = &pebbleSnapshot{}
@@ -2067,6 +2087,11 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		}
 		return iter
 	}
+
+	if opts.KeyTypes != IterKeyTypePointsOnly && p.formatMajorVersion < pebble.FormatRangeKeys {
+		opts.KeyTypes = IterKeyTypePointsOnly
+	}
+
 	iter := MVCCIterator(newPebbleIterator(p.snapshot, nil, opts))
 	if util.RaceEnabled {
 		iter = wrapInUnsafeIter(iter)
@@ -2076,6 +2101,9 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("range keys are not supported for engine iterators, only MVCC")
+	}
 	return newPebbleIterator(p.snapshot, nil, opts)
 }
 
