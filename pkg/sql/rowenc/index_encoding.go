@@ -47,11 +47,11 @@ func MakeIndexKeyPrefix(codec keys.SQLCodec, tableID descpb.ID, indexID descpb.I
 	return codec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
-// EncodeIndexKey creates a key by concatenating keyPrefix with the
-// encodings of the columns in the index, and returns the key and
-// whether any of the encoded values were NULLs.
+// EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
+// the index key columns, and returns the key and whether any of the encoded
+// values were NULLs.
 //
-// Note that KeySuffixColumnIDs are not encoded, so the result isn't always a
+// Note that key suffix columns are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
 	tableDesc catalog.TableDescriptor,
@@ -60,24 +60,15 @@ func EncodeIndexKey(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(
+	key, containsNull, err = EncodePartialIndexKey(
 		index,
 		index.NumKeyColumns(), /* encode all columns */
 		colMap,
 		values,
 		keyPrefix,
 	)
-	containsNull = colIDWithNullVal != 0
-	if err == nil && containsNull && index.Primary() {
-		col, findErr := tableDesc.FindColumnWithID(colIDWithNullVal)
-		if findErr != nil {
-			return nil, true, errors.WithAssertionFailure(findErr)
-		}
-		if col.IsNullable() {
-			return nil, true, errors.AssertionFailedf("primary key column %q should not be nullable", col.GetName())
-		}
-		return nil, true, sqlerrors.NewNonNullViolationError(col.GetName())
+	if err != nil {
+		return nil, false, err
 	}
 	return key, containsNull, err
 }
@@ -93,11 +84,9 @@ func EncodePartialIndexSpan(
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
 	var key roachpb.Key
-	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(index, numCols, colMap, values, keyPrefix)
-	containsNull = colIDWithNullVal != 0
+	key, containsNull, err = EncodePartialIndexKey(index, numCols, colMap, values, keyPrefix)
 	if err != nil {
-		return span, containsNull, err
+		return span, false, err
 	}
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, containsNull, nil
 }
@@ -112,13 +101,13 @@ func EncodePartialIndexKey(
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, colIDWithNullVal descpb.ColumnID, err error) {
+) (key []byte, containsNull bool, _ error) {
 	var colIDs, keySuffixColIDs []descpb.ColumnID
 	if numCols <= index.NumKeyColumns() {
 		colIDs = index.IndexDesc().KeyColumnIDs[:numCols]
 	} else {
 		if index.IsUnique() || numCols > index.NumKeyColumns()+index.NumKeySuffixColumns() {
-			return nil, colIDWithNullVal, errors.Errorf("encoding too many columns (%d)", numCols)
+			return nil, false, errors.Errorf("encoding too many columns (%d)", numCols)
 		}
 		colIDs = index.IndexDesc().KeyColumnIDs
 		keySuffixColIDs = index.IndexDesc().KeySuffixColumnIDs[:numCols-index.NumKeyColumns()]
@@ -132,23 +121,17 @@ func EncodePartialIndexKey(
 
 	dirs := directions(index.IndexDesc().KeyColumnDirections)
 
-	var keyColIDWithNullVal, keySuffixColIDWithNullVal descpb.ColumnID
-	key, keyColIDWithNullVal, err = EncodeColumns(colIDs, dirs, colMap, values, key)
-	if colIDWithNullVal == 0 {
-		colIDWithNullVal = keyColIDWithNullVal
-	}
+	key, containsNull, err := EncodeColumns(colIDs, dirs, colMap, values, key)
 	if err != nil {
-		return nil, colIDWithNullVal, err
+		return nil, false, err
 	}
 
-	key, keySuffixColIDWithNullVal, err = EncodeColumns(keySuffixColIDs, nil /* directions */, colMap, values, key)
-	if colIDWithNullVal == 0 {
-		colIDWithNullVal = keySuffixColIDWithNullVal
-	}
+	key, suffixContainsNull, err := EncodeColumns(keySuffixColIDs, nil /* directions */, colMap, values, key)
+	containsNull = containsNull || suffixContainsNull
 	if err != nil {
-		return nil, colIDWithNullVal, err
+		return nil, false, err
 	}
-	return key, colIDWithNullVal, nil
+	return key, containsNull, nil
 }
 
 type directions []descpb.IndexDescriptor_Direction
@@ -893,9 +876,12 @@ func EncodePrimaryIndex(
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
-	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
+	indexKey, containsNull, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
 	if err != nil {
 		return nil, err
+	}
+	if containsNull {
+		return nil, MakeNullPKError(tableDesc, index, colMap, values)
 	}
 	indexedColumns := index.CollectKeyColumnIDs()
 	var entryValue []byte
@@ -966,6 +952,23 @@ func EncodePrimaryIndex(
 	}
 
 	return indexEntries, nil
+}
+
+// MakeNullPKError generates an error when the value for a primary key column is
+// null.
+func MakeNullPKError(
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+) error {
+	for _, col := range table.IndexKeyColumns(index) {
+		ord, ok := colMap.Get(col.GetID())
+		if !ok || values[ord] == tree.DNull {
+			return sqlerrors.NewNonNullViolationError(col.GetName())
+		}
+	}
+	return errors.AssertionFailedf("NULL value in unknown key column")
 }
 
 // EncodeSecondaryIndex encodes key/values for a secondary
@@ -1321,24 +1324,24 @@ func EncodeColumns(
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, colIDWithNullVal descpb.ColumnID, err error) {
+) (key []byte, containsNull bool, err error) {
 	key = keyPrefix
 	for colIdx, id := range columnIDs {
 		val := findColumnValue(id, colMap, values)
 		if val == tree.DNull {
-			colIDWithNullVal = id
+			containsNull = true
 		}
 
 		dir, err := directions.get(colIdx)
 		if err != nil {
-			return nil, colIDWithNullVal, err
+			return nil, false, err
 		}
 
 		if key, err = keyside.Encode(key, val, dir); err != nil {
-			return nil, colIDWithNullVal, err
+			return nil, false, err
 		}
 	}
-	return key, colIDWithNullVal, nil
+	return key, containsNull, nil
 }
 
 // growKey returns a new key with  the same contents as the given key and with
