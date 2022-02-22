@@ -207,7 +207,35 @@ func alterChangefeedPlanHook(
 			newChangefeedStmt.Options = append(newChangefeedStmt.Options, val)
 		}
 
-		jobRecord, err := createChangefeedJobRecord(ctx, p, newChangefeedStmt, jobID, ``)
+		sinkURIFn, err := p.TypeAsString(ctx, newChangefeedStmt.SinkURI, `ALTER CHANGEFEED`)
+		if err != nil {
+			return err
+		}
+
+		optsFn, err := p.TypeAsStringOpts(ctx, newChangefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+		if err != nil {
+			return err
+		}
+
+		sinkURI, err := sinkURIFn()
+		if err != nil {
+			return err
+		}
+
+		opts, err := optsFn()
+		if err != nil {
+			return err
+		}
+
+		jobRecord, err := createChangefeedJobRecord(
+			ctx,
+			p,
+			newChangefeedStmt,
+			sinkURI,
+			opts,
+			jobID,
+			``,
+		)
 		if err != nil {
 			return err
 		}

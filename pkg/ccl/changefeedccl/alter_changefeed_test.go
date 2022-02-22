@@ -123,7 +123,7 @@ func TestAlterChangefeedSetDiffOption(t *testing.T) {
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
 
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff = 'true'`, feed.JobID()))
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
 		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
@@ -240,7 +240,7 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	sqlDB.Exec(t, `PAUSE JOB $1`, changefeedID)
 	waitForJobStatus(sqlDB, t, changefeedID, `paused`)
 
-	sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff = 'true'`, changefeedID))
+	sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, changefeedID))
 
 	sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, changefeedID))
 	waitForJobStatus(sqlDB, t, changefeedID, `running`)

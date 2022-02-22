@@ -82,6 +82,7 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
+	var sinkURIFn func() (string, error)
 	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 	avoidBuffering := false
@@ -94,6 +95,7 @@ func changefeedPlanHook(
 		// over pgwire. The types of these rows are `(topic STRING, key BYTES,
 		// value BYTES)` and they correspond exactly to what would be emitted to
 		// a sink.
+		sinkURIFn = func() (string, error) { return ``, nil }
 		header = colinfo.ResultColumns{
 			{Name: "table", Typ: types.String},
 			{Name: "key", Typ: types.Bytes},
@@ -101,16 +103,44 @@ func changefeedPlanHook(
 		}
 		avoidBuffering = true
 	} else {
+		var err error
+		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
 		header = colinfo.ResultColumns{
 			{Name: "job_id", Typ: types.Int},
 		}
+	}
+
+	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+	if err != nil {
+		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		jr, err := createChangefeedJobRecord(ctx, p, changefeedStmt, jobspb.InvalidJobID, `changefeed.create`)
+		sinkURI, err := sinkURIFn()
+		if err != nil {
+			return err
+		}
+
+		opts, err := optsFn()
+		if err != nil {
+			return err
+		}
+
+		jr, err := createChangefeedJobRecord(
+			ctx,
+			p,
+			changefeedStmt,
+			sinkURI,
+			opts,
+			jobspb.InvalidJobID,
+			`changefeed.create`,
+		)
 		if err != nil {
 			return err
 		}
@@ -212,44 +242,21 @@ func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
 	changefeedStmt *tree.CreateChangefeed,
+	sinkURI string,
+	opts map[string]string,
 	jobID jobspb.JobID,
 	telemetryPath string,
 ) (*jobs.Record, error) {
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 
-	var sinkURIFn func() (string, error)
-	if unspecifiedSink {
-		sinkURIFn = func() (string, error) { return ``, nil }
-	} else {
-		var err error
-		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := validateSettings(ctx, p); err != nil {
 		return nil, err
 	}
 
-	sinkURI, err := sinkURIFn()
-	if err != nil {
-		return nil, err
-	}
 	if !unspecifiedSink && sinkURI == `` {
 		// Error if someone specifies an INTO with the empty string. We've
 		// already sent the wrong result column headers.
 		return nil, errors.New(`omit the SINK clause for inline results`)
-	}
-
-	opts, err := optsFn()
-	if err != nil {
-		return nil, err
 	}
 
 	for key, value := range opts {
