@@ -838,31 +838,31 @@ func newOptTable(
 			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedColOrd */)
 		}
 
-		// Add unique constraints for implicitly partitioned unique indexes.
-		if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 {
-			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-				name:         idx.GetName(),
-				table:        ot.ID(),
-				columns:      idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
-				withoutIndex: true,
-				predicate:    idx.GetPredicate(),
-				// TODO(rytaft): will we ever support an unvalidated unique constraint
-				// here?
-				validity: descpb.ConstraintValidity_Validated,
-			})
-		}
-
-		// Add unique constraint for hash sharded indexes.
-		if idx.IsUnique() && idx.IsSharded() {
-			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-				name:                               idx.GetName(),
-				table:                              ot.ID(),
-				columns:                            idx.IndexDesc().KeyColumnIDs[1:],
-				withoutIndex:                       true,
-				predicate:                          idx.GetPredicate(),
-				validity:                           descpb.ConstraintValidity_Validated,
-				uniquenessGuaranteedByAnotherIndex: true,
-			})
+		if idx.IsUnique() {
+			if idx.GetPartitioning().NumImplicitColumns() > 0 {
+				// Add unique constraints for implicitly partitioned unique indexes.
+				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+					name:         idx.GetName(),
+					table:        ot.ID(),
+					columns:      idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex: true,
+					predicate:    idx.GetPredicate(),
+					// TODO(rytaft): will we ever support an unvalidated unique constraint
+					// here?
+					validity: descpb.ConstraintValidity_Validated,
+				})
+			} else if idx.IsSharded() {
+				// Add unique constraint for hash sharded indexes.
+				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+					name:                               idx.GetName(),
+					table:                              ot.ID(),
+					columns:                            idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:                       true,
+					predicate:                          idx.GetPredicate(),
+					validity:                           descpb.ConstraintValidity_Validated,
+					uniquenessGuaranteedByAnotherIndex: true,
+				})
+			}
 		}
 	}
 
@@ -1446,9 +1446,13 @@ func (oi *optIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (oi *optIndex) ImplicitPartitioningColumnCount() int {
-	return oi.idx.GetPartitioning().NumImplicitColumns()
+// ImplicitColumnCount is part of the cat.Index interface.
+func (oi *optIndex) ImplicitColumnCount() int {
+	implicitColCnt := oi.idx.GetPartitioning().NumImplicitColumns()
+	if oi.idx.IsSharded() {
+		implicitColCnt++
+	}
+	return implicitColCnt
 }
 
 // GeoConfig is part of the cat.Index interface.
@@ -2218,8 +2222,8 @@ func (oi *optVirtualIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
+// ImplicitColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ImplicitColumnCount() int {
 	return 0
 }
 

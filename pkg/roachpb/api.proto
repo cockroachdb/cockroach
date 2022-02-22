@@ -1228,6 +1228,19 @@ message TruncateLogRequest {
   // itself. The range may have changed from the one specified in the header
   // in the case of a merge.
   int64 range_id = 3 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+
+  // ExpectedFirstIndex is the expected Index of the last TruncateLogRequest,
+  // i.e., we expect that this request will typically be truncating entries
+  // [ExpectedFirstIndex, Index).
+  //
+  // There is no correctness issue if the replica applying this truncation has
+  // not seen the preceding TruncateLogRequest or has seen one with an Index
+  // that is not equal to ExpectedFirstIndex. This is an optimization that
+  // typically allows the potentially expensive computation of the bytes being
+  // discarded from the raft log to be performed once, at the leaseholder.
+  //
+  // Populated starting at cluster version LooselyCoupledRaftLogTruncation.
+  uint64 expected_first_index = 4;
 }
 
 // TruncateLogResponse is the response to a TruncateLog() operation.

@@ -29,13 +29,13 @@ user testuser
 statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
-statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to show cluster setting 'sql.defaults.default_int_size'
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'sql.defaults.default_int_size'
 SHOW CLUSTER SETTING sql.defaults.default_int_size
 
-statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to SHOW CLUSTER SETTINGS
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
 SHOW CLUSTER SETTINGS
 
-statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to SHOW CLUSTER SETTINGS
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
 SHOW ALL CLUSTER SETTINGS
 
 user root
@@ -74,6 +74,52 @@ user testuser
 
 statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+user root
+
+statement ok
+ALTER USER testuser NOMODIFYCLUSTERSETTING
+
+statement ok
+ALTER USER testuser VIEWCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+4
+
+query TT
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TT
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+user root
+
+statement ok
+ALTER USER testuser NOVIEWCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW CLUSTER SETTINGS
+
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW ALL CLUSTER SETTINGS
 
 user root
 

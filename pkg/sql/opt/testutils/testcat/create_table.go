@@ -402,7 +402,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		// If no columns are specified, attempt to default to PK, ignoring implicit
 		// columns.
 		idx := targetTable.Index(cat.PrimaryIndex)
-		numImplicitCols := idx.ImplicitPartitioningColumnCount()
+		numImplicitCols := idx.ImplicitColumnCount()
 		referencedColNames = make(
 			tree.NameList,
 			0,

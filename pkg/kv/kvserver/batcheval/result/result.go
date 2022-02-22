@@ -234,10 +234,12 @@ func (p *Result) MergeAndDestroy(q Result) error {
 
 		if p.Replicated.State.TruncatedState == nil {
 			p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
+			p.Replicated.RaftExpectedFirstIndex = q.Replicated.RaftExpectedFirstIndex
 		} else if q.Replicated.State.TruncatedState != nil {
 			return errors.AssertionFailedf("conflicting TruncatedState")
 		}
 		q.Replicated.State.TruncatedState = nil
+		q.Replicated.RaftExpectedFirstIndex = 0
 
 		if q.Replicated.State.GCThreshold != nil {
 			if p.Replicated.State.GCThreshold == nil {

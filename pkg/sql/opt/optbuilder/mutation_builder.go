@@ -1188,7 +1188,7 @@ func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) util.Fa
 // columns, excluding any implicit partitioning columns in the primary index.
 func getExplicitPrimaryKeyOrdinals(tab cat.Table) util.FastIntSet {
 	index := tab.Index(cat.PrimaryIndex)
-	skipCols := index.ImplicitPartitioningColumnCount()
+	skipCols := index.ImplicitColumnCount()
 	var keyOrds util.FastIntSet
 	for i, n := skipCols, index.LaxKeyColumnCount(); i < n; i++ {
 		keyOrds.Add(index.Column(i).Ordinal())
