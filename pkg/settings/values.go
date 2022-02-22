@@ -32,13 +32,12 @@ type Values struct {
 
 	nonSystemTenant bool
 
-	overridesMu struct {
+	defaultOverridesMu struct {
 		syncutil.Mutex
+
 		// defaultOverrides maintains the set of overridden default values (see
 		// Override()).
-		defaultOverrides valuesContainer
-		// setOverrides is the list of slots with values in defaultOverrides.
-		setOverrides map[slotIdx]struct{}
+		defaultOverrides map[slotIdx]interface{}
 	}
 
 	changeMu struct {
@@ -155,37 +154,23 @@ func (sv *Values) setInt64(ctx context.Context, slot slotIdx, newVal int64) {
 	}
 }
 
-// setDefaultOverrideInt64 overrides the default value for the respective
-// setting to newVal.
-func (sv *Values) setDefaultOverrideInt64(slot slotIdx, newVal int64) {
-	sv.overridesMu.Lock()
-	defer sv.overridesMu.Unlock()
-	sv.overridesMu.defaultOverrides.setInt64Val(slot, newVal)
-	sv.setDefaultOverrideLocked(slot)
+// setDefaultOverride overrides the default value for the respective setting to
+// newVal.
+func (sv *Values) setDefaultOverride(slot slotIdx, newVal interface{}) {
+	sv.defaultOverridesMu.Lock()
+	defer sv.defaultOverridesMu.Unlock()
+	if sv.defaultOverridesMu.defaultOverrides == nil {
+		sv.defaultOverridesMu.defaultOverrides = make(map[slotIdx]interface{})
+	}
+	sv.defaultOverridesMu.defaultOverrides[slot] = newVal
 }
 
-// setDefaultOverrideLocked marks the slot as having an overridden default value.
-func (sv *Values) setDefaultOverrideLocked(slot slotIdx) {
-	if sv.overridesMu.setOverrides == nil {
-		sv.overridesMu.setOverrides = make(map[slotIdx]struct{})
-	}
-	sv.overridesMu.setOverrides[slot] = struct{}{}
-}
-
-// getDefaultOverrides checks whether there's a default override for slotIdx-1.
-// If there isn't, the first ret val is false. Otherwise, the first ret val is
-// true, the second is the int64 override and the last is a pointer to the
-// generic value override. Callers are expected to only use the override value
-// corresponding to their setting type.
-func (sv *Values) getDefaultOverride(slot slotIdx) (bool, int64, *atomic.Value) {
-	sv.overridesMu.Lock()
-	defer sv.overridesMu.Unlock()
-	if _, ok := sv.overridesMu.setOverrides[slot]; !ok {
-		return false, 0, nil
-	}
-	return true,
-		sv.overridesMu.defaultOverrides.intVals[slot],
-		&sv.overridesMu.defaultOverrides.genericVals[slot]
+// getDefaultOverrides checks whether there's a default override for slotIdx-1
+// and returns it (or nil if there is no override).
+func (sv *Values) getDefaultOverride(slot slotIdx) interface{} {
+	sv.defaultOverridesMu.Lock()
+	defer sv.defaultOverridesMu.Unlock()
+	return sv.defaultOverridesMu.defaultOverrides[slot]
 }
 
 func (sv *Values) setGeneric(ctx context.Context, slot slotIdx, newVal interface{}) {
