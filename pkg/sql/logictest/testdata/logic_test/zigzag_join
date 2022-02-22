@@ -2,10 +2,6 @@
 # Zigzag join tests on non-inverted indexes.
 # ------------------------------------------------------------------------------
 
-# TODO(ssd): index id test dependency cleanup
-statement ok
-SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false
-
 statement ok
 CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), INDEX bc_idx(b,c));
 INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
@@ -275,17 +271,33 @@ SELECT * FROM a@{FORCE_ZIGZAG} WHERE a = 3 AND c = 'foo'
 statement error FORCE_ZIGZAG index duplicated
 SELECT * FROM a@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[1]} WHERE a = 3 AND b = 7
 
-# Full indexes specified. 6 is a_idx and 7 is b_idx.
+# Some of the test depend on the IDs of the exact indexes. If this
+# test fails, then the tests below may also need to change.
+query TT
+WITH indexes AS (
+    SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes') AS idx
+    FROM system.descriptor AS d
+    JOIN system.namespace AS n
+    ON d.id = n.id
+    WHERE n.name = 'a'
+)
+SELECT idx->>'name', idx->>'id' FROM indexes
+----
+bc_idx  4
+a_idx   7
+b_idx   9
+
+# Full indexes specified. 7 is a_idx and 9 is b_idx.
 statement ok
-SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=[7]} WHERE a = 3 AND b = 7
+SELECT * FROM a@{FORCE_ZIGZAG=[7],FORCE_ZIGZAG=[9]} WHERE a = 3 AND b = 7
 
 # Combining name and id is allowed.
 statement ok
-SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7
+SELECT * FROM a@{FORCE_ZIGZAG=[7],FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7
 
 # Duplicate name and id is not allowed.
 statement error FORCE_ZIGZAG index duplicated
-SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+SELECT * FROM a@{FORCE_ZIGZAG=[7],FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
 
 statement error FORCE_ZIGZAG cannot be specified in conjunction with NO_ZIGZAG_JOIN
 SELECT * FROM a@{FORCE_ZIGZAG,NO_ZIGZAG_JOIN} WHERE a = 3 AND b = 7
