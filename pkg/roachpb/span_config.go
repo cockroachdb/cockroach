@@ -96,6 +96,18 @@ func (c ConstraintsConjunction) String() string {
 	return sb.String()
 }
 
+// String implements the stringer interface.
+func (p ProtectionPolicy) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("{ts: %d", int(p.ProtectedTimestamp.WallTime)))
+	if p.IgnoreIfExcludedFromBackup {
+		sb.WriteString(fmt.Sprintf(",ignore_if_excluded_from_backup: %t",
+			p.IgnoreIfExcludedFromBackup))
+	}
+	sb.WriteString("}")
+	return sb.String()
+}
+
 // TestingDefaultSpanConfig exports the default span config for testing purposes.
 func TestingDefaultSpanConfig() SpanConfig {
 	return SpanConfig{

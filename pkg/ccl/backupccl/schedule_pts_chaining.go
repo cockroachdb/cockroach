@@ -153,6 +153,14 @@ func manageFullBackupPTSChaining(
 		return errors.Wrap(err, "getting spans to protect")
 	}
 
+	// Records written by the backup schedule should be ignored when making GC
+	// decisions on any table that has been marked as `exclude_data_from_backup`.
+	// This ensures that the schedule does not holdup GC on that table span for
+	// the duration of execution.
+	if targetToProtect != nil {
+		targetToProtect.IgnoreIfExcludedFromBackup = true
+	}
+
 	// Protect the target after the EndTime of the current backup. We do not need
 	// to verify this new record as we have a record written by the backup during
 	// planning, already protecting this target after EndTime.

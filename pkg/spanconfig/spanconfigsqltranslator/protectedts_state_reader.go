@@ -73,19 +73,25 @@ func (p *protectedTimestampStateReader) getProtectionPoliciesForSchemaObject(
 func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState ptpb.State) {
 	tenantProtections := make(map[roachpb.TenantID][]roachpb.ProtectionPolicy)
 	for _, record := range ptsState.Records {
+		// TODO(adityamaru): We should never see this post 22.1 since all records
+		// will be written with a target.
+		if record.Target == nil {
+			continue
+		}
+		protectionPolicy := roachpb.ProtectionPolicy{
+			ProtectedTimestamp:         record.Timestamp,
+			IgnoreIfExcludedFromBackup: record.Target.IgnoreIfExcludedFromBackup,
+		}
 		switch t := record.Target.GetUnion().(type) {
 		case *ptpb.Target_Cluster:
-			p.clusterProtections = append(p.clusterProtections,
-				roachpb.ProtectionPolicy{ProtectedTimestamp: record.Timestamp})
+			p.clusterProtections = append(p.clusterProtections, protectionPolicy)
 		case *ptpb.Target_Tenants:
 			for _, tenID := range t.Tenants.IDs {
-				tenantProtections[tenID] = append(tenantProtections[tenID],
-					roachpb.ProtectionPolicy{ProtectedTimestamp: record.Timestamp})
+				tenantProtections[tenID] = append(tenantProtections[tenID], protectionPolicy)
 			}
 		case *ptpb.Target_SchemaObjects:
 			for _, descID := range t.SchemaObjects.IDs {
-				p.schemaObjectProtections[descID] = append(p.schemaObjectProtections[descID],
-					roachpb.ProtectionPolicy{ProtectedTimestamp: record.Timestamp})
+				p.schemaObjectProtections[descID] = append(p.schemaObjectProtections[descID], protectionPolicy)
 			}
 		}
 	}

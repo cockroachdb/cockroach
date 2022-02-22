@@ -369,11 +369,11 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 			rhs := conf.GCPolicy.ProtectionPolicies[j].ProtectedTimestamp
 			return lhs.Less(rhs)
 		})
-		timestamps := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
-		for _, pts := range conf.GCPolicy.ProtectionPolicies {
-			timestamps = append(timestamps, strconv.Itoa(int(pts.ProtectedTimestamp.WallTime)))
+		protectionPolicies := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
+		for _, pp := range conf.GCPolicy.ProtectionPolicies {
+			protectionPolicies = append(protectionPolicies, pp.String())
 		}
-		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
+		diffs = append(diffs, fmt.Sprintf("protection_policies=[%s]", strings.Join(protectionPolicies, " ")))
 	}
 	if conf.ExcludeDataFromBackup != defaultConf.ExcludeDataFromBackup {
 		diffs = append(diffs, fmt.Sprintf("exclude_data_from_backup=%v", conf.ExcludeDataFromBackup))
