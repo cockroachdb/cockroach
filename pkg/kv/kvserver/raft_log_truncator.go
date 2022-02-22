@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -184,19 +185,29 @@ func (pt *pendingTruncation) firstIndexAfterTrunc() uint64 {
 // raftLogTruncator.mu, but the reverse is not permitted.
 
 type raftLogTruncator struct {
-	store storeForTruncator
-	mu    struct {
+	ambientCtx context.Context
+	store      storeForTruncator
+	stopper    *stop.Stopper
+	mu         struct {
 		syncutil.Mutex
 		// Ranges are queued into addRanges and batch dequeued by swapping with
 		// drainRanges. This avoids holding mu for any work proportional to the
 		// number of queued ranges.
 		addRanges, drainRanges map[roachpb.RangeID]struct{}
+		// State for scheduling the goroutine for background enacting of
+		// truncations.
+		runningTruncation  bool
+		queuedDurabilityCB bool
 	}
 }
 
-func makeRaftLogTruncator(store storeForTruncator) *raftLogTruncator {
+func makeRaftLogTruncator(
+	ambientCtx log.AmbientContext, store storeForTruncator, stopper *stop.Stopper,
+) *raftLogTruncator {
 	t := &raftLogTruncator{
-		store: store,
+		ambientCtx: ambientCtx.AnnotateCtx(context.Background()),
+		store:      store,
+		stopper:    stopper,
 	}
 	t.mu.addRanges = make(map[roachpb.RangeID]struct{})
 	t.mu.drainRanges = make(map[roachpb.RangeID]struct{})
@@ -363,9 +374,53 @@ func (r rangesByRangeID) Swap(i, j int) {
 // truncated index become durable in RangeAppliedState.RaftAppliedIndex. This
 // coarseness assumption is important for not wasting much work being done in
 // this method.
-// TODO(sumeer): hook this up to the callback that will be invoked on the
-// Store by the Engine (Pebble). Put this work on a separate goroutine of
-// which there will be at most one running at a time.
+//
+// This method schedules the actual work for asynchronous execution as we need
+// to return quickly, and not call into the engine since that could risk
+// deadlock (see storage.Engine.RegisterFlushCompletedCallback).
+func (t *raftLogTruncator) durabilityAdvancedCallback() {
+	runTruncation := false
+	doneRunning := func() {}
+	t.mu.Lock()
+	if !t.mu.runningTruncation && len(t.mu.addRanges) > 0 {
+		runTruncation = true
+		t.mu.runningTruncation = true
+		doneRunning = func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			if !t.mu.runningTruncation {
+				panic("expected runningTruncation")
+			}
+			t.mu.runningTruncation = false
+		}
+	}
+	if !runTruncation && len(t.mu.addRanges) > 0 {
+		t.mu.queuedDurabilityCB = true
+	}
+	t.mu.Unlock()
+	if !runTruncation {
+		return
+	}
+	if err := t.stopper.RunAsyncTask(t.ambientCtx, "raft-log-truncation",
+		func(ctx context.Context) {
+			defer doneRunning()
+			for {
+				t.durabilityAdvanced(ctx)
+				t.mu.Lock()
+				queued := t.mu.queuedDurabilityCB
+				t.mu.queuedDurabilityCB = false
+				t.mu.Unlock()
+				if !queued {
+					return
+				}
+			}
+		}); err != nil {
+		// Task did not run because stopper is stopped.
+		doneRunning()
+	}
+}
+
+// Synchronously does the work to truncate the queued replicas.
 func (t *raftLogTruncator) durabilityAdvanced(ctx context.Context) {
 	t.mu.Lock()
 	t.mu.addRanges, t.mu.drainRanges = t.mu.drainRanges, t.mu.addRanges
@@ -390,15 +445,23 @@ func (t *raftLogTruncator) durabilityAdvanced(ctx context.Context) {
 	// Sort it for deterministic testing output.
 	sort.Sort(rangesByRangeID(ranges))
 	// Create an engine Reader to provide a safe lower bound on what is durable.
-	//
-	// TODO(sumeer): This is incorrect -- change this reader to only read
-	// durable state after merging
-	// https://github.com/cockroachdb/pebble/pull/1490 and incorporating into
-	// CockroachDB.
-	reader := t.store.getEngine().NewReadOnly(storage.StandardDurability)
+	reader := t.store.getEngine().NewReadOnly(storage.GuaranteedDurability)
 	defer reader.Close()
+	shouldQuiesce := t.stopper.ShouldQuiesce()
+	quiesced := false
 	for _, rangeID := range ranges {
 		t.tryEnactTruncations(ctx, rangeID, reader)
+		// Check if the stopper is quiescing. This isn't strictly necessary, but
+		// if there are a huge number of ranges that need to be truncated, this
+		// will cause us to stop faster.
+		select {
+		case <-shouldQuiesce:
+			quiesced = true
+		default:
+		}
+		if quiesced {
+			break
+		}
 	}
 }
 
@@ -528,7 +591,11 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		r.setTruncationDeltaAndTrusted(trunc.logDeltaBytes, isDeltaTrusted)
 	})
 	// Now remove the enacted truncations. It is the same iteration as the
-	// previous one, but we do it while holding pendingTruncs.mu.
+	// previous one, but we do it while holding pendingTruncs.mu. Note that
+	// since we have updated the raft log size but not yet removed the pending
+	// truncations, a concurrent thread could race and compute a lower post
+	// truncation size. We ignore this race since it seems harmless, and closing
+	// it requires a more complicated replicaForTruncator interface.
 	pendingTruncs.mu.Lock()
 	for i := 0; i <= enactIndex; i++ {
 		pendingTruncs.popLocked()
