@@ -241,36 +241,6 @@ var NoLongerExperimental = map[string]string{
 	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
 }
 
-// AlterChangefeedOptionExpectValues is used to parse alter changefeed options
-// using PlanHookState.TypeAsStringOpts()
-var AlterChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
-	OptAvroSchemaPrefix:         sql.KVStringOptRequireValue,
-	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
-	OptCursor:                   sql.KVStringOptRequireValue,
-	OptEnvelope:                 sql.KVStringOptRequireValue,
-	OptFormat:                   sql.KVStringOptRequireValue,
-	OptFullTableName:            sql.KVStringOptRequireValue,
-	OptKeyInValue:               sql.KVStringOptRequireValue,
-	OptTopicInValue:             sql.KVStringOptRequireValue,
-	OptResolvedTimestamps:       sql.KVStringOptAny,
-	OptMinCheckpointFrequency:   sql.KVStringOptRequireValue,
-	OptUpdatedTimestamps:        sql.KVStringOptRequireValue,
-	OptMVCCTimestamps:           sql.KVStringOptRequireValue,
-	OptDiff:                     sql.KVStringOptRequireValue,
-	OptCompression:              sql.KVStringOptRequireValue,
-	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
-	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
-	OptProtectDataFromGCOnPause: sql.KVStringOptRequireValue,
-	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
-	OptWebhookSinkConfig:        sql.KVStringOptRequireValue,
-	OptWebhookAuthHeader:        sql.KVStringOptRequireValue,
-	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
-	OptOnError:                  sql.KVStringOptRequireValue,
-	OptMetricsScope:             sql.KVStringOptRequireValue,
-	OptVirtualColumns:           sql.KVStringOptRequireValue,
-}
-
-// OptionsWithNoValue are options that do not require a value
-var OptionsWithNoValue = makeStringSet(OptFullTableName, OptKeyInValue,
-	OptTopicInValue, OptUpdatedTimestamps,
-	OptMVCCTimestamps, OptDiff, OptProtectDataFromGCOnPause)
+// AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
+// users to alter
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan)

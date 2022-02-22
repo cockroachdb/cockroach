@@ -1193,6 +1193,7 @@ unreserved_keyword ::=
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
 	| 'UNLOGGED'
+	| 'UNSET'
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
@@ -2369,6 +2370,7 @@ alter_changefeed_cmd ::=
 	'ADD' changefeed_targets
 	| 'DROP' changefeed_targets
 	| 'SET' kv_option_list
+	| 'UNSET' name_list
 
 role_option ::=
 	'CREATEROLE'

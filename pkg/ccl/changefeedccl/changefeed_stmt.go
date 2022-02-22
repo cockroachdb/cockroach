@@ -82,7 +82,6 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	var sinkURIFn func() (string, error)
 	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 	avoidBuffering := false
@@ -95,7 +94,6 @@ func changefeedPlanHook(
 		// over pgwire. The types of these rows are `(topic STRING, key BYTES,
 		// value BYTES)` and they correspond exactly to what would be emitted to
 		// a sink.
-		sinkURIFn = func() (string, error) { return ``, nil }
 		header = colinfo.ResultColumns{
 			{Name: "table", Typ: types.String},
 			{Name: "key", Typ: types.Bytes},
@@ -103,96 +101,21 @@ func changefeedPlanHook(
 		}
 		avoidBuffering = true
 	} else {
-		var err error
-		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
 		header = colinfo.ResultColumns{
 			{Name: "job_id", Typ: types.Int},
 		}
-	}
-
-	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
-	if err != nil {
-		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if err := validateSettings(ctx, p); err != nil {
-			return err
-		}
-
-		sinkURI, err := sinkURIFn()
-		if err != nil {
-			return err
-		}
-		if !unspecifiedSink && sinkURI == `` {
-			// Error if someone specifies an INTO with the empty string. We've
-			// already sent the wrong result column headers.
-			return errors.New(`omit the SINK clause for inline results`)
-		}
-
-		opts, err := optsFn()
+		jr, err := createChangefeedJobRecord(ctx, p, changefeedStmt, jobspb.InvalidJobID, `changefeed.create`)
 		if err != nil {
 			return err
 		}
 
-		for key, value := range opts {
-			// if option is case insensitive then convert its value to lower case
-			if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
-				opts[key] = strings.ToLower(value)
-			}
-		}
-
-		if newFormat, ok := changefeedbase.NoLongerExperimental[opts[changefeedbase.OptFormat]]; ok {
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				`%[1]s is no longer experimental, use %[2]s=%[1]s`,
-				newFormat, changefeedbase.OptFormat),
-			)
-			// Still serialize the experimental_ form for backwards compatibility
-		}
-
-		jobDescription, err := changefeedJobDescription(p, changefeedStmt, sinkURI, opts)
-		if err != nil {
-			return err
-		}
-
-		statementTime := hlc.Timestamp{
-			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
-		}
-		var initialHighWater hlc.Timestamp
-		if cursor, ok := opts[changefeedbase.OptCursor]; ok {
-			asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
-			var err error
-			asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
-			if err != nil {
-				return err
-			}
-			initialHighWater = asOf.Timestamp
-			statementTime = initialHighWater
-		}
-
-		// This grabs table descriptors once to get their ids.
-		targetDescs, err := getTableDescriptors(ctx, p, &changefeedStmt.Targets, statementTime, initialHighWater)
-		if err != nil {
-			return err
-		}
-
-		targets, err := getTargets(ctx, p, targetDescs, opts)
-		if err != nil {
-			return err
-		}
-
-		details := jobspb.ChangefeedDetails{
-			Targets:       targets,
-			Opts:          opts,
-			SinkURI:       sinkURI,
-			StatementTime: statementTime,
-		}
+		details := jr.Details.(jobspb.ChangefeedDetails)
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{},
 			Details: &jobspb.Progress_Changefeed{
@@ -200,96 +123,7 @@ func changefeedPlanHook(
 			},
 		}
 
-		// TODO(dan): In an attempt to present the most helpful error message to the
-		// user, the ordering requirements between all these usage validations have
-		// become extremely fragile and non-obvious.
-		//
-		// - `validateDetails` has to run first to fill in defaults for `envelope`
-		//   and `format` if the user didn't specify them.
-		// - Then `getEncoder` is run to return any configuration errors.
-		// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
-		//   storage sink or webhook sink. Kafka etc have a key and value field in
-		//   each message but cloud storage sinks and webhook sinks don't have
-		//   anywhere to put the key. So if the key is not in the value, then for
-		//   DELETEs there is no way to recover which key was deleted. We could make
-		//   the user explicitly pass this option for every cloud storage sink/
-		//   webhook sink and error if they don't, but that seems user-hostile for
-		//   insufficient reason. We can't do this any earlier, because we might
-		//   return errors about `key_in_value` being incompatible which is
-		//   confusing when the user didn't type that option.
-		//   This is the same for the topic and webhook sink, which uses
-		//   `topic_in_value` to embed the topic in the value by default, since it
-		//   has no other avenue to express the topic.
-		// - Finally, we create a "canary" sink to test sink configuration and
-		//   connectivity. This has to go last because it is strange to return sink
-		//   connectivity errors before we've finished validating all the other
-		//   options. We should probably split sink configuration checking and sink
-		//   connectivity checking into separate methods.
-		//
-		// The only upside in all this nonsense is the tests are decent. I've tuned
-		// this particular order simply by rearranging stuff until the changefeedccl
-		// tests all pass.
-		parsedSink, err := url.Parse(sinkURI)
-		if err != nil {
-			return err
-		}
-		if newScheme, ok := changefeedbase.NoLongerExperimental[parsedSink.Scheme]; ok {
-			parsedSink.Scheme = newScheme // This gets munged anyway when building the sink
-			p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
-				newScheme),
-			)
-		}
-
-		if details, err = validateDetails(details); err != nil {
-			return err
-		}
-
-		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
-			return err
-		}
-
-		if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
-			details.Opts[changefeedbase.OptKeyInValue] = ``
-		}
-		if isWebhookSink(parsedSink) {
-			details.Opts[changefeedbase.OptTopicInValue] = ``
-		}
-
-		if !unspecifiedSink && p.ExecCfg().ExternalIODirConfig.DisableOutbound {
-			return errors.Errorf("Outbound IO is disabled by configuration, cannot create changefeed into %s", parsedSink.Scheme)
-		}
-
-		if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; shouldProtect && !p.ExecCfg().Codec.ForSystemTenant() {
-			return errorutil.UnsupportedWithMultiTenancy(67271)
-		}
-
-		// Feature telemetry
-		telemetrySink := parsedSink.Scheme
-		if telemetrySink == `` {
-			telemetrySink = `sinkless`
-		}
-		telemetry.Count(`changefeed.create.sink.` + telemetrySink)
-		telemetry.Count(`changefeed.create.format.` + details.Opts[changefeedbase.OptFormat])
-		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
-
-		if scope, ok := opts[changefeedbase.OptMetricsScope]; ok {
-			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
-			); err != nil {
-				return errors.Wrapf(err,
-					"use of %q option requires enterprise license.", changefeedbase.OptMetricsScope)
-			}
-
-			if scope == defaultSLIScope {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"%[1]q=%[2]q is the default metrics scope which keeps track of statistics "+
-						"across all changefeeds without explicit label.  "+
-						"If this is an intended behavior, please re-run the statement "+
-						"without specifying %[1]q parameter.  "+
-						"Otherwise, please re-run with a different %[1]q value.",
-					changefeedbase.OptMetricsScope, defaultSLIScope)
-			}
-		}
+		jr.Progress = *progress.GetChangefeed()
 
 		if details.SinkURI == `` {
 			telemetry.Count(`changefeed.create.core`)
@@ -298,23 +132,6 @@ func changefeedPlanHook(
 				telemetry.Count(`changefeed.core.error`)
 			}
 			return changefeedbase.MaybeStripRetryableErrorMarker(err)
-		}
-
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
-		); err != nil {
-			return err
-		}
-
-		telemetry.Count(`changefeed.create.enterprise`)
-
-		// In the case where a user is executing a CREATE CHANGEFEED and is still
-		// waiting for the statement to return, we take the opportunity to ensure
-		// that the user has not made any obvious errors when specifying the sink in
-		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
-		// which will be immediately closed, only to check for errors.
-		if err := validateSink(ctx, p, jobspb.InvalidJobID, details, opts); err != nil {
-			return err
 		}
 
 		// The below block creates the job and if there's an initial scan, protects
@@ -338,25 +155,12 @@ func changefeedPlanHook(
 				deprecatedSpansToProtect := makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
 				targetToProtect := makeTargetToProtect(details.Targets)
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
-				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), statementTime,
+				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), details.StatementTime,
 					deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 			}
 
-			jr := jobs.Record{
-				Description: jobDescription,
-				Username:    p.User(),
-				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-					for _, desc := range targetDescs {
-						sqlDescIDs = append(sqlDescIDs, desc.GetID())
-					}
-					return sqlDescIDs
-				}(),
-				Details:  details,
-				Progress: *progress.GetChangefeed(),
-			}
-
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
+				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
 					return err
 				}
 				if ptr != nil {
@@ -402,6 +206,241 @@ func changefeedPlanHook(
 
 	}
 	return fn, header, nil, avoidBuffering, nil
+}
+
+func createChangefeedJobRecord(
+	ctx context.Context,
+	p sql.PlanHookState,
+	changefeedStmt *tree.CreateChangefeed,
+	jobID jobspb.JobID,
+	telemetryPath string,
+) (*jobs.Record, error) {
+	unspecifiedSink := changefeedStmt.SinkURI == nil
+
+	var sinkURIFn func() (string, error)
+	if unspecifiedSink {
+		sinkURIFn = func() (string, error) { return ``, nil }
+	} else {
+		var err error
+		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateSettings(ctx, p); err != nil {
+		return nil, err
+	}
+
+	sinkURI, err := sinkURIFn()
+	if err != nil {
+		return nil, err
+	}
+	if !unspecifiedSink && sinkURI == `` {
+		// Error if someone specifies an INTO with the empty string. We've
+		// already sent the wrong result column headers.
+		return nil, errors.New(`omit the SINK clause for inline results`)
+	}
+
+	opts, err := optsFn()
+	if err != nil {
+		return nil, err
+	}
+
+	for key, value := range opts {
+		// if option is case insensitive then convert its value to lower case
+		if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
+			opts[key] = strings.ToLower(value)
+		}
+	}
+
+	if newFormat, ok := changefeedbase.NoLongerExperimental[opts[changefeedbase.OptFormat]]; ok {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			`%[1]s is no longer experimental, use %[2]s=%[1]s`,
+			newFormat, changefeedbase.OptFormat),
+		)
+		// Still serialize the experimental_ form for backwards compatibility
+	}
+
+	jobDescription, err := changefeedJobDescription(p, changefeedStmt, sinkURI, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	statementTime := hlc.Timestamp{
+		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+	}
+	var initialHighWater hlc.Timestamp
+	if cursor, ok := opts[changefeedbase.OptCursor]; ok {
+		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
+		var err error
+		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
+		if err != nil {
+			return nil, err
+		}
+		initialHighWater = asOf.Timestamp
+		statementTime = initialHighWater
+	}
+
+	// This grabs table descriptors once to get their ids.
+	targetDescs, err := getTableDescriptors(ctx, p, &changefeedStmt.Targets, statementTime, initialHighWater)
+	if err != nil {
+		return nil, err
+	}
+
+	targets, err := getTargets(ctx, p, targetDescs, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	details := jobspb.ChangefeedDetails{
+		Targets:       targets,
+		Opts:          opts,
+		SinkURI:       sinkURI,
+		StatementTime: statementTime,
+	}
+
+	// TODO(dan): In an attempt to present the most helpful error message to the
+	// user, the ordering requirements between all these usage validations have
+	// become extremely fragile and non-obvious.
+	//
+	// - `validateDetails` has to run first to fill in defaults for `envelope`
+	//   and `format` if the user didn't specify them.
+	// - Then `getEncoder` is run to return any configuration errors.
+	// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
+	//   storage sink or webhook sink. Kafka etc have a key and value field in
+	//   each message but cloud storage sinks and webhook sinks don't have
+	//   anywhere to put the key. So if the key is not in the value, then for
+	//   DELETEs there is no way to recover which key was deleted. We could make
+	//   the user explicitly pass this option for every cloud storage sink/
+	//   webhook sink and error if they don't, but that seems user-hostile for
+	//   insufficient reason. We can't do this any earlier, because we might
+	//   return errors about `key_in_value` being incompatible which is
+	//   confusing when the user didn't type that option.
+	//   This is the same for the topic and webhook sink, which uses
+	//   `topic_in_value` to embed the topic in the value by default, since it
+	//   has no other avenue to express the topic.
+	// - Finally, we create a "canary" sink to test sink configuration and
+	//   connectivity. This has to go last because it is strange to return sink
+	//   connectivity errors before we've finished validating all the other
+	//   options. We should probably split sink configuration checking and sink
+	//   connectivity checking into separate methods.
+	//
+	// The only upside in all this nonsense is the tests are decent. I've tuned
+	// this particular order simply by rearranging stuff until the changefeedccl
+	// tests all pass.
+	parsedSink, err := url.Parse(sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	if newScheme, ok := changefeedbase.NoLongerExperimental[parsedSink.Scheme]; ok {
+		parsedSink.Scheme = newScheme // This gets munged anyway when building the sink
+		p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
+			newScheme),
+		)
+	}
+
+	if details, err = validateDetails(details); err != nil {
+		return nil, err
+	}
+
+	if _, err := getEncoder(details.Opts, details.Targets); err != nil {
+		return nil, err
+	}
+
+	if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
+		details.Opts[changefeedbase.OptKeyInValue] = ``
+	}
+	if isWebhookSink(parsedSink) {
+		details.Opts[changefeedbase.OptTopicInValue] = ``
+	}
+
+	if !unspecifiedSink && p.ExecCfg().ExternalIODirConfig.DisableOutbound {
+		return nil, errors.Errorf("Outbound IO is disabled by configuration, cannot create changefeed into %s", parsedSink.Scheme)
+	}
+
+	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; shouldProtect && !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy(67271)
+	}
+
+	if telemetryPath != `` {
+		// Feature telemetry
+		telemetrySink := parsedSink.Scheme
+		if telemetrySink == `` {
+			telemetrySink = `sinkless`
+		}
+		telemetry.Count(telemetryPath + `.sink.` + telemetrySink)
+		telemetry.Count(telemetryPath + `.format.` + details.Opts[changefeedbase.OptFormat])
+		telemetry.CountBucketed(telemetryPath+`.num_tables`, int64(len(targets)))
+	}
+
+	if scope, ok := opts[changefeedbase.OptMetricsScope]; ok {
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+		); err != nil {
+			return nil, errors.Wrapf(err,
+				"use of %q option requires enterprise license.", changefeedbase.OptMetricsScope)
+		}
+
+		if scope == defaultSLIScope {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"%[1]q=%[2]q is the default metrics scope which keeps track of statistics "+
+					"across all changefeeds without explicit label.  "+
+					"If this is an intended behavior, please re-run the statement "+
+					"without specifying %[1]q parameter.  "+
+					"Otherwise, please re-run with a different %[1]q value.",
+				changefeedbase.OptMetricsScope, defaultSLIScope)
+		}
+	}
+
+	if details.SinkURI == `` {
+		// Jobs should not be created for sinkless changefeeds. However, note that
+		// we create and return a job record for sinkless changefeeds below. This is
+		// because we need the details field to create our sinkless changefeed.
+		// After this job record is returned, we create our forever running sinkless
+		// changefeed, thus ensuring that no job is created for this changefeed as
+		// desired.
+		sinklessRecord := &jobs.Record{
+			Details: details,
+		}
+		return sinklessRecord, nil
+	}
+
+	if err := utilccl.CheckEnterpriseEnabled(
+		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+	); err != nil {
+		return nil, err
+	}
+
+	if telemetryPath != `` {
+		telemetry.Count(telemetryPath + `.enterprise`)
+	}
+
+	// In the case where a user is executing a CREATE CHANGEFEED and is still
+	// waiting for the statement to return, we take the opportunity to ensure
+	// that the user has not made any obvious errors when specifying the sink in
+	// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
+	// which will be immediately closed, only to check for errors.
+	err = validateSink(ctx, p, jobID, details, opts)
+
+	jr := &jobs.Record{
+		Description: jobDescription,
+		Username:    p.User(),
+		DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
+			for _, desc := range targetDescs {
+				sqlDescIDs = append(sqlDescIDs, desc.GetID())
+			}
+			return sqlDescIDs
+		}(),
+		Details: details,
+	}
+
+	return jr, err
 }
 
 func validateSettings(ctx context.Context, p sql.PlanHookState) error {

@@ -10,36 +10,24 @@ package changefeedccl
 
 import (
 	"context"
-	"net/url"
-	"sort"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
 	sql.AddPlanHook("alter changefeed", alterChangefeedPlanHook)
-}
-
-type alterChangefeedOpts struct {
-	AddTargets  []tree.TargetList
-	DropTargets []tree.TargetList
-	Options     []tree.KVOptions
 }
 
 // alterChangefeedPlanHook implements sql.PlanHookFn.
@@ -83,46 +71,94 @@ func alterChangefeedPlanHook(
 			return errors.Errorf(`job %d is not paused`, jobID)
 		}
 
-		targetsChanged := false
-
-		oldStmt, err := parser.ParseOne(job.Payload().Description)
-		if err != nil {
-			return err
-		}
-		createChangefeedStmt, ok := oldStmt.AST.(*tree.CreateChangefeed)
-		if !ok {
-			return errors.Errorf(`could not parse create changefeed statement for job %d`, jobID)
+		// this CREATE CHANGEFEED node will be used to update the existing changefeed
+		newChangefeedStmt := &tree.CreateChangefeed{
+			SinkURI: tree.NewDString(details.SinkURI),
 		}
 
-		optsFn, err := p.TypeAsStringOpts(ctx, createChangefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
-		if err != nil {
-			return err
-		}
-		descriptionOpts, err := optsFn()
-		if err != nil {
-			return err
-		}
+		optionsMap := make(map[string]tree.KVOption, len(details.Opts))
 
-		var opts alterChangefeedOpts
-		for _, cmd := range alterChangefeedStmt.Cmds {
-			switch v := cmd.(type) {
-			case *tree.AlterChangefeedAddTarget:
-				opts.AddTargets = append(opts.AddTargets, v.Targets)
-			case *tree.AlterChangefeedDropTarget:
-				opts.DropTargets = append(opts.DropTargets, v.Targets)
-			case *tree.AlterChangefeedSetOptions:
-				opts.Options = append(opts.Options, v.Options)
+		// pull the options that are set for the existing changefeed
+		for key, value := range details.Opts {
+			// There are some options (e.g. topics) that we set during the creation of
+			// a changefeed, but we do not allow these options to be set by the user.
+			// Hence, we can not include these options in our new CREATE CHANGEFEED
+			// statement.
+			if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
+				continue
 			}
+			existingOpt := tree.KVOption{Key: tree.Name(key)}
+			if len(value) > 0 {
+				existingOpt.Value = tree.NewDString(value)
+			}
+			optionsMap[key] = existingOpt
 		}
 
-		var initialHighWater hlc.Timestamp
 		statementTime := hlc.Timestamp{
 			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 		}
 
-		if opts.Options != nil {
-			for _, options := range opts.Options {
-				optsFn, err := p.TypeAsStringOpts(ctx, options, changefeedbase.AlterChangefeedOptionExpectValues)
+		allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), statementTime)
+		if err != nil {
+			return err
+		}
+		descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
+
+		newDescs := make(map[descpb.ID]*tree.UnresolvedName)
+
+		for descID := range details.Targets {
+			desc := descResolver.DescByID[descID]
+			newDescs[descID] = tree.NewUnresolvedName(desc.GetName())
+		}
+
+		for _, cmd := range alterChangefeedStmt.Cmds {
+			switch v := cmd.(type) {
+			case *tree.AlterChangefeedAddTarget:
+				for _, targetPattern := range v.Targets.Tables {
+					targetName, err := getTargetName(targetPattern)
+					if err != nil {
+						return err
+					}
+					found, _, desc, err := resolver.ResolveExisting(
+						ctx,
+						targetName.ToUnresolvedObjectName(),
+						descResolver,
+						tree.ObjectLookupFlags{},
+						p.CurrentDatabase(),
+						p.CurrentSearchPath(),
+					)
+					if err != nil {
+						return err
+					}
+					if !found {
+						return errors.Errorf(`table %q does not exist`, tree.ErrString(targetPattern))
+					}
+					newDescs[desc.GetID()] = tree.NewUnresolvedName(desc.GetName())
+				}
+			case *tree.AlterChangefeedDropTarget:
+				for _, targetPattern := range v.Targets.Tables {
+					targetName, err := getTargetName(targetPattern)
+					if err != nil {
+						return err
+					}
+					found, _, desc, err := resolver.ResolveExisting(
+						ctx,
+						targetName.ToUnresolvedObjectName(),
+						descResolver,
+						tree.ObjectLookupFlags{},
+						p.CurrentDatabase(),
+						p.CurrentSearchPath(),
+					)
+					if err != nil {
+						return err
+					}
+					if !found {
+						return errors.Errorf(`table %q does not exist`, tree.ErrString(targetPattern))
+					}
+					delete(newDescs, desc.GetID())
+				}
+			case *tree.AlterChangefeedSetOptions:
+				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.ChangefeedOptionExpectValues)
 				if err != nil {
 					return err
 				}
@@ -133,163 +169,53 @@ func alterChangefeedPlanHook(
 				}
 
 				for key, value := range opts {
-					// if option is case insensitive then convert its value to lower case
-					if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
-						opts[key] = strings.ToLower(value)
+					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
+						return errors.Errorf(`invalid option %s`, key)
 					}
-					if _, ok := changefeedbase.OptionsWithNoValue[key]; ok {
-						switch v := changefeedbase.AlterNoValueOptionType(value); v {
-						case changefeedbase.OptUnsetValue:
-							delete(descriptionOpts, key)
-							delete(details.Opts, key)
-						case changefeedbase.OptSetValue:
-							descriptionOpts[key] = ``
-							details.Opts[key] = ``
-						default:
-							return errors.Errorf(
-								`unknown %s: %s, valid values are '%s' and '%s'`, key, value,
-								changefeedbase.OptUnsetValue,
-								changefeedbase.OptSetValue)
-						}
-					} else {
-						descriptionOpts[key] = opts[key]
-						details.Opts[key] = opts[key]
+					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
+						return errors.Errorf(`cannot alter option %s`, key)
 					}
-				}
-
-				if newFormat, ok := changefeedbase.NoLongerExperimental[opts[changefeedbase.OptFormat]]; ok {
-					p.BufferClientNotice(ctx, pgnotice.Newf(
-						`%[1]s is no longer experimental, use %[2]s=%[1]s`,
-						newFormat, changefeedbase.OptFormat),
-					)
-					// Still serialize the experimental_ form for backwards compatibility
-				}
-			}
-
-			// perform validation checks for new options
-			parsedSink, err := url.Parse(details.SinkURI)
-			if err != nil {
-				return err
-			}
-
-			if details, err = validateDetails(details); err != nil {
-				return err
-			}
-
-			if _, err := getEncoder(details.Opts, details.Targets); err != nil {
-				return err
-			}
-
-			if _, ok := details.Opts[changefeedbase.OptKeyInValue]; !ok && (isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink)) {
-				return errors.Errorf(`cannot unset option %s for sink type %s`, changefeedbase.OptKeyInValue, parsedSink.Scheme)
-			}
-
-			if _, ok := details.Opts[changefeedbase.OptTopicInValue]; !ok && isWebhookSink(parsedSink) {
-				return errors.Errorf(`cannot unset option %s for sink type %s`, changefeedbase.OptTopicInValue, parsedSink.Scheme)
-			}
-
-			if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; shouldProtect && !p.ExecCfg().Codec.ForSystemTenant() {
-				return errorutil.UnsupportedWithMultiTenancy(67271)
-			}
-
-			var newOptions tree.KVOptions
-
-			for k, v := range descriptionOpts {
-				if k == changefeedbase.OptWebhookAuthHeader {
-					v = redactWebhookAuthHeader(v)
-				}
-				opt := tree.KVOption{Key: tree.Name(k)}
-				if len(v) > 0 {
-					opt.Value = tree.NewDString(v)
-				}
-				newOptions = append(newOptions, opt)
-			}
-			sort.Slice(newOptions, func(i, j int) bool { return newOptions[i].Key < newOptions[j].Key })
-
-			createChangefeedStmt.Options = newOptions
-		}
-
-		if opts.AddTargets != nil {
-			targetsChanged = true
-			var targetDescs []catalog.Descriptor
-
-			for _, targetList := range opts.AddTargets {
-				descs, err := getTableDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
-				if err != nil {
-					return err
-				}
-				targetDescs = append(targetDescs, descs...)
-			}
-
-			newTargets, err := getTargets(ctx, p, targetDescs, details.Opts)
-			if err != nil {
-				return err
-			}
-			// add old targets
-			for id, target := range details.Targets {
-				newTargets[id] = target
-			}
-			details.Targets = newTargets
-		}
-
-		if opts.DropTargets != nil {
-			targetsChanged = true
-			var targetDescs []catalog.Descriptor
-
-			for _, targetList := range opts.DropTargets {
-				descs, err := getTableDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
-				if err != nil {
-					return err
-				}
-				targetDescs = append(targetDescs, descs...)
-			}
-
-			for _, desc := range targetDescs {
-				if table, isTable := desc.(catalog.TableDescriptor); isTable {
-					if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-						return err
+					opt := tree.KVOption{Key: tree.Name(key)}
+					if len(value) > 0 {
+						opt.Value = tree.NewDString(value)
 					}
-					delete(details.Targets, table.GetID())
+					optionsMap[key] = opt
+				}
+			case *tree.AlterChangefeedUnsetOptions:
+				optKeys := v.Options.ToStrings()
+				for _, key := range optKeys {
+					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
+						return errors.Errorf(`invalid option %s`, key)
+					}
+					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
+						return errors.Errorf(`cannot alter option %s`, key)
+					}
+					delete(optionsMap, key)
 				}
 			}
 		}
 
-		if len(details.Targets) == 0 {
+		if len(newDescs) == 0 {
 			return errors.Errorf("cannot drop all targets for changefeed job %d", jobID)
 		}
 
-		if err := validateSink(ctx, p, jobID, details, details.Opts); err != nil {
+		for _, targetName := range newDescs {
+			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, targetName)
+		}
+
+		for _, val := range optionsMap {
+			newChangefeedStmt.Options = append(newChangefeedStmt.Options, val)
+		}
+
+		jobRecord, err := createChangefeedJobRecord(ctx, p, newChangefeedStmt, jobID, ``)
+		if err != nil {
 			return err
 		}
 
 		newPayload := job.Payload()
-
-		if targetsChanged {
-			var targets tree.TargetList
-			for _, target := range details.Targets {
-				targetName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(target.StatementTimeName))
-				targets.Tables = append(targets.Tables, &targetName)
-			}
-
-			createChangefeedStmt.Targets = targets
-
-			finalDescs, err := getTableDescriptors(ctx, p, &targets, statementTime, initialHighWater)
-			if err != nil {
-				return err
-			}
-
-			newPayload.DescriptorIDs = func() (sqlDescIDs []descpb.ID) {
-				for _, desc := range finalDescs {
-					sqlDescIDs = append(sqlDescIDs, desc.GetID())
-				}
-				return sqlDescIDs
-			}()
-		}
-
-		jobDescription := tree.AsString(createChangefeedStmt)
-
-		newPayload.Description = jobDescription
-		newPayload.Details = jobspb.WrapPayloadDetails(details)
+		newPayload.Details = jobspb.WrapPayloadDetails(jobRecord.Details)
+		newPayload.Description = jobRecord.Description
+		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
 
 		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, lockForUpdate, func(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
@@ -307,11 +233,24 @@ func alterChangefeedPlanHook(
 			return ctx.Err()
 		case resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(jobID)),
-			tree.NewDString(jobDescription),
+			tree.NewDString(jobRecord.Description),
 		}:
 			return nil
 		}
 	}
 
 	return fn, header, nil, false, nil
+}
+
+func getTargetName(targetPattern tree.TablePattern) (*tree.TableName, error) {
+	pattern, err := targetPattern.NormalizeTablePattern()
+	if err != nil {
+		return nil, err
+	}
+	targetName, ok := pattern.(*tree.TableName)
+	if !ok {
+		return nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(targetPattern))
+	}
+
+	return targetName, nil
 }

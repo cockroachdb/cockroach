@@ -868,7 +868,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
-%token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
+%token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIRTUAL VISIBLE VOTERS
 
@@ -4352,6 +4352,12 @@ alter_changefeed_cmd:
   {
     $$.val = &tree.AlterChangefeedSetOptions{
       Options: $2.kvOptions(),
+    }
+  }
+| UNSET name_list
+  {
+    $$.val = &tree.AlterChangefeedUnsetOptions{
+      Options: $2.nameList(),
     }
   }
 
@@ -13767,6 +13773,7 @@ unreserved_keyword:
 | UNCOMMITTED
 | UNKNOWN
 | UNLOGGED
+| UNSET
 | UNSPLIT
 | UNTIL
 | UPDATE
