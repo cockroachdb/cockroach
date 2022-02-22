@@ -268,7 +268,7 @@ func inputReader(
 
 type mergedSST struct {
 	entry   execinfrapb.RestoreSpanEntry
-	iter    storage.SimpleMVCCIterator
+	iter    *storage.ReadAsOfIterator
 	cleanup func()
 }
 
@@ -300,8 +300,10 @@ func (rd *restoreDataProcessor) openSSTs(
 	// channel.
 	sendIters := func(itersToSend []storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
 		multiIter := storage.MakeMultiIterator(itersToSend)
+		readAsOfIter := storage.NewReadAsOfIterator(multiIter, rd.spec.RestoreTime)
 
 		cleanup := func() {
+			readAsOfIter.Close()
 			multiIter.Close()
 			for _, iter := range itersToSend {
 				iter.Close()
@@ -316,7 +318,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 		mSST := mergedSST{
 			entry:   entry,
-			iter:    multiIter,
+			iter:    readAsOfIter,
 			cleanup: cleanup,
 		}
 
@@ -449,31 +451,14 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
 
-	for iter.SeekGE(startKeyMVCC); ; {
+	for iter.SeekGE(startKeyMVCC); ; iter.NextKey() {
 		ok, err := iter.Valid()
 		if err != nil {
 			return summary, err
 		}
-		if !ok {
-			break
-		}
-
-		if !rd.spec.RestoreTime.IsEmpty() {
-			// TODO(dan): If we have to skip past a lot of versions to find the
-			// latest one before args.EndTime, then this could be slow.
-			if rd.spec.RestoreTime.Less(iter.UnsafeKey().Timestamp) {
-				iter.Next()
-				continue
-			}
-		}
 
 		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
 			break
-		}
-		if len(iter.UnsafeValue()) == 0 {
-			// Value is deleted.
-			iter.NextKey()
-			continue
 		}
 
 		key := iter.UnsafeKey()
@@ -481,7 +466,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		key.Key = keyScratch
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
 		value := roachpb.Value{RawBytes: valueScratch}
-		iter.NextKey()
 
 		key.Key, ok, err = kr.RewriteKey(key.Key)
 		if err != nil {
