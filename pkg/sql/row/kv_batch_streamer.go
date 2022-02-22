@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // CanUseStreamer returns whether the kvstreamer.Streamer API should be used.
@@ -91,11 +90,8 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 ) (skip bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
 	result := f.lastResultState.Result
 	if get := result.GetResp; get != nil {
-		if get.IntentValue != nil {
-			return false, nil, nil, errors.AssertionFailedf(
-				"unexpectedly got an IntentValue back from a SQL GetRequest %v", *get.IntentValue,
-			)
-		}
+		// No need to check get.IntentValue since the Streamer guarantees that
+		// it is nil.
 		if get.Value == nil {
 			// Nothing found in this particular response, so we skip it.
 			f.releaseLastResult(ctx)
@@ -114,9 +110,12 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 	if len(f.lastResultState.remainingBatches) == 0 {
 		f.lastResultState.numEmitted++
 	}
-	// Note that scan.Rows and batchResp might be nil when the ScanResponse is
-	// empty, and the caller (the KVFetcher) will skip over it.
-	return false, scan.Rows, batchResp, nil
+	// We're consciously ignoring scan.Rows argument since the Streamer
+	// guarantees to always produce Scan responses using BATCH_RESPONSE format.
+	//
+	// Note that batchResp might be nil when the ScanResponse is empty, and the
+	// caller (the KVFetcher) will skip over it.
+	return false, nil, batchResp, nil
 }
 
 func (f *TxnKVStreamer) releaseLastResult(ctx context.Context) {

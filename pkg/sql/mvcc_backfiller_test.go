@@ -12,14 +12,17 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -153,7 +156,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 	})
 	require.True(t, mergeChunk > 3, fmt.Sprintf("mergeChunk: %d", mergeChunk))
-
 }
 
 // Test index backfill merges are not affected by various operations that run
@@ -356,6 +358,82 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+}
+
+// TestIndexBackfillMergeTxnRetry tests that the merge completes
+// successfully even in the face of a transaction retry.
+func TestIndexBackfillMergeTxnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var retryOnce sync.Once
+	var (
+		s       serverutils.TestServerInterface
+		kvDB    *kv.DB
+		sqlDB   *gosql.DB
+		scratch roachpb.Key
+	)
+	const (
+		maxValue               = 200
+		additionalRowsForMerge = 10
+	)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Ensure that the temp index has work to do.
+			RunBeforeTempIndexMerge: func() {
+				for i := 1; i <= additionalRowsForMerge; i++ {
+					_, err := sqlDB.Exec("INSERT INTO t.test VALUES ($1, $1)", maxValue+i)
+					require.NoError(t, err)
+				}
+			},
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunDuringMergeTxn: func(ctx context.Context, txn *kv.Txn, startKey roachpb.Key, endKey roachpb.Key) error {
+					var err error
+					retryOnce.Do(func() {
+						t.Logf("forcing txn retry for [%s, %s)] using %s", startKey, endKey, scratch)
+						if _, err := txn.Get(ctx, scratch); err != nil {
+							require.NoError(t, err)
+						}
+						require.NoError(t, kvDB.Put(ctx, scratch, "foo"))
+						// This hits WriteTooOldError, but we swallow the error to test the txn failing after the entire txn closure has run.
+						_ = txn.Put(ctx, scratch, "bar")
+
+					})
+					return err
+				},
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	var err error
+	scratch, err = s.ScratchRange()
+	require.NoError(t, err)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;`, maxValue/5)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue+additionalRowsForMerge, 2, func() {
+		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func findCorrespondingTemporaryIndex(
