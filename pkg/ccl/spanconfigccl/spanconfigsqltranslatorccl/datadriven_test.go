@@ -219,9 +219,11 @@ func TestDataDriven(t *testing.T) {
 				var protectTS int
 				d.ScanArgs(t, "record-id", &recordID)
 				d.ScanArgs(t, "ts", &protectTS)
-				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
 
 				jobID := tenant.JobsRegistry().MakeJobID()
+				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
+				target.IgnoreIfExcludedFromBackup = d.HasArg("ignore-if-excluded-from-backup")
+
 				require.NoError(t, tenant.ExecCfg().DB.Txn(ctx,
 					func(ctx context.Context, txn *kv.Txn) (err error) {
 						require.Len(t, recordID, 1,
