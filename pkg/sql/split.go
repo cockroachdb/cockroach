@@ -97,7 +97,8 @@ func getRowKey(
 		colMap.Set(index.GetKeyColumnID(i), i)
 	}
 	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
-	key, _, err := rowenc.EncodePartialIndexKey(index, len(values), colMap, values, prefix)
+	keyCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+	key, _, err := rowenc.EncodePartialIndexKey(keyCols[:len(values)], colMap, values, prefix)
 	if err != nil {
 		return nil, err
 	}
