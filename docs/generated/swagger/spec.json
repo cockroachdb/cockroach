@@ -1751,6 +1751,9 @@
           "type": "string",
           "x-go-name": "SchemaName"
         },
+        "store_id": {
+          "$ref": "#/definitions/StoreID"
+        },
         "table_name": {
           "type": "string",
           "x-go-name": "TableName"
