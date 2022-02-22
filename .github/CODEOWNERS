@@ -94,7 +94,8 @@
 /pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
 
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
-/pkg/ccl/importccl/          @cockroachdb/bulk-prs
+/pkg/sql/importer/           @cockroachdb/bulk-prs
+/pkg/ccl/importerccl/        @cockroachdb/bulk-prs
 /pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
 /pkg/cloud/                  @cockroachdb/bulk-prs
