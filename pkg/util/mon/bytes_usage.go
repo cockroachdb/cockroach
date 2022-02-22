@@ -309,6 +309,14 @@ func NewMonitorWithLimit(
 
 // NewMonitorInheritWithLimit creates a new monitor with a limit local to this
 // monitor with all other attributes inherited from the passed in monitor.
+// Note on metrics and inherited monitors.
+// When using pool to share resource, downstream monitors must not use the
+// same metric objects as pool monitor to avoid reporting the same allocation
+// multiple times. Downstream monitors should use their own metrics as needed
+// by using BytesMonitor.SetMetrics function.
+// Also note that because monitors pre-allocate resources from pool in chunks,
+// those chunks would be reported as used by pool while downstream monitors will
+// not.
 func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *BytesMonitor {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -316,8 +324,8 @@ func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *Byte
 		name,
 		m.resource,
 		limit,
-		m.mu.curBytesCount,
-		m.mu.maxBytesHist,
+		nil, // curCount is not inherited as we don't want to double count allocations
+		nil, // maxHist is not inherited as we don't want to double count allocations
 		m.poolAllocationSize,
 		m.noteworthyUsageBytes,
 		m.settings,
