@@ -1341,6 +1341,12 @@ func protectTimestampForBackup(
 		// Resolve the target that the PTS record will protect as part of this
 		// backup.
 		target := getProtectedTimestampTargetForBackup(backupManifest)
+
+		// Records written by the backup job should be ignored when making GC
+		// decisions on any table that has been marked as
+		// `exclude_data_from_backup`. This ensures that the backup job does not
+		// holdup GC on that table span for the duration of execution.
+		target.IgnoreIfExcludedFromBackup = true
 		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
 			tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
 		err := execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
