@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -104,15 +105,17 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 	if !configRe.MatchString(conf) {
 		t.Fatalf("expected %s to match config regex", conf)
 	}
-	return roachpb.SpanConfig{
-		Constraints: []roachpb.ConstraintsConjunction{
-			{
-				Constraints: []roachpb.Constraint{
-					{
-						Key: conf,
-					},
-				},
+	protectionPolicies := make([]roachpb.ProtectionPolicy, 0, len(conf))
+	for _, c := range conf {
+		protectionPolicies = append(protectionPolicies, roachpb.ProtectionPolicy{
+			ProtectedTimestamp: hlc.Timestamp{
+				WallTime: int64(c),
 			},
+		})
+	}
+	return roachpb.SpanConfig{
+		GCPolicy: roachpb.GCPolicy{
+			ProtectionPolicies: protectionPolicies,
 		},
 	}
 }
@@ -263,8 +266,13 @@ func PrintTarget(t *testing.T, target spanconfig.Target) string {
 // PrintSpanConfig is a helper function that transforms roachpb.SpanConfig into
 // a readable string. The span config is assumed to have been constructed by the
 // ParseSpanConfig helper above.
-func PrintSpanConfig(conf roachpb.SpanConfig) string {
-	return conf.Constraints[0].Constraints[0].Key // see ParseConfig for what a "tagged" roachpb.SpanConfig translates to
+func PrintSpanConfig(config roachpb.SpanConfig) string {
+	// See ParseConfig for what a "tagged" roachpb.SpanConfig translates to.
+	conf := make([]string, 0, len(config.GCPolicy.ProtectionPolicies))
+	for _, policy := range config.GCPolicy.ProtectionPolicies {
+		conf = append(conf, fmt.Sprintf("%c", policy.ProtectedTimestamp.WallTime))
+	}
+	return strings.Join(conf, "")
 }
 
 // PrintSpanConfigRecord is a helper function that transforms
