@@ -165,7 +165,11 @@ func DecodePartitionTuple(
 	}
 
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
-	key, _, err := EncodePartialIndexKey(index, len(allDatums), colMap, allDatums, indexKeyPrefix)
+	keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+	if len(allDatums) > len(keyAndSuffixCols) {
+		return nil, nil, errors.Errorf("encoding too many columns (%d)", len(allDatums))
+	}
+	key, _, err := EncodePartialIndexKey(keyAndSuffixCols[:len(allDatums)], colMap, allDatums, indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
