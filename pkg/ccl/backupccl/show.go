@@ -178,7 +178,9 @@ func (m metadataSSTInfoReader) header() colinfo.ResultColumns {
 
 func (m metadataSSTInfoReader) showBackup(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	store cloud.ExternalStorage,
+	incStore cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
 	incPaths []string,
 	resultsCh chan<- tree.Datums,
@@ -203,7 +205,7 @@ func (m metadataSSTInfoReader) showBackup(
 
 	for _, i := range incPaths {
 		filename = strings.TrimSuffix(i, backupManifestName) + metadataSSTName
-		if err := DebugDumpMetadataSST(ctx, store, filename, enc, push); err != nil {
+		if err := DebugDumpMetadataSST(ctx, incStore, filename, enc, push); err != nil {
 			return err
 		}
 	}
