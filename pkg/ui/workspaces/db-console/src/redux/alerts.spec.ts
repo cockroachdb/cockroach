@@ -148,8 +148,8 @@ describe("alerts", function() {
 
     describe("version mismatch warning", function() {
       it("requires versions to be loaded before displaying", function() {
-        const alert = staggeredVersionWarningSelector(state());
-        assert.isUndefined(alert);
+        const numAlert = staggeredVersionWarningSelector(state());
+        assert.isUndefined(numAlert);
       });
 
       it("does not display when versions match", function() {
@@ -167,8 +167,8 @@ describe("alerts", function() {
             },
           ]),
         );
-        const alert = staggeredVersionWarningSelector(state());
-        assert.isUndefined(alert);
+        const numAlert = staggeredVersionWarningSelector(state());
+        assert.isUndefined(numAlert);
       });
 
       it("displays when mismatch detected and not dismissed", function() {
@@ -190,10 +190,13 @@ describe("alerts", function() {
             },
           ]),
         );
-        const alert = staggeredVersionWarningSelector(state());
-        assert.isObject(alert);
-        assert.equal(alert.level, AlertLevel.WARNING);
-        assert.equal(alert.title, "Staggered Version");
+        const numAlert = staggeredVersionWarningSelector(state());
+        assert.isObject(numAlert);
+        assert.equal(numAlert.level, AlertLevel.WARNING);
+        assert.equal(
+          numAlert.title,
+          "Multiple versions of CockroachDB are running on this cluster.",
+        );
       });
 
       it("does not display if dismissed locally", function() {
@@ -212,8 +215,8 @@ describe("alerts", function() {
           ]),
         );
         dispatch(staggeredVersionDismissedSetting.set(true));
-        const alert = staggeredVersionWarningSelector(state());
-        assert.isUndefined(alert);
+        const numAlert = staggeredVersionWarningSelector(state());
+        assert.isUndefined(numAlert);
       });
 
       it("dismisses by setting local dismissal", function() {
@@ -231,8 +234,28 @@ describe("alerts", function() {
             },
           ]),
         );
-        const alert = staggeredVersionWarningSelector(state());
-        alert.dismiss(dispatch, state);
+        const numAlert = staggeredVersionWarningSelector(state());
+        numAlert.dismiss(dispatch, state);
+        assert.isTrue(staggeredVersionDismissedSetting.selector(state()));
+      });
+
+      it("num alert dismisses by setting local dismissal", function() {
+        dispatch(
+          nodesReducerObj.receiveData([
+            {
+              build_info: {
+                tag: "0.1",
+              },
+            },
+            {
+              build_info: {
+                tag: "0.2",
+              },
+            },
+          ]),
+        );
+        const numAlert = staggeredVersionWarningSelector(state());
+        numAlert.dismiss(dispatch, state);
         assert.isTrue(staggeredVersionDismissedSetting.selector(state()));
       });
     });

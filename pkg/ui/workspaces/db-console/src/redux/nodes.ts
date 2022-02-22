@@ -446,28 +446,50 @@ export const clusterNameSelector = createSelector(
   },
 );
 
-export const versionsSelector = createSelector(
+export const validateNodesSelector = createSelector(
   nodeStatusesSelector,
   livenessByNodeIDSelector,
-  (nodeStatuses, livenessStatusByNodeID) =>
-    _.chain(nodeStatuses)
-      // Ignore nodes for which we don't have any build info.
-      .filter(status => !!status.build_info)
-      // Exclude this node if it's known to be decommissioning.
-      .filter(
-        status =>
-          !status.desc ||
-          !livenessStatusByNodeID[status.desc.node_id] ||
-          !livenessStatusByNodeID[status.desc.node_id].membership ||
-          !(
-            livenessStatusByNodeID[status.desc.node_id].membership !==
-            MembershipStatus.ACTIVE
-          ),
-      )
-      // Collect the surviving nodes' build tags.
-      .map(status => status.build_info.tag)
-      .uniq()
-      .value(),
+  (nodeStatuses, livenessStatusByNodeID) => {
+    if (!nodeStatuses) {
+      return undefined;
+    }
+    return (
+      nodeStatuses
+        // Ignore nodes for which we don't have any build info.
+        .filter(status => !!status.build_info)
+        // Exclude this node if it's known to be decommissioning.
+        .filter(
+          status =>
+            !status.desc ||
+            !livenessStatusByNodeID[status.desc.node_id] ||
+            !livenessStatusByNodeID[status.desc.node_id].membership ||
+            !(
+              livenessStatusByNodeID[status.desc.node_id].membership !==
+              MembershipStatus.ACTIVE
+            ),
+        )
+    );
+  },
+);
+
+export const versionsSelector = createSelector(validateNodesSelector, nodes =>
+  _.chain(nodes)
+    // Collect the surviving nodes' build tags.
+    .map(status => status.build_info.tag)
+    .uniq()
+    .value(),
+);
+
+export const numNodesByVersionsSelector = createSelector(
+  validateNodesSelector,
+  nodes => {
+    if (!nodes) {
+      return new Map();
+    }
+    return new Map(
+      Object.entries(_.countBy(nodes, node => node?.build_info?.tag)),
+    );
+  },
 );
 
 // Select the current build version of the cluster, returning undefined if the
