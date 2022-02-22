@@ -84,6 +84,12 @@ func MakeSplitter(
 	}
 }
 
+// FamilyIDs returns the family IDs into which spans will be split, or nil if
+// splitting is not possible.
+func (s *Splitter) FamilyIDs() []descpb.FamilyID {
+	return s.neededFamilies
+}
+
 // IsNoop returns true if this instance will never split spans.
 func (s *Splitter) IsNoop() bool {
 	return s.numKeyColumns == 0
