@@ -116,14 +116,49 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)
+		// First, we tighten the span bounds by looking for the last key in the
+		// span. The goal of this is to make it more likely that we terminate our
+		// merge process, for workloads that write sequentially into their primary
+		// key space. Note, however, that this can't help with all workloads and we
+		// still depend on merging our temporary index faster than the inbound write
+		// rate.
+		for i := range ibm.spec.Spans {
+			sp := ibm.spec.Spans[i]
+			endKey, err := ibm.findExistingEndKeyForSpan(ctx, sp)
+			if err != nil {
+				return err
+			}
+			var completedSpan roachpb.Span
+			if endKey == nil {
+				// No keys found in this span, we can mark the entire span as
+				// complete.
+				completedSpan = sp
+			} else {
+				// A key was found, mark [endKey, sp.EndKey) as complete. Note that
+				// the endKey returned above is the key after the last found key and
+				// will be used as the exclusive bound below.
+				completedSpan = roachpb.Span{Key: endKey, EndKey: sp.EndKey}
+			}
+			mu.Lock()
+			mu.completedSpans = append(mu.completedSpans, completedSpan)
+			mu.completedSpanIdx = append(mu.completedSpanIdx, ibm.spec.SpanIdx[i])
+			mu.Unlock()
+			ibm.spec.Spans[i].EndKey = endKey
+		}
+		pushProgress()
+
 		// TODO(rui): some room for improvement on single threaded
 		// implementation, e.g. run merge for spec spans in parallel.
 		for i := range ibm.spec.Spans {
 			sp := ibm.spec.Spans[i]
 			idx := ibm.spec.SpanIdx[i]
-
 			key := sp.Key
-			for key != nil {
+			// NB: EndKey will be nil above in the case that this entire span was empty
+			// and already marked completed.
+			if sp.EndKey == nil {
+				continue
+			}
+			for key != nil && !sp.EndKey.Equal(key) {
 				nextKey, err := ibm.Merge(ctx, ibm.evalCtx.Codec, ibm.desc, ibm.spec.TemporaryIndexes[idx], ibm.spec.AddedIndexes[idx],
 					key, sp.EndKey, ibm.spec.ChunkSize)
 				if err != nil {
@@ -210,6 +245,7 @@ func (ibm *IndexBackfillMerger) Merge(
 		if err != nil {
 			return err
 		}
+
 		var deletedCount int
 		txn.AddCommitTrigger(func(ctx context.Context) {
 			log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (nextStart: %s) (commit timestamp: %s)",
@@ -275,6 +311,30 @@ func (ibm *IndexBackfillMerger) Merge(
 	}
 
 	return nextStart, nil
+}
+
+// findExistingEndKeyForSpan reverse scans the given span and returns an new exclusive EndKey for
+// the span. A nil key is returned if the span is empty.
+func (ibm *IndexBackfillMerger) findExistingEndKeyForSpan(
+	ctx context.Context, sp roachpb.Span,
+) (roachpb.Key, error) {
+	lastKey := sp.EndKey
+	err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		kvs, err := txn.ReverseScan(ctx, sp.Key, sp.EndKey, 1)
+		if err != nil {
+			return err
+		}
+		if len(kvs) == 0 {
+			lastKey = nil
+		} else {
+			lastKey = kvs[len(kvs)-1].Key.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lastKey, nil
 }
 
 func mergeEntry(sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error) {

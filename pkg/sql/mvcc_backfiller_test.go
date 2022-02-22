@@ -422,6 +422,57 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSONB);
 	require.NoError(t, err)
 }
 
+// TestIndexMergeEveryChunkWrite tests the case where the workload
+// writes sequentially into the key space faster than the merger and
+// write.
+func TestIndexMergeEveryChunkWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	chunkSize := 10
+	rowsPerWrite := 20
+	rowIdx := 0
+
+	params, _ := tests.CreateTestServerParams()
+	var writeMore func() error
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeMergeChunk: func(key roachpb.Key) error {
+					return writeMore()
+				},
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	var mu syncutil.Mutex
+	writeMore = func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		start := rowIdx
+		rowIdx += rowsPerWrite
+		for i := 1; i <= rowsPerWrite; i++ {
+			if _, err := sqlDB.Exec("UPSERT INTO t.test VALUES ($1, $2)", start+i, start+i); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v int);`)
+	require.NoError(t, err)
+	require.NoError(t, writeMore(), "initial insert")
+	_, err = sqlDB.Exec("CREATE INDEX ON t.test (v)")
+	require.NoError(t, err)
+}
+
 // TestIndexBackfillMergeTxnRetry tests that the merge completes
 // successfully even in the face of a transaction retry.
 func TestIndexBackfillMergeTxnRetry(t *testing.T) {
