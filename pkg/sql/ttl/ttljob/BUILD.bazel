@@ -13,7 +13,6 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
