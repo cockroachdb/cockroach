@@ -177,8 +177,13 @@ func (rh *rowHelper) encodePrimaryIndex(
 			rh.Codec, rh.TableDesc.GetID(), rh.TableDesc.GetPrimaryIndexID(),
 		)
 	}
-	primaryIndexKey, _, err = rowenc.EncodeIndexKey(
-		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+	idx := rh.TableDesc.GetPrimaryIndex()
+	primaryIndexKey, containsNull, err := rowenc.EncodeIndexKey(
+		rh.TableDesc, idx, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix,
+	)
+	if containsNull {
+		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowIndex, values)
+	}
 	return primaryIndexKey, err
 }
 
