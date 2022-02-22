@@ -399,3 +399,93 @@ print-engine-state id=2
 truncated index: 34
 log entries:
 durable applied index: 34
+
+# Test case to ensure that truncator is reading only flushed engine state when
+# deciding to enact truncations.
+create-replica id=3 trunc-index=20 last-log-entry=30
+----
+
+print-engine-state id=3
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29
+durable applied index: 0
+
+# Add two pending truncations.
+add-pending-truncation id=3 first-index=21 trunc-index=22 delta-bytes=-20 sideloaded-bytes=10
+----
+r3.getPendingTruncs
+r3.getTruncatedState
+r3.sideloadedBytesIfTruncatedFromTo(21, 23)
+truncator ranges: 3
+
+add-pending-truncation id=3 first-index=23 trunc-index=24 delta-bytes=-20 sideloaded-bytes=10
+----
+r3.getPendingTruncs
+r3.getTruncatedState
+r3.sideloadedBytesIfTruncatedFromTo(23, 25)
+truncator ranges: 3
+
+print-replica-state id=3
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:23 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# Move RaftAppliedState enough to allow first truncation, but don't flush that
+# change.
+write-raft-applied-index id=3 raft-applied-index=22 no-flush=true
+----
+
+durability-advanced
+----
+acquireReplica(3)
+r3.getTruncatedState
+r3.getPendingTruncs
+r3.getStateLoader
+releaseReplica(3)
+truncator ranges: 3
+
+# Both truncations are still pending.
+print-replica-state id=3
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:23 logDeltaBytes:-30 isDeltaTrusted:true}
+
+print-engine-state id=3
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29
+durable applied index: 22
+
+# Do the same change to RaftAppliedState, but flush this time (we didn't need
+# to rewrite and flushing would have been sufficient).
+write-raft-applied-index id=3 raft-applied-index=22
+----
+
+durability-advanced
+----
+acquireReplica(3)
+r3.getTruncatedState
+r3.getPendingTruncs
+r3.getStateLoader
+r3.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:true
+r3.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+releaseReplica(3)
+truncator ranges: 3
+
+# First truncation is enacted.
+print-replica-state id=3
+----
+truncIndex: 22
+pending:
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:23 logDeltaBytes:-30 isDeltaTrusted:true}
+
+print-engine-state id=3
+----
+truncated index: 22
+log entries: 23, 24, 25, 26, 27, 28, 29
+durable applied index: 22

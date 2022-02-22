@@ -744,10 +744,7 @@ func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 func isLooselyCoupledRaftLogTruncationEnabled(
 	ctx context.Context, settings *cluster.Settings,
 ) bool {
-	// TODO(sumeer): remove the false when hooking up the
-	// raftLogTruncator.durabilityAdvanced and fixing that method to do a
-	// durable read of RaftAppliedIndex.
 	return settings.Version.IsActive(
 		ctx, clusterversion.LooselyCoupledRaftLogTruncation) &&
-		looselyCoupledTruncationEnabled.Get(&settings.SV) && false
+		looselyCoupledTruncationEnabled.Get(&settings.SV)
 }
