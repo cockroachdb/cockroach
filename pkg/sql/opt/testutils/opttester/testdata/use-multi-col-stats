@@ -1,0 +1,44 @@
+exec-ddl
+CREATE TABLE rides (
+    id UUID NOT NULL,
+    city VARCHAR NOT NULL,
+    vehicle_city VARCHAR NULL,
+    rider_id UUID NULL,
+    vehicle_id UUID NULL,
+    start_address VARCHAR NULL,
+    end_address VARCHAR NULL,
+    start_time TIMESTAMP NULL,
+    end_time TIMESTAMP NULL,
+    revenue DECIMAL(10,2) NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+    FAMILY "primary" (id, city, vehicle_city, rider_id, vehicle_id, start_address, end_address, start_time, end_time, revenue),
+    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+)
+----
+
+inject-stats file=inject-stats.json table=rides
+----
+
+opt format=show-stats use-multi-col-stats=true
+SELECT * FROM rides WHERE city = 'rome' and id = '17198184-b24f-4aa8-9933-64a72ff6665f'
+----
+scan rides
+ ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ ├── constraint: /2/1: [/'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f' - /'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f']
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=0.9111111, distinct(1)=0.911111, null(1)=0, avgsize(1)=1, distinct(2)=0.911111, null(2)=0, avgsize(2)=6, distinct(1,2)=0.911111, null(1,2)=0, avgsize(1,2)=8]
+ ├── key: ()
+ └── fd: ()-->(1-10)
+
+opt format=show-stats use-multi-col-stats=false
+SELECT * FROM rides WHERE city = 'rome' and id = '17198184-b24f-4aa8-9933-64a72ff6665f'
+----
+scan rides
+ ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ ├── constraint: /2/1: [/'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f' - /'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f']
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=0.1111111, distinct(1)=0.111111, null(1)=0, avgsize(1)=1, distinct(2)=0.111111, null(2)=0, avgsize(2)=6]
+ ├── key: ()
+ └── fd: ()-->(1-10)
