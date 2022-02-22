@@ -51,6 +51,22 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	// Hoist the constraints to separate clauses because other code assumes that
 	// that is how the commands will look.
 	n.HoistAddColumnConstraints()
+	// Check if an entry exists for the statement type, in which
+	// case. It's either fully or partially supported. Check the commands
+	// first, since we don't want to do extra work in this transaction
+	// only to bail out later.
+	for _, cmd := range n.Cmds {
+		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		if !ok {
+			panic(scerrors.NotImplementedError(cmd))
+		}
+		// Check if partially supported operations are allowed next. If an
+		// operation is not fully supported will not allow it to be run in
+		// the declarative schema changer until its fully supported.
+		if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
+			panic(scerrors.NotImplementedError(cmd))
+		}
+	}
 	tn := n.Table.ToTableName()
 	prefix, tbl := b.ResolveTable(n.Table, ResolveParams{
 		IsExistenceOptional: n.IfExists,
@@ -74,19 +90,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 func alterTableCmd(
 	b BuildCtx, table catalog.TableDescriptor, cmd tree.AlterTableCmd, tn *tree.TableName,
 ) {
-	// Check if an entry exists for the statement type, in which
-	// case its either fully or partially supported.
-	info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-	if !ok {
-		panic(scerrors.NotImplementedError(cmd))
-	}
-	// Check if partially supported operations are allowed next. If an
-	// operation is not fully supported will not allow it to be run in
-	// the declarative schema changer until its fully supported.
-	if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
-		panic(scerrors.NotImplementedError(cmd))
-	}
-
+	info, _ := supportedAlterTableStatements[reflect.TypeOf(cmd)]
 	// Next invoke the callback function, with the concrete types.
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(table),
