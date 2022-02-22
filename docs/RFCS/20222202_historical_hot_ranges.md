@@ -111,7 +111,7 @@ Therefore, a store must be given a budget for the number of ranges that it can p
 
 To provide useful insights, we can dynamically adjust the budget based on the previous sample. If a store previously reported hot ranges relative to the mean, we should increase the store's budget, so that it doesn't need to aggregate as aggressively. Conversely, if a store previously reported cold ranges, we should decrease the store's budget, to keep the sum of all budgets <= 1000.
 
-If the number of non-zero QPS replicas is less than the available budget, the store will use a simple heuristic to aggregate key-adjacent replicas (ranges) until the budget is met. The heuristic tests if the resulting averaged QPS of the aggregated range would be less than the median QPS across the store. The goal is to avoid losing resolution around ranges that are hot, preferring to take away resolution from ranges that are cold.
+If the number of non-zero QPS replicas is greater than the available budget, the store will use a simple heuristic to aggregate key-adjacent replicas (ranges) until the budget is met. The heuristic tests if the resulting averaged QPS of the aggregated range would be less than the median QPS across the store. The goal is to avoid losing resolution around ranges that are hot, preferring to take away resolution from ranges that are cold.
 
 
 Unfortunately, we can't do a more comprehensive cluster-wide aggregation because we are limited to the scope of an individual store. Additionally, we can imagine a scenario where the heuristic is wrong, but if a store sees sustained hotness, we can expect the budgeting algorithm to provide a higher budget to this store during subsequent sampling.
