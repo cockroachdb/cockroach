@@ -307,7 +307,7 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 			// Notably, this means a SQL STRING column is represented the same as a
 			// BYTES column (ditto UUID, etc). We could get the fidelity back by
 			// parsing the SQL schema, which in fact we do in
-			// `importccl.makeDatumFromColOffset`. At the moment, the set of types
+			// `importer.makeDatumFromColOffset`. At the moment, the set of types
 			// used in workloads is limited enough that the users of initial
 			// data/splits are okay with the fidelity loss. So, to avoid the
 			// complexity and the undesirable pkg/sql/parser dep, we simply treat them

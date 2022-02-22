@@ -13,6 +13,7 @@ go_library(
         "metrics.go",
         "progress.go",
         "registry.go",
+        "resultcols.go",
         "schedule_metrics.go",
         "scheduled_job.go",
         "scheduled_job_executor.go",

@@ -525,6 +525,7 @@ func TestLint(t *testing.T) {
 			`[^[:alnum:]]telemetry\.Count\(`,
 			"--",
 			"sql",
+			":!sql/importer",
 		)
 		if err != nil {
 			t.Fatal(err)

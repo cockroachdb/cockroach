@@ -22,11 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,30 +45,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMaxIngestBatchSize(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	testCases := []struct {
-		ingestBatchSize int64
-		maxCommandSize  int64
-		expected        int64
-	}{
-		{ingestBatchSize: 2 << 20, maxCommandSize: 64 << 20, expected: 2 << 20},
-		{ingestBatchSize: 128 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-		{ingestBatchSize: 64 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-		{ingestBatchSize: 63 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-	}
-	for i, testCase := range testCases {
-		st := cluster.MakeTestingClusterSettings()
-		storageccl.IngestBatchSize.Override(ctx, &st.SV, testCase.ingestBatchSize)
-		kvserver.MaxCommandSize.Override(ctx, &st.SV, testCase.maxCommandSize)
-		if e, a := storageccl.MaxIngestBatchSize(st), testCase.expected; e != a {
-			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
-		}
-	}
-}
 
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, oldPrefix, newPrefix []byte,
@@ -172,7 +148,7 @@ func TestIngest(t *testing.T) {
 		// The test normally doesn't trigger the batching behavior, so lower
 		// the threshold to force it.
 		init := func(st *cluster.Settings) {
-			storageccl.IngestBatchSize.Override(ctx, &st.SV, 1)
+			bulk.IngestBatchSize.Override(ctx, &st.SV, 1)
 		}
 		runTestIngest(t, init)
 	})
@@ -265,18 +241,21 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	init(s.ClusterSettings())
 
 	evalCtx := tree.EvalContext{Settings: s.ClusterSettings()}
-	flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
-		ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-			return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-				s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			DB: kvDB,
+			ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+			},
+			Settings: s.ClusterSettings(),
+			Codec:    keys.SystemSQLCodec,
 		},
-		Settings: s.ClusterSettings(),
-		Codec:    keys.SystemSQLCodec,
-	},
 		EvalCtx: &tree.EvalContext{
 			Codec:    keys.SystemSQLCodec,
 			Settings: s.ClusterSettings(),
-		}}
+		},
+	}
 
 	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUserName())
 	if err != nil {
@@ -443,7 +422,8 @@ func newTestingRestoreDataProcessor(
 			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
 				Ctx:     ctx,
 				EvalCtx: evalCtx,
-			}},
+			},
+		},
 		flowCtx: flowCtx,
 		spec:    spec,
 	}

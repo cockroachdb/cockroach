@@ -20,7 +20,7 @@ for target in $targets
 do
     tc_start_block "Bench $target"
     # We need the `test_sharding_strategy` flag or else the benchmarks will
-    # fail to run sharded tests like //pkg/ccl/importccl:importccl_test.
+    # fail to run sharded tests like //pkg/sql/importer:importer_test.
     bazel run --config=test --config=crosslinux --config=ci --test_sharding_strategy=disabled $target -- \
           -test.bench=. -test.benchtime=1ns -test.short -test.run=-
     tc_end_block "Bench $target"

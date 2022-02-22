@@ -218,27 +218,31 @@ message BackupProgress {
 
 }
 
-message RestoreDetails {
-  message DescriptorRewrite {
-    uint32 id = 1 [
-      (gogoproto.customname) = "ID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    uint32 parent_id = 2 [
-      (gogoproto.customname) = "ParentID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    uint32 parent_schema_id = 5 [
-      (gogoproto.customname) = "ParentSchemaID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    // ToExisting represents whether this descriptor is being remapped to a
-    // descriptor that already exists in the cluster.
-    bool to_existing = 3;
+// DescriptorRewrite specifies a remapping from one descriptor ID to another for
+// use in rewritting descriptors themselves or things that reference them such 
+// as is done during RESTORE or IMPORT.
+message DescriptorRewrite {
+  uint32 id = 1 [
+    (gogoproto.customname) = "ID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  uint32 parent_id = 2 [
+    (gogoproto.customname) = "ParentID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  uint32 parent_schema_id = 5 [
+    (gogoproto.customname) = "ParentSchemaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  // ToExisting represents whether this descriptor is being remapped to a
+  // descriptor that already exists in the cluster.
+  bool to_existing = 3;
 
-    // NewDBName represents the new name given to a restored database during a database restore
-    string new_db_name = 4 [(gogoproto.customname) = "NewDBName"];
-  }
+  // NewDBName represents the new name given to a restored database during a database restore
+  string new_db_name = 4 [(gogoproto.customname) = "NewDBName"];
+}
+
+message RestoreDetails {
   message BackupLocalityInfo {
     map<string, string> uris_by_original_locality_kv = 1 [(gogoproto.customname) = "URIsByOriginalLocalityKV"];
   }

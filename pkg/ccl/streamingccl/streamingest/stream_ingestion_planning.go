@@ -142,7 +142,7 @@ func ingestionPlanHook(
 		return nil
 	}
 
-	return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+	return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 }
 
 func init() {
