@@ -68,7 +68,7 @@ func (f *FloatSetting) Override(ctx context.Context, sv *Values, v float64) {
 	if err := f.set(ctx, sv, v); err != nil {
 		panic(err)
 	}
-	sv.setDefaultOverrideInt64(f.slot, int64(math.Float64bits(v)))
+	sv.setDefaultOverride(f.slot, v)
 }
 
 // Validate that a value conforms with the validation function.
@@ -91,11 +91,10 @@ func (f *FloatSetting) set(ctx context.Context, sv *Values, v float64) error {
 
 func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(f.slot)
-	if ok {
+	if val := sv.getDefaultOverride(f.slot); val != nil {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = f.set(ctx, sv, math.Float64frombits(uint64((val))))
+		_ = f.set(ctx, sv, val.(float64))
 		return
 	}
 	if err := f.set(ctx, sv, f.defaultValue); err != nil {
