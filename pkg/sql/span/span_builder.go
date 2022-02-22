@@ -224,8 +224,7 @@ func (s *Builder) UnconstrainedSpans() (roachpb.Spans, error) {
 // appendSpansFromConstraintSpan converts a constraint.Span to one or more
 // roachpb.Spans and appends them to the provided spans. It appends multiple
 // spans in the case that multiple, non-adjacent column families should be
-// scanned. The forDelete parameter indicates whether these spans will be used
-// for row deletion.
+// scanned.
 func (s *Builder) appendSpansFromConstraintSpan(
 	appendTo roachpb.Spans, cs *constraint.Span, splitter Splitter,
 ) (roachpb.Spans, error) {
@@ -261,9 +260,8 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		return rowenc.SplitRowKeyIntoFamilySpans(appendTo, span.Key, splitter.neededFamilies), nil
 	}
 
-	// We need to advance the end key if it is inclusive or the index is
-	// inverted.
-	if cs.EndBoundary() == constraint.IncludeBoundary || s.index.GetType() == descpb.IndexDescriptor_INVERTED {
+	// We need to advance the end key if it is inclusive.
+	if cs.EndBoundary() == constraint.IncludeBoundary {
 		span.EndKey = span.EndKey.PrefixEnd()
 	}
 
