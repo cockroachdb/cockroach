@@ -2010,6 +2010,7 @@ type subtestDetails struct {
 }
 
 func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
+	fmt.Printf("STARTING UP TEST %s %s\n", path, config.name)
 	subtests, err := fetchSubtests(path)
 	if err != nil {
 		return err
