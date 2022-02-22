@@ -778,6 +778,10 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		secondStore, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		for _, server := range tc.Servers {
 			store, err := server.Stores().GetStore(server.GetFirstStoreID())
@@ -853,6 +857,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		truncArgs.Key = startKey
 		if _, err := kv.SendWrapped(ctx, firstStore.TestSender(), truncArgs); err != nil {
 			t.Fatal(err)
+		}
+		for _, store := range []*kvserver.Store{firstStore, secondStore} {
+			_, err := store.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitForTruncationForTesting(t, repl, index+1)
 		}
 
 		// Remove the partition. Snapshot should follow.
