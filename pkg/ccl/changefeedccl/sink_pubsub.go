@@ -139,7 +139,10 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
 func MakePubsubSink(
-	ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
+	ctx context.Context,
+	u *url.URL,
+	opts map[string]string,
+	targets []jobspb.ChangefeedTargetSpecification,
 ) (Sink, error) {
 
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
@@ -294,19 +297,19 @@ func (p *gcpPubsubClient) getTopicClient(topicID descpb.ID) (*pubsub.Topic, erro
 }
 
 func (p *pubsubSink) getTopicsMap(
-	targets jobspb.ChangefeedTargets, pubsubTopicName string,
+	targets []jobspb.ChangefeedTargetSpecification, pubsubTopicName string,
 ) map[descpb.ID]*topicStruct {
 	topics := make(map[descpb.ID]*topicStruct)
 
 	//creates a topic for each target
-	for id, target := range targets {
+	for _, target := range targets {
 		var topicName string
 		if pubsubTopicName != "" {
 			topicName = pubsubTopicName
 		} else {
 			topicName = target.StatementTimeName
 		}
-		topics[id] = &topicStruct{topicName: topicName}
+		topics[target.TableID] = &topicStruct{topicName: topicName}
 	}
 	return topics
 }

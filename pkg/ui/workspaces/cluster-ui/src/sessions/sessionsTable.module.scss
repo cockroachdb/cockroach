@@ -23,6 +23,17 @@
   color: $colors--link;
 }
 
+.cl-table__col-query-text {
+  font-family: $font-family--monospace;
+  font-size: 12px;
+  display: inline-block;
+  max-width: 400px;
+  div {
+    font-size: $font-size--small;
+    @include line-clamp(2);
+  }
+}
+
 .cl-table__col-session {
   color: $colors--neutral-8;
   font-family: $font-family--base;
@@ -40,6 +51,20 @@
       color: $colors--link;
       text-decoration: underline;
     }
+  }
+}
+
+.session-status-icon {
+  &__active {
+    height: 10px;
+    width: 20px;
+    fill: $colors--primary-green-3;
+  }
+
+  &__idle {
+    height: 10px;
+    width: 20px;
+    fill: $colors--functional-orange-3;
   }
 }
 
