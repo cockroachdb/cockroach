@@ -117,6 +117,10 @@ func (p *planner) SetClusterSetting(
 		}
 	}
 
+	if st.OverridesInformer != nil && st.OverridesInformer.IsOverridden(name) {
+		return nil, errors.Errorf("cluster setting '%s' is currently overridden by the operator", name)
+	}
+
 	var value tree.TypedExpr
 	if n.Value != nil {
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.

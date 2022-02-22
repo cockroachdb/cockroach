@@ -54,6 +54,19 @@ type Settings struct {
 	// Cache can be used for arbitrary caching, e.g. to cache decoded
 	// enterprises licenses for utilccl.CheckEnterpriseEnabled().
 	Cache sync.Map
+
+	// OverridesInformer can be nil.
+	OverridesInformer OverridesInformer
+}
+
+// OverridesInformer is an interface that can be used to figure out if a setting
+// is currently being overridden by the host cluster (only possible for
+// secondary tenants).
+//
+// TODO(radu): move this functionality into settings.Values, provide a way to
+// obtain it along with the current value consistently.
+type OverridesInformer interface {
+	IsOverridden(settingName string) bool
 }
 
 // TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
