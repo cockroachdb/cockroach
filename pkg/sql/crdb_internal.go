@@ -1461,10 +1461,14 @@ CREATE TABLE crdb_internal.cluster_settings (
 			if err != nil {
 				return err
 			}
-			if !hasModify {
+			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+			if err != nil {
+				return err
+			}
+			if !hasModify && !hasView {
 				return pgerror.Newf(pgcode.InsufficientPrivilege,
-					"only users with the %s privilege are allowed to read "+
-						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING)
+					"only users with either %s or %s privileges are allowed to read "+
+						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
 			}
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
