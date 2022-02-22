@@ -12,7 +12,6 @@ package span
 
 import (
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,28 +39,17 @@ type Builder struct {
 	alloc     tree.DatumAlloc
 }
 
-var builderPool = sync.Pool{
-	New: func() interface{} { return &Builder{} },
-}
-
-// MakeBuilder creates a Builder for a table and index. The returned object must
-// be Release()d when no longer needed.
-func MakeBuilder(
+// Init initializes a Builder with a table and index.
+func (s *Builder) Init(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 	index catalog.Index,
-) *Builder {
-	s := builderPool.Get().(*Builder)
-	*s = Builder{
-		evalCtx:          evalCtx,
-		codec:            codec,
-		keyAndPrefixCols: table.IndexFetchSpecKeyAndSuffixColumns(index),
-
-		KeyPrefix: rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID()),
-	}
-
-	return s
+) {
+	s.evalCtx = evalCtx
+	s.codec = codec
+	s.keyAndPrefixCols = table.IndexFetchSpecKeyAndSuffixColumns(index)
+	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
 }
 
 // SpanFromEncDatums encodes a span with len(values) constraint columns from the
@@ -382,10 +370,4 @@ func (s *Builder) generateInvertedSpanKey(
 
 	span, _, err := s.SpanFromEncDatums(scratchRow[:keyLen])
 	return span.Key, err
-}
-
-// Release implements the execinfra.Releasable interface.
-func (s *Builder) Release() {
-	*s = Builder{}
-	builderPool.Put(s)
 }

@@ -100,7 +100,8 @@ func TestSpanAssembler(t *testing.T) {
 							oracleSource.Init(ctx)
 							converter := colconv.NewAllVecToDatumConverter(len(typs))
 
-							builder := span.MakeBuilder(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
+							var builder span.Builder
+							builder.Init(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
 							splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
 
 							colBuilder := NewColSpanAssembler(
@@ -143,7 +144,7 @@ func TestSpanAssembler(t *testing.T) {
 									}
 									rows[i] = row
 								}
-								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, builder, splitter, rows, len(typs))...)
+								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, &builder, splitter, rows, len(typs))...)
 							}
 
 							if len(oracleSpans) != len(testSpans) {

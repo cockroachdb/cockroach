@@ -166,7 +166,7 @@ type invertedJoiner struct {
 		seenMatch bool
 	}
 
-	spanBuilder           *span.Builder
+	spanBuilder           span.Builder
 	outputContinuationCol bool
 
 	scanStats execinfra.ScanStats
@@ -337,7 +337,7 @@ func newInvertedJoiner(
 		ij.fetcher = fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
+	ij.spanBuilder.Init(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
 
 	// Initialize memory monitors and row container for index rows.
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -768,9 +768,6 @@ func (ij *invertedJoiner) close() {
 		ij.MemMonitor.Stop(ij.Ctx)
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx)
-		}
-		if ij.spanBuilder != nil {
-			ij.spanBuilder.Release()
 		}
 	}
 }
