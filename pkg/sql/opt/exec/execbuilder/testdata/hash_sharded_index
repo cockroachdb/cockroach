@@ -996,3 +996,140 @@ vectorized: true
                       row 0, expr 1: 222
                       row 1, expr 0: 333
                       row 1, expr 1: 444
+
+subtest test_fk_constraint
+
+statement ok
+CREATE TABLE t_parent_pk (
+  id INT PRIMARY KEY USING HASH
+)
+
+statement ok
+CREATE TABLE t_child_pk (
+  id INT PRIMARY KEY,
+  pid INT REFERENCES t_parent_pk (id),
+  FAMILY fam_0 (id, pid)
+);
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_child_pk VALUES (123, 321);
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: t_child_pk(id, pid)
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2)
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             columns: (column1, column2)
+│             size: 2 columns, 1 row
+│             row 0, expr 0: 123
+│             row 0, expr 1: 321
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • project
+            │ columns: (pid)
+            │ estimated row count: 0 (missing stats)
+            │
+            └── • lookup join (anti)
+                │ columns: (crdb_internal_id_shard_16_eq, pid)
+                │ table: t_parent_pk@t_parent_pk_pkey
+                │ equality: (crdb_internal_id_shard_16_eq, pid) = (crdb_internal_id_shard_16,id)
+                │ equality cols are key
+                │
+                └── • render
+                    │ columns: (crdb_internal_id_shard_16_eq, pid)
+                    │ estimated row count: 1
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render pid: column2
+                    │
+                    └── • project
+                        │ columns: (column2)
+                        │ estimated row count: 1
+                        │
+                        └── • scan buffer
+                              columns: (column1, column2)
+                              label: buffer 1
+
+statement ok
+CREATE TABLE t_parent_sec (
+  id INT PRIMARY KEY,
+  real_id INT,
+  FAMILY fam_0 (id, real_id)
+)
+
+statement ok
+CREATE UNIQUE INDEX idx_t_parent_sec_real_id ON t_parent_sec (real_id) USING HASH
+
+statement ok
+CREATE TABLE t_child_sec (
+  id INT PRIMARY KEY,
+  pid INT REFERENCES t_parent_sec (real_id),
+  FAMILY fam_0 (id, pid)
+);
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_child_sec VALUES (123, 321);
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: t_child_sec(id, pid)
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2)
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             columns: (column1, column2)
+│             size: 2 columns, 1 row
+│             row 0, expr 0: 123
+│             row 0, expr 1: 321
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • project
+            │ columns: (pid)
+            │ estimated row count: 0 (missing stats)
+            │
+            └── • lookup join (anti)
+                │ columns: (crdb_internal_real_id_shard_16_eq, pid)
+                │ table: t_parent_sec@idx_t_parent_sec_real_id
+                │ equality: (crdb_internal_real_id_shard_16_eq, pid) = (crdb_internal_real_id_shard_16,real_id)
+                │ equality cols are key
+                │
+                └── • render
+                    │ columns: (crdb_internal_real_id_shard_16_eq, pid)
+                    │ estimated row count: 1
+                    │ render crdb_internal_real_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render pid: column2
+                    │
+                    └── • project
+                        │ columns: (column2)
+                        │ estimated row count: 1
+                        │
+                        └── • scan buffer
+                              columns: (column1, column2)
+                              label: buffer 1
