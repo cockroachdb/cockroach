@@ -717,7 +717,7 @@ type Store struct {
 	replicaGCQueue  *replicaGCQueue    // Replica GC queue
 	raftLogQueue    *raftLogQueue      // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
-	// via raft, when they are safe.
+	// via raft, when they are safe. Created in Store.Start.
 	raftTruncator      *raftLogTruncator
 	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
 	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
@@ -1165,7 +1165,6 @@ func NewStore(
 		)
 	}
 	s.replRankings = newReplicaRankings()
-	s.raftTruncator = makeRaftLogTruncator((*storeForTruncatorImpl)(s))
 
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
@@ -1831,6 +1830,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		RangeDescriptorCache: intentResolverRangeCache,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
+
+	// Create the raft log truncator and register the callback.
+	s.raftTruncator = makeRaftLogTruncator(s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper)
+	{
+		truncator := s.raftTruncator
+		s.engine.RegisterFlushCompletedCallback(func() {
+			truncator.durabilityAdvancedCallback()
+		})
+	}
 
 	// Create the recovery manager.
 	s.recoveryMgr = txnrecovery.NewManager(
