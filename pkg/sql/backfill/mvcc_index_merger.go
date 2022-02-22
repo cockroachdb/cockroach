@@ -249,6 +249,14 @@ func (ibm *IndexBackfillMerger) Merge(
 		}
 
 		nextStart = kvs[len(kvs)-1].Key.Next()
+
+		if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
+			if knobs != nil && knobs.RunDuringMergeTxn != nil {
+				if err := knobs.RunDuringMergeTxn(ctx, txn, startKey, endKey); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	})
 
@@ -304,6 +312,8 @@ type IndexBackfillMergerTestingKnobs struct {
 	// RunBeforeMergeChunk is called once before the merge of each chunk. It is
 	// called with starting key of the chunk.
 	RunBeforeMergeChunk func(startKey roachpb.Key) error
+
+	RunDuringMergeTxn func(ctx context.Context, txn *kv.Txn, startKey roachpb.Key, endKey roachpb.Key) error
 
 	// PushesProgressEveryChunk forces the process to push the merge process after
 	// every chunk.
