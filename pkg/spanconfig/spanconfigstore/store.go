@@ -37,13 +37,11 @@ var EnabledSetting = settings.RegisterBoolSetting(
 // update the span configuration state. Internally, it makes use of an interval
 // tree based spanConfigStore to store non-overlapping span configurations that
 // target keyspans. It's safe for concurrent use.
-//
-// TODO(arul): In the future we'll teach this thing about system span
-// configurations as well.
 type Store struct {
 	mu struct {
 		syncutil.RWMutex
-		spanConfigStore *spanConfigStore
+		spanConfigStore       *spanConfigStore
+		systemSpanConfigStore *systemSpanConfigStore
 	}
 
 	// TODO(irfansharif): We're using a static fall back span config here, we
@@ -63,6 +61,7 @@ var _ spanconfig.Store = &Store{}
 func New(fallback roachpb.SpanConfig) *Store {
 	s := &Store{fallback: fallback}
 	s.mu.spanConfigStore = newSpanConfigStore()
+	s.mu.systemSpanConfigStore = newSystemSpanConfigStore()
 	return s
 }
 
@@ -91,9 +90,9 @@ func (s *Store) GetSpanConfigForKey(
 		return roachpb.SpanConfig{}, err
 	}
 	if !found {
-		return s.fallback, nil
+		conf = s.fallback
 	}
-	return conf, nil
+	return s.mu.systemSpanConfigStore.combine(key, conf)
 }
 
 // Apply is part of the spanconfig.StoreWriter interface.
@@ -114,6 +113,7 @@ func (s *Store) Copy(ctx context.Context) *Store {
 
 	clone := New(s.fallback)
 	clone.mu.spanConfigStore = s.mu.spanConfigStore.copy(ctx)
+	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.copy()
 	return clone
 }
 
@@ -127,10 +127,15 @@ func (s *Store) applyInternal(
 	// a set of updates at once instead of individually, to correctly construct
 	// the deleted/added slices.
 	spanStoreUpdates := make([]spanconfig.Update, 0, len(updates))
+	systemSpanConfigStoreUpdates := make([]spanconfig.Update, 0, len(updates))
 	for _, update := range updates {
-		// TODO(arul): We'll hijack system span configurations here.
-		if update.Target.IsSpanTarget() {
+		switch {
+		case update.Target.IsSpanTarget():
 			spanStoreUpdates = append(spanStoreUpdates, update)
+		case update.Target.IsSystemTarget():
+			systemSpanConfigStoreUpdates = append(systemSpanConfigStoreUpdates, update)
+		default:
+			panic("unknown target type")
 		}
 	}
 	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(dryrun, spanStoreUpdates...)
@@ -148,6 +153,15 @@ func (s *Store) applyInternal(
 			Config: entry.config,
 		})
 	}
+
+	deletedSystemTargets, addedSystemSpanConfigRecords, err := s.mu.systemSpanConfigStore.apply(
+		systemSpanConfigStoreUpdates...,
+	)
+	for _, systemTarget := range deletedSystemTargets {
+		deleted = append(deleted, spanconfig.MakeTargetFromSystemTarget(systemTarget))
+	}
+	added = append(added, addedSystemSpanConfigRecords...)
+
 	return deleted, added, nil
 }
 
@@ -155,6 +169,10 @@ func (s *Store) applyInternal(
 func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	// System targets are considered to be less than span targets.
+	if err := s.mu.systemSpanConfigStore.iterate(f); err != nil {
+		return err
+	}
 	return s.mu.spanConfigStore.forEachOverlapping(
 		keys.EverythingSpan,
 		func(s spanConfigEntry) error {

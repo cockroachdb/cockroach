@@ -33,7 +33,7 @@ type SystemTarget struct {
 	//
 	// Secondary tenants are only allowed to target their own keyspace. The host
 	// tenant may use this field to target a specific secondary tenant.
-	targetTenantID *roachpb.TenantID
+	targetTenantID roachpb.TenantID
 
 	// systemTargetType indicates the type of the system target. targetTenantID
 	// can only be set if the system target is specific.
@@ -71,7 +71,7 @@ func MakeTenantKeyspaceTarget(
 ) (SystemTarget, error) {
 	t := SystemTarget{
 		sourceTenantID:   sourceTenantID,
-		targetTenantID:   &targetTenantID,
+		targetTenantID:   targetTenantID,
 		systemTargetType: SystemTargetTypeSpecificTenantKeyspace,
 	}
 	return t, t.validate()
@@ -85,19 +85,19 @@ func makeSystemTargetFromProto(proto *roachpb.SystemSpanConfigTarget) (SystemTar
 	case proto.IsSpecificTenantKeyspaceTarget():
 		t = SystemTarget{
 			sourceTenantID:   proto.SourceTenantID,
-			targetTenantID:   &proto.Type.GetSpecificTenantKeyspace().TenantID,
+			targetTenantID:   proto.Type.GetSpecificTenantKeyspace().TenantID,
 			systemTargetType: SystemTargetTypeSpecificTenantKeyspace,
 		}
 	case proto.IsEntireKeyspaceTarget():
 		t = SystemTarget{
 			sourceTenantID:   proto.SourceTenantID,
-			targetTenantID:   nil,
+			targetTenantID:   roachpb.TenantID{},
 			systemTargetType: SystemTargetTypeEntireKeyspace,
 		}
 	case proto.IsAllTenantKeyspaceTargetsSetTarget():
 		t = SystemTarget{
 			sourceTenantID:   proto.SourceTenantID,
-			targetTenantID:   nil,
+			targetTenantID:   roachpb.TenantID{},
 			systemTargetType: SystemTargetTypeAllTenantKeyspaceTargetsSet,
 		}
 	default:
@@ -114,7 +114,7 @@ func (st SystemTarget) toProto() *roachpb.SystemSpanConfigTarget {
 	case SystemTargetTypeAllTenantKeyspaceTargetsSet:
 		systemTargetType = roachpb.NewAllTenantKeyspaceTargetsSetTargetType()
 	case SystemTargetTypeSpecificTenantKeyspace:
-		systemTargetType = roachpb.NewSpecificTenantKeyspaceTargetType(*st.targetTenantID)
+		systemTargetType = roachpb.NewSpecificTenantKeyspaceTargetType(st.targetTenantID)
 	default:
 		panic("unknown system target type")
 	}
@@ -189,7 +189,7 @@ func (st SystemTarget) encode() roachpb.Span {
 func (st SystemTarget) validate() error {
 	switch st.systemTargetType {
 	case SystemTargetTypeAllTenantKeyspaceTargetsSet:
-		if st.targetTenantID != nil {
+		if !st.targetTenantID.Equal(roachpb.TenantID{}) {
 			return errors.AssertionFailedf(
 				"targetTenantID must be unset when targeting everything installed on tenants",
 			)
@@ -198,16 +198,16 @@ func (st SystemTarget) validate() error {
 		if st.sourceTenantID != roachpb.SystemTenantID {
 			return errors.AssertionFailedf("only the host tenant is allowed to target the entire keyspace")
 		}
-		if st.targetTenantID != nil {
+		if !st.targetTenantID.Equal(roachpb.TenantID{}) {
 			return errors.AssertionFailedf("malformed system target for entire keyspace; targetTenantID set")
 		}
 	case SystemTargetTypeSpecificTenantKeyspace:
-		if st.targetTenantID == nil {
+		if st.targetTenantID.Equal(roachpb.TenantID{}) {
 			return errors.AssertionFailedf(
 				"malformed system target for specific tenant keyspace; targetTenantID unset",
 			)
 		}
-		if st.sourceTenantID != roachpb.SystemTenantID && st.sourceTenantID != *st.targetTenantID {
+		if st.sourceTenantID != roachpb.SystemTenantID && st.sourceTenantID != st.targetTenantID {
 			return errors.AssertionFailedf(
 				"secondary tenant %s cannot target another tenant with ID %s",
 				st.sourceTenantID,
@@ -222,7 +222,9 @@ func (st SystemTarget) validate() error {
 
 // isEmpty returns true if the receiver is empty.
 func (st SystemTarget) isEmpty() bool {
-	return st.sourceTenantID.Equal(roachpb.TenantID{}) && st.targetTenantID.Equal(nil)
+	return st.sourceTenantID.Equal(roachpb.TenantID{}) &&
+		st.targetTenantID.Equal(roachpb.TenantID{}) &&
+		st.systemTargetType == 0 // unset
 }
 
 // less returns true if the receiver is considered less than the supplied
@@ -258,7 +260,9 @@ func (st SystemTarget) less(ot SystemTarget) bool {
 
 // equal returns true iff the receiver is equal to the supplied system target.
 func (st SystemTarget) equal(ot SystemTarget) bool {
-	return st.sourceTenantID.Equal(ot.sourceTenantID) && st.targetTenantID.Equal(ot.targetTenantID)
+	return st.sourceTenantID.Equal(ot.sourceTenantID) &&
+		st.targetTenantID.Equal(ot.targetTenantID) &&
+		st.systemTargetType == ot.systemTargetType
 }
 
 // String returns a pretty printed version of a system target.
