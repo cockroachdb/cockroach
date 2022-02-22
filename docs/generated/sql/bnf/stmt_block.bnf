@@ -1103,6 +1103,7 @@ unreserved_keyword ::=
 	| 'NOSQLLOGIN'
 	| 'NOVIEWACTIVITY'
 	| 'NOVIEWACTIVITYREDACTED'
+	| 'NOVIEWCLUSTERSETTING'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -1270,6 +1271,7 @@ unreserved_keyword ::=
 	| 'VIEW'
 	| 'VIEWACTIVITY'
 	| 'VIEWACTIVITYREDACTED'
+	| 'VIEWCLUSTERSETTING'
 	| 'VISIBLE'
 	| 'VOTERS'
 	| 'WITHIN'
@@ -2497,6 +2499,8 @@ role_option ::=
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'SQLLOGIN'
 	| 'NOSQLLOGIN'
+	| 'VIEWCLUSTERSETTING'
+	| 'NOVIEWCLUSTERSETTING'
 	| password_clause
 	| valid_until_clause
 
