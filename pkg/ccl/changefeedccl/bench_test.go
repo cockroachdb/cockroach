@@ -196,7 +196,7 @@ func createBenchmarkChangefeed(
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
-		Targets: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTarget{
+		Tables: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTargetTable{
 			StatementTimeName: tableDesc.GetName(),
 		}},
 		Opts: map[string]string{
@@ -204,7 +204,7 @@ func createBenchmarkChangefeed(
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder, err := makeJSONEncoder(details.Opts, details.Targets)
+	encoder, err := makeJSONEncoder(details.Opts, AllTargets(details))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -228,7 +228,7 @@ func createBenchmarkChangefeed(
 		Clock:            feedClock,
 		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:            spans,
-		Targets:          details.Targets,
+		Targets:          AllTargets(details),
 		Writer:           buf,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,

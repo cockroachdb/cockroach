@@ -203,10 +203,13 @@ func makeTestKafkaSink(
 	}
 }
 
-func makeChangefeedTargets(targetNames ...string) jobspb.ChangefeedTargets {
-	targets := make(jobspb.ChangefeedTargets, len(targetNames))
+func makeChangefeedTargets(targetNames ...string) []jobspb.ChangefeedTargetSpecification {
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetNames))
 	for i, name := range targetNames {
-		targets[descpb.ID(i)] = jobspb.ChangefeedTarget{StatementTimeName: name}
+		targets[i] = jobspb.ChangefeedTargetSpecification{
+			TableID:           descpb.ID(i),
+			StatementTimeName: name,
+		}
 	}
 	return targets
 }
@@ -402,9 +405,9 @@ func TestSQLSink(t *testing.T) {
 
 	fooTopic := overrideTopic(`foo`)
 	barTopic := overrideTopic(`bar`)
-	targets := jobspb.ChangefeedTargets{
-		fooTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
-		barTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
+	targets := []jobspb.ChangefeedTargetSpecification{
+		{TableID: fooTopic.GetID(), StatementTimeName: `foo`},
+		{TableID: barTopic.GetID(), StatementTimeName: `bar`},
 	}
 	const testTableName = `sink`
 	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nil)

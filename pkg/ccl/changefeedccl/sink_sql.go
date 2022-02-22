@@ -72,7 +72,7 @@ type sqlSink struct {
 const sqlSinkTableName = `sqlsink`
 
 func makeSQLSink(
-	u sinkURL, tableName string, targets jobspb.ChangefeedTargets, m *sliMetrics,
+	u sinkURL, tableName string, targets []jobspb.ChangefeedTargetSpecification, m *sliMetrics,
 ) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.
@@ -84,9 +84,9 @@ func makeSQLSink(
 
 	topics := make(map[string]struct{})
 	targetNames := make(map[descpb.ID]string)
-	for id, t := range targets {
+	for _, t := range targets {
 		topics[t.StatementTimeName] = struct{}{}
-		targetNames[id] = t.StatementTimeName
+		targetNames[t.TableID] = t.StatementTimeName
 	}
 
 	uri := u.String()
