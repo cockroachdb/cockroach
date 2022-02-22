@@ -435,6 +435,7 @@ type hotRangeInfo struct {
 	IndexName         string           `json:"index_name"`
 	SchemaName        string           `json:"schema_name"`
 	ReplicaNodeIDs    []roachpb.NodeID `json:"replica_node_ids"`
+	StoreID           roachpb.StoreID  `json:"store_id"`
 }
 
 // swagger:operation GET /ranges/hot/ listHotRanges
@@ -514,6 +515,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 				IndexName:         r.IndexName,
 				ReplicaNodeIDs:    r.ReplicaNodeIds,
 				SchemaName:        r.SchemaName,
+				StoreID:           r.StoreID,
 			}
 		}
 		return hotRangeInfos, nil
