@@ -741,6 +741,9 @@ func mergeCheckingTimestampCaches(
 			// the result to apply on the majority quorum.
 			testutils.SucceedsSoon(t, func() error {
 				for _, r := range lhsRepls[1:] {
+					// Loosely-coupled truncation requires an engine flush to advance
+					// guaranteed durability.
+					require.NoError(t, r.Engine().Flush())
 					firstIndex, err := r.GetFirstIndex()
 					require.NoError(t, err)
 					if firstIndex < truncIndex {
@@ -3980,6 +3983,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if _, err := kv.SendWrapped(ctx, distSender, truncArgs); err != nil {
 			t.Fatal(err)
 		}
+		waitForTruncationForTesting(t, repl, index)
 		return index
 	}()
 

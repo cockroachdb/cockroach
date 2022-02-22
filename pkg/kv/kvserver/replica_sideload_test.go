@@ -804,65 +804,70 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
+		st := tc.store.ClusterSettings()
+		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
-	const count = 10
+		const count = 10
 
-	var indexes []uint64
-	addLastIndex := func() {
-		lastIndex, err := tc.repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
+		var indexes []uint64
+		addLastIndex := func() {
+			lastIndex, err := tc.repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			indexes = append(indexes, lastIndex)
 		}
-		indexes = append(indexes, lastIndex)
-	}
-	for i := 0; i < count; i++ {
+		for i := 0; i < count; i++ {
+			addLastIndex()
+			key := fmt.Sprintf("key-%d", i)
+			val := fmt.Sprintf("val-%d", i)
+			if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
+				t.Fatalf("%d: %+v", i, err)
+			}
+		}
+		// Append an extra entry which, if we truncate it, should definitely also
+		// remove any leftover files (ok, unless the last one is reproposed but
+		// that's *very* unlikely to happen for the last one)
 		addLastIndex()
-		key := fmt.Sprintf("key-%d", i)
-		val := fmt.Sprintf("val-%d", i)
-		if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
-			t.Fatalf("%d: %+v", i, err)
+
+		fmtSideloaded := func() []string {
+			tc.repl.raftMu.Lock()
+			defer tc.repl.raftMu.Unlock()
+			fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
+			sort.Strings(fs)
+			return fs
 		}
-	}
-	// Append an extra entry which, if we truncate it, should definitely also
-	// remove any leftover files (ok, unless the last one is reproposed but
-	// that's *very* unlikely to happen for the last one)
-	addLastIndex()
 
-	fmtSideloaded := func() []string {
-		tc.repl.raftMu.Lock()
-		defer tc.repl.raftMu.Unlock()
-		fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
-		sort.Strings(fs)
-		return fs
-	}
-
-	// Check that when we truncate, the number of on-disk files changes in ways
-	// we expect. Intentionally not too strict due to the possibility of
-	// reproposals, etc; it could be made stricter, but this should give enough
-	// confidence already that we're calling `PurgeTo` correctly, and for the
-	// remainder unit testing on each impl's PurgeTo is more useful.
-	for i := range indexes {
-		const rangeID = 1
-		newFirstIndex := indexes[i] + 1
-		truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
-		log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
-		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
-			t.Fatal(pErr)
+		// Check that when we truncate, the number of on-disk files changes in ways
+		// we expect. Intentionally not too strict due to the possibility of
+		// reproposals, etc; it could be made stricter, but this should give enough
+		// confidence already that we're calling `PurgeTo` correctly, and for the
+		// remainder unit testing on each impl's PurgeTo is more useful.
+		for i := range indexes {
+			const rangeID = 1
+			newFirstIndex := indexes[i] + 1
+			truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
+			log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
+			if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			waitForTruncationForTesting(t, tc.repl, newFirstIndex, looselyCoupled)
+			// Truncation done, so check sideloaded files.
+			sideloadStrings := fmtSideloaded()
+			if minFiles := count - i; len(sideloadStrings) < minFiles {
+				t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
+					indexes[i], i, minFiles, sideloadStrings)
+			}
 		}
-		sideloadStrings := fmtSideloaded()
-		if minFiles := count - i; len(sideloadStrings) < minFiles {
-			t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
-				indexes[i], i, minFiles, sideloadStrings)
+
+		if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {
+			t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
 		}
-	}
-
-	if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {
-		t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
-	}
-
+	})
 }
