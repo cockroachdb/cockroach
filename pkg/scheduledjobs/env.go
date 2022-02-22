@@ -12,6 +12,7 @@ package scheduledjobs
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -46,6 +47,7 @@ type JobExecutionConfig struct {
 	Settings         *cluster.Settings
 	InternalExecutor sqlutil.InternalExecutor
 	DB               *kv.DB
+	Gossip           gossip.OptionalGossip
 	// TestingKnobs is *jobs.TestingKnobs; however we cannot depend
 	// on jobs package due to circular dependencies.
 	TestingKnobs base.ModuleTestingKnobs

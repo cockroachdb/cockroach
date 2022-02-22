@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"math/rand"
 	"time"
 
@@ -384,8 +385,11 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 			log.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
 
+		numClusterNodes := func() int {
+			return clusterNodeCount(s.Gossip)
+		}
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
-			getWaitPeriod(ctx, &s.Settings.SV, s.schedulerEnabledOnThisNode, jitter, s.TestingKnobs)) {
+			getWaitPeriod(ctx, &s.Settings.SV, s.schedulerEnabledOnThisNode, numClusterNodes, jitter, s.TestingKnobs)) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
@@ -421,6 +425,16 @@ var schedulerPaceSetting = settings.RegisterDurationSetting(
 	time.Minute,
 )
 
+var schedulerTargetMaxFrequency = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"jobs.scheduler.max_target_frequency",
+	"how often could a scheduler execute in a cluster.  The frequency of scheduler "+
+		"execution across entire cluster depends on the number of nodes in the cluster; This setting "+
+		" tries to cap the frequency of scheduler runs in a cluster per pace period",
+	6.0, /* default 6 runs per minute across entire cluster */
+	settings.PositiveFloat,
+)
+
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"jobs.scheduler.max_jobs_per_iteration",
@@ -453,6 +467,7 @@ func getWaitPeriod(
 	ctx context.Context,
 	sv *settings.Values,
 	enabledOnThisNode func(ctx context.Context) bool,
+	numNodesFn func() int,
 	jitter jitterFn,
 	knobs base.ModuleTestingKnobs,
 ) time.Duration {
@@ -477,7 +492,35 @@ func getWaitPeriod(
 		pace = minPacePeriod
 	}
 
+	if numNodesFn != nil {
+		n := numNodesFn()
+		if n > 0 {
+			// Slow down scheduler based on the number of nodes in the cluster.
+			// E.g. if the target max frequency is 6 (per minute), and cluster has 12 nodes,
+			// we will boost wait period by 2x. (12/6).
+			boostFraction := float64(n) / schedulerTargetMaxFrequency.Get(sv)
+			if boostFraction < 1 {
+				boostFraction = 1
+			}
+			pace = time.Duration(float64(pace) * boostFraction)
+		}
+	}
 	return jitter(pace)
+}
+
+func clusterNodeCount(gw gossip.OptionalGossip) int {
+	g, err := gw.OptionalErr(47971)
+	if err != nil {
+		// can't count nodes in tenants
+		return 1
+	}
+	var nodes int
+	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		nodes++
+		return nil
+	})
+
+	return nodes
 }
 
 // StartJobSchedulerDaemon starts a daemon responsible for periodically scanning

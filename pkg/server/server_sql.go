@@ -1222,6 +1222,7 @@ func (s *SQLServer) preStart(
 			Settings:         s.execCfg.Settings,
 			InternalExecutor: s.internalExecutor,
 			DB:               s.execCfg.DB,
+			Gossip:           s.execCfg.Gossip,
 			TestingKnobs:     knobs.JobsTestingKnobs,
 			PlanHookMaker: func(opName string, txn *kv.Txn, user security.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment

@@ -228,17 +228,28 @@ func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	schedulerEnabledSetting.Override(ctx, sv, false)
 
 	// When disabled, we wait 5 minutes before rechecking.
-	require.EqualValues(t, 5*time.Minute, getWaitPeriod(ctx, sv, schedulerEnabled, noJitter, nil))
+	require.EqualValues(t, 5*time.Minute, getWaitPeriod(ctx, sv, schedulerEnabled, nil, noJitter, nil))
 	schedulerEnabledSetting.Override(ctx, sv, true)
 
 	// When pace is too low, we use something more reasonable.
 	schedulerPaceSetting.Override(ctx, sv, time.Nanosecond)
-	require.EqualValues(t, minPacePeriod, getWaitPeriod(ctx, sv, schedulerEnabled, noJitter, nil))
-
+	require.EqualValues(t, minPacePeriod, getWaitPeriod(ctx, sv, schedulerEnabled, nil, noJitter, nil))
 	// Otherwise, we use user specified setting.
 	pace := 42 * time.Second
 	schedulerPaceSetting.Override(ctx, sv, pace)
-	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, schedulerEnabled, noJitter, nil))
+	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, schedulerEnabled, nil, noJitter, nil))
+
+	numClusterNodes := func(n int) func() int {
+		return func() int { return n }
+	}
+	schedulerMaxJobsPerIterationSetting.Override(ctx, sv, 6)
+	// When we have fewer than 6 nodes, the pace setting remains unchanged.
+	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, schedulerEnabled, numClusterNodes(3), noJitter, nil))
+	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, schedulerEnabled, numClusterNodes(6), noJitter, nil))
+
+	// When we have many nodes, pace should be slowed.
+	require.EqualValues(t, 7*pace/6, getWaitPeriod(ctx, sv, schedulerEnabled, numClusterNodes(7), noJitter, nil))
+	require.EqualValues(t, 2*pace, getWaitPeriod(ctx, sv, schedulerEnabled, numClusterNodes(12), noJitter, nil))
 }
 
 type recordScheduleExecutor struct {
