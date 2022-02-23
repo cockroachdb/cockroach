@@ -1538,10 +1538,25 @@ type prepStmtNamespace struct {
 	portals map[string]PreparedPortal
 }
 
-// HasPrepared returns true if there are prepared statements or portals
-// in the session.
-func (ns prepStmtNamespace) HasPrepared() bool {
-	return len(ns.prepStmts) > 0 || len(ns.portals) > 0
+// HasActivePortals returns true if there are portals in the session.
+func (ns prepStmtNamespace) HasActivePortals() bool {
+	return len(ns.portals) > 0
+}
+
+// MigratablePreparedStatements returns a mapping of all prepared statements.
+func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
+	for name, stmt := range ns.prepStmts {
+		ret = append(
+			ret,
+			sessiondatapb.MigratableSession_PreparedStatement{
+				Name:                 name,
+				PlaceholderTypeHints: stmt.InferredTypes,
+				SQL:                  stmt.SQL,
+			},
+		)
+	}
+	return ret
 }
 
 func (ns prepStmtNamespace) String() string {
@@ -2614,6 +2629,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
 		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
+		statementPreparer:      ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }

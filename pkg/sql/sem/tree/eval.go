@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -3250,10 +3251,6 @@ type EvalPlanner interface {
 	// the `system.users` table
 	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
 
-	// CheckCanBecomeUser returns an error if the SessionUser cannot become the
-	// becomeUser.
-	CheckCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error
-
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3395,7 +3392,8 @@ type EvalSessionAccessor interface {
 // PreparedStatementState is a limited interface that exposes metadata about
 // prepared statements.
 type PreparedStatementState interface {
-	HasPrepared() bool
+	HasActivePortals() bool
+	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
 }
 
 // ClientNoticeSender is a limited interface to send notices to the

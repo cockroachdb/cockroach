@@ -11,13 +11,16 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // SerializeSessionState is a wrapper for serializeSessionState, and uses the
@@ -36,19 +39,19 @@ func (p *planner) SerializeSessionState() (*tree.DBytes, error) {
 // NOTE: This is used within an observer statement directly, and should not rely
 // on the planner because those statements do not get planned.
 func serializeSessionState(
-	inTxn bool, prepStmtsState tree.PreparedStatementState, sd *sessiondata.SessionData,
+	inExplicitTxn bool, prepStmtsState tree.PreparedStatementState, sd *sessiondata.SessionData,
 ) (*tree.DBytes, error) {
-	if inTxn {
+	if inExplicitTxn {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
 			"cannot serialize a session which is inside a transaction",
 		)
 	}
 
-	if prepStmtsState.HasPrepared() {
+	if prepStmtsState.HasActivePortals() {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
-			"cannot serialize a session which has portals or prepared statements",
+			"cannot serialize a session which has active portals",
 		)
 	}
 
@@ -70,6 +73,7 @@ func serializeSessionState(
 	m.SessionData = sd.SessionData
 	sessiondata.MarshalNonLocal(sd, &m.SessionData)
 	m.LocalOnlySessionData = sd.LocalOnlySessionData
+	m.PreparedStatements = prepStmtsState.MigratablePreparedStatements()
 
 	b, err := protoutil.Marshal(&m)
 	if err != nil {
@@ -81,8 +85,7 @@ func serializeSessionState(
 
 // DeserializeSessionState deserializes the given state into the current session.
 func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error) {
-	evalCtx := p.EvalContext()
-
+	evalCtx := p.ExtendedEvalContext()
 	if !evalCtx.TxnImplicit {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
@@ -92,10 +95,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 
 	var m sessiondatapb.MigratableSession
 	if err := protoutil.Unmarshal([]byte(*state), &m); err != nil {
-		return nil, pgerror.WithCandidateCode(
-			errors.Wrapf(err, "error deserializing session"),
-			pgcode.InvalidParameterValue,
-		)
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error deserializing session")
 	}
 	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
 	if err != nil {
@@ -110,9 +110,52 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.CheckCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+	if err := p.checkCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
 		return nil, err
 	}
+
+	for _, prepStmt := range m.PreparedStatements {
+		parserStmt, err := parser.ParseOneWithInt(
+			prepStmt.SQL,
+			parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize),
+		)
+		if err != nil {
+			return nil, err
+		}
+		id := GenerateClusterWideID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeID.SQLInstanceID())
+		stmt := makeStatement(parserStmt, id)
+
+		var placeholderTypes tree.PlaceholderTypes
+		if len(prepStmt.PlaceholderTypeHints) > 0 {
+			// Prepare the mapping of SQL placeholder names to types. Pre-populate it
+			// with the type hints that were serialized.
+			placeholderTypes = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+			for i, t := range prepStmt.PlaceholderTypeHints {
+				// If the OID is user defined or unknown, then skip it and let the
+				// statementPreparer resolve the type.
+				if t == 0 || t == oid.T_unknown || types.IsOIDUserDefinedType(t) {
+					placeholderTypes[i] = nil
+					continue
+				}
+				v, ok := types.OidToType[t]
+				if !ok {
+					err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
+					return nil, err
+				}
+				placeholderTypes[i] = v
+			}
+		}
+
+		_, err = evalCtx.statementPreparer.addPreparedStmt(
+			evalCtx.Context,
+			prepStmt.Name, stmt, placeholderTypes, prepStmt.PlaceholderTypeHints,
+			PreparedStatementOriginSessionMigration,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	*p.SessionData() = *sd
 
 	return tree.MakeDBool(true), nil

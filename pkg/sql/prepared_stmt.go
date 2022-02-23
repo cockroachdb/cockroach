@@ -34,6 +34,9 @@ const (
 	// PreparedStatementOriginSQL signifies the prepared statement was made
 	// over a parsed SQL query.
 	PreparedStatementOriginSQL
+	// PreparedStatementOriginSessionMigration signifies that the prepared
+	// statement came from a call to crdb_internal.deserialize_session.
+	PreparedStatementOriginSessionMigration
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
