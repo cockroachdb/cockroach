@@ -22,6 +22,9 @@ SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
 statement ok
 SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'
 
+statement ok
+RESET CLUSTER SETTING sql.conn.max_read_buffer_message_size
+
 # Test permissions for modifying cluster settings.
 
 user testuser
@@ -162,3 +165,53 @@ SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
 onlyif config 3node-tenant
 statement error unknown setting
 SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+
+# Test a cluster setting which is SystemOnly
+subtest tenant-cluster-settings
+
+# Skip this test when inside a tenant, as this setting won't be visible in
+# there.
+skipif config 3node-tenant
+statement error admission.kv.enabled is a system-only setting and must be set at the host cluster level using SET CLUSTER SETTING
+ALTER TENANT 10 SET CLUSTER SETTING admission.kv.enabled=true
+
+onlyif config 3node-tenant
+statement error ALTER TENANT can only be called by system operators
+ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT ALL SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT 10 RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT ALL RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+skipif config 3node-tenant
+statement error pq: at or near "EOF": syntax error: invalid tenant ID
+ALTER TENANT 0 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error pq: at or near "EOF": syntax error: invalid tenant ID
+ALTER TENANT 0 RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+statement error unimplemented
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
+
+statement error unimplemented
+SHOW CLUSTER SETTINGS FOR TENANT 10
+
+statement error unimplemented
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT 10
+
+statement error unimplemented
+SHOW ALL CLUSTER SETTINGS FOR TENANT 10
+

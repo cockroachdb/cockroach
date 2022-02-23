@@ -38,6 +38,7 @@ FILES = [
     "alter_table_partition_by",
     "alter_table_set_schema_stmt",
     "alter_table_stmt",
+    "alter_tenant_csetting_stmt",
     "alter_type",
     "alter_view",
     "alter_view_owner_stmt",

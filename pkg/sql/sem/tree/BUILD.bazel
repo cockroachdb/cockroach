@@ -21,6 +21,7 @@ go_library(
         "alter_schema.go",
         "alter_sequence.go",
         "alter_table.go",
+        "alter_tenant.go",
         "alter_type.go",
         "analyze.go",
         "annotation.go",

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (d *delegator) delegateShowClusterSettingList(
@@ -23,6 +24,10 @@ func (d *delegator) delegateShowClusterSettingList(
 	isAdmin, err := d.catalog.HasAdminRole(d.ctx)
 	if err != nil {
 		return nil, err
+	}
+	if stmt.TenantID.IsSet() {
+		return nil, unimplemented.NewWithIssue(73857,
+			`unimplemented: tenant-level cluster settings not supported`)
 	}
 	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
 	if err != nil {
