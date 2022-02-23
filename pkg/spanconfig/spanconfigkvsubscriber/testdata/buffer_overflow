@@ -75,7 +75,6 @@ upsert [a,c):C
 
 updates
 ----
-/M{in-ax}
 [a,c)
 
 store-reader key=a

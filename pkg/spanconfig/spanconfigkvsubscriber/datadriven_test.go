@@ -46,8 +46,9 @@ import (
 //      delete [c,e)
 //      upsert [c,d):C
 //      upsert [d,e):D
+//      upsert {entire-keyspace}:_CLUSTER
+//      delete {source=1,target=20}
 //      ----
-//      ok
 //
 //      get
 //      span [a,b)
@@ -99,6 +100,7 @@ import (
 // Text of the form [a,b) and [a,b):C correspond to spans and span config
 // records; see spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more
 // details.
+// TODO(arul): Add ability to express tenant spans to this datadriven test.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -243,7 +245,7 @@ func TestDataDriven(t *testing.T) {
 					}
 
 					var spanStr string
-					if update.Equal(keys.EverythingSpan) {
+					if update.Equal(keys.EverythingSpan) || update.Key.Compare(keys.TenantTableDataMin) > 0 {
 						spanStr = update.String()
 					} else {
 						spanStr = spanconfigtestutils.PrintSpan(update)

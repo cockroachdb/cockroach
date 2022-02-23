@@ -149,6 +149,27 @@ func (st SystemTarget) targetsEntireKeyspace() bool {
 	return st.systemTargetType == SystemTargetTypeEntireKeyspace
 }
 
+// KeyspaceTargeted returns the keyspan the system target applies to.
+func (st SystemTarget) KeyspaceTargeted() roachpb.Span {
+	if st.targetsEntireKeyspace() {
+		return keys.EverythingSpan
+	}
+	switch st.systemTargetType {
+	case SystemTargetTypeEntireKeyspace:
+		return keys.EverythingSpan
+	case SystemTargetTypeSpecificTenantKeyspace:
+		k := keys.MakeTenantPrefix(st.targetTenantID)
+		return roachpb.Span{
+			Key:    k,
+			EndKey: k.PrefixEnd(),
+		}
+	case SystemTargetTypeAllTenantKeyspaceTargetsSet:
+		panic("read only target")
+	default:
+		panic("unknown target type")
+	}
+}
+
 // IsReadOnly returns true if the system target is read-only. Read only targets
 // should not be persisted.
 func (st SystemTarget) IsReadOnly() bool {

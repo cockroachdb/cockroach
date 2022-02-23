@@ -248,14 +248,14 @@ func (s *KVSubscriber) handlePartialUpdate(
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
-	for _, h := range handlers {
+	for i := range handlers {
 		for _, ev := range events {
-			// TODO(arul): In the future, once we start reacting to system span
-			// configurations, we'll want to invoke handlers with the correct span
-			// here as well.
 			target := ev.(*bufferEvent).Update.Target
-			if target.IsSpanTarget() {
-				h.invoke(ctx, target.GetSpan())
+			switch {
+			case target.IsSpanTarget():
+				handlers[i].invoke(ctx, target.GetSpan())
+			case target.IsSystemTarget():
+				handlers[i].invoke(ctx, target.GetSystemTarget().KeyspaceTargeted())
 			}
 		}
 	}

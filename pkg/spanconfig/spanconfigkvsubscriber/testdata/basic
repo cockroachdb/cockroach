@@ -40,7 +40,6 @@ delete [d,f)
 
 updates
 ----
-/M{in-ax}
 [d,f)
 
 store-reader key=d

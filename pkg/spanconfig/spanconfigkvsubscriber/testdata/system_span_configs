@@ -1,0 +1,127 @@
+
+start
+----
+
+update
+upsert [a,c):A
+upsert [d,f):D
+----
+
+updates
+----
+/M{in-ax}
+[a,c)
+[d,f)
+
+store-reader key=a
+----
+conf=A
+
+store-reader key=e
+----
+conf=D
+
+store-reader key=g
+----
+conf=MISSING
+
+update
+upsert {entire-keyspace}:_CLUSTER
+----
+
+updates
+----
+/M{in-ax}
+
+store-reader key=a
+----
+conf=A_CLUSTER
+
+store-reader key=e
+----
+conf=D_CLUSTER
+
+# The system span config we set should still apply.
+store-reader key=g
+----
+conf=MISSING_CLUSTER
+
+# Update span configs that target tenant keyspaces and ensure handlers are
+# invoked correctly.
+update
+upsert {source=1, target=1}:_HOST
+upsert {source=1,target=20}:_SECONDARY
+upsert {source=10, target=10}:_TEN
+----
+
+# M{in-ax} corresponds to the system tenant targeting itself.
+updates
+----
+/M{in-ax}
+/Tenant/1{0-1}
+/Tenant/2{0-1}
+
+# Ensure configs are correctly hydrated when we read them.
+store-reader key=a
+----
+conf=A_CLUSTER_HOST
+
+store-reader key=e
+----
+conf=D_CLUSTER_HOST
+
+# Delete the system span config over the entire keyspace and ensure handlers are
+# invoked correctly + configs for various keys are correctly hydrated.
+update
+delete {entire-keyspace}
+----
+
+updates
+----
+/M{in-ax}
+
+store-reader key=a
+----
+conf=A_HOST
+
+store-reader key=e
+----
+conf=D_HOST
+
+# Delete system span configs that target secondary and ensure handlers are
+# invoked correctly.
+update
+delete {source=1,target=20}
+----
+
+updates
+----
+/Tenant/2{0-1}
+
+# Update system span config, ensure handlers are correctly invoked, and configs
+# are hydrated correctly.
+update
+upsert {source=1, target=1}:_SYSTEM
+----
+
+updates
+----
+/M{in-ax}
+
+store-reader key=a
+----
+conf=A_SYSTEM
+
+store-reader key=e
+----
+conf=D_SYSTEM
+
+# Lastly, update a system span config set on a secondary tenant's keyspace and
+# ensure handlers are invoked correctly.
+update
+upsert {source=10, target=10}:_SEC
+----
+
+updates
+----
+/Tenant/1{0-1}
