@@ -276,7 +276,7 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 		}
 	}
 
-	// A script to summarize the hottest ranges.
+	// A script to summarize the hottest ranges for host cluster range reports.
 	{
 		s := zc.clusterPrinter.start("hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
