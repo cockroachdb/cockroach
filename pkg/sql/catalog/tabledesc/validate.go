@@ -186,14 +186,28 @@ func (desc *wrapper) ValidateCrossReferences(
 		vea.Report(desc.validateInboundTableRef(by, vdg))
 	}
 
-	// Check foreign keys.
-	if desc.HasRowLevelTTL() && (len(desc.OutboundFKs) > 0 || len(desc.InboundFKs) > 0) {
-		vea.Report(unimplemented.NewWithIssuef(
-			76407,
-			`foreign keys to/from table with TTL "%s" are not permitted`,
-			desc.Name,
-		))
+	// For row-level TTL, only ascending PKs are permitted.
+	if desc.HasRowLevelTTL() {
+		pk := desc.GetPrimaryIndex()
+		for i := 0; i < pk.NumKeyColumns(); i++ {
+			dir := pk.GetKeyColumnDirection(i)
+			if dir != descpb.IndexDescriptor_ASC {
+				vea.Report(unimplemented.NewWithIssuef(
+					76912,
+					`non-ascending ordering on PRIMARY KEYs are not supported`,
+				))
+			}
+		}
+		if len(desc.OutboundFKs) > 0 || len(desc.InboundFKs) > 0 {
+			vea.Report(unimplemented.NewWithIssuef(
+				76407,
+				`foreign keys to/from table with TTL "%s" are not permitted`,
+				desc.Name,
+			))
+		}
 	}
+
+	// Check foreign keys.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
 	}
