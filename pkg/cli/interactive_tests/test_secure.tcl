@@ -162,8 +162,8 @@ end_test
 set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
 
 start_test "Check that the auth cookie works."
-send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/settings'\r"
-eexpect "cluster.organization"
+send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/users'\r"
+eexpect "users"
 eexpect $prompt
 end_test
 

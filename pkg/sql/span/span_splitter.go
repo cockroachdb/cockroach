@@ -25,7 +25,13 @@ import (
 // Note that a zero Splitter (NoopSplitter) is a usable instance that never
 // splits spans.
 type Splitter struct {
-	numKeyColumns  int
+	// numKeyColumns is the number of key columns in the index; a span needs to
+	// constrain this many columns to be considered for splitting.
+	// It is 0 if splitting is not possible.
+	numKeyColumns int
+
+	// neededFamilies contains the family IDs into which spans will be split, or
+	// nil if splitting is not possible.
 	neededFamilies []descpb.FamilyID
 }
 
@@ -72,7 +78,7 @@ func MakeSplitter(
 	// * The index either has just 1 family (so we'll make a GetRequest) or we
 	//   need fewer than every column family in the table (otherwise we'd just
 	//   make a big ScanRequest).
-	// TODO(radu): should we be using index.KeysPerRow() instead?
+	// TODO(radu): should we be using IndexKeysPerRow() instead?
 	numFamilies := len(table.GetFamilies())
 	if numFamilies > 1 && len(neededFamilies) == numFamilies {
 		return NoopSplitter()
@@ -82,6 +88,12 @@ func MakeSplitter(
 		numKeyColumns:  index.NumKeyColumns(),
 		neededFamilies: neededFamilies,
 	}
+}
+
+// FamilyIDs returns the family IDs into which spans will be split, or nil if
+// splitting is not possible.
+func (s *Splitter) FamilyIDs() []descpb.FamilyID {
+	return s.neededFamilies
 }
 
 // IsNoop returns true if this instance will never split spans.

@@ -52,7 +52,6 @@ go_library(
         "selection_ops_gen.go",
         "sort_gen.go",
         "sorttopk_gen.go",
-        "span_assembler_gen.go",
         "span_encoder_gen.go",
         "substring_gen.go",
         "sum_agg_gen.go",

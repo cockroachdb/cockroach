@@ -186,7 +186,7 @@ const (
 	// bundles when the query latency exceeds the user provided threshold.
 	AlterSystemStmtDiagReqs
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
-	// WriteAtRequestTimestamp and DisallowConflicts parameters.
+	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
 	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
 	// have an entry in system.namespace upon being restored.
@@ -288,6 +288,19 @@ const (
 	// preserving temporary indexes, and a post-backfill merging
 	// processing.
 	MVCCIndexBackfiller
+	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
+	// during joint configuration, including to VOTER_INCOMING replicas.
+	EnableLeaseHolderRemoval
+	// BackupResolutionInJob defaults to resolving backup destinations during the
+	// execution of a backup job rather than during planning.
+	BackupResolutionInJob
+	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
+	// for raft log truncation, by allowing each replica to treat a truncation
+	// proposal as an upper bound on what should be truncated.
+	LooselyCoupledRaftLogTruncation
+	// ChangefeedIdleness is the version where changefeed aggregators forward
+	// idleness-related information alnog with resolved spans to the frontier
+	ChangefeedIdleness
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -460,6 +473,26 @@ var versionsSingleton = keyedVersions{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
+	{
+		Key:     EnableLeaseHolderRemoval,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
+	},
+	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
+	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)
+	{
+		Key:     BackupResolutionInJob,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 76},
+	},
+	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
+	{
+		Key:     LooselyCoupledRaftLogTruncation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
+	},
+	{
+		Key:     ChangefeedIdleness,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

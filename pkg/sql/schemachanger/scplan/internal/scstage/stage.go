@@ -50,6 +50,9 @@ type Stage struct {
 
 // Type returns the type of the operations in this stage.
 func (s Stage) Type() scop.Type {
+	if len(s.EdgeOps) == 0 {
+		return scop.MutationType
+	}
 	return s.EdgeOps[0].Type()
 }
 

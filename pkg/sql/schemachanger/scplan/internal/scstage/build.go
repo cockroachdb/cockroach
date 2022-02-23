@@ -29,6 +29,7 @@ func BuildStages(
 	init scpb.CurrentState, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
 ) []Stage {
 	c := buildContext{
+		rollback:               init.InRollback,
 		g:                      g,
 		scJobIDSupplier:        scJobIDSupplier,
 		isRevertibilityIgnored: true,
@@ -50,6 +51,7 @@ func BuildStages(
 // buildContext contains the global constants for building the stages.
 // Only the BuildStages function mutates it, it's read-only everywhere else.
 type buildContext struct {
+	rollback               bool
 	g                      *scgraph.Graph
 	scJobIDSupplier        func() jobspb.JobID
 	isRevertibilityIgnored bool
@@ -435,7 +437,7 @@ func (bc buildContext) createSchemaChangeJobOp() scop.Op {
 		JobID:         bc.scJobIDSupplier(),
 		Statements:    bc.targetState.Statements,
 		Authorization: bc.targetState.Authorization,
-		DescriptorIDs: screl.GetDescIDs(bc.targetState).Ordered(),
+		DescriptorIDs: screl.AllTargetDescIDs(bc.targetState).Ordered(),
 	}
 }
 
@@ -448,7 +450,7 @@ func (bc buildContext) updateJobProgressOp(isNonCancellable bool) scop.Op {
 
 func (bc buildContext) removeJobReferenceOps() (ops []scop.Op) {
 	jobID := bc.scJobIDSupplier()
-	screl.GetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
+	screl.AllTargetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
 		ops = append(ops, &scop.RemoveJobStateFromDescriptor{
 			DescriptorID: descID,
 			JobID:        jobID,
@@ -472,7 +474,9 @@ func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
 }
 
 func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.Status) []scop.Op {
-	descIDs, states := makeDescriptorStates(bc.scJobIDSupplier(), bc.targetState, after)
+	descIDs, states := makeDescriptorStates(
+		bc.scJobIDSupplier(), bc.rollback, bc.targetState, after,
+	)
 	ops := make([]scop.Op, 0, descIDs.Len())
 	descIDs.ForEach(func(descID descpb.ID) {
 		ops = append(ops, &scop.SetJobStateOnDescriptor{
@@ -485,13 +489,14 @@ func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.
 }
 
 func makeDescriptorStates(
-	jobID jobspb.JobID, ts scpb.TargetState, statuses []scpb.Status,
+	jobID jobspb.JobID, inRollback bool, ts scpb.TargetState, statuses []scpb.Status,
 ) (catalog.DescriptorIDSet, map[descpb.ID]*scpb.DescriptorState) {
-	descIDs := screl.GetDescIDs(ts)
+	descIDs := screl.AllTargetDescIDs(ts)
 	states := make(map[descpb.ID]*scpb.DescriptorState, descIDs.Len())
 	descIDs.ForEach(func(id descpb.ID) {
 		states[id] = &scpb.DescriptorState{
 			Authorization: ts.Authorization,
+			JobID:         jobID,
 		}
 	})
 	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
@@ -511,12 +516,12 @@ func makeDescriptorStates(
 	for i, t := range ts.Targets {
 		descID := screl.GetDescID(t.Element())
 		state := states[descID]
-		state.JobID = jobID
 		stmtID := t.Metadata.StatementID
 		noteRelevantStatement(state, stmtID)
 		state.Targets = append(state.Targets, t)
 		state.TargetRanks = append(state.TargetRanks, uint32(i))
 		state.CurrentStatuses = append(state.CurrentStatuses, statuses[i])
+		state.InRollback = inRollback
 	}
 	return descIDs, states
 }

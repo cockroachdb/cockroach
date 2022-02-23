@@ -16,7 +16,9 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -60,7 +62,7 @@ var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
 
 type defaultSpanGenerator struct {
-	spanBuilder  *span.Builder
+	spanBuilder  span.Builder
 	spanSplitter span.Splitter
 	numKeyCols   int
 	lookupCols   []uint32
@@ -79,6 +81,27 @@ type defaultSpanGenerator struct {
 	// memAcc is owned by this span generator and is closed when the generator
 	// is closed.
 	memAcc *mon.BoundAccount
+}
+
+func (g *defaultSpanGenerator) init(
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	neededColOrdinals util.FastIntSet,
+	numKeyCols int,
+	keyToInputRowIndices map[string][]int,
+	lookupCols []uint32,
+	memAcc *mon.BoundAccount,
+) {
+	g.spanBuilder.Init(evalCtx, codec, table, index)
+	g.spanSplitter = span.MakeSplitter(table, index, neededColOrdinals)
+	g.numKeyCols = numKeyCols
+	g.lookupCols = lookupCols
+	g.indexKeyRow = nil
+	g.keyToInputRowIndices = keyToInputRowIndices
+	g.scratchSpans = nil
+	g.memAcc = memAcc
 }
 
 // Generate spans for a given row.
@@ -100,7 +123,7 @@ func (g *defaultSpanGenerator) generateSpan(
 	for _, id := range g.lookupCols {
 		g.indexKeyRow = append(g.indexKeyRow, row[id])
 	}
-	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow, numLookupCols)
+	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow[:numLookupCols])
 }
 
 func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
@@ -181,7 +204,6 @@ func (g *defaultSpanGenerator) memUsage() int64 {
 
 func (g *defaultSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
-	g.spanBuilder.Release()
 	*g = defaultSpanGenerator{}
 }
 
@@ -223,7 +245,7 @@ func (s spanRowIndices) memUsage() int64 {
 // In this case, the multiSpanGenerator would generate two spans for each input
 // row: [/'east'/<val_a> - /'east'/<val_a>] [/'west'/<val_a> - /'west'/<val_a>].
 type multiSpanGenerator struct {
-	spanBuilder  *span.Builder
+	spanBuilder  span.Builder
 	spanSplitter span.Splitter
 
 	// indexColInfos stores info about the values that each index column can
@@ -345,16 +367,19 @@ func (g *multiSpanGenerator) maxLookupCols() int {
 // init must be called before the multiSpanGenerator can be used to generate
 // spans.
 func (g *multiSpanGenerator) init(
-	spanBuilder *span.Builder,
-	spanSplitter span.Splitter,
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	neededColOrdinals util.FastIntSet,
 	numKeyCols int,
 	numInputCols int,
 	exprHelper *execinfrapb.ExprHelper,
 	tableOrdToIndexOrd util.FastIntMap,
 	memAcc *mon.BoundAccount,
 ) error {
-	g.spanBuilder = spanBuilder
-	g.spanSplitter = spanSplitter
+	g.spanBuilder.Init(evalCtx, codec, table, index)
+	g.spanSplitter = span.MakeSplitter(table, index, neededColOrdinals)
 	g.numInputCols = numInputCols
 	g.keyToInputRowIndices = make(map[string][]int)
 	g.tableOrdToIndexOrd = tableOrdToIndexOrd
@@ -609,7 +634,7 @@ func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roach
 		var err error
 		var containsNull bool
 		if g.inequalityColIdx == -1 {
-			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow, len(g.indexColInfos))
+			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow[:len(g.indexColInfos)])
 		} else {
 			s, containsNull, err = g.spanBuilder.SpanFromEncDatumsWithRange(indexKeyRow, len(g.indexColInfos),
 				inequalityInfo.start, inequalityInfo.startInclusive, inequalityInfo.end, inequalityInfo.endInclusive)
@@ -733,7 +758,6 @@ func (g *multiSpanGenerator) memUsage() int64 {
 
 func (g *multiSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
-	g.spanBuilder.Release()
 	*g = multiSpanGenerator{}
 }
 
@@ -751,10 +775,11 @@ type localityOptimizedSpanGenerator struct {
 // local and remote span generators could release their own when they are
 // close()d.
 func (g *localityOptimizedSpanGenerator) init(
-	localSpanBuilder *span.Builder,
-	localSpanSplitter span.Splitter,
-	remoteSpanBuilder *span.Builder,
-	remoteSpanSplitter span.Splitter,
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	neededColOrdinals util.FastIntSet,
 	numKeyCols int,
 	numInputCols int,
 	localExprHelper *execinfrapb.ExprHelper,
@@ -764,12 +789,14 @@ func (g *localityOptimizedSpanGenerator) init(
 	remoteSpanGenMemAcc *mon.BoundAccount,
 ) error {
 	if err := g.localSpanGen.init(
-		localSpanBuilder, localSpanSplitter, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
+		evalCtx, codec, table, index, neededColOrdinals,
+		numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
 	if err := g.remoteSpanGen.init(
-		remoteSpanBuilder, remoteSpanSplitter, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
+		evalCtx, codec, table, index, neededColOrdinals,
+		numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
 	); err != nil {
 		return err
 	}

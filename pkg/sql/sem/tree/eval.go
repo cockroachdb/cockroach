@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -3063,7 +3064,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 func matchRegexpWithKey(ctx *EvalContext, str Datum, key RegexpCacheKey) (Datum, error) {
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return DBoolFalse, err
+		return DBoolFalse, pgerror.Wrap(err, pgcode.InvalidRegularExpression, "invalid regular expression")
 	}
 	return MakeDBool(DBool(re.MatchString(string(MustBeDString(str))))), nil
 }
@@ -3250,10 +3251,6 @@ type EvalPlanner interface {
 	// the `system.users` table
 	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
 
-	// CheckCanBecomeUser returns an error if the SessionUser cannot become the
-	// becomeUser.
-	CheckCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error
-
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3270,6 +3267,14 @@ type EvalPlanner interface {
 
 	// DecodeGist exposes gist functionality to the builtin functions.
 	DecodeGist(gist string) ([]string, error)
+
+	// SerializeSessionState serializes the variables in the current session
+	// and returns a state, in bytes form.
+	SerializeSessionState() (*DBytes, error)
+
+	// DeserializeSessionState deserializes the state as serialized variables
+	// into the current session.
+	DeserializeSessionState(state *DBytes) (*DBool, error)
 
 	// CreateSessionRevivalToken creates a token that can be used to log in
 	// as the current user, in bytes form.
@@ -3387,7 +3392,8 @@ type EvalSessionAccessor interface {
 // PreparedStatementState is a limited interface that exposes metadata about
 // prepared statements.
 type PreparedStatementState interface {
-	HasPrepared() bool
+	HasActivePortals() bool
+	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
 }
 
 // ClientNoticeSender is a limited interface to send notices to the
@@ -3827,6 +3833,14 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 // assigned. Will be false during Prepare.
 func (ctx *EvalContext) HasPlaceholders() bool {
 	return ctx.Placeholders != nil
+}
+
+const regionKey = "region"
+
+// GetLocalRegion returns the region name of the local processor
+// on which we're executing.
+func (ctx *EvalContext) GetLocalRegion() (regionName string, ok bool) {
+	return ctx.Locality.Find(regionKey)
 }
 
 // TimestampToDecimal converts the logical timestamp into a decimal

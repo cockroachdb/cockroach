@@ -192,7 +192,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			ro := e.NewReadOnly()
+			ro := e.NewReadOnly(StandardDurability)
 			if ro.Closed() {
 				t.Fatal("read-only is expectedly found to be closed")
 			}

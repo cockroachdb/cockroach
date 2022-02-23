@@ -664,7 +664,7 @@ func TestParseHash(t *testing.T) {
 		{
 			"-",
 			10,
-			`geohash decode '-': invalid character at index 0`,
+			`invalid GeoHash: geohash decode '-': invalid character at index 0`,
 		},
 	}
 	for _, tc := range errorCases {

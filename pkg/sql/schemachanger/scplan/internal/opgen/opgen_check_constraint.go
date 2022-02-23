@@ -28,8 +28,32 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
+				minPhase(scop.PreCommitPhase),
+				// TODO(postamar): remove revertibility constraint when possible
+				revertible(false),
 				emit(func(this *scpb.CheckConstraint) scop.Op {
-					return notImplemented(this)
+					return &scop.RemoveCheckConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
+				}),
+				emit(func(this *scpb.CheckConstraint) scop.Op {
+					if len(this.UsesTypeIDs) == 0 {
+						return nil
+					}
+					return &scop.UpdateTableBackReferencesInTypes{
+						TypeIDs:               this.UsesTypeIDs,
+						BackReferencedTableID: this.TableID,
+					}
+				}),
+				emit(func(this *scpb.CheckConstraint) scop.Op {
+					if len(this.UsesSequenceIDs) == 0 {
+						return nil
+					}
+					return &scop.UpdateBackReferencesInSequences{
+						SequenceIDs:           this.UsesSequenceIDs,
+						BackReferencedTableID: this.TableID,
+					}
 				}),
 			),
 		),

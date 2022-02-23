@@ -167,6 +167,7 @@ type CCLOnlyStatement interface {
 	cclOnlyStatement()
 }
 
+var _ CCLOnlyStatement = &AlterBackup{}
 var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
@@ -188,6 +189,17 @@ func (*AlterChangefeed) StatementType() StatementType { return TypeDML }
 func (*AlterChangefeed) StatementTag() string { return `ALTER CHANGEFEED` }
 
 func (*AlterChangefeed) cclOnlyStatement() {}
+
+// StatementReturnType implements the Statement interface.
+func (*AlterBackup) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*AlterBackup) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterBackup) StatementTag() string { return "ALTER BACKUP" }
+
+func (*AlterBackup) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterDatabaseOwner) StatementReturnType() StatementReturnType { return DDL }
@@ -488,6 +500,15 @@ func (*CannedOptPlan) StatementType() StatementType { return TypeDML }
 func (*CannedOptPlan) StatementTag() string { return "PREPARE AS OPT PLAN" }
 
 // StatementReturnType implements the Statement interface.
+func (*CloseCursor) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CloseCursor) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CloseCursor) StatementTag() string { return "CLOSE" }
+
+// StatementReturnType implements the Statement interface.
 func (*CommentOnColumn) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -707,6 +728,15 @@ func (*Discard) StatementType() StatementType { return TypeTCL }
 func (*Discard) StatementTag() string { return "DISCARD" }
 
 // StatementReturnType implements the Statement interface.
+func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*DeclareCursor) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DeclareCursor) StatementTag() string { return "DECLARE" }
+
+// StatementReturnType implements the Statement interface.
 func (n *Delete) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
 
 // StatementType implements the Statement interface.
@@ -831,6 +861,15 @@ func (*Export) StatementTag() string { return "EXPORT" }
 
 // StatementReturnType implements the Statement interface.
 func (*Grant) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementReturnType implements the Statement interface.
+func (n *FetchCursor) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*FetchCursor) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*FetchCursor) StatementTag() string { return "FETCH" }
 
 // StatementType implements the Statement interface.
 func (*Grant) StatementType() StatementType { return TypeDCL }
@@ -1436,6 +1475,17 @@ func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION S
 func (*ShowTransactionStatus) observerStatement() {}
 
 // StatementReturnType implements the Statement interface.
+func (*ShowTransferState) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowTransferState) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTransferState) StatementTag() string { return "SHOW TRANSFER STATE" }
+
+func (*ShowTransferState) observerStatement() {}
+
+// StatementReturnType implements the Statement interface.
 func (*ShowSavepointStatus) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1662,6 +1712,7 @@ func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterChangefeed) String() string                { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string            { return AsString(n) }
+func (n *AlterBackup) String() string                    { return AsString(n) }
 func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
@@ -1700,6 +1751,7 @@ func (n *ControlJobsOfType) String() string              { return AsString(n) }
 func (n *CancelQueries) String() string                  { return AsString(n) }
 func (n *CancelSessions) String() string                 { return AsString(n) }
 func (n *CannedOptPlan) String() string                  { return AsString(n) }
+func (n *CloseCursor) String() string                    { return AsString(n) }
 func (n *CommentOnColumn) String() string                { return AsString(n) }
 func (n *CommentOnConstraint) String() string            { return AsString(n) }
 func (n *CommentOnDatabase) String() string              { return AsString(n) }
@@ -1720,6 +1772,7 @@ func (n *CreateStats) String() string                    { return AsString(n) }
 func (n *CreateView) String() string                     { return AsString(n) }
 func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
+func (n *DeclareCursor) String() string                  { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
 func (n *DropOwnedBy) String() string                    { return AsString(n) }
@@ -1733,6 +1786,7 @@ func (n *Execute) String() string                        { return AsString(n) }
 func (n *Explain) String() string                        { return AsString(n) }
 func (n *ExplainAnalyze) String() string                 { return AsString(n) }
 func (n *Export) String() string                         { return AsString(n) }
+func (n *FetchCursor) String() string                    { return AsString(n) }
 func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
 func (n *Insert) String() string                         { return AsString(n) }
@@ -1808,6 +1862,7 @@ func (n *ShowTypes) String() string                      { return AsString(n) }
 func (n *ShowTraceForSession) String() string            { return AsString(n) }
 func (n *ShowTransactionStatus) String() string          { return AsString(n) }
 func (n *ShowTransactions) String() string               { return AsString(n) }
+func (n *ShowTransferState) String() string              { return AsString(n) }
 func (n *ShowUsers) String() string                      { return AsString(n) }
 func (n *ShowVar) String() string                        { return AsString(n) }
 func (n *ShowZoneConfig) String() string                 { return AsString(n) }

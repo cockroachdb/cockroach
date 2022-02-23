@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1272,10 +1273,6 @@ type ExecutorConfig struct {
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
-
-	// AllowSessionRevival is true if the cluster is allowed to create session
-	// revival tokens and use them to authenticate a session.
-	AllowSessionRevival bool
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -1477,6 +1474,11 @@ type TTLTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
 	// current time.
 	AOSTDuration *time.Duration
+	// MockDescriptorVersionDuringDelete is a version to mock the delete descriptor
+	// as during delete.
+	MockDescriptorVersionDuringDelete *descpb.DescriptorVersion
+	// OnDeleteLoopStart is a hook that executes before the loop for TTL deletes begin.
+	OnDeleteLoopStart func() error
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.

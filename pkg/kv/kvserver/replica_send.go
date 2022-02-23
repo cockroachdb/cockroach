@@ -140,6 +140,9 @@ func (r *Replica) sendWithoutRangeID(
 
 	// Circuit breaker handling.
 	ctx, cancel := context.WithCancel(ctx)
+	if bypassReplicaCircuitBreakerForBatch(ba) {
+		ctx = withBypassCircuitBreakerMarker(ctx)
+	}
 	tok, brSig, err := r.breaker.Register(ctx, cancel)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -932,7 +935,7 @@ func (r *Replica) executeAdminBatch(
 		transferLeaseToFirstVoter := !tArgs.TransferLeaseToFirstVoterAccurate
 		// We also revert to that behavior if the caller specifically asked for it.
 		transferLeaseToFirstVoter = transferLeaseToFirstVoter || tArgs.TransferLeaseToFirstVoter
-		err := r.store.AdminRelocateRange(
+		err := r.AdminRelocateRange(
 			ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets, transferLeaseToFirstVoter,
 		)
 		pErr = roachpb.NewError(err)

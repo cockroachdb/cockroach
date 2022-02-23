@@ -12,7 +12,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -132,14 +131,13 @@ func planBackup(
 	ctx context.Context, p sql.PlanHookState, backupStmt tree.Statement,
 ) (sql.PlanHookRowFn, error) {
 	fn, cols, _, _, err := backupPlanHook(ctx, backupStmt, p)
-
 	if err != nil {
 		return nil, errors.Wrapf(err, "backup eval: %q", tree.AsString(backupStmt))
 	}
 	if fn == nil {
 		return nil, errors.Newf("backup eval: %q", tree.AsString(backupStmt))
 	}
-	if len(cols) != len(utilccl.DetachedJobExecutionResultHeader) {
+	if len(cols) != len(jobs.DetachedJobExecutionResultHeader) {
 		return nil, errors.Newf("unexpected result columns")
 	}
 	return fn, nil
@@ -306,7 +304,8 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 	node := &tree.ScheduledBackup{
 		ScheduleLabelSpec: tree.ScheduleLabelSpec{
-			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel())},
+			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel()),
+		},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
 		Targets:         redactedBackupNode.Targets,

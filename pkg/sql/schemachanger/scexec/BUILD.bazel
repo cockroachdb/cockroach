@@ -25,13 +25,15 @@ go_library(
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sessiondata",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_sync//errgroup",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

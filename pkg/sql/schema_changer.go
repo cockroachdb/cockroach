@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -398,7 +399,7 @@ func (sc *SchemaChanger) maybeUpdateScheduledJobsForRowLevelTTL(
 			scheduleID := tableDesc.GetRowLevelTTL().ScheduleID
 			if scheduleID > 0 {
 				log.Infof(ctx, "dropping TTL schedule %d", scheduleID)
-				return deleteSchedule(ctx, sc.execCfg, txn, scheduleID)
+				return DeleteSchedule(ctx, sc.execCfg, txn, scheduleID)
 			}
 			return nil
 		}); err != nil {
@@ -1498,7 +1499,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 
 					if shouldCreateScheduledJob {
-						j, err := createRowLevelTTLScheduledJob(
+						j, err := CreateRowLevelTTLScheduledJob(
 							ctx,
 							sc.execCfg,
 							txn,
@@ -1513,7 +1514,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				} else if m.Dropped() {
 					if ttl := scTable.RowLevelTTL; ttl != nil {
-						if err := deleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
+						if err := DeleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
 							return err
 						}
 					}
@@ -2535,6 +2536,9 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 			// Note that r.Next always returns true on first run so exec will be
 			// called at least once before there is a chance for this loop to exit.
+			if err := p.ExecCfg().JobRegistry.CheckPausepoint("schemachanger.before.exec"); err != nil {
+				return err
+			}
 			scErr = sc.exec(ctx)
 			switch {
 			case scErr == nil:
@@ -3023,13 +3027,57 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 			}
 
 			if idx := m.AsIndex(); sc.shouldSplitAndScatter(tableDesc, m, idx) {
-				if idx.IsSharded() {
-					splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
+				// Iterate through all partitioning lists to get all possible list
+				// partitioning key prefix. Hash sharded index only allows implicit
+				// partitioning, and implicit partitioning does not support
+				// subpartition. So it's safe not to consider subpartitions. Range
+				// partition is not considered here as well, because it's hard to
+				// predict the sampling points within each range to make the pre-split
+				// on shard boundaries helpful.
+				var partitionKeyPrefixes []roachpb.Key
+				partitioning := idx.GetPartitioning()
+				if err := partitioning.ForEachList(
+					func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+						for _, tupleBytes := range values {
+							_, key, err := rowenc.DecodePartitionTuple(
+								&tree.DatumAlloc{},
+								sc.execCfg.Codec,
+								tableDesc,
+								idx,
+								partitioning,
+								tupleBytes,
+								tree.Datums{},
+							)
+							if err != nil {
+								return err
+							}
+							partitionKeyPrefixes = append(partitionKeyPrefixes, key)
+						}
+						return nil
+					},
+				); err != nil {
+					return err
+				}
+
+				splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
+				if len(partitionKeyPrefixes) == 0 {
+					// If there is no partitioning on the index, only pre-split on
+					// selected shard boundaries.
 					for _, shard := range splitAtShards {
 						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
 						splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
 						if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
 							return err
+						}
+					}
+				} else {
+					// If there are partitioning prefixes, pre-split each of them.
+					for _, partPrefix := range partitionKeyPrefixes {
+						for _, shard := range splitAtShards {
+							splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
+							if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+								return err
+							}
 						}
 					}
 				}

@@ -958,8 +958,8 @@ func (ti *Index) Predicate() (string, bool) {
 	return ti.predicate, ti.predicate != ""
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (ti *Index) ImplicitPartitioningColumnCount() int {
+// ImplicitColumnCount is part of the cat.Index interface.
+func (ti *Index) ImplicitColumnCount() int {
 	return 0
 }
 
@@ -981,6 +981,11 @@ func (ti *Index) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
+}
+
+// SetPartitions manually sets the partitions.
+func (ti *Index) SetPartitions(partitions []Partition) {
+	ti.partitions = partitions
 }
 
 // Partition implements the cat.Partition interface for testing purposes.
@@ -1005,6 +1010,11 @@ func (p *Partition) Zone() cat.Zone {
 // PartitionByListPrefixes is part of the cat.Partition interface.
 func (p *Partition) PartitionByListPrefixes() []tree.Datums {
 	return p.datums
+}
+
+// SetDatums manually sets the partitioning values.
+func (p *Partition) SetDatums(datums []tree.Datums) {
+	p.datums = datums
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.

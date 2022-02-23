@@ -40,6 +40,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
 		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
 
+		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
+
 		{`ALTER TABLE IF ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ADD ??`, `ALTER TABLE`},
@@ -222,6 +224,16 @@ func TestContextualHelp(t *testing.T) {
 		{`DEALLOCATE ALL ??`, `DEALLOCATE`},
 		{`DEALLOCATE PREPARE ??`, `DEALLOCATE`},
 
+		{`DECLARE ??`, `DECLARE`},
+		{`DECLARE foo ??`, `DECLARE`},
+		{`DECLARE foo BINARY ??`, `DECLARE`},
+		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
+
+		{`CLOSE ??`, `CLOSE`},
+
+		{`FETCH ??`, `FETCH`},
+		{`FETCH 1 ??`, `FETCH`},
+
 		{`INSERT INTO ??`, `INSERT`},
 		{`INSERT INTO blah (??`, `<SELECTCLAUSE>`},
 		{`INSERT INTO blah VALUES (1) RETURNING ??`, `INSERT`},
@@ -372,6 +384,11 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
+
+		{`SHOW TRANSFER ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE WITH ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE WITH 'foo' ??`, `SHOW TRANSFER`},
 
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 

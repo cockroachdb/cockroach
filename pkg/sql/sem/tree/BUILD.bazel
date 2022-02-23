@@ -11,6 +11,7 @@ go_library(
     name = "tree",
     srcs = [
         "aggregate_funcs.go",
+        "alter_backup.go",
         "alter_changefeed.go",
         "alter_database.go",
         "alter_default_privileges.go",
@@ -40,6 +41,7 @@ go_library(
         "constants.go",
         "copy.go",
         "create.go",
+        "cursor.go",
         "data_placement.go",
         "datum.go",
         "datum_alloc.go",

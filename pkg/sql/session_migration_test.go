@@ -12,21 +12,21 @@ package sql_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,6 +37,7 @@ import (
 // * query: executes a SQL command and returns the output
 // * dump_vars: dumps variables into a variable called with the given input.
 // * compare_vars: compares two dumped variables.
+// * wire_prepare: prepare a statement using the pgwire protocol.
 func TestSessionMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -46,24 +47,36 @@ func TestSessionMigration(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer tc.Stopper().Stop(ctx)
 
-		openConnFunc := func() *gosql.DB {
-			return serverutils.OpenDBConn(
-				t,
+		openConnFunc := func() *pgx.Conn {
+			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
 				tc.Server(0).ServingSQLAddr(),
-				"defaultdb", /* database */
-				false,       /* insecure */
-				tc.Server(0).Stopper(),
+				"StartServer", /* prefix */
+				url.User(security.RootUser),
 			)
+			require.NoError(t, err)
+			pgURL.Path = "defaultdb"
+
+			config, err := pgx.ParseConfig(pgURL.String())
+			require.NoError(t, err)
+			config.PreferSimpleProtocol = true
+			conn, err := pgx.ConnectConfig(ctx, config)
+			require.NoError(t, err)
+
+			tc.Server(0).Stopper().AddCloser(
+				stop.CloserFn(func() {
+					cleanupGoDB()
+				}))
+
+			return conn
 		}
 		dbConn := openConnFunc()
 		defer func() {
-			_ = dbConn.Close()
+			_ = dbConn.Close(ctx)
 		}()
-		_, err := dbConn.Exec("CREATE USER testuser")
+		_, err := dbConn.Exec(ctx, "CREATE USER testuser")
 		require.NoError(t, err)
 
-		openUserConnFunc := func(user string) *gosql.DB {
-
+		openUserConnFunc := func(user string) *pgx.Conn {
 			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
 				tc.Server(0).ServingSQLAddr(),
 				"StartServer", /* prefix */
@@ -72,7 +85,10 @@ func TestSessionMigration(t *testing.T) {
 			require.NoError(t, err)
 			pgURL.Path = "defaultdb"
 
-			goDB, err := gosql.Open("postgres", pgURL.String())
+			config, err := pgx.ParseConfig(pgURL.String())
+			require.NoError(t, err)
+			config.PreferSimpleProtocol = true
+			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 
 			tc.Server(0).Stopper().AddCloser(
@@ -80,7 +96,7 @@ func TestSessionMigration(t *testing.T) {
 					cleanupGoDB()
 				}))
 
-			return goDB
+			return conn
 		}
 
 		vars := make(map[string]string)
@@ -94,22 +110,22 @@ func TestSessionMigration(t *testing.T) {
 			}
 			switch d.Cmd {
 			case "reset":
-				require.NoError(t, dbConn.Close())
+				require.NoError(t, dbConn.Close(ctx))
 				dbConn = openConnFunc()
 				return ""
 			case "user":
-				require.NoError(t, dbConn.Close())
+				require.NoError(t, dbConn.Close(ctx))
 				dbConn = openUserConnFunc(d.Input)
 				return ""
 			case "exec":
-				_, err := dbConn.Exec(getQuery())
+				_, err := dbConn.Exec(ctx, getQuery())
 				if err != nil {
 					return err.Error()
 				}
 				return ""
 			case "dump_vars":
 				require.NotEmpty(t, d.Input, "expected table name")
-				_, err := dbConn.Exec(fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM [SHOW ALL]", d.Input))
+				_, err := dbConn.Exec(ctx, fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM [SHOW ALL]", d.Input))
 				require.NoError(t, err)
 				return ""
 			case "compare_vars":
@@ -130,9 +146,9 @@ WHERE dump.variable IS NULL OR dump2.variable IS NULL OR dump.variable != dump2.
 				} {
 					q = strings.ReplaceAll(q, repl.from, repl.to)
 				}
-				rows, err := dbConn.Query(q)
+				rows, err := dbConn.Query(ctx, q)
 				require.NoError(t, err)
-				ret, err := sqlutils.RowsToDataDrivenOutput(rows)
+				ret, err := sqlutils.PGXRowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
 				return ret
 			case "query":
@@ -140,23 +156,59 @@ WHERE dump.variable IS NULL OR dump2.variable IS NULL OR dump.variable != dump2.
 				for k, v := range vars {
 					q = strings.ReplaceAll(q, k, v)
 				}
-				rows, err := dbConn.Query(getQuery())
+				rows, err := dbConn.Query(ctx, getQuery())
 				if err != nil {
 					return err.Error()
 				}
-				ret, err := sqlutils.RowsToDataDrivenOutput(rows)
-				require.NoError(t, err)
+				ret, err := sqlutils.PGXRowsToDataDrivenOutput(rows)
+				if err != nil {
+					return err.Error()
+				}
 				return ret
 			case "let":
-				row := dbConn.QueryRow(getQuery())
+				row := dbConn.QueryRow(ctx, getQuery())
 				var v string
-				require.NoError(t, row.Err())
 				require.NoError(t, row.Scan(&v))
 				require.Len(t, d.CmdArgs, 1, "only one argument permitted for let")
 				for _, arg := range d.CmdArgs {
 					vars[arg.Key] = v
 				}
 				return ""
+			case "wire_prepare":
+				q := getQuery()
+				require.Len(t, d.CmdArgs, 1, "only one argument permitted for wire_prepare")
+				stmtName := d.CmdArgs[0].Key
+				_, err := dbConn.Prepare(ctx, stmtName, q)
+				require.NoError(t, err)
+				return ""
+			case "wire_exec":
+				require.GreaterOrEqual(t, len(d.CmdArgs), 1, "at least one argument required for wire_exec")
+				stmtName := d.CmdArgs[0].Key
+				args := make([]interface{}, len(d.CmdArgs[1:]))
+				for i, a := range d.CmdArgs[1:] {
+					args[i] = a.Key
+				}
+				_, err := dbConn.Exec(ctx, stmtName, args...)
+				if err != nil {
+					return err.Error()
+				}
+				return ""
+			case "wire_query":
+				require.GreaterOrEqual(t, len(d.CmdArgs), 1, "at least one argument required for wire_query")
+				stmtName := d.CmdArgs[0].Key
+				args := make([]interface{}, len(d.CmdArgs[1:]))
+				for i, a := range d.CmdArgs[1:] {
+					args[i] = a.Key
+				}
+				rows, err := dbConn.Query(ctx, stmtName, args...)
+				if err != nil {
+					return err.Error()
+				}
+				ret, err := sqlutils.PGXRowsToDataDrivenOutput(rows)
+				if err != nil {
+					return err.Error()
+				}
+				return ret
 			}
 			t.Fatalf("unknown command: %s", d.Cmd)
 			return "unexpected"

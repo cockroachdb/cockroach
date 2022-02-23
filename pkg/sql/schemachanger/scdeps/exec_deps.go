@@ -40,6 +40,7 @@ type JobRegistry interface {
 	UpdateJobWithTxn(
 		ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
 	) error
+	CheckPausepoint(name string) error
 }
 
 // NewExecutorDependencies returns an scexec.Dependencies implementation built
@@ -257,6 +258,10 @@ var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
 
 func (d *txnDeps) MakeJobID() jobspb.JobID {
 	return d.jobRegistry.MakeJobID()
+}
+
+func (d *txnDeps) CheckPausepoint(name string) error {
+	return d.jobRegistry.CheckPausepoint(name)
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {

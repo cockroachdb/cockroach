@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -410,13 +411,15 @@ func (ds *ServerImpl) setupFlow(
 	// localState.Txn. Otherwise, we create a txn based on the request's
 	// LeafTxnInputState.
 	useLeaf := false
-	for _, proc := range req.Flow.Processors {
-		if jr := proc.Core.JoinReader; jr != nil {
-			if !jr.MaintainOrdering && jr.IsIndexJoin() {
-				// Index joins when ordering doesn't have to be maintained are
-				// executed via the Streamer API that has concurrency.
-				useLeaf = true
-				break
+	if req.LeafTxnInputState != nil && row.CanUseStreamer(ctx, ds.Settings) {
+		for _, proc := range req.Flow.Processors {
+			if jr := proc.Core.JoinReader; jr != nil {
+				if !jr.MaintainOrdering && jr.IsIndexJoin() {
+					// Index joins when ordering doesn't have to be maintained
+					// are executed via the Streamer API that has concurrency.
+					useLeaf = true
+					break
+				}
 			}
 		}
 	}
@@ -524,7 +527,6 @@ type LocalState struct {
 	IsLocal bool
 
 	// HasConcurrency indicates whether the local flow uses multiple goroutines.
-	// It is set only if IsLocal is true.
 	HasConcurrency bool
 
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.

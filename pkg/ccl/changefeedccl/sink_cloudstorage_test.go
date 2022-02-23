@@ -145,7 +145,7 @@ func TestCloudStorageSink(t *testing.T) {
 		changefeedbase.OptCompression: ``, // NB: overridden in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e, err := makeJSONEncoder(opts, jobspb.ChangefeedTargets{})
+	e, err := makeJSONEncoder(opts, []jobspb.ChangefeedTargetSpecification{})
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)

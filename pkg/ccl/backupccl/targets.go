@@ -229,8 +229,9 @@ func getAllDescChanges(
 	return res, nil
 }
 
-// fullClusterTargets returns all of the tableDescriptors to be included in a
-// full cluster backup, and all the user databases.
+// fullClusterTargets returns all of the descriptors to be included in a full
+// cluster backup, along with all the "complete databases" that we are backing
+// up.
 func fullClusterTargets(
 	allDescs []catalog.Descriptor,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, error) {
@@ -240,6 +241,11 @@ func fullClusterTargets(
 	systemTablesToBackup := GetSystemTablesToIncludeInClusterBackup()
 
 	for _, desc := range allDescs {
+		// If a descriptor is in the DROP state at `EndTime` we do not want to
+		// include it in the backup.
+		if desc.Dropped() {
+			continue
+		}
 		switch desc := desc.(type) {
 		case catalog.DatabaseDescriptor:
 			dbDesc := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
@@ -256,10 +262,7 @@ func fullClusterTargets(
 					fullClusterDescs = append(fullClusterDescs, desc)
 				}
 			} else {
-				// Add all user tables that are not in a DROP state.
-				if !desc.Dropped() {
-					fullClusterDescs = append(fullClusterDescs, desc)
-				}
+				fullClusterDescs = append(fullClusterDescs, desc)
 			}
 		case catalog.SchemaDescriptor:
 			fullClusterDescs = append(fullClusterDescs, desc)
@@ -318,9 +321,10 @@ func fullClusterTargetsBackup(
 	return fullClusterDescs, fullClusterDBIDs, nil
 }
 
-// selectTargets loads all descriptors from the selected backup manifest(s), and
-// filters the descriptors based on the targets specified in the restore. Post
-// filtering, the method returns:
+// selectTargets loads all descriptors from the selected backup manifest(s),
+// filters the descriptors based on the targets specified in the restore, and
+// calculates the max descriptor ID in the backup.
+// Post filtering, the method returns:
 //  - A list of all descriptors (table, type, database, schema) along with their
 //    parent databases.
 //  - A list of database descriptors IFF the user is restoring on the cluster or
@@ -333,11 +337,33 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
+	restoreSystemUsers bool,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(allDescs, lastBackupManifest)
+	}
+
+	if restoreSystemUsers {
+		systemTables := make([]catalog.Descriptor, 0)
+		var users catalog.Descriptor
+		for _, desc := range allDescs {
+			if desc.GetParentID() == systemschema.SystemDB.GetID() {
+				switch desc.GetName() {
+				case systemschema.UsersTable.GetName():
+					users = desc
+					systemTables = append(systemTables, desc)
+				case systemschema.RoleMembersTable.GetName():
+					systemTables = append(systemTables, desc)
+					// TODO(casper): should we handle role_options table?
+				}
+			}
+		}
+		if users == nil {
+			return nil, nil, nil, errors.Errorf("cannot restore system users as no system.users table in the backup")
+		}
+		return systemTables, nil, nil, nil
 	}
 
 	if targets.Tenant != (roachpb.TenantID{}) {

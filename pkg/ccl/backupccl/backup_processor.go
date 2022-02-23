@@ -135,8 +135,10 @@ type backupDataProcessor struct {
 	memAcc *mon.BoundAccount
 }
 
-var _ execinfra.Processor = &backupDataProcessor{}
-var _ execinfra.RowSource = &backupDataProcessor{}
+var (
+	_ execinfra.Processor = &backupDataProcessor{}
+	_ execinfra.RowSource = &backupDataProcessor{}
+)
 
 func newBackupDataProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -264,13 +266,17 @@ func runBackupProcessor(
 	todo := make(chan spanAndTime, totalSpans)
 	var spanIdx int
 	for _, s := range spec.IntroducedSpans {
-		todo <- spanAndTime{spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: hlc.Timestamp{},
-			end: spec.BackupStartTime}
+		todo <- spanAndTime{
+			spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: hlc.Timestamp{},
+			end: spec.BackupStartTime,
+		}
 		spanIdx++
 	}
 	for _, s := range spec.Spans {
-		todo <- spanAndTime{spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: spec.BackupStartTime,
-			end: spec.BackupEndTime}
+		todo <- spanAndTime{
+			spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: spec.BackupStartTime,
+			end: spec.BackupEndTime,
+		}
 		spanIdx++
 	}
 
@@ -443,7 +449,8 @@ func runBackupProcessor(
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
 							backupProcessorSpan.RecordStructured(&BackupExportTraceResponseEvent{
-								RetryableError: tracing.RedactAndTruncateError(intentErr)})
+								RetryableError: tracing.RedactAndTruncateError(intentErr),
+							})
 							continue
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
@@ -505,7 +512,7 @@ func runBackupProcessor(
 					duration := respReceivedTime.Sub(reqSentTime)
 					exportResponseTraceEvent := &BackupExportTraceResponseEvent{
 						Duration:      duration.String(),
-						FileSummaries: make([]RowCount, 0),
+						FileSummaries: make([]roachpb.RowCount, 0),
 					}
 
 					if len(res.Files) > 1 {
@@ -785,7 +792,7 @@ func (s *sstSink) open(ctx context.Context) error {
 		}
 	}
 	s.out = w
-	s.sst = storage.MakeBackupSSTWriter(s.out)
+	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
 
 	return nil
 }
@@ -854,7 +861,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 		s.flushedFiles[l].EndTime.EqOrdering(resp.f.EndTime) &&
 		s.flushedFiles[l].StartTime.EqOrdering(resp.f.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
-		s.flushedFiles[l].EntryCounts.add(resp.f.EntryCounts)
+		s.flushedFiles[l].EntryCounts.Add(resp.f.EntryCounts)
 		s.stats.spanGrows++
 	} else {
 		f := resp.f

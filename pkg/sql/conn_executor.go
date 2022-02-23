@@ -296,6 +296,11 @@ type Server struct {
 
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
 	TelemetryLoggingMetrics *TelemetryLoggingMetrics
+
+	mu struct {
+		syncutil.Mutex
+		connectionCount int64
+	}
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -660,6 +665,39 @@ func (s *Server) SetupConn(
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 	)
 	return ConnectionHandler{ex}, nil
+}
+
+// IncrementConnectionCount increases connectionCount by 1.
+func (s *Server) IncrementConnectionCount() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.connectionCount++
+}
+
+// DecrementConnectionCount decreases connectionCount by 1.
+func (s *Server) DecrementConnectionCount() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.connectionCount--
+}
+
+// IncrementConnectionCountIfLessThan increases connectionCount by and returns true if allowedConnectionCount < max,
+// otherwise it does nothing and returns false.
+func (s *Server) IncrementConnectionCountIfLessThan(max int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lt := s.mu.connectionCount < max
+	if lt {
+		s.mu.connectionCount++
+	}
+	return lt
+}
+
+// GetConnectionCount returns the current number of connections.
+func (s *Server) GetConnectionCount() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.connectionCount
 }
 
 // ConnectionHandler is the interface between the result of SetupConn
@@ -1074,7 +1112,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if closeType != panicClose {
-		// Close all statements and prepared portals.
+		// Close all statements, prepared portals, and cursors.
 		ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -1082,6 +1120,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
+		ex.extraTxnState.sqlCursors.closeAll()
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -1258,6 +1297,12 @@ type connExecutor struct {
 		// tracks the memory usage of portals and should be closed upon
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
+
+		// sqlCursors contains the list of SQL CURSORs the session currently has
+		// access to.
+		// Cursors are bound to an explicit transaction and they're all destroyed
+		// once the transaction finishes.
+		sqlCursors cursorMap
 
 		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
 		// when txn is finished (either committed or aborted). It is true when
@@ -1493,10 +1538,25 @@ type prepStmtNamespace struct {
 	portals map[string]PreparedPortal
 }
 
-// HasPrepared returns true if there are prepared statements or portals
-// in the session.
-func (ns prepStmtNamespace) HasPrepared() bool {
-	return len(ns.prepStmts) > 0 || len(ns.portals) > 0
+// HasActivePortals returns true if there are portals in the session.
+func (ns prepStmtNamespace) HasActivePortals() bool {
+	return len(ns.portals) > 0
+}
+
+// MigratablePreparedStatements returns a mapping of all prepared statements.
+func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
+	for name, stmt := range ns.prepStmts {
+		ret = append(
+			ret,
+			sessiondatapb.MigratableSession_PreparedStatement{
+				Name:                 name,
+				PlaceholderTypeHints: stmt.InferredTypes,
+				SQL:                  stmt.SQL,
+			},
+		)
+	}
+	return ret
 }
 
 func (ns prepStmtNamespace) String() string {
@@ -1574,6 +1634,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 	}
+
+	// Close all cursors.
+	ex.extraTxnState.sqlCursors.closeAll()
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -1903,13 +1966,11 @@ func (ex *connExecutor) execCmd() error {
 		// inside a BEGIN/COMMIT transaction block (“close” meaning to commit if no
 		// error, or roll back if error)."
 		// In other words, Sync is treated as commit for implicit transactions.
-		if op, ok := ex.machine.CurState().(stateOpen); ok {
-			if op.ImplicitTxn.Get() {
-				// Note that the handling of ev in the case of Sync is massaged a bit
-				// later - Sync is special in that, if it encounters an error, that does
-				// *not *cause the session to ignore all commands until the next Sync.
-				ev, payload = ex.handleAutoCommit(ctx, &tree.CommitTransaction{})
-			}
+		if ex.implicitTxn() {
+			// Note that the handling of ev in the case of Sync is massaged a bit
+			// later - Sync is special in that, if it encounters an error, that does
+			// *not *cause the session to ignore all commands until the next Sync.
+			ev, payload = ex.handleAutoCommit(ctx, &tree.CommitTransaction{})
 		}
 		// Note that the Sync result will flush results to the network connection.
 		res = ex.clientComm.CreateSyncResult(pos)
@@ -2477,7 +2538,6 @@ func (ex *connExecutor) setTransactionModes(
 		if err := ex.state.setHistoricalTimestamp(ctx, asOfTs); err != nil {
 			return err
 		}
-		ex.state.sqlTimestamp = asOfTs.GoTime()
 		if rwMode == tree.UnspecifiedReadWriteMode {
 			rwMode = tree.ReadOnly
 		}
@@ -2569,6 +2629,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
 		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
+		statementPreparer:      ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
@@ -2581,10 +2642,16 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 // statement is supposed to have a different timestamp, the evalCtx generally
 // shouldn't be reused across statements.
 func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
+	newTxn := txn == nil || evalCtx.Txn != txn
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
-	evalCtx.StmtTimestamp = stmtTS
+	if newTxn || !ex.implicitTxn() {
+		// Only update the stmt timestamp if in a new txn or an explicit txn. This is because this gets
+		// called multiple times during an extended protocol implicit txn, but we
+		// want all those stages to share the same stmtTS.
+		evalCtx.StmtTimestamp = stmtTS
+	}
 	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
@@ -2607,7 +2674,10 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 		nextMax := minTSErr.MinTimestampBound
 		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
 		evalCtx.AsOfSystemTime.MaxTimestampBound = nextMax
-	} else {
+	} else if newTxn {
+		// Otherwise, only change the historical timestamps if this is a new txn.
+		// This is because resetPlanner can be called multiple times for the same
+		// txn during the extended protocol.
 		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
 		evalCtx.AsOfSystemTime = nil
 	}
@@ -2640,6 +2710,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
+	p.sqlCursors = ex.getCursorAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -2994,6 +3065,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 	return connExPrepStmtsAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCursorAccessor() sqlCursors {
+	return connExCursorAccessor{
 		ex: ex,
 	}
 }

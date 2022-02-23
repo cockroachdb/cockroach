@@ -216,6 +216,39 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
+func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) error {
+	// We could, but do not, report server-side network errors while
+	// trying to send the client error. This is because clients that
+	// receive error payload are highly correlated with clients
+	// disconnecting abruptly.
+	_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
+	return err
+}
+
+func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
+	if c.sessionArgs.IsSuperuser {
+		// This user is a super user and is therefore not affected by connection limits.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+
+	maxNumConnectionsValue := maxNumConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNumConnectionsValue < 0 {
+		// Unlimited connections are allowed.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+	if !sqlServer.IncrementConnectionCountIfLessThan(maxNumConnectionsValue) {
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
+			"the maximum number of allowed connections is %d and can be modified using the %s config key",
+			maxNumConnectionsValue,
+			maxNumConnections.Key(),
+		))
+	}
+	return nil
+}
+
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
@@ -279,7 +312,7 @@ func (c *conn) serveImpl(
 
 	var sentDrainSignal bool
 	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	c.conn = newReadTimeoutConn(c.conn, func() error {
+	c.conn = NewReadTimeoutConn(c.conn, func() error {
 		// If the context was canceled, it's time to stop reading. Either a
 		// higher-level server or the command processor have canceled us.
 		if ctx.Err() != nil {
@@ -661,6 +694,15 @@ func (c *conn) processCommandsAsync(
 			ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
 		); retErr != nil {
 			// Auth failed or some other error.
+			return
+		}
+
+		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
+			return
+		}
+		defer sqlServer.DecrementConnectionCount()
+
+		if retErr = c.authOKMessage(); retErr != nil {
 			return
 		}
 
@@ -1745,7 +1787,8 @@ type readTimeoutConn struct {
 	checkExitConds func() error
 }
 
-func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
+// NewReadTimeoutConn wraps the given connection with a readTimeoutConn.
+func NewReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	return &readTimeoutConn{
 		Conn:           c,
 		checkExitConds: checkExitConds,

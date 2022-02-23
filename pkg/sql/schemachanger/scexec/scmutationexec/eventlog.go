@@ -23,7 +23,7 @@ import (
 
 func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
 	descID := screl.GetDescID(op.Element.Element())
-	fullName, err := m.cr.GetFullyQualifiedName(ctx, descID)
+	fullName, err := m.nr.GetFullyQualifiedName(ctx, descID)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func asEventPayload(
 			return &eventpb.DropDatabase{DatabaseName: fullName}, nil
 		case *scpb.Schema:
 			return &eventpb.DropSchema{SchemaName: fullName}, nil
-		case *scpb.Type:
+		case *scpb.AliasType, *scpb.EnumType:
 			return &eventpb.DropType{TypeName: fullName}, nil
 		}
 	}

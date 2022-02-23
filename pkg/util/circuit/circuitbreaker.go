@@ -84,6 +84,20 @@ func (b *Breaker) Signal() interface {
 	return b.mu.errAndCh
 }
 
+// HasMark returns whether the error has an error mark that is unique to this
+// breaker. In other words, the error originated at this Breaker.
+//
+// TODO(tbg): I think this doesn't work as advertised. Two breakers on different
+// systems might produce wire-identical `b.errMark()`s. We really want a wrapping
+// error which we can then retrieve & check for pointer equality with `b`.
+func (b *Breaker) HasMark(err error) bool {
+	return errors.Is(err, b.errMark())
+}
+
+func (b *Breaker) errMark() error {
+	return (*breakerErrorMark)(b)
+}
+
 // Report reports a (non-nil) error to the breaker. This will trip the Breaker.
 func (b *Breaker) Report(err error) {
 	if err == nil {
@@ -92,8 +106,7 @@ func (b *Breaker) Report(err error) {
 		return
 	}
 	// Give shouldTrip a chance to massage the error.
-	markErr := (*breakerErrorMark)(b)
-	if errors.Is(err, markErr) {
+	if b.HasMark(err) {
 		// The input error originated from this breaker. This shouldn't
 		// happen but since it is happening, we want to avoid creating
 		// longer and longer error chains below.
@@ -102,7 +115,7 @@ func (b *Breaker) Report(err error) {
 
 	// Update the error. This may overwrite an earlier error, which is fine:
 	// We want the breaker to reflect a recent error as this is more helpful.
-	storeErr := errors.Mark(errors.Mark(err, ErrBreakerOpen), markErr)
+	storeErr := errors.Mark(errors.Mark(err, ErrBreakerOpen), b.errMark())
 
 	// When the Breaker first trips, we populate the error and close the channel.
 	// When the error changes, we have to replace errAndCh wholesale (that's the

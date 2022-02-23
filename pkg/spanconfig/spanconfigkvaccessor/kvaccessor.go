@@ -309,7 +309,7 @@ func (k *KVAccessor) constructDeleteStmtAndArgs(
 }
 
 // constructUpsertStmtAndArgs constructs the statement and query arguments
-// needed to upsert the given span config entries.
+// needed to upsert the given span config records.
 func (k *KVAccessor) constructUpsertStmtAndArgs(
 	toUpsert []spanconfig.Record,
 ) (string, []interface{}, error) {
@@ -429,6 +429,12 @@ func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Reco
 		copy(targets, list)
 		sort.Sort(spanconfig.Targets(targets))
 		for i := range targets {
+			if targets[i].IsSystemTarget() && targets[i].GetSystemTarget().IsReadOnly() {
+				return errors.AssertionFailedf(
+					"cannot use read only system target %s as an update argument", targets[i],
+				)
+			}
+
 			if i == 0 {
 				continue
 			}

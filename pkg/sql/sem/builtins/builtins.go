@@ -76,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -688,7 +687,7 @@ var builtins = map[string]builtinDefinition{
 				s := string(tree.MustBeDString(args[0]))
 				uv, err := uuid.FromString(s)
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid UUID")
 				}
 				return tree.NewDBytes(tree.DBytes(uv.GetBytes())), nil
 			},
@@ -758,7 +757,7 @@ var builtins = map[string]builtinDefinition{
 				s := tree.MustBeDString(args[0])
 				u, err := ulid.Parse(string(s))
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid ULID")
 				}
 				b, err := u.MarshalBinary()
 				if err != nil {
@@ -3917,7 +3916,7 @@ value if you rely on the HLC for accuracy.`,
 			pbToJSON := func(typ string, data []byte, flags protoreflect.FmtFlags) (tree.Datum, error) {
 				msg, err := protoreflect.DecodeMessage(typ, data)
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid protocol message")
 				}
 				j, err := protoreflect.MessageToJSON(msg, flags)
 				if err != nil {
@@ -3998,11 +3997,11 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				msg, err := protoreflect.NewMessage(string(tree.MustBeDString(args[0])))
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid proto name")
 				}
 				data, err := protoreflect.JSONBMarshalToMessage(tree.MustBeDJSON(args[1]).JSON, msg)
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid proto JSON")
 				}
 				return tree.NewDBytes(tree.DBytes(data)), nil
 			},
@@ -4855,11 +4854,15 @@ value if you rely on the HLC for accuracy.`,
 				}
 				// Finally, encode the index key using the provided datums.
 				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc.GetID(), index.GetID())
-				res, _, err := rowenc.EncodePartialIndexKey(index, len(datums), colMap, datums, keyPrefix)
+				keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+				if len(datums) > len(keyAndSuffixCols) {
+					return nil, errors.Errorf("encoding too many columns (%d)", len(datums))
+				}
+				res, _, err := rowenc.EncodePartialIndexKey(keyAndSuffixCols[:len(datums)], colMap, datums, keyPrefix)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDBytes(tree.DBytes(res)), err
+				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
 			Info:       "Generate the key for a row on a particular table and index.",
 			Volatility: tree.VolatilityStable,
@@ -6330,46 +6333,7 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if !evalCtx.TxnImplicit {
-					return nil, pgerror.Newf(
-						pgcode.InvalidTransactionState,
-						"cannot serialize a session which is inside a transaction",
-					)
-				}
-
-				if evalCtx.PreparedStatementState.HasPrepared() {
-					return nil, pgerror.Newf(
-						pgcode.InvalidTransactionState,
-						"cannot serialize a session which has portals or prepared statements",
-					)
-				}
-
-				sd := evalCtx.SessionData()
-				if sd == nil {
-					return nil, pgerror.Newf(
-						pgcode.InvalidTransactionState,
-						"no session is active",
-					)
-				}
-
-				if len(sd.DatabaseIDToTempSchemaID) > 0 {
-					return nil, pgerror.Newf(
-						pgcode.InvalidTransactionState,
-						"cannot serialize session with temporary schemas",
-					)
-				}
-
-				var m sessiondatapb.MigratableSession
-				m.SessionData = sd.SessionData
-				sessiondata.MarshalNonLocal(sd, &m.SessionData)
-				m.LocalOnlySessionData = sd.LocalOnlySessionData
-
-				b, err := protoutil.Marshal(&m)
-				if err != nil {
-					return nil, err
-				}
-
-				return tree.NewDBytes(tree.DBytes(b)), nil
+				return evalCtx.Planner.SerializeSessionState()
 			},
 			Info:       `This function serializes the variables in the current session.`,
 			Volatility: tree.VolatilityVolatile,
@@ -6384,38 +6348,8 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{{"session", types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if !evalCtx.TxnImplicit {
-					return nil, pgerror.Newf(
-						pgcode.InvalidTransactionState,
-						"cannot deserialize a session whilst inside a transaction",
-					)
-				}
-
-				var m sessiondatapb.MigratableSession
-				if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(args[0])), &m); err != nil {
-					return nil, pgerror.WithCandidateCode(
-						errors.Wrapf(err, "error deserializing session"),
-						pgcode.InvalidParameterValue,
-					)
-				}
-				sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
-				if err != nil {
-					return nil, err
-				}
-				sd.SessionData = m.SessionData
-				sd.LocalUnmigratableSessionData = evalCtx.SessionData().LocalUnmigratableSessionData
-				sd.LocalOnlySessionData = m.LocalOnlySessionData
-				if sd.SessionUser().Normalized() != evalCtx.SessionData().SessionUser().Normalized() {
-					return nil, pgerror.Newf(
-						pgcode.InsufficientPrivilege,
-						"can only deserialize matching session users",
-					)
-				}
-				if err := evalCtx.Planner.CheckCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
-					return nil, err
-				}
-				*evalCtx.SessionData() = *sd
-				return tree.MakeDBool(true), nil
+				state := tree.MustBeDBytes(args[0])
+				return evalCtx.Planner.DeserializeSessionState(tree.NewDBytes(state))
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
 			Volatility: tree.VolatilityVolatile,

@@ -251,10 +251,6 @@ export class StatementsPage extends React.Component<
     }
   };
 
-  resetTime = (): void => {
-    this.changeTimeScale(defaultTimeScaleSelected);
-  };
-
   resetPagination = (): void => {
     this.setState(prevState => {
       return {
@@ -643,11 +639,6 @@ export class StatementsPage extends React.Component<
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
             />
-          </PageConfigItem>
-          <PageConfigItem>
-            <button className={cx("reset-btn")} onClick={this.resetTime}>
-              reset time
-            </button>
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
             <ClearStats resetSQLStats={resetSQLStats} tooltipType="statement" />

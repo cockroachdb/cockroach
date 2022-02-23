@@ -56,17 +56,20 @@ func (noopSyncCloser) Close() error {
 
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
 // that will subsequently be ingested (e.g. with AddSSTable).
-func MakeIngestionWriterOptions(ctx context.Context, st *cluster.Settings) sstable.WriterOptions {
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatPebblev1)
-	// Only enable block properties if this cluster version support it.
-	// NB: we check for the _second_ of the two cluster versions. The first is
-	// used as a barrier for the major format version bump in the store. Nodes
-	// that are at the second version are guaranteed by the cluster migration
-	// framework to have already bumped their store major format versions to a
-	// sufficient version by the first.
-	if !st.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties) {
+func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
+	// By default, take a conservative approach and assume we don't have newer
+	// table features available. Upgrade to an appropriate version only if the
+	// cluster supports it.
+	format := sstable.TableFormatRocksDBv2
+	// Cases are ordered from newer to older versions.
+	switch {
+	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties):
+		format = sstable.TableFormatPebblev1 // Block properties.
+	}
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+	if format < sstable.TableFormatPebblev1 {
+		// Block properties aren't available at this version. Disable collection.
 		opts.BlockPropertyCollectors = nil
-		opts.TableFormat = sstable.TableFormatRocksDBv2
 	}
 	opts.MergerName = "nullptr"
 	return opts
@@ -74,7 +77,10 @@ func MakeIngestionWriterOptions(ctx context.Context, st *cluster.Settings) sstab
 
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
 // are typically only ever iterated in their entirety.
-func MakeBackupSSTWriter(f io.Writer) SSTWriter {
+func MakeBackupSSTWriter(_ context.Context, _ *cluster.Settings, f io.Writer) SSTWriter {
+	// By default, take a conservative approach and assume we don't have newer
+	// table features available. Upgrade to an appropriate version only if the
+	// cluster supports it.
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
 	// Don't need BlockPropertyCollectors for backups.
 	opts.BlockPropertyCollectors = nil

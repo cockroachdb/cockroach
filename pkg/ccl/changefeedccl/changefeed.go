@@ -15,15 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -46,47 +43,47 @@ func emitResolvedTimestamp(
 	return nil
 }
 
+func shouldProtectTimestamps(codec keys.SQLCodec) bool {
+	// TODO(smiskin): Remove this restriction once tenant based pts are enabled
+	return codec.ForSystemTenant()
+}
+
 // createProtectedTimestampRecord will create a record to protect the spans for
 // this changefeed at the resolved timestamp. The progress struct will be
 // updated to refer to this new protected timestamp record.
 func createProtectedTimestampRecord(
 	ctx context.Context,
 	codec keys.SQLCodec,
-	pts protectedts.Storage,
-	txn *kv.Txn,
 	jobID jobspb.JobID,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	resolved hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,
-) error {
-	if !codec.ForSystemTenant() {
-		return errors.AssertionFailedf("createProtectedTimestampRecord called on tenant-based changefeed")
-	}
-
+) *ptpb.Record {
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
-	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
-		progress.ProtectedTimestampRecord, resolved)
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeTargetToProtect(targets)
-	rec := jobsprotectedts.MakeRecord(
+
+	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", progress.ProtectedTimestampRecord, resolved)
+	return jobsprotectedts.MakeRecord(
 		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
 		jobsprotectedts.Jobs, targetToProtect)
-	return pts.Protect(ctx, txn, rec)
 }
 
-func makeTargetToProtect(targets jobspb.ChangefeedTargets) *ptpb.Target {
+func makeTargetToProtect(targets []jobspb.ChangefeedTargetSpecification) *ptpb.Target {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
 	tablesToProtect := make(descpb.IDs, 0, len(targets)+1)
-	for t := range targets {
-		tablesToProtect = append(tablesToProtect, t)
+	for _, t := range targets {
+		tablesToProtect = append(tablesToProtect, t.TableID)
 	}
 	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 
-func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) []roachpb.Span {
+func makeSpansToProtect(
+	codec keys.SQLCodec, targets []jobspb.ChangefeedTargetSpecification,
+) []roachpb.Span {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
@@ -98,8 +95,8 @@ func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) [
 			EndKey: tablePrefix.PrefixEnd(),
 		})
 	}
-	for t := range targets {
-		addTablePrefix(uint32(t))
+	for _, t := range targets {
+		addTablePrefix(uint32(t.TableID))
 	}
 	addTablePrefix(keys.DescriptorTableID)
 	return spansToProtect

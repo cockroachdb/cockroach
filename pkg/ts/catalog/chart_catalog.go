@@ -1004,10 +1004,24 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Lock Hold Durations",
+				Metrics: []string{
+					"kv.concurrency.avg_lock_hold_duration_nanos",
+					"kv.concurrency.max_lock_hold_duration_nanos",
+				},
+			},
+			{
 				Title: "Waiters",
 				Metrics: []string{
 					"kv.concurrency.lock_wait_queue_waiters",
 					"kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+				},
+			},
+			{
+				Title: "Lock Wait Durations",
+				Metrics: []string{
+					"kv.concurrency.avg_lock_wait_duration_nanos",
+					"kv.concurrency.max_lock_wait_duration_nanos",
 				},
 			},
 		},
@@ -2366,6 +2380,41 @@ var charts = []sectionDescription{
 					"sql.restart_savepoint.release.started.count.internal",
 					"sql.restart_savepoint.rollback.started.count.internal",
 				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{SQLLayer, "SQL", "Row Level TTL"}},
+		Charts: []chartDescription{
+			{
+				Title: "Active Range Deletes",
+				Metrics: []string{
+					"jobs.row_level_ttl.num_active_ranges",
+				},
+				AxisLabel: "Num Running",
+			},
+			{
+				Title: "Processing Count",
+				Metrics: []string{
+					"jobs.row_level_ttl.rows_selected",
+					"jobs.row_level_ttl.rows_deleted",
+				},
+				AxisLabel: "Count",
+			},
+			{
+				Title: "Processing Latency",
+				Metrics: []string{
+					"jobs.row_level_ttl.select_duration",
+					"jobs.row_level_ttl.delete_duration",
+				},
+				AxisLabel: "Latency (nanoseconds)",
+			},
+			{
+				Title: "Net Processing Latency",
+				Metrics: []string{
+					"jobs.row_level_ttl.range_total_duration",
+				},
+				AxisLabel: "Latency (nanoseconds)",
 			},
 		},
 	},

@@ -193,26 +193,25 @@ func (ibm *IndexBackfillMerger) Merge(
 	prefixLen := len(sourcePrefix)
 	destPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), destinationID)
 
-	key := startKey
 	destKey := make([]byte, len(destPrefix))
 
 	if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
 		if knobs != nil && knobs.RunBeforeMergeChunk != nil {
-			if err := knobs.RunBeforeMergeChunk(key); err != nil {
+			if err := knobs.RunBeforeMergeChunk(startKey); err != nil {
 				return nil, err
 			}
 		}
 	}
-
+	var nextStart roachpb.Key
 	err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// For now just grab all of the destination KVs and merge the corresponding entries.
-		kvs, err := txn.Scan(ctx, key, endKey, chunkSize)
+		kvs, err := txn.Scan(ctx, startKey, endKey, chunkSize)
 		if err != nil {
 			return err
 		}
 
 		if len(kvs) == 0 {
-			key = nil
+			nextStart = nil
 			return nil
 		}
 
@@ -249,7 +248,15 @@ func (ibm *IndexBackfillMerger) Merge(
 			return err
 		}
 
-		key = kvs[len(kvs)-1].Key.Next()
+		nextStart = kvs[len(kvs)-1].Key.Next()
+
+		if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
+			if knobs != nil && knobs.RunDuringMergeTxn != nil {
+				if err := knobs.RunDuringMergeTxn(ctx, txn, startKey, endKey); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	})
 
@@ -257,7 +264,7 @@ func (ibm *IndexBackfillMerger) Merge(
 		return nil, err
 	}
 
-	return key, nil
+	return nextStart, nil
 }
 
 func mergeEntry(sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error) {
@@ -305,6 +312,8 @@ type IndexBackfillMergerTestingKnobs struct {
 	// RunBeforeMergeChunk is called once before the merge of each chunk. It is
 	// called with starting key of the chunk.
 	RunBeforeMergeChunk func(startKey roachpb.Key) error
+
+	RunDuringMergeTxn func(ctx context.Context, txn *kv.Txn, startKey roachpb.Key, endKey roachpb.Key) error
 
 	// PushesProgressEveryChunk forces the process to push the merge process after
 	// every chunk.

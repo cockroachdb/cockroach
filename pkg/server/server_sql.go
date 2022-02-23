@@ -151,6 +151,8 @@ type SQLServer struct {
 
 	systemConfigWatcher *systemconfigwatcher.Cache
 
+	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
+
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
 	// connManager is the connection manager to use to set up additional
@@ -305,10 +307,6 @@ type sqlServerArgs struct {
 
 	// monitorAndMetrics contains the return value of newRootSQLMemoryMonitor.
 	monitorAndMetrics monitorAndMetrics
-
-	// allowSessionRevival is true if the cluster is allowed to create session
-	// revival tokens and use them to authenticate a session.
-	allowSessionRevival bool
 
 	// settingsStorage is an optional interface to drive storing of settings
 	// data on disk to provide a fresh source of settings upon next startup.
@@ -695,7 +693,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
-		AllowSessionRevival:     cfg.allowSessionRevival,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -1021,6 +1018,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		spanconfigSQLWatcher:    spanConfig.sqlWatcher,
 		settingsWatcher:         settingsWatcher,
 		systemConfigWatcher:     cfg.systemConfigWatcher,
+		isMeta1Leaseholder:      cfg.isMeta1Leaseholder,
 	}, nil
 }
 
@@ -1236,6 +1234,12 @@ func (s *SQLServer) preStart(
 					s.execCfg,
 					sessiondatapb.SessionData{},
 				)
+			},
+			ShouldRunScheduler: func(ctx context.Context, ts hlc.ClockTimestamp) (bool, error) {
+				if s.execCfg.Codec.ForSystemTenant() {
+					return s.isMeta1Leaseholder(ctx, ts)
+				}
+				return true, nil
 			},
 		},
 		scheduledjobs.ProdJobSchedulerEnv,

@@ -59,7 +59,9 @@ func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
 			} else {
 				out = fn.Call(inWithMeta)
 			}
-			ret = append(ret, out[0].Interface().(scop.Op))
+			if !out[0].IsNil() {
+				ret = append(ret, out[0].Interface().(scop.Op))
+			}
 		}
 		return ret
 	}, nil

@@ -72,7 +72,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	reader := eng.NewReadOnly()
+	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
 	iter := reader.NewMVCCIterator(
 		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
@@ -137,7 +137,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[3], Timestamp: hlc.Timestamp{WallTime: 1}},
 		largeValue))
 
-	reader := eng.NewReadOnly()
+	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
 	iter := reader.NewMVCCIterator(
 		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})

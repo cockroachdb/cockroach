@@ -17,16 +17,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -91,6 +95,65 @@ func doTestDrain(tt *testing.T) {
 		// return value if err is nil, which is not desired.
 		return errors.Newf("server not yet refusing RPC, got %v", err) // nolint:errwrap
 	})
+}
+
+func TestEnsureSQLStatsAreFlushedDuringDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var drainSleepCallCount = 0
+	drainCtx := newTestDrainContext(t, &drainSleepCallCount)
+	defer drainCtx.Close()
+
+	var (
+		ts    = drainCtx.tc.Server(0).SQLServer().(*sql.Server)
+		sqlDB = sqlutils.MakeSQLRunner(drainCtx.tc.ServerConn(0))
+	)
+
+	// Issue queries to be registered in stats.
+	sqlDB.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT PRIMARY KEY);
+INSERT INTO t.test VALUES (1);
+INSERT INTO t.test VALUES (2);
+INSERT INTO t.test VALUES (3);
+`)
+
+	// Find the in-memory stats for the queries.
+	stats, err := ts.GetScrubbedStmtStats(ctx)
+	require.NoError(t, err)
+	require.Truef(t,
+		func(stats []roachpb.CollectedStatementStatistics) bool {
+			for _, stat := range stats {
+				if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
+					return true
+				}
+			}
+			return false
+		}(stats),
+		"expected to find in-memory stats",
+	)
+
+	// Sanity check: verify that the statement statistics system table is empty.
+	sqlDB.CheckQueryResults(t,
+		`SELECT count(*) FROM system.statement_statistics WHERE node_id = 1`,
+		[][]string{{"0"}},
+	)
+
+	// Issue a drain.
+	drainCtx.sendDrainNoShutdown()
+
+	// Open a new SQL connection.
+	sqlDB = sqlutils.MakeSQLRunner(drainCtx.tc.ServerConn(1))
+
+	// Check that the stats were flushed into the statement stats system table.
+	// Verify that the number of statistics for node 1 are non-zero.
+	sqlDB.CheckQueryResults(t,
+		`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
+		[][]string{{"true"}},
+	)
 }
 
 type testDrainContext struct {

@@ -552,6 +552,15 @@ func (u *sqlSymUnion) alterChangefeedCmd() tree.AlterChangefeedCmd {
 func (u *sqlSymUnion) alterChangefeedCmds() tree.AlterChangefeedCmds {
     return u.val.(tree.AlterChangefeedCmds)
 }
+func (u *sqlSymUnion) backupKMS() tree.BackupKMS {
+    return u.val.(tree.BackupKMS)
+}
+func (u *sqlSymUnion) alterBackupCmd() tree.AlterBackupCmd {
+    return u.val.(tree.AlterBackupCmd)
+}
+func (u *sqlSymUnion) alterBackupCmds() tree.AlterBackupCmds {
+    return u.val.(tree.AlterBackupCmds)
+}
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
 }
@@ -752,6 +761,15 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 func (u *sqlSymUnion) setVar() *tree.SetVar {
     return u.val.(*tree.SetVar)
 }
+func (u *sqlSymUnion) cursorSensitivity() tree.CursorSensitivity {
+    return u.val.(tree.CursorSensitivity)
+}
+func (u *sqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
+    return u.val.(tree.CursorScrollOption)
+}
+func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
+    return u.val.(*tree.FetchCursor)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -771,11 +789,11 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
+%token <str> ASENSITIVE ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
-%token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
@@ -801,20 +819,21 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG
+%token <str> FOREIGN FORWARD FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
 %token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
-%token <str> INNER INSERT INT INTEGER
+%token <str> INNER INSENSITIVE INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -831,46 +850,47 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
-%token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
-%token <str> RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
+%token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
+%token <str> START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
-%token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
+%token <str> TRANSACTION TRANSACTIONS TRANSFER TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIRTUAL VISIBLE VOTERS
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
+%token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -907,6 +927,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.Statement> alter_stmt
 %type <tree.Statement> alter_changefeed_stmt
+%type <tree.Statement> alter_backup_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
@@ -1106,6 +1127,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_transactions_stmt
+%type <tree.Statement> show_transfer_stmt
 %type <tree.Statement> show_types_stmt
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
@@ -1125,6 +1147,14 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.Statement> close_cursor_stmt
 %type <tree.Statement> declare_cursor_stmt
+%type <tree.Statement> fetch_cursor_stmt
+%type <*tree.FetchCursor> fetch_specifier
+%type <bool> opt_hold opt_binary
+%type <tree.CursorSensitivity> opt_sensitivity
+%type <tree.CursorScrollOption> opt_scroll
+%type <int64> opt_forward_backward forward_backward
+%type <int64> next_prior
+
 %type <tree.Statement> reindex_stmt
 
 %type <[]string> opt_incremental
@@ -1155,6 +1185,10 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.AlterChangefeedCmd> alter_changefeed_cmd
 %type <tree.AlterChangefeedCmds> alter_changefeed_cmds
+
+%type <tree.BackupKMS> backup_kms
+%type <tree.AlterBackupCmd> alter_backup_cmd
+%type <tree.AlterBackupCmd> alter_backup_cmds
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1526,8 +1560,9 @@ stmt:
 | refresh_stmt              // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt    // help texts in sub-rule
 | transaction_stmt          // help texts in sub-rule
-| close_cursor_stmt
-| declare_cursor_stmt
+| close_cursor_stmt         // EXTEND WITH HELP: CLOSE
+| declare_cursor_stmt       // EXTEND WITH HELP: DECLARE
+| fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
 | reindex_stmt
 | /* EMPTY */
   {
@@ -1555,6 +1590,7 @@ alter_ddl_stmt:
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
+| alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -2995,6 +3031,10 @@ opt_with_schedule_options:
 // RESTORE <targets...> FROM <location...>
 //         [ AS OF SYSTEM TIME <expr> ]
 //         [ WITH <option> [= <value>] [, ...] ]
+// or
+// RESTORE SYSTEM USERS FROM <location...>
+//         [ AS OF SYSTEM TIME <expr> ]
+//         [ WITH <option> [= <value>] [, ...] ]
 //
 // Targets:
 //    TABLE <pattern> [, ...]
@@ -3053,6 +3093,25 @@ restore_stmt:
       From: $6.listOfStringOrPlaceholderOptList(),
       AsOf: $7.asOfClause(),
       Options: *($8.restoreOptions()),
+    }
+  }
+| RESTORE SYSTEM USERS FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+      SystemUsers: true,
+      From: $5.listOfStringOrPlaceholderOptList(),
+      AsOf: $6.asOfClause(),
+      Options: *($7.restoreOptions()),
+    }
+  }
+| RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+      SystemUsers: true,
+      Subdir: $5.expr(),
+      From: $7.listOfStringOrPlaceholderOptList(),
+      AsOf: $8.asOfClause(),
+      Options: *($9.restoreOptions()),
     }
   }
 | RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause
@@ -3163,6 +3222,11 @@ restore_options:
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
 	}
+| TENANT '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
+  }
+
 import_format:
   name
   {
@@ -4349,6 +4413,62 @@ alter_changefeed_cmd:
     }
   }
 
+// %Help: ALTER BACKUP - alter an existing backup's encryption keys
+// %Category: CCL
+// %Text:
+// ALTER BACKUP <location...>
+//        [ ADD NEW_KMS = <kms...> ]
+//        [ WITH OLD_KMS = <kms...> ]
+// Locations:
+//    "[scheme]://[host]/[path to backup]?[parameters]"
+//
+// KMS:
+//    "[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : add new kms keys to backup
+alter_backup_stmt:
+  ALTER BACKUP string_or_placeholder alter_backup_cmds
+  {
+    $$.val = &tree.AlterBackup {
+      Backup:	$3.expr(),
+      Cmds:	$4.alterBackupCmds(),
+    }
+  }
+| ALTER BACKUP string_or_placeholder IN string_or_placeholder alter_backup_cmds
+	{
+    $$.val = &tree.AlterBackup {
+      Subdir:	$3.expr(),
+      Backup:	$5.expr(),
+      Cmds:	$6.alterBackupCmds(),
+    }
+	}
+| ALTER BACKUP error // SHOW HELP: ALTER BACKUP
+
+alter_backup_cmds:
+	alter_backup_cmd
+	{
+    $$.val = tree.AlterBackupCmds{$1.alterBackupCmd()}
+	}
+|	alter_backup_cmds alter_backup_cmd
+	{
+    $$.val = append($1.alterBackupCmds(), $2.alterBackupCmd())
+	}
+
+alter_backup_cmd:
+	ADD backup_kms
+	{
+    $$.val = &tree.AlterBackupKMS{
+      KMSInfo:	$2.backupKMS(),
+    }
+	}
+
+backup_kms:
+	NEW_KMS '=' string_or_placeholder_opt_list WITH OLD_KMS '=' string_or_placeholder_opt_list
+	{
+    $$.val = tree.BackupKMS{
+      NewKMSURI:	$3.stringOrPlaceholderOptList(),
+      OldKMSURI:	$7.stringOrPlaceholderOptList(),
+    }
+	}
+
 // %Help: PREPARE - prepare a statement for later execution
 // %Category: Misc
 // %Text: PREPARE <name> [ ( <types...> ) ] AS <query>
@@ -5093,8 +5213,8 @@ zone_value:
 // PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
-// SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
-// SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
+// SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
+// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
@@ -5130,6 +5250,7 @@ show_stmt:
 | show_trace_stmt            // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt      // EXTEND WITH HELP: SHOW TRANSACTION
 | show_transactions_stmt     // EXTEND WITH HELP: SHOW TRANSACTIONS
+| show_transfer_stmt         // EXTEND WITH HELP: SHOW TRANSFER
 | show_users_stmt            // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt             // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
 | SHOW error                 // SHOW HELP: SHOW
@@ -5137,14 +5258,206 @@ show_stmt:
 | show_full_scans_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
 
-// Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
-// since there will be no open cursors.
+// %Help: CLOSE - close SQL cursor
+// %Category: Misc
+// %Text: CLOSE [ ALL | <name> ]
+// %SeeAlso: DECLARE, FETCH
 close_cursor_stmt:
-	CLOSE ALL { }
-| CLOSE cursor_name { return unimplementedWithIssue(sqllex, 41412) }
+	CLOSE ALL
+	{
+	  $$.val = &tree.CloseCursor{
+	    All: true,
+	  }
+	}
+| CLOSE cursor_name
+  {
+	  $$.val = &tree.CloseCursor{
+	    Name: tree.Name($2),
+	  }
+	}
+| CLOSE error // SHOW HELP: CLOSE
 
+// %Help: DECLARE - declare SQL cursor
+// %Category: Misc
+// %Text: DECLARE <name> [ options ] CURSOR p [ WITH | WITHOUT HOLD ] FOR <query>
+// %SeeAlso: CLOSE, FETCH
 declare_cursor_stmt:
-	DECLARE { return unimplementedWithIssue(sqllex, 41412) }
+  // TODO(jordan): the options here should be supported in any order, not just
+  // the fixed one here.
+	DECLARE cursor_name opt_binary opt_sensitivity opt_scroll CURSOR opt_hold FOR select_stmt
+	{
+	  $$.val = &tree.DeclareCursor{
+	    Binary: $3.bool(),
+	    Name: tree.Name($2),
+	    Sensitivity: $4.cursorSensitivity(),
+	    Scroll: $5.cursorScrollOption(),
+	    Hold: $7.bool(),
+	    Select: $9.slct(),
+	  }
+  }
+| DECLARE error // SHOW HELP: DECLARE
+
+opt_binary:
+  BINARY
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_sensitivity:
+  INSENSITIVE
+  {
+    $$.val = tree.Insensitive
+  }
+| ASENSITIVE
+  {
+    $$.val = tree.Asensitive
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.UnspecifiedSensitivity
+  }
+
+opt_scroll:
+  SCROLL
+  {
+    $$.val = tree.Scroll
+  }
+| NO SCROLL
+  {
+    $$.val = tree.NoScroll
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.UnspecifiedScroll
+  }
+
+opt_hold:
+  WITH HOLD
+  {
+    $$.val = true
+  }
+| WITHOUT HOLD
+  {
+    $$.val = false
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+// %Help: FETCH - fetch rows from a SQL cursor
+// %Category: Misc
+// %Text: FETCH [ direction [ FROM | IN ] ] <name>
+// %SeeAlso: CLOSE, DECLARE
+fetch_cursor_stmt:
+  FETCH fetch_specifier
+  {
+    $$.val = $2.fetchCursor()
+  }
+| FETCH error // SHOW HELP: FETCH
+
+fetch_specifier:
+  cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($1),
+      Count: 1,
+    }
+  }
+| from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($2),
+      Count: 1,
+    }
+  }
+| next_prior opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      Count: $1.int64(),
+    }
+  }
+| forward_backward opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      Count: $1.int64(),
+    }
+  }
+| opt_forward_backward signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      Count: $2.int64() * $1.int64(),
+    }
+  }
+| opt_forward_backward ALL opt_from_or_in cursor_name
+  {
+    fetchType := tree.FetchAll
+    count := $1.int64()
+    if count < 0 {
+      fetchType = tree.FetchBackwardAll
+    }
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: fetchType,
+    }
+  }
+| ABSOLUTE signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: tree.FetchAbsolute,
+      Count: $2.int64(),
+    }
+  }
+| RELATIVE signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: tree.FetchRelative,
+      Count: $2.int64(),
+    }
+  }
+| FIRST opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      FetchType: tree.FetchFirst,
+    }
+  }
+| LAST opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      FetchType: tree.FetchLast,
+    }
+  }
+
+next_prior:
+  NEXT  { $$.val = int64(1) }
+| PRIOR { $$.val = int64(-1) }
+
+opt_forward_backward:
+  forward_backward { $$.val = $1.int64() }
+| /* EMPTY */ { $$.val = int64(1) }
+
+forward_backward:
+  FORWARD  { $$.val = int64(1) }
+| BACKWARD { $$.val = int64(-1) }
+
+opt_from_or_in:
+  from_or_in { }
+| /* EMPTY */ { }
+
+from_or_in:
+  FROM { }
+| IN { }
 
 reindex_stmt:
   REINDEX TABLE error
@@ -5850,6 +6163,20 @@ show_transaction_stmt:
     $$.val = &tree.ShowTransactionStatus{}
   }
 | SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
+
+// %Help: SHOW TRANSFER - display session state for connection migration
+// %Category: Misc
+// %Text: SHOW TRANSFER STATE [ WITH '<transfer_key>' ]
+show_transfer_stmt:
+  SHOW TRANSFER STATE WITH SCONST
+  {
+     $$.val = &tree.ShowTransferState{TransferKey: tree.NewStrVal($5)}
+  }
+| SHOW TRANSFER STATE
+  {
+     $$.val = &tree.ShowTransferState{}
+  }
+| SHOW TRANSFER error // SHOW HELP: SHOW TRANSFER
 
 // %Help: SHOW CREATE - display the CREATE statement for a table, sequence, view, or database
 // %Category: DDL
@@ -7875,6 +8202,14 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOSQLLOGIN
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| VIEWCLUSTERSETTING
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOVIEWCLUSTERSETTING
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
@@ -13414,6 +13749,7 @@ unrestricted_name:
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
   ABORT
+| ABSOLUTE
 | ACTION
 | ACCESS
 | ADD
@@ -13422,12 +13758,14 @@ unreserved_keyword:
 | AGGREGATE
 | ALTER
 | ALWAYS
+| ASENSITIVE
 | AT
 | ATTRIBUTE
 | AUTOMATIC
 | AVAILABILITY
 | BACKUP
 | BACKUPS
+| BACKWARD
 | BEFORE
 | BEGIN
 | BINARY
@@ -13512,6 +13850,7 @@ unreserved_keyword:
 | FORCE
 | FORCE_INDEX
 | FORCE_ZIGZAG
+| FORWARD
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -13529,6 +13868,7 @@ unreserved_keyword:
 | HASH
 | HIGH
 | HISTOGRAM
+| HOLD
 | HOUR
 | IDENTITY
 | IMMEDIATE
@@ -13596,6 +13936,7 @@ unreserved_keyword:
 | NAN
 | NEVER
 | NEW_DB_NAME
+| NEW_KMS
 | NEXT
 | NO
 | NORMAL
@@ -13614,12 +13955,15 @@ unreserved_keyword:
 | NOSQLLOGIN
 | NOVIEWACTIVITY
 | NOVIEWACTIVITYREDACTED
+| NOVIEWCLUSTERSETTING
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
+| INSENSITIVE
 | OF
 | OFF
 | OIDS
+| OLD_KMS
 | OPERATOR
 | OPT
 | OPTION
@@ -13649,6 +13993,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRESERVE
+| PRIOR
 | PRIORITY
 | PRIVILEGES
 | PUBLIC
@@ -13668,6 +14013,7 @@ unreserved_keyword:
 | REGIONAL
 | REGIONS
 | REINDEX
+| RELATIVE
 | RELEASE
 | RELOCATE
 | RENAME
@@ -13692,6 +14038,7 @@ unreserved_keyword:
 | RUNNING
 | SCHEDULE
 | SCHEDULES
+| SCROLL
 | SETTING
 | SETTINGS
 | STATUS
@@ -13725,6 +14072,7 @@ unreserved_keyword:
 | SQL
 | SQLLOGIN
 | START
+| STATE
 | STATEMENTS
 | STATISTICS
 | STDIN
@@ -13751,6 +14099,7 @@ unreserved_keyword:
 | TRACE
 | TRANSACTION
 | TRANSACTIONS
+| TRANSFER
 | TRIGGER
 | TRUNCATE
 | TRUSTED
@@ -13774,6 +14123,7 @@ unreserved_keyword:
 | VIEW
 | VIEWACTIVITY
 | VIEWACTIVITYREDACTED
+| VIEWCLUSTERSETTING
 | VISIBLE
 | VOTERS
 | WITHIN

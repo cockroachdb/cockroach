@@ -72,7 +72,7 @@ var RangefeedTBIEnabled = settings.RegisterBoolSetting(
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
 type lockedRangefeedStream struct {
-	wrapped roachpb.Internal_RangeFeedServer
+	wrapped rangefeed.Stream
 	sendMu  syncutil.Mutex
 }
 
@@ -143,15 +143,13 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
 // of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream rangefeed.Stream,
 ) *roachpb.Error {
 	return r.rangeFeedWithRangeID(r.RangeID, args, stream)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
-	_forStacks roachpb.RangeID,
-	args *roachpb.RangeFeedRequest,
-	stream roachpb.Internal_RangeFeedServer,
+	_forStacks roachpb.RangeID, args *roachpb.RangeFeedRequest, stream rangefeed.Stream,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
@@ -400,7 +398,15 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		return rangefeed.NewSeparatedIntentScanner(iter)
 	}
 
-	p.Start(r.store.Stopper(), rtsIter)
+	// NB: This only errors if the stopper is stopping, and we have to return here
+	// in that case. We do check ShouldQuiesce() below, but that's not sufficient
+	// because the stopper has two states: stopping and quiescing. If this errors
+	// due to stopping, but before it enters the quiescing state, then the select
+	// below will fall through to the panic.
+	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
+		errC <- roachpb.NewError(err)
+		return nil
+	}
 
 	// Register with the processor *before* we attach its reference to the
 	// Replica struct. This ensures that the registration is in place before
@@ -632,8 +638,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 
 // handleSSTableRaftMuLocked emits an ingested SSTable from AddSSTable via the
 // rangefeed. These can be expected to have timestamps at the write timestamp
-// (i.e. submitted with WriteAtRequestTimestamp) since we assert elsewhere that
-// MVCCHistoryMutation commands disconnect rangefeeds.
+// (i.e. submitted with SSTTimestampToRequestTimestamp) since we assert
+// elsewhere that MVCCHistoryMutation commands disconnect rangefeeds.
 //
 // NB: We currently don't have memory budgeting for rangefeeds, instead using a
 // large buffered channel, so this can easily OOM the node. This is "fine" for

@@ -43,11 +43,33 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 			return err
 		}
 	}
+	if ttl.RangeConcurrency != 0 {
+		if err := ValidateTTLRangeConcurrency("ttl_range_concurrency", ttl.RangeConcurrency); err != nil {
+			return err
+		}
+	}
+	if ttl.DeleteRateLimit != 0 {
+		if err := ValidateTTLRateLimit("ttl_delete_rate_limit", ttl.DeleteRateLimit); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // ValidateTTLBatchSize validates the batch size of a TTL.
 func ValidateTTLBatchSize(key string, val int64) error {
+	if val <= 0 {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`"%s" must be at least 1`,
+			key,
+		)
+	}
+	return nil
+}
+
+// ValidateTTLRangeConcurrency validates the batch size of a TTL.
+func ValidateTTLRangeConcurrency(key string, val int64) error {
 	if val <= 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
@@ -65,6 +87,18 @@ func ValidateTTLCronExpr(key string, str string) error {
 			err,
 			pgcode.InvalidParameterValue,
 			`invalid cron expression for "%s"`,
+			key,
+		)
+	}
+	return nil
+}
+
+// ValidateTTLRateLimit validates the rate limit parameters of TTL.
+func ValidateTTLRateLimit(key string, val int64) error {
+	if val <= 0 {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`"%s" must be at least 1`,
 			key,
 		)
 	}

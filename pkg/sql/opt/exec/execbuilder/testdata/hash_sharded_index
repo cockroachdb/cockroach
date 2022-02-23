@@ -142,7 +142,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  ├── CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
  ├── PRIMARY INDEX t_pkey
- │    ├── crdb_internal_a_shard_8 int4 not null as (mod(fnv32("crdb_internal.datums_to_bytes"(a)), 8:::INT8)) stored [hidden]
+ │    ├── crdb_internal_a_shard_8 int4 not null as (mod(fnv32("crdb_internal.datums_to_bytes"(a)), 8:::INT8)) stored [hidden] (implicit)
  │    └── a int not null
  └── UNIQUE WITHOUT INDEX (a)
 scan t
@@ -180,7 +180,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  ├── CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
  ├── PRIMARY INDEX t_pkey
- │    ├── crdb_internal_a_shard_8 int4 not null as (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) stored [hidden]
+ │    ├── crdb_internal_a_shard_8 int4 not null as (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) stored [hidden] (implicit)
  │    └── a int not null
  └── UNIQUE WITHOUT INDEX (a)
 scan t
@@ -249,6 +249,7 @@ vectorized: true
           spans: /6/1234/0
           locking strength: for update
 
+# TODO(mgartner): We should be able to perform the UPSERT fast path in this case, because the shard column is a function of the other PK columns.
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_hash_indexed VALUES (4321, 8765);
 ----
@@ -260,17 +261,39 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
 │ auto commit
+│ arbiter constraints: t_hash_indexed_pkey
 │
 └── • project
-    │ columns: (crdb_internal_a_shard_8_cast, column1, column2, column2, check1)
+    │ columns: (crdb_internal_a_shard_8_cast, column1, column2, crdb_internal_a_shard_8, a, b, crdb_internal_a_shard_8_cast, column2, crdb_internal_a_shard_8, check1)
     │
-    └── • values
-          columns: (column1, column2, crdb_internal_a_shard_8_cast, check1)
-          size: 4 columns, 1 row
-          row 0, expr 0: 4321
-          row 0, expr 1: 8765
-          row 0, expr 2: 1
-          row 0, expr 3: true
+    └── • render
+        │ columns: (check1, column1, column2, crdb_internal_a_shard_8_cast, crdb_internal_a_shard_8, a, b)
+        │ estimated row count: 1 (missing stats)
+        │ render check1: crdb_internal_a_shard_8_cast IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render column1: column1
+        │ render column2: column2
+        │ render crdb_internal_a_shard_8_cast: crdb_internal_a_shard_8_cast
+        │ render crdb_internal_a_shard_8: crdb_internal_a_shard_8
+        │ render a: a
+        │ render b: b
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, column2, crdb_internal_a_shard_8_cast, crdb_internal_a_shard_8, a, b)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, column2, crdb_internal_a_shard_8_cast)
+            │     size: 3 columns, 1 row
+            │     row 0, expr 0: 4321
+            │     row 0, expr 1: 8765
+            │     row 0, expr 2: 1
+            │
+            └── • scan
+                  columns: (crdb_internal_a_shard_8, a, b)
+                  estimated row count: 1 (missing stats)
+                  table: t_hash_indexed@t_hash_indexed_pkey
+                  spans: /1/4321/0
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET a = 4321
@@ -356,29 +379,40 @@ vectorized: true
     │ render column2: column2
     │ render crdb_internal_a_shard_8_cast: crdb_internal_a_shard_8_cast
     │
-    └── • lookup join (anti)
+    └── • project
         │ columns: (column1, column2, crdb_internal_a_shard_8_cast)
         │ estimated row count: 0 (missing stats)
-        │ table: t_hash_indexed@t_hash_indexed_pkey
-        │ equality cols are key
-        │ lookup condition: (column1 = a) AND (crdb_internal_a_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7))
         │
-        └── • cross join (anti)
-            │ columns: (column1, column2, crdb_internal_a_shard_8_cast)
-            │ estimated row count: 0 (missing stats)
+        └── • lookup join (anti)
+            │ columns: (crdb_internal_a_shard_8_eq, column1, column2, crdb_internal_a_shard_8_cast)
+            │ table: t_hash_indexed@t_hash_indexed_pkey
+            │ equality: (crdb_internal_a_shard_8_eq, column1) = (crdb_internal_a_shard_8,a)
+            │ equality cols are key
             │
-            ├── • values
-            │     columns: (column1, column2, crdb_internal_a_shard_8_cast)
-            │     size: 3 columns, 1 row
-            │     row 0, expr 0: 4321
-            │     row 0, expr 1: 8765
-            │     row 0, expr 2: 1
-            │
-            └── • scan
-                  columns: (crdb_internal_a_shard_8, a)
-                  estimated row count: 1 (missing stats)
-                  table: t_hash_indexed@t_hash_indexed_pkey
-                  spans: /1/4321/0
+            └── • render
+                │ columns: (crdb_internal_a_shard_8_eq, column1, column2, crdb_internal_a_shard_8_cast)
+                │ estimated row count: 0 (missing stats)
+                │ render crdb_internal_a_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 8)
+                │ render column1: column1
+                │ render column2: column2
+                │ render crdb_internal_a_shard_8_cast: crdb_internal_a_shard_8_cast
+                │
+                └── • cross join (anti)
+                    │ columns: (column1, column2, crdb_internal_a_shard_8_cast)
+                    │ estimated row count: 0 (missing stats)
+                    │
+                    ├── • values
+                    │     columns: (column1, column2, crdb_internal_a_shard_8_cast)
+                    │     size: 3 columns, 1 row
+                    │     row 0, expr 0: 4321
+                    │     row 0, expr 1: 8765
+                    │     row 0, expr 2: 1
+                    │
+                    └── • scan
+                          columns: (crdb_internal_a_shard_8, a)
+                          estimated row count: 1 (missing stats)
+                          table: t_hash_indexed@t_hash_indexed_pkey
+                          spans: /1/4321/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO NOTHING
@@ -705,16 +739,16 @@ vectorized: true
                 │ estimated row count: 2 (missing stats)
                 │
                 └── • lookup join (left outer)
-                    │ columns: (crdb_internal_b_shard_8_cast, column1, column2, a, b, crdb_internal_b_shard_8)
-                    │ estimated row count: 2 (missing stats)
+                    │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_cast, column1, column2, a, b)
                     │ table: t_hash_indexed@idx_t_hash_indexed
+                    │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
                     │ equality cols are key
-                    │ lookup condition: (column2 = b) AND (crdb_internal_b_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7))
                     │ locking strength: for update
                     │
                     └── • render
-                        │ columns: (crdb_internal_b_shard_8_cast, column1, column2)
+                        │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_cast, column1, column2)
                         │ estimated row count: 2
+                        │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
                         │ render crdb_internal_b_shard_8_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8), NULL::INT4)
                         │ render column1: column1
                         │ render column2: column2
@@ -729,8 +763,6 @@ vectorized: true
 
 # TODO (issue #75498): we're using unique without index on (a) as an arbiter and
 # using the original hash sharded index as an arbiter is not necessary.
-# TODO(mgartner): There is a full scan because we do not generate lookup
-# anti-joins on indexes with virtual columns.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT DO NOTHING
 ----
@@ -753,52 +785,128 @@ vectorized: true
     │ render column2: column2
     │ render crdb_internal_b_shard_8_cast: crdb_internal_b_shard_8_cast
     │
-    └── • cross join (right anti)
+    └── • project
         │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
         │ estimated row count: 0 (missing stats)
         │
-        ├── • project
-        │   │ columns: ()
-        │   │ estimated row count: 1 (missing stats)
-        │   │
-        │   └── • scan
-        │         columns: (a)
-        │         estimated row count: 1 (missing stats)
-        │         table: t_hash_indexed@t_hash_indexed_pkey
-        │         spans: /4321/0
-        │
         └── • lookup join (anti)
+            │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_cast)
+            │ table: t_hash_indexed@idx_t_hash_indexed
+            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+            │ equality cols are key
+            │
+            └── • render
+                │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_cast)
+                │ estimated row count: 0 (missing stats)
+                │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                │ render column1: column1
+                │ render column2: column2
+                │ render crdb_internal_b_shard_8_cast: crdb_internal_b_shard_8_cast
+                │
+                └── • lookup join (anti)
+                    │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
+                    │ estimated row count: 0 (missing stats)
+                    │ table: t_hash_indexed@idx_t_hash_indexed
+                    │ equality: (crdb_internal_b_shard_8_cast, column2) = (crdb_internal_b_shard_8,b)
+                    │ equality cols are key
+                    │
+                    └── • cross join (anti)
+                        │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
+                        │ estimated row count: 0 (missing stats)
+                        │
+                        ├── • values
+                        │     columns: (column1, column2, crdb_internal_b_shard_8_cast)
+                        │     size: 3 columns, 1 row
+                        │     row 0, expr 0: 4321
+                        │     row 0, expr 1: 8765
+                        │     row 0, expr 2: 3
+                        │
+                        └── • project
+                            │ columns: ()
+                            │ estimated row count: 1 (missing stats)
+                            │
+                            └── • scan
+                                  columns: (a)
+                                  estimated row count: 1 (missing stats)
+                                  table: t_hash_indexed@t_hash_indexed_pkey
+                                  spans: /4321/0
+
+# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
+# using the original hash sharded index as an arbiter is not necessary.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_hash_indexed(a, b, crdb_internal_b_shard_8)
+│ auto commit
+│ arbiter indexes: t_hash_indexed_pkey, idx_t_hash_indexed
+│ arbiter constraints: idx_t_hash_indexed
+│
+└── • render
+    │ columns: (column1, column2, crdb_internal_b_shard_8_cast, check1)
+    │ estimated row count: 0 (missing stats)
+    │ render check1: crdb_internal_b_shard_8_cast IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render column1: column1
+    │ render column2: column2
+    │ render crdb_internal_b_shard_8_cast: crdb_internal_b_shard_8_cast
+    │
+    └── • distinct
+        │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
+        │ estimated row count: 0 (missing stats)
+        │ distinct on: column2, crdb_internal_b_shard_8_cast
+        │ nulls are distinct
+        │
+        └── • project
             │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
             │ estimated row count: 0 (missing stats)
-            │ table: t_hash_indexed@idx_t_hash_indexed
-            │ equality cols are key
-            │ lookup condition: (column2 = b) AND (crdb_internal_b_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7))
             │
-            └── • hash join (right anti)
-                │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
-                │ estimated row count: 0 (missing stats)
-                │ equality: (b, crdb_internal_b_shard_8) = (column2, crdb_internal_b_shard_8_cast)
-                │ left cols are key
-                │ right cols are key
+            └── • lookup join (anti)
+                │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_cast)
+                │ table: t_hash_indexed@idx_t_hash_indexed
+                │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+                │ equality cols are key
                 │
-                ├── • render
-                │   │ columns: (crdb_internal_b_shard_8, b)
-                │   │ estimated row count: 1,000 (missing stats)
-                │   │ render crdb_internal_b_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)
-                │   │ render b: b
-                │   │
-                │   └── • scan
-                │         columns: (b)
-                │         estimated row count: 1,000 (missing stats)
-                │         table: t_hash_indexed@t_hash_indexed_pkey
-                │         spans: FULL SCAN
-                │
-                └── • values
-                      columns: (column1, column2, crdb_internal_b_shard_8_cast)
-                      size: 3 columns, 1 row
-                      row 0, expr 0: 4321
-                      row 0, expr 1: 8765
-                      row 0, expr 2: 3
+                └── • render
+                    │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_cast)
+                    │ estimated row count: 0 (missing stats)
+                    │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render crdb_internal_b_shard_8_cast: crdb_internal_b_shard_8_cast
+                    │
+                    └── • lookup join (anti)
+                        │ columns: (crdb_internal_b_shard_8_cast, column1, column2)
+                        │ estimated row count: 0 (missing stats)
+                        │ table: t_hash_indexed@t_hash_indexed_pkey
+                        │ equality: (column1) = (a)
+                        │ equality cols are key
+                        │
+                        └── • lookup join (anti)
+                            │ columns: (crdb_internal_b_shard_8_cast, column1, column2)
+                            │ estimated row count: 0 (missing stats)
+                            │ table: t_hash_indexed@idx_t_hash_indexed
+                            │ equality: (crdb_internal_b_shard_8_cast, column2) = (crdb_internal_b_shard_8,b)
+                            │ equality cols are key
+                            │
+                            └── • render
+                                │ columns: (crdb_internal_b_shard_8_cast, column1, column2)
+                                │ estimated row count: 2
+                                │ render crdb_internal_b_shard_8_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8), NULL::INT4)
+                                │ render column1: column1
+                                │ render column2: column2
+                                │
+                                └── • values
+                                      columns: (column1, column2)
+                                      size: 2 columns, 2 rows
+                                      row 0, expr 0: 111
+                                      row 0, expr 1: 222
+                                      row 1, expr 0: 333
+                                      row 1, expr 1: 444
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (b) DO NOTHING
@@ -863,24 +971,28 @@ vectorized: true
     │ render column2: column2
     │ render crdb_internal_b_shard_8_cast: crdb_internal_b_shard_8_cast
     │
-    └── • lookup join (anti)
-        │ columns: (crdb_internal_b_shard_8_cast, column1, column2)
+    └── • project
+        │ columns: (column1, column2, crdb_internal_b_shard_8_cast)
         │ estimated row count: 0 (missing stats)
-        │ table: t_hash_indexed@idx_t_hash_indexed
-        │ equality cols are key
-        │ lookup condition: (column2 = b) AND (crdb_internal_b_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7))
         │
-        └── • render
-            │ columns: (crdb_internal_b_shard_8_cast, column1, column2)
-            │ estimated row count: 2
-            │ render crdb_internal_b_shard_8_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8), NULL::INT4)
-            │ render column1: column1
-            │ render column2: column2
+        └── • lookup join (anti)
+            │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_cast, column1, column2)
+            │ table: t_hash_indexed@idx_t_hash_indexed
+            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+            │ equality cols are key
             │
-            └── • values
-                  columns: (column1, column2)
-                  size: 2 columns, 2 rows
-                  row 0, expr 0: 111
-                  row 0, expr 1: 222
-                  row 1, expr 0: 333
-                  row 1, expr 1: 444
+            └── • render
+                │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_cast, column1, column2)
+                │ estimated row count: 2
+                │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                │ render crdb_internal_b_shard_8_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8), NULL::INT4)
+                │ render column1: column1
+                │ render column2: column2
+                │
+                └── • values
+                      columns: (column1, column2)
+                      size: 2 columns, 2 rows
+                      row 0, expr 0: 111
+                      row 0, expr 1: 222
+                      row 1, expr 0: 333
+                      row 1, expr 1: 444

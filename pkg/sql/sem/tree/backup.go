@@ -132,13 +132,16 @@ type RestoreOptions struct {
 	DebugPauseOn              Expr
 	NewDBName                 Expr
 	IncrementalStorage        StringOrPlaceholderOptList
+	AsTenant                  Expr
 }
 
 var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets            TargetList
+	Targets TargetList
+	// Whether this is the RESTORE SYSTEM USERS variant of RESTORE statement.
+	SystemUsers        bool
 	DescriptorCoverage DescriptorCoverage
 
 	// From contains the URIs for the backup(s) we seek to restore.
@@ -389,10 +392,17 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("new_db_name = ")
 		ctx.FormatNode(o.NewDBName)
 	}
+
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
 		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
+	}
+
+	if o.AsTenant != nil {
+		maybeAddSep()
+		ctx.WriteString("tenant = ")
+		ctx.FormatNode(o.AsTenant)
 	}
 }
 
@@ -483,6 +493,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("incremental_location option specified multiple times")
 	}
 
+	if o.AsTenant == nil {
+		o.AsTenant = other.AsTenant
+	} else if other.AsTenant != nil {
+		return errors.New("tenant option specified multiple times")
+	}
+
 	return nil
 }
 
@@ -500,5 +516,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
 		o.DebugPauseOn == options.DebugPauseOn &&
 		o.NewDBName == options.NewDBName &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
+		o.AsTenant == options.AsTenant
 }

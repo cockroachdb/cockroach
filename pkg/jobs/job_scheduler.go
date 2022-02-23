@@ -351,6 +351,30 @@ func (s *jobScheduler) executeSchedules(
 	return err
 }
 
+// An internal, safety valve setting to revert scheduler execution to distributed mode.
+// This setting should be removed once scheduled job system no longer locks tables for excessive
+// periods of time.
+var schedulerRunsOnSingleNode = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"jobs.scheduler.single_node_scheduler.enabled",
+	"execute scheduler on a single node in a cluster",
+	false,
+)
+
+func (s *jobScheduler) schedulerEnabledOnThisNode(ctx context.Context) bool {
+	if s.ShouldRunScheduler == nil || !schedulerRunsOnSingleNode.Get(&s.Settings.SV) {
+		return true
+	}
+
+	enabled, err := s.ShouldRunScheduler(ctx, s.DB.Clock().NowAsClockTimestamp())
+	if err != nil {
+		log.Errorf(ctx, "error determining if the scheduler enabled: %v; will recheck after %s",
+			err, recheckEnabledAfterPeriod)
+		return false
+	}
+	return enabled
+}
+
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
@@ -361,13 +385,12 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 		}
 
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
-			getWaitPeriod(ctx, &s.Settings.SV, jitter, s.TestingKnobs)) {
+			getWaitPeriod(ctx, &s.Settings.SV, s.schedulerEnabledOnThisNode, jitter, s.TestingKnobs)) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Info(ctx, "scheduled job daemon disabled")
+				if !schedulerEnabledSetting.Get(&s.Settings.SV) || !s.schedulerEnabledOnThisNode(ctx) {
 					continue
 				}
 
@@ -427,13 +450,21 @@ type jitterFn func(duration time.Duration) time.Duration
 
 // Returns duration to wait before scanning system.scheduled_jobs.
 func getWaitPeriod(
-	ctx context.Context, sv *settings.Values, jitter jitterFn, knobs base.ModuleTestingKnobs,
+	ctx context.Context,
+	sv *settings.Values,
+	enabledOnThisNode func(ctx context.Context) bool,
+	jitter jitterFn,
+	knobs base.ModuleTestingKnobs,
 ) time.Duration {
 	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonScanDelay != nil {
 		return k.SchedulerDaemonScanDelay()
 	}
 
 	if !schedulerEnabledSetting.Get(sv) {
+		return recheckEnabledAfterPeriod
+	}
+
+	if enabledOnThisNode != nil && !enabledOnThisNode(ctx) {
 		return recheckEnabledAfterPeriod
 	}
 
@@ -479,6 +510,10 @@ func StartJobSchedulerDaemon(
 				return scheduler.executeSchedules(ctx, maxSchedules, txn)
 			})
 		return
+	}
+
+	if daemonKnobs != nil && daemonKnobs.CaptureJobScheduler != nil {
+		daemonKnobs.CaptureJobScheduler(scheduler)
 	}
 
 	scheduler.runDaemon(ctx, stopper)

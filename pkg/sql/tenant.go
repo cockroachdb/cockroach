@@ -448,6 +448,15 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 			return errors.Wrapf(err, "deleting tenant %d usage", info.ID)
 		}
 
+		if execCfg.Settings.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
+			if _, err := execCfg.InternalExecutor.ExecEx(
+				ctx, "delete-tenant-settings", txn, sessiondata.NodeUserSessionDataOverride,
+				`DELETE FROM system.tenant_settings WHERE tenant_id = $1`, info.ID,
+			); err != nil {
+				return errors.Wrapf(err, "deleting tenant %d settings", info.ID)
+			}
+		}
+
 		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PreSeedTenantSpanConfigs) {
 			return nil
 		}

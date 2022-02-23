@@ -422,6 +422,11 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().system
 }
 
+// FamilyDefaultColumns implements the TableDescriptor interface.
+func (desc *wrapper) FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn {
+	return desc.getExistingOrNewColumnCache().familyDefaultColumns
+}
+
 // PublicColumnIDs implements the TableDescriptor interface.
 func (desc *wrapper) PublicColumnIDs() []descpb.ColumnID {
 	cols := desc.PublicColumns()
@@ -488,6 +493,16 @@ func (desc *wrapper) IndexFullColumnDirections(
 func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.stored
+	}
+	return nil
+}
+
+// IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexFetchSpecKeyAndSuffixColumns(
+	idx catalog.Index,
+) []descpb.IndexFetchSpec_KeyColumn {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keyAndSuffix
 	}
 	return nil
 }

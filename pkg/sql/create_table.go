@@ -1249,6 +1249,10 @@ func NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck() NewTableDes
 // semaCtx can be nil if the table to be created has no default expression on
 // any of the columns and no check constraints.
 //
+// regionConfig indicates if the table is being created in a multi-region db.
+// A non-nil regionConfig represents the region configuration of a multi-region
+// db. A nil regionConfig means current db is not multi-regional.
+//
 // The caller must also ensure that the SchemaResolver is configured
 // to bypass caching and enable visibility of just-added descriptors.
 // This is used to resolve sequence and FK dependencies. Also see the
@@ -1320,6 +1324,7 @@ func NewTableDesc(
 		)
 	}
 
+	// PARTITION BY and PARTITION ALL BY are not supported in multi-regional table.
 	if n.Locality != nil || regionConfig != nil {
 		// Check PARTITION BY is not set on any column, index or table definition.
 		if n.PartitionByTable.ContainsPartitioningClause() {
@@ -1532,11 +1537,8 @@ func NewTableDesc(
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
 				}
-				if isRegionalByRow {
-					return nil, hashShardedIndexesOnRegionalByRowError()
-				}
-				if n.PartitionByTable.ContainsPartitions() {
-					return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
+				if n.PartitionByTable.ContainsPartitions() && !n.PartitionByTable.All {
+					return nil, pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes cannot be explicitly partitioned")
 				}
 				buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
 				if err != nil {
@@ -1651,8 +1653,14 @@ func NewTableDesc(
 	setupShardedIndexForNewTable := func(
 		d tree.IndexTableDef, idx *descpb.IndexDescriptor,
 	) (columns tree.IndexElemList, _ error) {
-		if n.PartitionByTable.ContainsPartitions() {
-			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
+		if d.PartitionByIndex.ContainsPartitions() {
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes cannot be explicitly partitioned")
+		}
+		if desc.IsPartitionAllBy() && anyColumnIsPartitioningField(d.Columns, partitionAllBy) {
+			return nil, pgerror.New(
+				pgcode.FeatureNotSupported,
+				`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
+			)
 		}
 		shardCol, newColumns, err := setupShardedIndex(
 			ctx,
@@ -1750,8 +1758,6 @@ func NewTableDesc(
 				d.Inverted,
 				true, /* isNewTable */
 				semaCtx,
-				evalCtx,
-				sessionData,
 			); err != nil {
 				return nil, err
 			}
@@ -1765,9 +1771,6 @@ func NewTableDesc(
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
-				if isRegionalByRow {
-					return nil, hashShardedIndexesOnRegionalByRowError()
-				}
 				var err error
 				columns, err = setupShardedIndexForNewTable(*d, &idx)
 				if err != nil {
@@ -1793,37 +1796,37 @@ func NewTableDesc(
 					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
 				}
 			}
-			if d.PartitionByIndex.ContainsPartitioningClause() || desc.PartitionAllBy {
-				partitionBy := partitionAllBy
-				if !desc.PartitionAllBy {
-					if d.PartitionByIndex.ContainsPartitions() {
-						partitionBy = d.PartitionByIndex.PartitionBy
-					}
-				} else if d.PartitionByIndex.ContainsPartitioningClause() {
-					return nil, pgerror.New(
-						pgcode.FeatureNotSupported,
-						"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
-					)
-				}
 
-				if partitionBy != nil {
-					var err error
-					newImplicitCols, newPartitioning, err := CreatePartitioning(
-						ctx,
-						st,
-						evalCtx,
-						&desc,
-						idx,
-						partitionBy,
-						nil, /* allowedNewColumnNames */
-						allowImplicitPartitioning,
-					)
-					if err != nil {
-						return nil, err
-					}
-					tabledesc.UpdateIndexPartitioning(&idx, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
-				}
+			var idxPartitionBy *tree.PartitionBy
+			if desc.PartitionAllBy && d.PartitionByIndex.ContainsPartitions() {
+				return nil, pgerror.New(
+					pgcode.FeatureNotSupported,
+					"cannot define PARTITION BY on an index if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition",
+				)
 			}
+			if desc.PartitionAllBy {
+				idxPartitionBy = partitionAllBy
+			} else if d.PartitionByIndex.ContainsPartitions() {
+				idxPartitionBy = d.PartitionByIndex.PartitionBy
+			}
+			if idxPartitionBy != nil {
+				var err error
+				newImplicitCols, newPartitioning, err := CreatePartitioning(
+					ctx,
+					st,
+					evalCtx,
+					&desc,
+					idx,
+					idxPartitionBy,
+					nil, /* allowedNewColumnNames */
+					allowImplicitPartitioning,
+				)
+				if err != nil {
+					return nil, err
+				}
+				tabledesc.UpdateIndexPartitioning(&idx, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
+			}
+
 			if d.Predicate != nil {
 				expr, err := schemaexpr.ValidatePartialIndexPredicate(
 					ctx, &desc, d.Predicate, &n.Table, semaCtx,
@@ -1870,8 +1873,6 @@ func NewTableDesc(
 				false, /* isInverted */
 				true,  /* isNewTable */
 				semaCtx,
-				evalCtx,
-				sessionData,
 			); err != nil {
 				return nil, err
 			}
@@ -1883,8 +1884,11 @@ func NewTableDesc(
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
-				if isRegionalByRow {
-					return nil, hashShardedIndexesOnRegionalByRowError()
+				if d.PrimaryKey && n.PartitionByTable.ContainsPartitions() && !n.PartitionByTable.All {
+					return nil, pgerror.New(
+						pgcode.FeatureNotSupported,
+						"hash sharded indexes cannot be explicitly partitioned",
+					)
 				}
 				var err error
 				columns, err = setupShardedIndexForNewTable(d.IndexTableDef, &idx)
@@ -1905,20 +1909,21 @@ func NewTableDesc(
 			// We should only do partitioning of non-primary indexes at this point -
 			// the PRIMARY KEY CreatePartitioning is done at the of CreateTable, so
 			// avoid the duplicate work.
-			if !d.PrimaryKey && (d.PartitionByIndex.ContainsPartitioningClause() || desc.PartitionAllBy) {
-				partitionBy := partitionAllBy
-				if !desc.PartitionAllBy {
-					if d.PartitionByIndex.ContainsPartitions() {
-						partitionBy = d.PartitionByIndex.PartitionBy
-					}
-				} else if d.PartitionByIndex.ContainsPartitioningClause() {
+			if !d.PrimaryKey {
+				if desc.PartitionAllBy && d.PartitionByIndex.ContainsPartitions() {
 					return nil, pgerror.New(
 						pgcode.FeatureNotSupported,
-						"cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition",
+						"cannot define PARTITION BY on an unique constraint if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition",
 					)
 				}
+				var idxPartitionBy *tree.PartitionBy
+				if desc.PartitionAllBy {
+					idxPartitionBy = partitionAllBy
+				} else if d.PartitionByIndex.ContainsPartitions() {
+					idxPartitionBy = d.PartitionByIndex.PartitionBy
+				}
 
-				if partitionBy != nil {
+				if idxPartitionBy != nil {
 					var err error
 					newImplicitCols, newPartitioning, err := CreatePartitioning(
 						ctx,
@@ -1926,7 +1931,7 @@ func NewTableDesc(
 						evalCtx,
 						&desc,
 						idx,
-						partitionBy,
+						idxPartitionBy,
 						nil, /* allowedNewColumnNames */
 						allowImplicitPartitioning,
 					)
@@ -2327,10 +2332,8 @@ func newTableDesc(
 	}
 
 	// Row level TTL tables require a scheduled job to be created as well.
-	// TODO(#75428): ensure backup & restore work too - this may need to be placed in NewTableDesc.
-	// This involves plumbing InternalExecutor in there,
 	if ttl := ret.RowLevelTTL; ttl != nil {
-		j, err := createRowLevelTTLScheduledJob(
+		j, err := CreateRowLevelTTLScheduledJob(
 			params.ctx,
 			params.ExecCfg(),
 			params.p.txn,
@@ -2392,7 +2395,8 @@ func rowLevelTTLSchedule(ttl *catpb.RowLevelTTL) string {
 	return defaultTTLScheduleCron
 }
 
-func createRowLevelTTLScheduledJob(
+// CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
+func CreateRowLevelTTLScheduledJob(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
@@ -2417,7 +2421,7 @@ func rowLevelTTLAutomaticColumnDef(ttl *catpb.RowLevelTTL) (*tree.ColumnTableDef
 		Type:   types.TimestampTZ,
 		Hidden: true,
 	}
-	intervalExpr, err := parser.ParseExpr(ttl.DurationExpr)
+	intervalExpr, err := parser.ParseExpr(string(ttl.DurationExpr))
 	if err != nil {
 		return nil, errors.Wrapf(err, "unexpected expression for TTL duration")
 	}
@@ -2761,10 +2765,6 @@ func regionalByRowDefaultColDef(
 	c.OnUpdateExpr.Expr = onUpdateExpr
 
 	return c
-}
-
-func hashShardedIndexesOnRegionalByRowError() error {
-	return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
 }
 
 func checkTypeIsSupported(ctx context.Context, settings *cluster.Settings, typ *types.T) error {

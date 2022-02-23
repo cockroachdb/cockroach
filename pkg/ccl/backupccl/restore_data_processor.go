@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -74,16 +75,34 @@ type restoreDataProcessor struct {
 	progCh chan RestoreProgress
 }
 
-var _ execinfra.Processor = &restoreDataProcessor{}
-var _ execinfra.RowSource = &restoreDataProcessor{}
+var (
+	_ execinfra.Processor = &restoreDataProcessor{}
+	_ execinfra.RowSource = &restoreDataProcessor{}
+)
 
 const restoreDataProcName = "restoreDataProcessor"
 
 const maxConcurrentRestoreWorkers = 32
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 	"restore-worker-concurrency",
-	1, /* defaultValue */
+	func() int {
+		// On low-CPU instances, a default value may still allow concurrent restore
+		// workers to tie up all cores so cap default value at cores-1 when the
+		// default value is higher.
+		restoreWorkerCores := runtime.GOMAXPROCS(0) - 1
+		if restoreWorkerCores < 1 {
+			restoreWorkerCores = 1
+		}
+		return min(4, restoreWorkerCores)
+	}(), /* defaultValue */
 	1, /* metamorphic min */
 	8, /* metamorphic max */
 )
@@ -128,7 +147,7 @@ func newRestoreDataProcessor(
 		progCh:     make(chan RestoreProgress, maxConcurrentRestoreWorkers),
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
-		flushBytes: storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings),
+		flushBytes: bulk.IngestFileSize(flowCtx.Cfg.Settings),
 	}
 
 	if err := rd.Init(rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
@@ -359,7 +378,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan
 
 				return done, nil
 			}()
-
 			if err != nil {
 				return err
 			}

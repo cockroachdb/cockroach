@@ -67,10 +67,20 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	if err != nil {
 		return err
 	}
-	if !hasModify {
+	if action == "set" && !hasModify {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with the %s privilege are allowed to %s cluster setting '%s'",
 			roleoption.MODIFYCLUSTERSETTING, action, name)
+	}
+	hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+	if err != nil {
+		return err
+	}
+	// check that for "show" action user has either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges.
+	if action == "show" && !(hasModify || hasView) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
+			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING, action, name)
 	}
 	return nil
 }
@@ -96,9 +106,15 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	if setting.Class() == settings.SystemOnly && !p.execCfg.Codec.ForSystemTenant() {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"setting %s is only settable in the system tenant", name)
+	if !p.execCfg.Codec.ForSystemTenant() {
+		switch setting.Class() {
+		case settings.SystemOnly:
+			// The Lookup call above should never return SystemOnly settings if this
+			// is a tenant.
+			return nil, errors.AssertionFailedf("looked up system-only setting")
+		case settings.TenantReadOnly:
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name)
+		}
 	}
 
 	var value tree.TypedExpr

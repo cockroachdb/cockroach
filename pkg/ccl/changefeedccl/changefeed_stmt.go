@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -182,16 +181,17 @@ func changefeedPlanHook(
 			return err
 		}
 
-		targets, err := getTargets(ctx, p, targetDescs, opts)
+		targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, opts)
 		if err != nil {
 			return err
 		}
 
 		details := jobspb.ChangefeedDetails{
-			Targets:       targets,
-			Opts:          opts,
-			SinkURI:       sinkURI,
-			StatementTime: statementTime,
+			Tables:               tables,
+			Opts:                 opts,
+			SinkURI:              sinkURI,
+			StatementTime:        statementTime,
+			TargetSpecifications: targets,
 		}
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{},
@@ -244,7 +244,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
+		if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
 			return err
 		}
 
@@ -270,7 +270,7 @@ func changefeedPlanHook(
 		}
 		telemetry.Count(`changefeed.create.sink.` + telemetrySink)
 		telemetry.Count(`changefeed.create.format.` + details.Opts[changefeedbase.OptFormat])
-		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
+		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(tables)))
 
 		if scope, ok := opts[changefeedbase.OptMetricsScope]; ok {
 			if err := utilccl.CheckEnterpriseEnabled(
@@ -317,29 +317,24 @@ func changefeedPlanHook(
 			return err
 		}
 
-		// The below block creates the job and if there's an initial scan, protects
-		// the data required for that scan. We protect the data here rather than in
+		// The below block creates the job and protects the data required for the
+		// changefeed to function from being garbage collected even if the
+		// changefeed lags behind the gcttl. We protect the data here rather than in
 		// Resume to shorten the window that data may be GC'd. The protected
-		// timestamps are removed and created during the execution of the changefeed
-		// by the changeFrontier when checkpointing progress. Additionally protected
-		// timestamps are removed in OnFailOrCancel. See the comment on
-		// changeFrontier.manageProtectedTimestamps for more details on the handling of
-		// protected timestamps.
+		// timestamps are updated to the highwater mark periodically during the
+		// execution of the changefeed by the changeFrontier. Protected timestamps
+		// are removed in OnFailOrCancel. See
+		// changeFrontier.manageProtectedTimestamps for more details on the handling
+		// of protected timestamps.
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
-
-			var protectedTimestampID uuid.UUID
 			var ptr *ptpb.Record
-
-			shouldProtectTimestamp := initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
-			if shouldProtectTimestamp {
-				protectedTimestampID = uuid.MakeV4()
-				deprecatedSpansToProtect := makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
-				targetToProtect := makeTargetToProtect(details.Targets)
-				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
-				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), statementTime,
-					deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+			var protectedTimestampID uuid.UUID
+			codec := p.ExecCfg().Codec
+			if shouldProtectTimestamps(codec) {
+				ptr = createProtectedTimestampRecord(ctx, codec, jobID, AllTargets(details), statementTime, progress.GetChangefeed())
+				protectedTimestampID = ptr.ID.GetUUID()
 			}
 
 			jr := jobs.Record{
@@ -476,35 +471,41 @@ func getTableDescriptors(
 	return targetDescs, err
 }
 
-func getTargets(
+func getTargetsAndTables(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targetDescs []catalog.Descriptor,
 	opts map[string]string,
-) (jobspb.ChangefeedTargets, error) {
-	targets := make(jobspb.ChangefeedTargets, len(targetDescs))
+) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
+	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDescs))
 	for _, desc := range targetDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			_, qualified := opts[changefeedbase.OptFullTableName]
 			name, err := getChangefeedTargetName(ctx, table, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			targets[table.GetID()] = jobspb.ChangefeedTarget{
+			tables[table.GetID()] = jobspb.ChangefeedTargetTable{
 				StatementTimeName: name,
 			}
-			if err := changefeedbase.ValidateTable(targets, table); err != nil {
-				return nil, err
+			ts := jobspb.ChangefeedTargetSpecification{
+				Type:    jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				TableID: table.GetID(),
 			}
-			for _, warning := range changefeedbase.WarningsForTable(targets, table, opts) {
+			targets = append(targets, ts)
+			if err := changefeedbase.ValidateTable(targets, table); err != nil {
+				return nil, nil, err
+			}
+			for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
 				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 			}
 		}
 	}
-	return targets, nil
+	return targets, tables, nil
 }
 
 func validateSink(
@@ -900,38 +901,27 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 
 // OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
-// paused, we want to install a protected timestamp at the most recent high
-// watermark if there isn't already one.
+// paused, we may want to clear the protected timestamp record.
 func (b *changefeedResumer) OnPauseRequest(
 	ctx context.Context, jobExec interface{}, txn *kv.Txn, progress *jobspb.Progress,
 ) error {
 	details := b.job.Details().(jobspb.ChangefeedDetails)
-	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
-		return nil
-	}
 
 	cp := progress.GetChangefeed()
-
-	// If we already have a protected timestamp record, keep it where it is.
-	if cp.ProtectedTimestampRecord != uuid.Nil {
-		return nil
-	}
-
-	resolved := progress.GetHighWater()
-	if resolved == nil {
-		// This should only happen if the job was created in a version that did not
-		// use protected timestamps but has yet to checkpoint its high water.
-		// Changefeeds from older versions didn't get protected timestamps so it's
-		// fine to not protect this one. In newer versions changefeeds which perform
-		// an initial scan at the statement time (and don't have an initial high
-		// water) will have a protected timestamp.
-		return nil
-	}
-
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
-	pts := execCfg.ProtectedTimestampProvider
-	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, b.job.ID(),
-		details.Targets, *resolved, cp)
+
+	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
+		// Release existing pts record to avoid a single changefeed left on pause
+		// resulting in storage issues
+		if cp.ProtectedTimestampRecord != uuid.Nil {
+			if err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, cp.ProtectedTimestampRecord); err != nil {
+				log.Warningf(ctx, "failed to release protected timestamp %v: %v", cp.ProtectedTimestampRecord, err)
+			} else {
+				cp.ProtectedTimestampRecord = uuid.Nil
+			}
+		}
+	}
+	return nil
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
@@ -969,4 +959,29 @@ func getChangefeedTargetName(
 		return getQualifiedTableName(ctx, execCfg, txn, desc)
 	}
 	return desc.GetName(), nil
+}
+
+// AllTargets gets all the targets listed in a ChangefeedDetails,
+// from the statement time name map in old protos
+// or the TargetSpecifications in new ones.
+func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetSpecification) {
+	//TODO: Use a version gate for this once we have CDC version gates
+	if len(cd.TargetSpecifications) > 0 {
+		for _, ts := range cd.TargetSpecifications {
+			if ts.TableID > 0 {
+				ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
+				targets = append(targets, ts)
+			}
+		}
+	} else {
+		for id, t := range cd.Tables {
+			ct := jobspb.ChangefeedTargetSpecification{
+				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				TableID:           id,
+				StatementTimeName: t.StatementTimeName,
+			}
+			targets = append(targets, ct)
+		}
+	}
+	return
 }

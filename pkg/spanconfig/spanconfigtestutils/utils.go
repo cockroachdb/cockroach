@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +34,10 @@ import (
 var spanRe = regexp.MustCompile(`^\[(\w+),\s??(\w+)\)$`)
 
 // systemTargetRe matches strings of the form
-// "{source=(<id>|system),target=(<id>|system)}".
-var systemTargetRe = regexp.MustCompile(`^{(cluster)|(source=(\d*),\s??target=(\d*))}$`)
+// "{entire-keyspace|source=<id>,(target=<id>|all-tenant-keyspace-targets-set)}".
+var systemTargetRe = regexp.MustCompile(
+	`^{(entire-keyspace)|(source=(\d*),\s??((target=(\d*))|all-tenant-keyspace-targets-set))}$`,
+)
 
 // configRe matches a single word. It's a shorthand for declaring a unique
 // config.
@@ -63,15 +66,18 @@ func parseSystemTarget(t *testing.T, systemTarget string) spanconfig.SystemTarge
 	}
 	matches := systemTargetRe.FindStringSubmatch(systemTarget)
 
-	if matches[1] == "cluster" {
-		return spanconfig.MakeClusterTarget()
+	if matches[1] == "entire-keyspace" {
+		return spanconfig.MakeEntireKeyspaceTarget()
 	}
 
 	sourceID, err := strconv.Atoi(matches[3])
 	require.NoError(t, err)
-	targetID, err := strconv.Atoi(matches[4])
+	if matches[4] == "all-tenant-keyspace-targets-set" {
+		return spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(uint64(sourceID)))
+	}
+	targetID, err := strconv.Atoi(matches[6])
 	require.NoError(t, err)
-	target, err := spanconfig.MakeTenantTarget(
+	target, err := spanconfig.MakeTenantKeyspaceTarget(
 		roachpb.MakeTenantID(uint64(sourceID)), roachpb.MakeTenantID(uint64(targetID)),
 	)
 	require.NoError(t, err)
@@ -99,15 +105,17 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 	if !configRe.MatchString(conf) {
 		t.Fatalf("expected %s to match config regex", conf)
 	}
-	return roachpb.SpanConfig{
-		Constraints: []roachpb.ConstraintsConjunction{
-			{
-				Constraints: []roachpb.Constraint{
-					{
-						Key: conf,
-					},
-				},
+	protectionPolicies := make([]roachpb.ProtectionPolicy, 0, len(conf))
+	for _, c := range conf {
+		protectionPolicies = append(protectionPolicies, roachpb.ProtectionPolicy{
+			ProtectedTimestamp: hlc.Timestamp{
+				WallTime: int64(c),
 			},
+		})
+	}
+	return roachpb.SpanConfig{
+		GCPolicy: roachpb.GCPolicy{
+			ProtectionPolicies: protectionPolicies,
 		},
 	}
 }
@@ -258,8 +266,13 @@ func PrintTarget(t *testing.T, target spanconfig.Target) string {
 // PrintSpanConfig is a helper function that transforms roachpb.SpanConfig into
 // a readable string. The span config is assumed to have been constructed by the
 // ParseSpanConfig helper above.
-func PrintSpanConfig(conf roachpb.SpanConfig) string {
-	return conf.Constraints[0].Constraints[0].Key // see ParseConfig for what a "tagged" roachpb.SpanConfig translates to
+func PrintSpanConfig(config roachpb.SpanConfig) string {
+	// See ParseConfig for what a "tagged" roachpb.SpanConfig translates to.
+	conf := make([]string, 0, len(config.GCPolicy.ProtectionPolicies))
+	for _, policy := range config.GCPolicy.ProtectionPolicies {
+		conf = append(conf, fmt.Sprintf("%c", policy.ProtectedTimestamp.WallTime))
+	}
+	return strings.Join(conf, "")
 }
 
 // PrintSpanConfigRecord is a helper function that transforms
@@ -269,6 +282,31 @@ func PrintSpanConfig(conf roachpb.SpanConfig) string {
 // Parse{Span,Config} helpers above.
 func PrintSpanConfigRecord(t *testing.T, record spanconfig.Record) string {
 	return fmt.Sprintf("%s:%s", PrintTarget(t, record.Target), PrintSpanConfig(record.Config))
+}
+
+// PrintSystemSpanConfigDiffedAgainstDefault is a helper function that diffs the
+// given config against the default system span config that applies to
+// spanconfig.SystemTargets, and returns a string for the mismatched fields.
+func PrintSystemSpanConfigDiffedAgainstDefault(conf roachpb.SpanConfig) string {
+	if conf.Equal(roachpb.TestingDefaultSystemSpanConfiguration()) {
+		return "default system span config"
+	}
+
+	var diffs []string
+	defaultSystemTargetConf := roachpb.TestingDefaultSystemSpanConfiguration()
+	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies, defaultSystemTargetConf.GCPolicy.ProtectionPolicies) {
+		sort.Slice(conf.GCPolicy.ProtectionPolicies, func(i, j int) bool {
+			lhs := conf.GCPolicy.ProtectionPolicies[i].ProtectedTimestamp
+			rhs := conf.GCPolicy.ProtectionPolicies[j].ProtectedTimestamp
+			return lhs.Less(rhs)
+		})
+		timestamps := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
+		for _, pts := range conf.GCPolicy.ProtectionPolicies {
+			timestamps = append(timestamps, strconv.Itoa(int(pts.ProtectedTimestamp.WallTime)))
+		}
+		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
+	}
+	return strings.Join(diffs, " ")
 }
 
 // PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given

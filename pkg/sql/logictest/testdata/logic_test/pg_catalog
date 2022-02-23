@@ -727,9 +727,9 @@ attrelid    relname            attname                   atttypid  attstattarget
 2129466852  t6_pkey            rowid                     20        0              8       6       0         -1
 2129466855  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
 2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      7       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       8       0         -1
-2129466848  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      9       0         -1
-2129466850  t6_expr_idx1       crdb_internal_idx_expr_4  16        0              1       10      0         -1
+2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr    20        0              8       5       0         -1
+2129466848  t6_expr_key        crdb_internal_idx_expr_1  25        0              -1      7       0         -1
+2129466850  t6_expr_idx1       crdb_internal_idx_expr_2  16        0              1       8       0         -1
 121         mv1                ?column?                  20        0              8       1       0         -1
 121         mv1                rowid                     20        0              8       2       0         -1
 784389845   mv1_pkey           rowid                     20        0              8       2       0         -1
@@ -796,9 +796,9 @@ t6                 rowid                     -1         NULL      NULL        NU
 t6_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_key        crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_idx1       crdb_internal_idx_expr_4  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_expr1_idx  crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_key        crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx1       crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -865,9 +865,9 @@ t6                 rowid                     false         true        0        
 t6_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
-t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
-t6_expr_key        crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
-t6_expr_idx1       crdb_internal_idx_expr_4  false         true        0            NULL    NULL        NULL
+t6_expr_expr1_idx  crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
+t6_expr_key        crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
+t6_expr_idx1       crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
 mv1_pkey           rowid                     false         true        0            NULL    NULL        NULL
@@ -927,7 +927,7 @@ WHERE n.nspname = 'public'
 ----
 relname            attname                   typname   attcollation  collname
 t1                 d                         varchar   3403232968    default
-t6_expr_key        crdb_internal_idx_expr_3  text      3403232968    default
+t6_expr_key        crdb_internal_idx_expr_1  text      3403232968    default
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  text      3403232968    default
 t6                 c                         text      3403232968    default
 t5                 c                         text      3403232968    default
@@ -1360,7 +1360,7 @@ check_b        true        0            true          {2}
 uwi_b_c        true        0            true          NULL
 fk_b_c         true        0            true          {2,3}
 check_c        true        0            true          {3}
-t6_expr_key    true        0            true          {9}
+t6_expr_key    true        0            true          {7}
 uwi_b_partial  true        0            true          NULL
 index_key      true        0            true          {3,4}
 t1_a_key       true        0            true          {2}
@@ -3863,7 +3863,7 @@ objoid      classoid    objsubid  description
 4294967127  4294967129  0         pg_config was created for compatibility and is currently unimplemented
 4294967126  4294967129  0         table constraints (incomplete - see also information_schema.table_constraints)
 4294967125  4294967129  0         encoding conversions (empty - unimplemented)
-4294967124  4294967129  0         pg_cursors was created for compatibility and is currently unimplemented
+4294967124  4294967129  0         contains currently active SQL cursors created with DECLARE
 4294967123  4294967129  0         available databases (incomplete)
 4294967122  4294967129  0         contains the default values that have been configured for session variables
 4294967121  4294967129  0         default ACLs; these are the privileges that will be assigned to newly created objects

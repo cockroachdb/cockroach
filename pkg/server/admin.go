@@ -1712,7 +1712,7 @@ func (s *adminServer) Settings(
 		keys = settings.Keys(settings.ForSystemTenant)
 	}
 
-	_, isAdmin, err := s.getUserAndRole(ctx)
+	user, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1729,6 +1729,22 @@ func (s *adminServer) Settings(
 	} else {
 		// Non-root access cannot see the values in any case.
 		lookupPurpose = settings.LookupForReporting
+
+		hasView, err := s.hasRoleOption(ctx, user, roleoption.VIEWCLUSTERSETTING)
+		if err != nil {
+			return nil, err
+		}
+
+		hasModify, err := s.hasRoleOption(ctx, user, roleoption.MODIFYCLUSTERSETTING)
+		if err != nil {
+			return nil, err
+		}
+
+		if !hasModify && !hasView {
+			return nil, status.Errorf(
+				codes.PermissionDenied, "this operation requires either %s or %s role options",
+				roleoption.VIEWCLUSTERSETTING, roleoption.MODIFYCLUSTERSETTING)
+		}
 	}
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
@@ -2054,13 +2070,12 @@ func (s *adminServer) jobHelper(
 	ctx context.Context, request *serverpb.JobRequest, userName security.SQLUsername,
 ) (_ *serverpb.JobResponse, retErr error) {
 	const query = `
-      SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
-						 running_status, created, started, finished, modified,
-						 fraction_completed, high_water_timestamp, error, last_run,
-						 next_run, num_runs
-        FROM crdb_internal.jobs
-       WHERE job_id = $1`
-
+	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
+	  						 running_status, created, started, finished, modified,
+	  						 fraction_completed, high_water_timestamp, error, last_run,
+	  						 next_run, num_runs, execution_events::string::bytes
+	          FROM crdb_internal.jobs
+	         WHERE job_id = $1`
 	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-job", nil,
 		sessiondata.InternalExecutorOverride{User: userName},

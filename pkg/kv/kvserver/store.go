@@ -701,21 +701,24 @@ increasing over time (see Replica.setTombstoneKey).
 NOTE: to the best of our knowledge, we don't rely on this invariant.
 */
 type Store struct {
-	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
-	cfg                StoreConfig
-	db                 *kv.DB
-	engine             storage.Engine // The underlying key-value store
-	tsCache            tscache.Cache  // Most recent timestamps for keys / key ranges
-	allocator          Allocator      // Makes allocation decisions
-	replRankings       *replicaRankings
-	storeRebalancer    *StoreRebalancer
-	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
-	mvccGCQueue        *mvccGCQueue                // MVCC GC queue
-	mergeQueue         *mergeQueue                 // Range merging queue
-	splitQueue         *splitQueue                 // Range splitting queue
-	replicateQueue     *replicateQueue             // Replication queue
-	replicaGCQueue     *replicaGCQueue             // Replica GC queue
-	raftLogQueue       *raftLogQueue               // Raft log truncation queue
+	Ident           *roachpb.StoreIdent // pointer to catch access before Start() is called
+	cfg             StoreConfig
+	db              *kv.DB
+	engine          storage.Engine // The underlying key-value store
+	tsCache         tscache.Cache  // Most recent timestamps for keys / key ranges
+	allocator       Allocator      // Makes allocation decisions
+	replRankings    *replicaRankings
+	storeRebalancer *StoreRebalancer
+	rangeIDAlloc    *idalloc.Allocator // Range ID allocator
+	mvccGCQueue     *mvccGCQueue       // MVCC GC queue
+	mergeQueue      *mergeQueue        // Range merging queue
+	splitQueue      *splitQueue        // Range splitting queue
+	replicateQueue  *replicateQueue    // Replication queue
+	replicaGCQueue  *replicaGCQueue    // Replica GC queue
+	raftLogQueue    *raftLogQueue      // Raft log truncation queue
+	// Carries out truncations proposed by the raft log queue, and "replicated"
+	// via raft, when they are safe.
+	raftTruncator      *raftLogTruncator
 	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
 	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
 	scanner            *replicaScanner             // Replica scanner
@@ -1162,6 +1165,7 @@ func NewStore(
 		)
 	}
 	s.replRankings = newReplicaRankings()
+	s.raftTruncator = makeRaftLogTruncator((*storeForTruncatorImpl)(s))
 
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
@@ -3060,8 +3064,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		behindCount               int64
 
 		locks                          int64
+		totalLockHoldDurationNanos     int64
+		maxLockHoldDurationNanos       int64
 		locksWithWaitQueues            int64
 		lockWaitQueueWaiters           int64
+		totalLockWaitDurationNanos     int64
+		maxLockWaitDurationNanos       int64
 		maxLockWaitQueueWaitersForLock int64
 
 		minMaxClosedTS hlc.Timestamp
@@ -3119,10 +3127,18 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			averageWritesPerSecond += wps
 		}
 		locks += metrics.LockTableMetrics.Locks
+		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
 		locksWithWaitQueues += metrics.LockTableMetrics.LocksWithWaitQueues
 		lockWaitQueueWaiters += metrics.LockTableMetrics.Waiters
+		totalLockWaitDurationNanos += metrics.LockTableMetrics.TotalWaitDurationNanos
 		if w := metrics.LockTableMetrics.TopKLocksByWaiters[0].Waiters; w > maxLockWaitQueueWaitersForLock {
 			maxLockWaitQueueWaitersForLock = w
+		}
+		if w := metrics.LockTableMetrics.TopKLocksByHoldDuration[0].HoldDurationNanos; w > maxLockHoldDurationNanos {
+			maxLockHoldDurationNanos = w
+		}
+		if w := metrics.LockTableMetrics.TopKLocksByWaitDuration[0].MaxWaitDurationNanos; w > maxLockWaitDurationNanos {
+			maxLockWaitDurationNanos = w
 		}
 		mc := rep.GetClosedTimestamp(ctx)
 		if minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS) {
@@ -3148,9 +3164,22 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 
+	var averageLockHoldDurationNanos int64
+	var averageLockWaitDurationNanos int64
+	if locks > 0 {
+		averageLockHoldDurationNanos = totalLockHoldDurationNanos / locks
+	}
+	if lockWaitQueueWaiters > 0 {
+		averageLockWaitDurationNanos = totalLockWaitDurationNanos / lockWaitQueueWaiters
+	}
+
 	s.metrics.Locks.Update(locks)
+	s.metrics.AverageLockHoldDurationNanos.Update(averageLockHoldDurationNanos)
+	s.metrics.MaxLockHoldDurationNanos.Update(maxLockHoldDurationNanos)
 	s.metrics.LocksWithWaitQueues.Update(locksWithWaitQueues)
 	s.metrics.LockWaitQueueWaiters.Update(lockWaitQueueWaiters)
+	s.metrics.AverageLockWaitDurationNanos.Update(averageLockWaitDurationNanos)
+	s.metrics.MaxLockWaitDurationNanos.Update(maxLockWaitDurationNanos)
 	s.metrics.MaxLockWaitQueueWaitersForLock.Update(maxLockWaitQueueWaitersForLock)
 
 	if !minMaxClosedTS.IsEmpty() {
@@ -3459,6 +3488,40 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+// Implementation of the storeForTruncator interface.
+type storeForTruncatorImpl Store
+
+var _ storeForTruncator = &storeForTruncatorImpl{}
+
+func (s *storeForTruncatorImpl) acquireReplicaForTruncator(
+	rangeID roachpb.RangeID,
+) replicaForTruncator {
+	r, err := (*Store)(s).GetReplica(rangeID)
+	if err != nil || r == nil {
+		// The only error we can see here is roachpb.NewRangeNotFoundError, so we
+		// can ignore it.
+		return nil
+	}
+	if isAlive := func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.mu.destroyStatus.IsAlive()
+	}(); !isAlive {
+		return nil
+	}
+	r.raftMu.Lock()
+	return (*raftTruncatorReplica)(r)
+}
+
+func (s *storeForTruncatorImpl) releaseReplicaForTruncator(r replicaForTruncator) {
+	replica := r.(*raftTruncatorReplica)
+	replica.raftMu.Unlock()
+}
+
+func (s *storeForTruncatorImpl) getEngine() storage.Engine {
+	return (*Store)(s).engine
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local

@@ -175,6 +175,19 @@ message SpanConfig {
 }
 
 // SystemSpanConfigTarget specifies the target of system span configurations.
+// System targets are designed for a few different kinds of interactions. We
+// want the ability to:
+// 1. Allow the host tenant to set a system span configuration on the entire
+// keyspace.
+// 2. Allow the host tenant to set a system span configuration on a particular
+// tenant's keyspace.
+// 3. Allow secondary tenants to set system span configurations on their
+// keyspace.
+//
+// Additionally, we also want each tenant to be able to fetch all system span
+// configurations that it has installed. Ideally, we want to be able to do this
+// without knowing the tenantID of all other tenants that exist. We provide a
+// read-only system span config target type to achieve exactly this.
 message SystemSpanConfigTarget {
   option (gogoproto.equal) = true;
 
@@ -182,17 +195,46 @@ message SystemSpanConfigTarget {
   // configuration.
   TenantID source_tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
 
-  // TargetTenantID is the ID of the tenant that the associated system span
-  // configuration applies to.
-  //
-  // If the host tenant is the source and the target is unspecified then the
-  // associated system span configuration applies over all ranges in the system
-  // (including those belonging to secondary tenants).
-  //
-  // Secondary tenants are only allowed to target themselves and must fill in
-  // this field. The host tenant may use this field to target a specific
-  // secondary tenant.
-  TenantID target_tenant_id = 2 [(gogoproto.customname) = "TargetTenantID"];
+  // TenantKeyspace is a target type that targets the keyspace of a specific
+  // tenant.
+  message TenantKeyspace {
+    option (gogoproto.equal) = true;
+
+    // TenantID is the ID of the tenant whose keyspace the the associated
+    // system span configuration applies to.
+    //
+    // Secondary tenants are only allowed to target their keyspace. The host
+    // tenant may use this field to target a specific secondary tenant's
+    // keyspace.
+    TenantID tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+  };
+
+   // EntireKeyspace is a target type that targets the entire keyspace (all
+   // ranges, including those belonging to secondary tenants). Only the host
+   // tenant is allowed to target the entire keyspace.
+  message EntireKeyspace{
+    option (gogoproto.equal) = true;
+  };
+
+  // AllTenantKeyspacesTargetsSet is is a read-only system target type that
+  // encompasses all system targets that have been set by the source tenant on
+  // specific tenant's keyspaces.
+  message AllTenantKeyspaceTargetsSet{
+    option (gogoproto.equal) = true;
+  };
+
+  message Type {
+    option (gogoproto.equal) = true;
+
+    oneof type {
+      TenantKeyspace specific_tenant_keyspace = 1;
+      EntireKeyspace entire_keyspace = 2;
+      AllTenantKeyspaceTargetsSet all_tenant_keyspace_targets_set = 3;
+    }
+  }
+
+  // Type of the system target.
+  Type type = 2;
 }
 
 // SpanConfigTarget specifies the target of an associated span configuration.

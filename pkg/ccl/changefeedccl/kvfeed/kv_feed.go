@@ -43,7 +43,7 @@ type Config struct {
 	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
 	BackfillCheckpoint []roachpb.Span
-	Targets            jobspb.ChangefeedTargets
+	Targets            []jobspb.ChangefeedTargetSpecification
 	Writer             kvevent.Writer
 	Metrics            *kvevent.Metrics
 	OnBackfillCallback func() func()

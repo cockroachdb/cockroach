@@ -33,6 +33,8 @@ func (s *Store) TestingApplyInternal(
 	return s.applyInternal(dryrun, updates...)
 }
 
+// TestingSpanConfigStoreForEachOverlapping exports an internal method on the
+// spanConfigStore for testing purposes.
 func (s *Store) TestingSpanConfigStoreForEachOverlapping(
 	span roachpb.Span, f func(spanConfigEntry) error,
 ) error {
@@ -47,10 +49,14 @@ func (s *Store) TestingSpanConfigStoreForEachOverlapping(
 // 		apply
 // 		delete [a,c)
 // 		set [c,h):X
+// 		set {entire-keyspace}:_ENTIRE
+// 		set {source=1,target=1}:_TENANT
 // 		----
 // 		deleted [b,d)
 // 		deleted [e,g)
 // 		added [c,h):X
+// 		added {entire-keyspace}:_ENTIRE
+// 		added {source=1,target=1}:_TENANT
 //
 // 		get key=b
 // 		----
@@ -71,9 +77,9 @@ func (s *Store) TestingSpanConfigStoreForEachOverlapping(
 // 		[f,h):A
 //
 //
-// Text of the form [a,b) and [a,b):C correspond to spans and span config
-// entries; see spanconfigtestutils.Parse{Span,Config,SpanConfigEntry} for more
-// details.
+// Text of the form [a,b), {entire-keyspace}, {source=1,target=20}, and [a,b):C
+// correspond to targets {spans, system targets} and span config records; see
+// spanconfigtestutils.Parse{Target,Config,SpanConfigRecord} for more details.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -172,6 +178,22 @@ func TestStoreClone(t *testing.T) {
 			spanconfig.MakeTargetFromSpan(spanconfigtestutils.ParseSpan(t, "[e, f)")),
 			spanconfigtestutils.ParseConfig(t, "E"),
 		),
+		spanconfig.Addition(
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			spanconfigtestutils.ParseConfig(t, "G"),
+		),
+		spanconfig.Addition(
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
+				t, roachpb.SystemTenantID, roachpb.MakeTenantID(10),
+			)),
+			spanconfigtestutils.ParseConfig(t, "H"),
+		),
+		spanconfig.Addition(
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
+				t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10),
+			)),
+			spanconfigtestutils.ParseConfig(t, "I"),
+		),
 	}
 
 	original := New(roachpb.TestingDefaultSpanConfig())
@@ -189,6 +211,7 @@ func TestStoreClone(t *testing.T) {
 		return nil
 	})
 
+	require.Equal(t, len(updates), len(originalRecords))
 	require.Equal(t, len(originalRecords), len(clonedRecords))
 	for i := 0; i < len(originalRecords); i++ {
 		require.True(

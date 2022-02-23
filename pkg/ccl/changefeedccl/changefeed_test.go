@@ -39,6 +39,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -136,6 +137,67 @@ func TestChangefeedBasics(t *testing.T) {
 
 // TestChangefeedSendError validates that SendErrors do not fail the changefeed
 // as they can occur in normal situations such as a cluster update
+func TestChangefeedIdleness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		changefeedbase.IdleTimeout.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, 3*time.Second)
+
+		// Idleness functionality is version gated
+		knobs := f.Server().TestingKnobs().Server.(*server.TestingKnobs)
+		knobs.BinaryVersionOverride = clusterversion.ByKey(clusterversion.ChangefeedIdleness)
+
+		registry := f.Server().JobRegistry().(*jobs.Registry)
+		currentlyIdle := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyIdle
+		waitForIdleCount := func(numIdle int64) {
+			testutils.SucceedsSoon(t, func() error {
+				if currentlyIdle.Value() != numIdle {
+					return fmt.Errorf("expected (%+v) idle changefeeds, found (%+v)", numIdle, currentlyIdle.Value())
+				}
+				return nil
+			})
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
+		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo WITH resolved='10ms'") // higher resolved frequency for faster test
+		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'")
+		defer closeFeed(t, cf1)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
+		waitForIdleCount(0)
+		waitForIdleCount(2) // Both should eventually be considered idle
+
+		jobFeed := cf2.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.Pause())
+		waitForIdleCount(1) // Paused jobs aren't considered idle
+
+		require.NoError(t, jobFeed.Resume())
+		waitForIdleCount(2) // Resumed job should eventually become idle
+
+		closeFeed(t, cf2)
+		waitForIdleCount(1) // The cancelled changefeed isn't considered idle
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		waitForIdleCount(0)
+		waitForIdleCount(1)
+
+		assertPayloads(t, cf1, []string{
+			`foo: [0]->{"after": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+	}
+
+	// Tenant testing disabled due to TestServerInterface being required
+	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
+	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
+}
+
 func TestChangefeedSendError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3663,6 +3725,75 @@ func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
+func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		ptsInterval := 50 * time.Millisecond
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, ptsInterval)
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
+		defer closeFeed(t, foo)
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+		ptsProvider := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+
+		var tableID int
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables `+
+			`WHERE name = 'foo' AND database_name = current_database()`).
+			Scan(&tableID)
+
+		getTablePtsRecord := func() *ptpb.Record {
+			var r *ptpb.Record
+			require.NoError(t, ptsProvider.Refresh(context.Background(), f.Server().Clock().Now()))
+			ptsProvider.Iterate(context.Background(), tableSpan.Key, tableSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
+				r = record
+				return false
+			})
+
+			expectedKeys := map[string]struct{}{
+				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
+				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
+			}
+			require.Equal(t, len(r.DeprecatedSpans), len(expectedKeys))
+			for _, s := range r.DeprecatedSpans {
+				require.Contains(t, expectedKeys, string(s.Key))
+			}
+			return r
+		}
+
+		// Wait and return the next resolved timestamp after the wait time
+		waitAndDrainResolved := func(ts time.Duration) hlc.Timestamp {
+			targetTs := timeutil.Now().Add(ts)
+			for {
+				resolvedTs, _ := expectResolvedTimestamp(t, foo)
+				if resolvedTs.GoTime().UnixNano() > targetTs.UnixNano() {
+					return resolvedTs
+				}
+			}
+		}
+
+		// Observe the protected timestamp advancing along with resolved timestamps
+		for i := 0; i < 5; i++ {
+			// Progress the changefeed and allow time for a pts record to be laid down
+			nextResolved := waitAndDrainResolved(100 * time.Millisecond)
+			time.Sleep(2 * ptsInterval)
+			rec := getTablePtsRecord()
+			require.LessOrEqual(t, nextResolved.GoTime().UnixNano(), rec.Timestamp.GoTime().UnixNano())
+		}
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
+	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
+}
+
 func TestChangefeedProtectedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3766,11 +3897,24 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				`WHERE name = 'foo' AND database_name = current_database()`).
 				Scan(&tableID)
 
+			changefeedbase.ProtectTimestampInterval.Override(
+				context.Background(), &f.Server().ClusterSettings().SV, 100*time.Millisecond)
+
 			ptp := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 			getPtsRec := mkGetPtsRec(t, ptp, f.Server().Clock())
 			waitForRecord := mkWaitForRecordCond(t, getPtsRec, mkCheckRecord(t, tableID))
 			waitForNoRecord := mkWaitForRecordCond(t, getPtsRec, checkNoRecord)
 			waitForBlocked := requestBlockedScan()
+			waitForRecordAdvanced := func(ts hlc.Timestamp) {
+				check := func(ptr *ptpb.Record) error {
+					if ptr != nil && !ptr.Timestamp.LessEq(ts) {
+						return nil
+					}
+					return errors.Errorf("expected protected timestamp to exceed %v, found %v", ts, ptr.Timestamp)
+				}
+
+				mkWaitForRecordCond(t, getPtsRec, check)()
+			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
 			defer closeFeed(t, foo)
@@ -3787,8 +3931,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 					`foo: [7]->{"after": {"a": 7, "b": "d"}}`,
 					`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
 				})
-				expectResolvedTimestamp(t, foo)
-				waitForNoRecord()
+				resolved, _ := expectResolvedTimestamp(t, foo)
+				waitForRecordAdvanced(resolved)
 			}
 
 			{
@@ -3806,8 +3950,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 					`foo: [7]->{"after": {"a": 7, "b": "d", "c": 1}}`,
 					`foo: [8]->{"after": {"a": 8, "b": "e", "c": 1}}`,
 				})
-				expectResolvedTimestamp(t, foo)
-				waitForNoRecord()
+				resolved, _ := expectResolvedTimestamp(t, foo)
+				waitForRecordAdvanced(resolved)
 			}
 
 			{
@@ -3878,7 +4022,7 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 						r, err = pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
 						return err
 					}))
-					require.Equal(t, r.Timestamp, *progress.GetHighWater())
+					require.True(t, r.Timestamp.LessEq(*progress.GetHighWater()))
 				} else {
 					require.Equal(t, uuid.Nil, details.ProtectedTimestampRecord)
 				}
@@ -3888,14 +4032,19 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 			// the changefeed has caught up.
 			require.NoError(t, feedJob.Resume())
 			testutils.SucceedsSoon(t, func() error {
-				expectResolvedTimestamp(t, foo)
+				resolvedTs, _ := expectResolvedTimestamp(t, foo)
 				j, err := jr.LoadJob(ctx, feedJob.JobID())
 				require.NoError(t, err)
 				details := j.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-				if details.ProtectedTimestampRecord != uuid.Nil {
-					return fmt.Errorf("expected no protected timestamp record")
-				}
-				return nil
+
+				err = serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					r, err := pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
+					if err != nil || r.Timestamp.Less(resolvedTs) {
+						return fmt.Errorf("expected protected timestamp record %v to have timestamp greater than %v", r, resolvedTs)
+					}
+					return nil
+				})
+				return err
 			})
 		}
 	}

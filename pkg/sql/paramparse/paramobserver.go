@@ -249,7 +249,7 @@ var tableParams = map[string]tableParam{
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
-			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
+			po.tableDesc.RowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
@@ -306,6 +306,50 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_range_concurrency`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRangeConcurrency(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.RangeConcurrency = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.RangeConcurrency = 0
+			}
+			return nil
+		},
+	},
+	`ttl_delete_rate_limit`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.DeleteRateLimit = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DeleteRateLimit = 0
+			}
+			return nil
+		},
+	},
 	`ttl_job_cron`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
@@ -325,6 +369,23 @@ var tableParams = map[string]tableParam{
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeletionCron = ""
 			}
+			return nil
+		},
+	},
+	`ttl_pause`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			b, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			po.tableDesc.RowLevelTTL.Pause = b
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL.Pause = false
 			return nil
 		},
 	},

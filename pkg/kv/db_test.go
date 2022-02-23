@@ -797,3 +797,54 @@ func TestDB_TxnRetry(t *testing.T) {
 		require.NoError(t, err1)
 	})
 }
+
+func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "stepping", func(t *testing.T, stepping bool) {
+		// Create a txn which will be aborted by a high priority txn, with stepping
+		// enabled and disabled.
+		var txn *kv.Txn
+		var expectedStepping kv.SteppingMode
+		if stepping {
+			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0)
+			expectedStepping = kv.SteppingEnabled
+		} else {
+			txn = kv.NewTxn(ctx, db, 0)
+			expectedStepping = kv.SteppingDisabled
+		}
+		keyA := fmt.Sprintf("a_%t", stepping)
+		require.NoError(t, txn.Put(ctx, keyA, "1"))
+
+		{
+			// High priority txn - will abort the other txn.
+			hpTxn := kv.NewTxn(ctx, db, 0)
+			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+			require.NoError(t, hpTxn.Put(ctx, keyA, "hp txn"))
+			require.NoError(t, hpTxn.Commit(ctx))
+		}
+
+		_, err := txn.Get(ctx, keyA)
+		require.NotNil(t, err)
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+		pErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil)
+		require.ErrorAs(t, err, &pErr)
+		require.Equal(t, txn.ID(), pErr.TxnID)
+
+		// The transaction was aborted, therefore we should have a new transaction ID.
+		require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+
+		// Reset the handle in order to get a new sender.
+		txn.PrepareForRetry(ctx)
+
+		// Make sure we have a new txn ID.
+		require.NotEqual(t, pErr.TxnID, txn.ID())
+
+		// Using ConfigureStepping() to read the current state.
+		require.Equal(t, expectedStepping, txn.ConfigureStepping(ctx, expectedStepping))
+	})
+}

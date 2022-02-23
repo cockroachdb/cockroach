@@ -250,8 +250,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					false, /* isInverted */
 					false, /* isNewTable */
 					params.p.SemaCtx(),
-					params.EvalContext(),
-					params.SessionData(),
 				); err != nil {
 					return err
 				}
@@ -646,6 +644,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if n.tableDesc.IsPartitionAllBy() {
 				return unimplemented.NewWithIssue(58736, "changing partition of table with PARTITION ALL BY not yet implemented")
+			}
+			if n.tableDesc.GetPrimaryIndex().IsSharded() {
+				return pgerror.New(
+					pgcode.FeatureNotSupported,
+					"cannot set explicit partitioning with PARTITION BY on hash sharded primary key",
+				)
 			}
 			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning().DeepCopy()
 			if oldPartitioning.NumImplicitColumns() > 0 {
@@ -1832,7 +1836,7 @@ func handleTTLStorageParamChange(
 			if err != nil {
 				return err
 			}
-			intervalExpr, err := parser.ParseExpr(after.DurationExpr)
+			intervalExpr, err := parser.ParseExpr(string(after.DurationExpr))
 			if err != nil {
 				return errors.Wrapf(err, "unexpected expression for TTL duration")
 			}

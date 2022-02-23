@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -51,14 +53,8 @@ import (
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
-func (r *RowCount) add(other RowCount) {
-	r.DataSize += other.DataSize
-	r.Rows += other.Rows
-	r.IndexEntries += other.IndexEntries
-}
-
-func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
-	res := RowCount{DataSize: raw.DataSize}
+func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
+	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
 			res.Rows += count
@@ -123,7 +119,7 @@ func backup(
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
-) (RowCount, error) {
+) (roachpb.RowCount, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
@@ -160,7 +156,7 @@ func backup(
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
-		return RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
 	backupSpecs, err := distBackupPlanSpecs(
@@ -179,7 +175,7 @@ func backup(
 		backupManifest.EndTime,
 	)
 	if err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	numTotalSpans := 0
@@ -216,7 +212,7 @@ func backup(
 			}
 			for _, file := range progDetails.Files {
 				backupManifest.Files = append(backupManifest.Files, file)
-				backupManifest.EntryCounts.add(file.EntryCounts)
+				backupManifest.EntryCounts.Add(file.EntryCounts)
 				numBackedUpFiles++
 			}
 
@@ -256,7 +252,7 @@ func backup(
 	}
 
 	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
-		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
+		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	backupID := uuid.MakeV4()
@@ -293,14 +289,14 @@ func backup(
 				defer store.Close()
 				return writeBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
 			}(); err != nil {
-				return RowCount{}, err
+				return roachpb.RowCount{}, err
 			}
 		}
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
 	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
@@ -330,7 +326,7 @@ func backup(
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup table statistics"})
 	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	return backupManifest.EntryCounts, nil
@@ -355,7 +351,7 @@ func releaseProtectedTimestamp(
 
 type backupResumer struct {
 	job         *jobs.Job
-	backupStats RowCount
+	backupStats roachpb.RowCount
 
 	testingKnobs struct {
 		ignoreProtectedTimestamps bool
@@ -375,6 +371,80 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
+
+	var backupManifest *BackupManifest
+
+	// If planning didn't resolve the external destination, then we need to now.
+	if details.URI == "" {
+		initialDetails := details
+		backupDetails, m, err := getBackupDetailAndManifest(
+			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, details, p.User(),
+		)
+		if err != nil {
+			return err
+		}
+		details = backupDetails
+		backupManifest = &m
+
+		if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
+			protectedtsID := uuid.MakeV4()
+			details.ProtectedTimestampRecord = &protectedtsID
+
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return protectTimestampForBackup(
+					ctx, p.ExecCfg(), txn, b.job.ID(), m, details,
+				)
+			}); err != nil {
+				return err
+			}
+		}
+
+		if err := writeBackupManifestCheckpoint(
+			ctx, b.job.ID(), backupDetails, backupManifest, p.ExecCfg(), p.User(),
+		); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return planSchedulePTSChaining(ctx, p.ExecCfg(), txn, &details, b.job.CreatedBy())
+		}); err != nil {
+			return err
+		}
+
+		// The description picked during original planning might still say "LATEST",
+		// if resolving that to the actual directory only just happened above here.
+		// Ideally we'd re-render the description now that we know the subdir, but
+		// we don't have backup AST node anymore to easily call the rendering func.
+		// Instead we can just do a bit of dirty string replacement iff there is one
+		// "INTO 'LATEST' IN" (if there's >1, somenoe has a weird table/db names and
+		// we should just leave the description as-is, since it is just for humans).
+		description := b.job.Payload().Description
+		const unresolvedText = "INTO 'LATEST' IN"
+		if initialDetails.Destination.Subdir == "LATEST" && strings.Count(description, unresolvedText) == 1 {
+			description = strings.ReplaceAll(description, unresolvedText, fmt.Sprintf("INTO '%s' IN", details.Destination.Subdir))
+		}
+
+		// Update the job payload (non-volatile job definition) once, with the now
+		// resolved destination, updated description, etc. If we resume again we'll
+		// skip this whole block so this isn't an excessive update of payload.
+		if err := b.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			md.Payload.Description = description
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// Collect telemetry, once per backup after resolving its destination.
+		lic := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+		) != nil
+		collectTelemetry(m, details, details, lic)
+	}
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -424,15 +494,19 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	backupManifest, memSize, err := b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
-	if err != nil {
-		return err
-	}
+	var memSize int64
 	defer func() {
 		if memSize != 0 {
 			mem.Shrink(ctx, memSize)
 		}
 	}()
+
+	if backupManifest == nil || util.ConstantWithMetamorphicTestBool("backup-read-manifest", false) {
+		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
+		if err != nil {
+			return err
+		}
+	}
 
 	statsCache := p.ExecCfg().TableStatsCache
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
@@ -445,7 +519,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
-	var res RowCount
+	var res roachpb.RowCount
 	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		retryCount++
@@ -473,7 +547,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			break
 		}
 
-		if utilccl.IsPermanentBulkJobError(err) {
+		if joberror.IsPermanentBulkJobError(err) {
 			return errors.Wrap(err, "failed to run backup")
 		}
 
@@ -612,7 +686,6 @@ func (b *backupResumer) readManifestOnResume(
 	// table descriptors were using and leave them alone.
 	desc, memSize, err := readBackupManifest(ctx, mem, defaultStore, backupManifestCheckpointName,
 		details.EncryptionOptions)
-
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
@@ -668,7 +741,6 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),
 			b.job.ID(), jobs.CreatedByScheduledJobs)
-
 		if err != nil {
 			return errors.Wrap(err, "schedule info lookup")
 		}

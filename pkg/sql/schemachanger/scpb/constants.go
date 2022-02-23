@@ -12,9 +12,7 @@ package scpb
 
 const (
 	// PlaceHolderComment placeholder string for non-fetched comments.
-	PlaceHolderComment string = "TODO(fqazi) Comments are not currently fetched " +
-		"from system.comments when doing decomposition"
+	PlaceHolderComment string = "__placeholder_comment__"
 	// PlaceHolderRoleName placeholder string for non-fetched role names.
-	PlaceHolderRoleName string = "TODO(fqazi) Roles are not currently fetched " +
-		"from database_role_settings"
+	PlaceHolderRoleName string = "__placeholder_role_name__"
 )

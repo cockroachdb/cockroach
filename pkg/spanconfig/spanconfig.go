@@ -98,8 +98,11 @@ type KVSubscriber interface {
 type SQLTranslator interface {
 	// Translate generates the span configuration state given a list of
 	// {descriptor, named zone} IDs. Entries are unique, and are omitted for IDs
-	// that don't exist. The timestamp at which the translation is valid is also
-	// returned.
+	// that don't exist.
+	// Additionally, if `generateSystemSpanConfigurations` is set to true,
+	// Translate will generate all the span configurations that apply to
+	// `spanconfig.SystemTargets`. The timestamp at which the translation is valid
+	// is also returned.
 	//
 	// For every ID we first descend the zone configuration hierarchy with the
 	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
@@ -109,7 +112,8 @@ type SQLTranslator interface {
 	// for each one of these accumulated IDs, we generate <span, config> tuples
 	// by following up the inheritance chain to fully hydrate the span
 	// configuration. Translate also accounts for and negotiates subzone spans.
-	Translate(ctx context.Context, ids descpb.IDs) ([]Record, hlc.Timestamp, error)
+	Translate(ctx context.Context, ids descpb.IDs,
+		generateSystemSpanConfigurations bool) ([]Record, hlc.Timestamp, error)
 }
 
 // FullTranslate translates the entire SQL zone configuration state to the span
@@ -119,7 +123,8 @@ func FullTranslate(ctx context.Context, s SQLTranslator) ([]Record, hlc.Timestam
 	// As RANGE DEFAULT is the root of all zone configurations (including other
 	// named zones for the system tenant), we can construct the entire span
 	// configuration state by starting from RANGE DEFAULT.
-	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
+	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID},
+		true /* generateSystemSpanConfigurations */)
 }
 
 // SQLWatcherHandler is the signature of a handler that can be passed into
@@ -220,6 +225,7 @@ type StoreWriter interface {
 	//
 	// [1]: Unless dryrun is true. We'll still generate the same {deleted,added}
 	//      lists.
+	// TODO(arul): Get rid of dryrun; we don't make use of it anywhere.
 	Apply(ctx context.Context, dryrun bool, updates ...Update) (
 		deleted []Target, added []Record,
 	)
@@ -231,6 +237,33 @@ type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
 	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
+}
+
+// Splitter returns the set of all possible split points for the given table
+// descriptor. It steps through every "unit" that we can apply configurations
+// over (table, indexes, partitions and sub-partitions) and figures out the
+// actual key boundaries that we may need to split over. For example:
+//
+//		CREATE TABLE db.parts(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+//			PARTITION one_and_five    VALUES IN (1, 5),
+//			PARTITION four_and_three  VALUES IN (4, 3),
+//			PARTITION everything_else VALUES IN (6, default)
+//		);
+//
+//  Assuming a table ID of 108, we'd generate:
+//
+//		/Table/108
+//		/Table/108/1
+//		/Table/108/1/1
+//		/Table/108/1/2
+//		/Table/108/1/3
+//		/Table/108/1/4
+//		/Table/108/1/5
+//		/Table/108/1/6
+//		/Table/108/1/7
+//		/Table/108/2
+type Splitter interface {
+	Splits(ctx context.Context, desc catalog.TableDescriptor) ([]roachpb.Key, error)
 }
 
 // Record ties a target to its corresponding config.

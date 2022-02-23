@@ -58,8 +58,15 @@ exp,benchmark
 2,ORMQueries/django_table_introspection_8_tables
 2,ORMQueries/has_column_privilege_using_attnum
 2,ORMQueries/has_column_privilege_using_column_name
-2,ORMQueries/has_table_privilege_real_table
-2,ORMQueries/has_table_privilege_virtual_table
+1,ORMQueries/has_schema_privilege_1
+1,ORMQueries/has_schema_privilege_3
+1,ORMQueries/has_schema_privilege_5
+2,ORMQueries/has_sequence_privilege_1
+4,ORMQueries/has_sequence_privilege_3
+6,ORMQueries/has_sequence_privilege_5
+2,ORMQueries/has_table_privilege_1
+4,ORMQueries/has_table_privilege_3
+6,ORMQueries/has_table_privilege_5
 15,ORMQueries/information_schema._pg_index_position
 2,ORMQueries/pg_attribute
 2,ORMQueries/pg_class

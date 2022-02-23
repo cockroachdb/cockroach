@@ -18,26 +18,24 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,15 +45,28 @@ type NewClusterFunc func(
 	t *testing.T, knobs *scrun.TestingKnobs,
 ) (_ *gosql.DB, cleanup func())
 
+// SingleNodeCluster is a NewClusterFunc.
+func SingleNodeCluster(t *testing.T, knobs *scrun.TestingKnobs) (*gosql.DB, func()) {
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: knobs,
+			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	return db, func() {
+		s.Stopper().Stop(context.Background())
+	}
+}
+
 // EndToEndSideEffects is a data-driven test runner that executes DDL statements in the
 // declarative schema changer injected with test dependencies and compares the
 // accumulated side effects logs with expected results from the data-driven
 // test file.
 //
 // It shares a data-driven format with Rollback.
-func EndToEndSideEffects(t *testing.T, newCluster NewClusterFunc) {
+func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
 		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
@@ -68,7 +79,7 @@ func EndToEndSideEffects(t *testing.T, newCluster NewClusterFunc) {
 				for _, stmt := range stmts {
 					tdb.Exec(t, stmt.SQL)
 				}
-				waitForSchemaChangesToComplete(t, tdb)
+				waitForSchemaChangesToSucceed(t, tdb)
 			}
 
 			switch d.Cmd {
@@ -126,61 +137,6 @@ var scheduleIDRegexp = regexp.MustCompile(`scheduleId: "?[0-9]+"?`)
 func replaceNonDeterministicOutput(text string) string {
 	// scheduleIDs change based on execution time, so redact the output.
 	return scheduleIDRegexp.ReplaceAllString(text, "scheduleId: <redacted>")
-}
-
-// Rollback tests that the schema changer job rolls back properly.
-// This data-driven test uses the same input as EndToEndSideEffects
-// but ignores the expected output.
-func Rollback(t *testing.T, newCluster NewClusterFunc) {
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
-		ctx := context.Background()
-		var setup []parser.Statement
-
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			stmts, err := parser.Parse(d.Input)
-			require.NoError(t, err)
-			require.NotEmpty(t, stmts)
-
-			switch d.Cmd {
-			case "setup":
-				// no-op
-			case "test":
-				var lines []string
-				for _, stmt := range stmts {
-					lines = append(lines, stmt.SQL)
-				}
-				t.Run(strings.Join(lines, "; "), func(t *testing.T) {
-					numRevertibleStages := countRevertiblePostCommitStages(ctx, t, newCluster, setup, stmts)
-					if numRevertibleStages == 0 {
-						t.Logf("test case has no revertible post-commit stages, skipping...")
-						return
-					}
-					t.Logf("test case has %d revertible post-commit stages", numRevertibleStages)
-					for i := 1; i <= numRevertibleStages; i++ {
-						if !t.Run(fmt.Sprintf("rollback stage %d of %d", i, numRevertibleStages), func(t *testing.T) {
-							testRollbackCase(ctx, t, newCluster, setup, stmts, i)
-						}) {
-							return
-						}
-					}
-				})
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
-			}
-			setup = append(setup, stmts...)
-			return d.Expected
-		})
-	})
-}
-
-func waitForSchemaChangesToComplete(t *testing.T, tdb *sqlutils.SQLRunner) {
-	q := fmt.Sprintf(
-		`SELECT count(*) FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status <> 'succeeded'`,
-		jobspb.TypeSchemaChange,
-		jobspb.TypeTypeSchemaChange,
-		jobspb.TypeNewSchemaChange,
-	)
-	tdb.CheckQueryResultsRetry(t, q, [][]string{{"0"}})
 }
 
 // execStatementWithTestDeps executes the DDL statement using the declarative
@@ -249,145 +205,25 @@ func prettyNamespaceDump(t *testing.T, tdb *sqlutils.SQLRunner) string {
 	return strings.Join(lines, "\n")
 }
 
-// testRollbackCase is a helper function for TestRollback.
-func testRollbackCase(
-	ctx context.Context,
-	t *testing.T,
-	newCluster NewClusterFunc,
-	setup []parser.Statement,
-	stmts []parser.Statement,
-	rollbackStageOrdinal int,
-) {
-	var numInjectedFailures uint32
-	beforeStage := func(p scplan.Plan, stageIdx int) error {
-		if atomic.LoadUint32(&numInjectedFailures) > 0 {
-			return nil
-		}
-		s := p.Stages[stageIdx]
-		if s.Phase == scop.PostCommitPhase && s.Ordinal == rollbackStageOrdinal {
-			atomic.AddUint32(&numInjectedFailures, 1)
-			return errors.Errorf("boom %d", rollbackStageOrdinal)
-		}
-		return nil
-	}
-	resetTxnState := func() {
-		// Reset the counter in case the transaction is retried for whatever reason.
-		atomic.StoreUint32(&numInjectedFailures, 0)
-	}
-	db, cleanup := newCluster(t, &scrun.TestingKnobs{
-		BeforeStage: beforeStage,
-	})
-	defer cleanup()
-	err := execRolledBackStatements(ctx, t, setup, stmts, db, resetTxnState)
-	if atomic.LoadUint32(&numInjectedFailures) == 0 {
-		require.NoError(t, err)
-	} else {
-		require.Regexp(t, fmt.Sprintf("boom %d", rollbackStageOrdinal), err)
-	}
+func waitForSchemaChangesToSucceed(t *testing.T, tdb *sqlutils.SQLRunner) {
+	tdb.CheckQueryResultsRetry(
+		t, schemaChangeWaitQuery(`('succeeded')`), [][]string{},
+	)
 }
 
-// countRevertiblePostCommitStages runs the test statements to count the number
-// of stages in the post-commit phase which are revertible.
-func countRevertiblePostCommitStages(
-	ctx context.Context,
-	t *testing.T,
-	newCluster NewClusterFunc,
-	setup []parser.Statement,
-	stmt []parser.Statement,
-) (numRevertiblePostCommitStages int) {
-	var nRevertible uint32
-	beforeStage := func(p scplan.Plan, _ int) error {
-		if p.Params.ExecutionPhase != scop.PostCommitPhase {
-			return nil
-		}
-		n := uint32(0)
-		for _, s := range p.Stages {
-			if s.Phase == scop.PostCommitPhase {
-				n++
-			}
-		}
-		// Only store this value once.
-		atomic.CompareAndSwapUint32(&nRevertible, 0, n)
-		return nil
-	}
-	db, cleanup := newCluster(t, &scrun.TestingKnobs{
-		BeforeStage: beforeStage,
-	})
-	defer cleanup()
-	require.NoError(t, execRolledBackStatements(ctx, t, setup, stmt, db, func() {}))
-	return int(atomic.LoadUint32(&nRevertible))
+func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
+	tdb.CheckQueryResultsRetry(
+		t, schemaChangeWaitQuery(`('succeeded', 'failed')`), [][]string{},
+	)
 }
 
-// execRolledBackStatements spins up a test cluster, executes the setup
-// statements with the legacy schema changer, then executes the test statements
-// with the declarative schema changer.
-func execRolledBackStatements(
-	ctx context.Context,
-	t *testing.T,
-	setup []parser.Statement,
-	stmts []parser.Statement,
-	db *gosql.DB,
-	txnStartCallback func(),
-) (err error) {
-	const fetchDescriptorStateQuery = `
-		SELECT
-			create_statement
-		FROM
-			(
-				SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
-				UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
-				UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
-			)
-		ORDER BY
-			create_statement;`
-
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	// Execute the setup statements with the legacy schema changer so that the
-	// declarative schema changer testing knobs don't get used.
-	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'off'")
-	for _, stmt := range setup {
-		tdb.Exec(t, stmt.SQL)
-	}
-	waitForSchemaChangesToComplete(t, tdb)
-	before := tdb.QueryStr(t, fetchDescriptorStateQuery)
-
-	// Execute the tested statements with the declarative schema changer and fail
-	// the test if it all takes too long. This prevents the test suite from
-	// hanging when a regression is introduced.
-	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'unsafe_always'")
-	{
-		c := make(chan error, 1)
-		go func() {
-			c <- crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
-				txnStartCallback()
-				for _, stmt := range stmts {
-					if _, err := tx.Exec(stmt.SQL); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		}()
-		testutils.SucceedsSoon(t, func() error {
-			select {
-			case e := <-c:
-				err = e
-				return nil
-			default:
-				return errors.New("waiting for statements to execute")
-			}
-		})
-	}
-
-	if err != nil {
-		// If the statement execution failed, then we expect to end up in the same
-		// state as when we started.
-		require.Equal(t, before, tdb.QueryStr(t, fetchDescriptorStateQuery))
-		return err
-	}
-
-	// Ensure we're really done here.
-	waitForSchemaChangesToComplete(t, tdb)
-	return nil
+func schemaChangeWaitQuery(statusInString string) string {
+	q := fmt.Sprintf(
+		`SELECT status, job_type, description FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status NOT IN %s`,
+		jobspb.TypeSchemaChange,
+		jobspb.TypeTypeSchemaChange,
+		jobspb.TypeNewSchemaChange,
+		statusInString,
+	)
+	return q
 }
