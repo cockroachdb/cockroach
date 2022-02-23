@@ -1,0 +1,5 @@
+alter_tenant_csetting_stmt ::=
+	'ALTER' 'TENANT' iconst64 'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value
+	| 'ALTER' 'TENANT' 'ALL' 'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value
+	| 'ALTER' 'TENANT' iconst64 'RESET' 'CLUSTER' 'SETTING' var_name
+	| 'ALTER' 'TENANT' 'ALL' 'RESET' 'CLUSTER' 'SETTING' var_name

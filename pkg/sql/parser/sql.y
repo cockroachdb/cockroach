@@ -958,6 +958,9 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> alter_table_locality_stmt
 %type <tree.Statement> alter_table_owner_stmt
 
+// ALTER TENANT CLUSTER SETTINGS
+%type <tree.Statement> alter_tenant_csetting_stmt
+
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
 
@@ -1572,10 +1575,11 @@ stmt:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE, ALTER DEFAULT PRIVILEGES
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE, ALTER DEFAULT PRIVILEGES, ALTER TENANT
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
+| alter_tenant_csetting_stmt  // EXTEND WITH HELP: ALTER TENANT
 | alter_unsupported_stmt
 | ALTER error         // SHOW HELP: ALTER
 
@@ -4947,6 +4951,56 @@ set_csetting_stmt:
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
+// %Help: ALTER TENANT - alter tenant configuration
+// %Category: Cfg
+// %Text:
+// ALTER TENANT { <tenant_id>  | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
+// ALTER TENANT { <tenant_id>  | ALL } RESET CLUSTER SETTING <var>
+// %SeeAlso: SET CLUSTER SETTING
+alter_tenant_csetting_stmt:
+  ALTER TENANT iconst64 SET CLUSTER SETTING var_name to_or_eq var_value
+  {
+    tenID := uint64($3.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = &tree.AlterTenantSetClusterSetting{
+      Name: strings.Join($7.strs(), "."),
+      Value: $9.expr(),
+      TenantID: roachpb.MakeTenantID(tenID),
+    }
+  }
+| ALTER TENANT ALL SET CLUSTER SETTING var_name to_or_eq var_value
+  {
+    $$.val = &tree.AlterTenantSetClusterSetting{
+      Name: strings.Join($7.strs(), "."),
+      Value: $9.expr(),
+      TenantAll: true,
+    }
+  }
+| ALTER TENANT iconst64 RESET CLUSTER SETTING var_name
+  {
+    tenID := uint64($3.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = &tree.AlterTenantSetClusterSetting{
+      Name: strings.Join($7.strs(), "."),
+      Value: tree.DefaultVal{},
+      TenantID: roachpb.MakeTenantID(tenID),
+    }
+  }
+| ALTER TENANT ALL RESET CLUSTER SETTING var_name
+  {
+    $$.val = &tree.AlterTenantSetClusterSetting{
+      Name: strings.Join($7.strs(), "."),
+      Value: tree.DefaultVal{},
+      TenantAll: true,
+    }
+  }
+| ALTER TENANT error // SHOW HELP: ALTER TENANT
+
+
 to_or_eq:
   '='
 | TO
@@ -5642,8 +5696,8 @@ show_backup_stmt:
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
 // %Text:
-// SHOW CLUSTER SETTING <var>
-// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS
+// SHOW CLUSTER SETTING <var> [ FOR TENANT <tenant_id> ]
+// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS [ FOR TENANT <tenant_id> ]
 // %SeeAlso: WEBDOCS/cluster-settings.html
 show_csettings_stmt:
   SHOW CLUSTER SETTING var_name
@@ -5667,6 +5721,38 @@ show_csettings_stmt:
 | SHOW PUBLIC CLUSTER SETTINGS
   {
     $$.val = &tree.ShowClusterSettingList{}
+  }
+| SHOW CLUSTER SETTING var_name FOR TENANT iconst64
+  {
+    tenID := uint64($7.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = &tree.ShowClusterSetting{Name: strings.Join($4.strs(), "."), TenantID: roachpb.MakeTenantID(tenID)}
+  }
+| SHOW ALL CLUSTER SETTINGS FOR TENANT iconst64
+  {
+    tenID := uint64($7.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = &tree.ShowClusterSettingList{All: true, TenantID: roachpb.MakeTenantID(tenID)}
+  }
+| SHOW CLUSTER SETTINGS FOR TENANT iconst64
+  {
+    tenID := uint64($6.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = &tree.ShowClusterSettingList{TenantID: roachpb.MakeTenantID(tenID)}
+  }
+| SHOW PUBLIC CLUSTER SETTINGS FOR TENANT iconst64
+  {
+    tenID := uint64($7.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = &tree.ShowClusterSettingList{TenantID: roachpb.MakeTenantID(tenID)}
   }
 | SHOW PUBLIC CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 

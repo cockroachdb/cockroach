@@ -22,6 +22,7 @@ package tree
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 )
 
@@ -42,7 +43,8 @@ func (node *ShowVar) Format(ctx *FmtCtx) {
 
 // ShowClusterSetting represents a SHOW CLUSTER SETTING statement.
 type ShowClusterSetting struct {
-	Name string
+	Name     string
+	TenantID roachpb.TenantID
 }
 
 // Format implements the NodeFormatter interface.
@@ -53,12 +55,17 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
+	if node.TenantID.IsSet() {
+		s := fmt.Sprintf(" FOR TENANT %d", node.TenantID.ToUint64())
+		ctx.WriteString(s)
+	}
 }
 
 // ShowClusterSettingList represents a SHOW [ALL|PUBLIC] CLUSTER SETTINGS statement.
 type ShowClusterSettingList struct {
 	// All indicates whether to include non-public settings in the output.
-	All bool
+	All      bool
+	TenantID roachpb.TenantID
 }
 
 // Format implements the NodeFormatter interface.
@@ -70,6 +77,10 @@ func (node *ShowClusterSettingList) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(qual)
 	ctx.WriteString(" CLUSTER SETTINGS")
+	if node.TenantID.IsSet() {
+		s := fmt.Sprintf(" FOR TENANT %d", node.TenantID.ToUint64())
+		ctx.WriteString(s)
+	}
 }
 
 // BackupDetails represents the type of details to display for a SHOW BACKUP

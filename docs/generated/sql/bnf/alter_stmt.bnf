@@ -1,3 +1,4 @@
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_role_stmt
+	| alter_tenant_csetting_stmt
