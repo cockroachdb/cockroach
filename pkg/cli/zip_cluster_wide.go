@@ -32,6 +32,7 @@ const (
 	schemaPrefix      = debugBase + "/schema"
 	settingsName      = debugBase + "/settings"
 	problemRangesName = reportsPrefix + "/problemranges"
+	tenantRangesName  = debugBase + "/tenant_ranges"
 )
 
 // makeClusterWideZipRequests defines the zipRequests that are to be
@@ -65,6 +66,12 @@ func makeClusterWideZipRequests(
 				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
 			},
 			pathName: problemRangesName,
+		},
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
+			},
+			pathName: tenantRangesName,
 		},
 	}
 }
