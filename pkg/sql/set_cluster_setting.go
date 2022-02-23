@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,9 +49,11 @@ import (
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
 type setClusterSettingNode struct {
-	name    string
-	st      *cluster.Settings
-	setting settings.NonMaskedSetting
+	name      string
+	tenantID  roachpb.TenantID
+	tenantAll bool
+	st        *cluster.Settings
+	setting   settings.NonMaskedSetting
 	// If value is nil, the setting should be reset.
 	value tree.TypedExpr
 	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
@@ -160,7 +163,7 @@ func (p *planner) SetClusterSetting(
 	}
 
 	csNode := setClusterSettingNode{
-		name: name, st: st, setting: setting, value: value,
+		name: name, tenantID: n.TenantID, tenantAll: n.TenantAll, st: st, setting: setting, value: value,
 		versionUpgradeHook: p.execCfg.VersionUpgradeHook,
 	}
 	return &csNode, nil
@@ -169,6 +172,12 @@ func (p *planner) SetClusterSetting(
 func (n *setClusterSettingNode) startExec(params runParams) error {
 	if !params.p.ExtendedEvalContext().TxnImplicit {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
+	}
+
+	if n.tenantID.IsSet() || n.tenantAll {
+		return errors.UnimplementedError(
+			errors.IssueLink{IssueURL: build.MakeIssueURL(73857)},
+			`unimplemented: tenant-level cluster settings not supported`)
 	}
 
 	// Set the system config trigger explicitly here as it might not happen

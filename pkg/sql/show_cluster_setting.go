@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -117,6 +118,11 @@ func (p *planner) showVersionSetting(
 func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
+	if n.TenantID.IsSet() {
+		return nil, errors.UnimplementedError(
+			errors.IssueLink{IssueURL: build.MakeIssueURL(73857)},
+			`unimplemented: tenant-level cluster settings not supported`)
+	}
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(
