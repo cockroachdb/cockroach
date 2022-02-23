@@ -411,6 +411,35 @@ message PrettySpan {
   string end_key = 2;
 }
 
+message TenantRangeInfo {
+  int64 range_id = 1 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) =
+      "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  PrettySpan span = 2 [ (gogoproto.nullable) = false ];
+  Locality locality = 3;
+  bool is_leaseholder = 4;
+  bool lease_valid = 5;
+  string error_message = 6;
+  RangeStatistics range_stats = 7 [ (gogoproto.nullable) = false ];
+  storage.enginepb.MVCCStats mvcc_stats = 8;
+  int64 read_latches = 9;
+  int64 write_latches = 10;
+  int64 locks = 11;
+  int64 locks_with_wait_queues = 12;
+  int64 lock_wait_queue_waiters = 13;
+  message LockInfo {
+    string pretty_key = 1;
+    bytes key = 2 [ (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key" ];
+    bool held = 3;
+    int64 waiters = 4;
+    int64 waiting_readers = 5;
+    int64 waiting_writers = 6;
+  }
+  repeated LockInfo top_k_locks_by_wait_queue_waiters = 14 [ (gogoproto.nullable) = false ];
+}
+
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
@@ -465,6 +494,19 @@ message RangesRequest {
 
 message RangesResponse {
   repeated RangeInfo ranges = 1 [ (gogoproto.nullable) = false ];
+}
+
+message TenantRangesRequest {}
+
+message TenantRangesResponse {
+  message TenantRangeList {
+    repeated TenantRangeInfo ranges = 1 [ (gogoproto.nullable) = false ];
+  }
+  // ranges_by_locality maps each range replica to its specified availability
+  // zone, as defined within the replica's locality metadata (default key `az`).
+  // Replicas without the default available zone key set will fall under the
+  // `locality-unset` key.
+  map<string, TenantRangeList> ranges_by_locality = 1 [ (gogoproto.nullable) = false ];
 }
 
 message GossipRequest {
@@ -1579,6 +1621,14 @@ service Status {
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
       get : "/_status/ranges/{node_id}"
+    };
+  }
+
+  // TenantRanges requests internal details about all leaseholder ranges for
+  // the calling tenant.
+  rpc TenantRanges(TenantRangesRequest) returns (TenantRangesResponse) {
+    option (google.api.http) = {
+      get : "/_status/tenant_ranges"
     };
   }
 

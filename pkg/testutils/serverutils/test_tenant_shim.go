@@ -56,6 +56,8 @@ type TestTenantInterface interface {
 	// interface{}.
 	StatusServer() interface{}
 
+	DebugStatusServer() interface{}
+
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
