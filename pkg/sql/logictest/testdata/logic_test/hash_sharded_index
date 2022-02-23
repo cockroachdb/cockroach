@@ -1,6 +1,3 @@
-statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
 # Tests for creating a hash sharded primary key
 statement ok 
 CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=10))
@@ -422,25 +419,7 @@ DROP INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx
 statement ok
 DROP TABLE sharded_primary
 
-statement ok
-SET experimental_enable_hash_sharded_indexes = false
-
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
-CREATE TABLE disabled (k INT PRIMARY KEY USING HASH WITH (bucket_count=10))
-
-statement ok
-CREATE TABLE disabled_secondary (k INT, v BYTES)
-
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
-CREATE INDEX failure on disabled_secondary (k) USING HASH WITH (bucket_count=12)
-
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
-CREATE TABLE disabled (k INT, INDEX (k) USING HASH WITH (bucket_count=10))
-
 # Ensure everything works with weird column names
-statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
 statement ok
 CREATE TABLE weird_names (
     "I am a column with spaces" INT PRIMARY KEY USING HASH WITH (bucket_count=12),
@@ -825,7 +804,6 @@ CREATE TABLE public.t (
 subtest test_hash_index_presplit
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = on;
 CREATE TABLE t_hash_pre_split (
   a INT PRIMARY KEY,
   b INT
