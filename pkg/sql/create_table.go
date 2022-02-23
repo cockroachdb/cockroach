@@ -2332,10 +2332,8 @@ func newTableDesc(
 	}
 
 	// Row level TTL tables require a scheduled job to be created as well.
-	// TODO(#75428): ensure backup & restore work too - this may need to be placed in NewTableDesc.
-	// This involves plumbing InternalExecutor in there,
 	if ttl := ret.RowLevelTTL; ttl != nil {
-		j, err := createRowLevelTTLScheduledJob(
+		j, err := CreateRowLevelTTLScheduledJob(
 			params.ctx,
 			params.ExecCfg(),
 			params.p.txn,
@@ -2397,7 +2395,8 @@ func rowLevelTTLSchedule(ttl *catpb.RowLevelTTL) string {
 	return defaultTTLScheduleCron
 }
 
-func createRowLevelTTLScheduledJob(
+// CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
+func CreateRowLevelTTLScheduledJob(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,

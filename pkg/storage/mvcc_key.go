@@ -61,6 +61,23 @@ func (k MVCCKey) Next() MVCCKey {
 	}
 }
 
+// Compare returns -1 if this key is less than the given key, 0 if they're
+// equal, or 1 if this is greater. Comparison is by key,timestamp, where larger
+// timestamps sort before smaller ones except empty ones which sort first (like
+// elsewhere in MVCC).
+func (k MVCCKey) Compare(o MVCCKey) int {
+	if c := k.Key.Compare(o.Key); c != 0 {
+		return c
+	}
+	if k.Timestamp.IsEmpty() && !o.Timestamp.IsEmpty() {
+		return -1
+	} else if !k.Timestamp.IsEmpty() && o.Timestamp.IsEmpty() {
+		return 1
+	} else {
+		return -k.Timestamp.Compare(o.Timestamp) // timestamps sort in reverse
+	}
+}
+
 // Less compares two keys.
 func (k MVCCKey) Less(l MVCCKey) bool {
 	if c := k.Key.Compare(l.Key); c != 0 {
@@ -156,6 +173,12 @@ func EncodeMVCCKeyToBuf(buf []byte, key MVCCKey) []byte {
 	return buf
 }
 
+// EncodeMVCCKeyPrefix encodes an MVCC user key (without timestamp) into its
+// Pebble prefix representation.
+func EncodeMVCCKeyPrefix(key roachpb.Key) []byte {
+	return EncodeMVCCKey(MVCCKey{Key: key})
+}
+
 // encodeMVCCKeyToBuf encodes an MVCCKey into its Pebble representation to the
 // target buffer, which must have the correct size.
 func encodeMVCCKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
@@ -185,10 +208,10 @@ func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
 	return buf
 }
 
-// encodeMVCCTimestampSuffix encodes an MVCC timestamp into its Pebble
+// EncodeMVCCTimestampSuffix encodes an MVCC timestamp into its Pebble
 // representation, including the length suffix but excluding the sentinel byte.
 // This is equivalent to the Pebble suffix.
-func encodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
+func EncodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
 	tsLen := encodedMVCCTimestampLength(ts)
 	if tsLen == 0 {
 		return nil
@@ -214,6 +237,9 @@ func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
 
 // encodedMVCCKeyLength returns the encoded length of the given MVCCKey.
 func encodedMVCCKeyLength(key MVCCKey) int {
+	// NB: We don't call into encodedMVCCKeyPrefixLength() or
+	// encodedMVCCTimestampSuffixLength() here because the additional function
+	// call overhead is significant.
 	keyLen := len(key.Key) + mvccEncodedTimeSentinelLen
 	if !key.Timestamp.IsEmpty() {
 		keyLen += mvccEncodedTimeWallLen + mvccEncodedTimeLengthLen
@@ -225,6 +251,12 @@ func encodedMVCCKeyLength(key MVCCKey) int {
 		}
 	}
 	return keyLen
+}
+
+// encodedMVCCKeyPrefixLength returns the encoded length of a roachpb.Key prefix
+// including the sentinel byte.
+func encodedMVCCKeyPrefixLength(key roachpb.Key) int {
+	return len(key) + mvccEncodedTimeSentinelLen
 }
 
 // encodedMVCCTimestampLength returns the encoded length of the given MVCC
@@ -239,6 +271,14 @@ func encodedMVCCTimestampLength(ts hlc.Timestamp) int {
 		tsLen -= mvccEncodedTimeLengthLen
 	}
 	return tsLen
+}
+
+// encodedMVCCTimestampSuffixLength returns the encoded length of the
+// given MVCC timestamp, including the length suffix. It returns 0
+// if the timestamp is empty.
+func encodedMVCCTimestampSuffixLength(ts hlc.Timestamp) int {
+	// This is backwards, see comment in encodedMVCCTimestampLength() for why.
+	return encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
 }
 
 // TODO(erikgrinaker): merge in the enginepb decoding functions once it can

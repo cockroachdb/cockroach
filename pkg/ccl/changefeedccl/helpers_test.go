@@ -328,6 +328,7 @@ func startTestFullServer(
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		Server:           &server.TestingKnobs{},
 	}
 	if options.knobsFn != nil {
 		options.knobsFn(&knobs)
@@ -414,6 +415,7 @@ func startTestTenant(
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		Server:           &server.TestingKnobs{},
 	}
 	if options.knobsFn != nil {
 		options.knobsFn(&knobs)
