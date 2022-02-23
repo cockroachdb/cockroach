@@ -201,6 +201,14 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 	return b.nextIndexID(view.ViewID)
 }
 
+func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
+	// Scan the table for any rows, if they exist the lack of a default value
+	// should lead to an error.
+	elts := b.QueryByID(table.TableID)
+	_, _, index := scpb.FindPrimaryIndex(elts)
+	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
+}
+
 func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 	{
 		b.ensureDescriptor(id)
