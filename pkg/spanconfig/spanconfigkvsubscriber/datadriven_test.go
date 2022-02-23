@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -46,8 +45,9 @@ import (
 //      delete [c,e)
 //      upsert [c,d):C
 //      upsert [d,e):D
+//      upsert {entire-keyspace}:X
+//      delete {source=1,target=20}
 //      ----
-//      ok
 //
 //      get
 //      span [a,b)
@@ -99,6 +99,7 @@ import (
 // Text of the form [a,b) and [a,b):C correspond to spans and span config
 // records; see spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more
 // details.
+// TODO(arul): Add ability to express tenant spans to this datadriven test.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -241,14 +242,7 @@ func TestDataDriven(t *testing.T) {
 					if i != 0 && receivedUpdates[i].Equal(receivedUpdates[i-1]) {
 						continue // de-dup updates
 					}
-
-					var spanStr string
-					if update.Equal(keys.EverythingSpan) {
-						spanStr = update.String()
-					} else {
-						spanStr = spanconfigtestutils.PrintSpan(update)
-					}
-					output.WriteString(fmt.Sprintf("%s\n", spanStr))
+					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpan(update)))
 				}
 
 				return output.String()

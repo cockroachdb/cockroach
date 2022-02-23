@@ -18,7 +18,7 @@ span [a,f)
 
 updates
 ----
-/M{in-ax}
+[/Min,/Max)
 [a,c)
 [d,f)
 
@@ -40,7 +40,6 @@ delete [d,f)
 
 updates
 ----
-/M{in-ax}
 [d,f)
 
 store-reader key=d

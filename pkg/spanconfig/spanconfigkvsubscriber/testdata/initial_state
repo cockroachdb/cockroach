@@ -16,7 +16,7 @@ start
 
 updates
 ----
-/M{in-ax}
+[/Min,/Max)
 
 store-reader key=a
 ----

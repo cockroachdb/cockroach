@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -248,15 +249,25 @@ func (s *KVSubscriber) handlePartialUpdate(
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
-	for _, h := range handlers {
+	for i := range handlers {
 		for _, ev := range events {
-			// TODO(arul): In the future, once we start reacting to system span
-			// configurations, we'll want to invoke handlers with the correct span
-			// here as well.
 			target := ev.(*bufferEvent).Update.Target
-			if target.IsSpanTarget() {
-				h.invoke(ctx, target.GetSpan())
+			var sp roachpb.Span
+			switch {
+			case target.IsSpanTarget():
+				sp = target.GetSpan()
+			case target.IsSystemTarget():
+				var err error
+				sp, err = target.GetSystemTarget().KeyspaceTargeted()
+				if err != nil {
+					// Swallow the error here, even though we never expect this to happen.
+					log.Warningf(
+						ctx, "error targeting %s's keyspace %v", target.GetSystemTarget(), err,
+					)
+					continue
+				}
 			}
+			handlers[i].invoke(ctx, sp)
 		}
 	}
 }

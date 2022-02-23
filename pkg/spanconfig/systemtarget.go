@@ -149,6 +149,36 @@ func (st SystemTarget) targetsEntireKeyspace() bool {
 	return st.systemTargetType == SystemTargetTypeEntireKeyspace
 }
 
+// KeyspaceTargeted returns the keyspan the system target applies to.
+func (st SystemTarget) KeyspaceTargeted() (roachpb.Span, error) {
+	switch st.systemTargetType {
+	case SystemTargetTypeEntireKeyspace:
+		return keys.EverythingSpan, nil
+	case SystemTargetTypeSpecificTenantKeyspace:
+		// If the system tenant's keyspace is being targeted then this means
+		// everything from the start of the keyspace to where all non-system tenant
+		// keys begin.
+		if st.targetTenantID == roachpb.SystemTenantID {
+			return roachpb.Span{
+				Key:    keys.MinKey,
+				EndKey: keys.TenantTableDataMin,
+			}, nil
+		}
+		k := keys.MakeTenantPrefix(st.targetTenantID)
+		return roachpb.Span{
+			Key:    k,
+			EndKey: k.PrefixEnd(),
+		}, nil
+	case SystemTargetTypeAllTenantKeyspaceTargetsSet:
+		return roachpb.Span{},
+			errors.AssertionFailedf(
+				"AllTenantKeyspaceTarget encapsulates other targets; does not target a single keyspace",
+			)
+	default:
+		return roachpb.Span{}, errors.AssertionFailedf("unknown target type")
+	}
+}
+
 // IsReadOnly returns true if the system target is read-only. Read only targets
 // should not be persisted.
 func (st SystemTarget) IsReadOnly() bool {
