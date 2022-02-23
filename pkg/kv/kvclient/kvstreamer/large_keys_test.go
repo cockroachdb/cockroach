@@ -71,6 +71,12 @@ func TestLargeKeys(t *testing.T) {
 	// here.
 	_, err := db.Exec("SET distsql_workmem='100KiB'")
 	require.NoError(t, err)
+	// To improve the test coverage, occasionally lower the maximum number of
+	// concurrent requests.
+	if rng.Float64() < 0.25 {
+		_, err = db.Exec("SET CLUSTER SETTING kv.streamer.concurrency_limit = $1", rng.Intn(10)+1)
+		require.NoError(t, err)
+	}
 	// In both engines, the index joiner will buffer input rows up to a quarter
 	// of workmem limit, so we have several interesting options for the blob
 	// size:
