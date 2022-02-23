@@ -2657,7 +2657,7 @@ func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescript
 	col := &descpb.ColumnDescriptor{
 		Hidden:   true,
 		Nullable: false,
-		Type:     types.Int4,
+		Type:     types.Int,
 		Virtual:  true,
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
