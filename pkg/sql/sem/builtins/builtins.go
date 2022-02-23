@@ -4854,11 +4854,15 @@ value if you rely on the HLC for accuracy.`,
 				}
 				// Finally, encode the index key using the provided datums.
 				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc.GetID(), index.GetID())
-				res, _, err := rowenc.EncodePartialIndexKey(index, len(datums), colMap, datums, keyPrefix)
+				keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+				if len(datums) > len(keyAndSuffixCols) {
+					return nil, errors.Errorf("encoding too many columns (%d)", len(datums))
+				}
+				res, _, err := rowenc.EncodePartialIndexKey(keyAndSuffixCols[:len(datums)], colMap, datums, keyPrefix)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDBytes(tree.DBytes(res)), err
+				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
 			Info:       "Generate the key for a row on a particular table and index.",
 			Volatility: tree.VolatilityStable,
