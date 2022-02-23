@@ -52,7 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -2305,15 +2306,6 @@ func (s *statusServer) HotRanges(
 	return response, nil
 }
 
-type hotRangeReportMeta struct {
-	dbName         string
-	tableName      string
-	schemaName     string
-	indexNames     map[uint32]string
-	parentID       uint32
-	schemaParentID uint32
-}
-
 // HotRangesV2 returns hot ranges from all stores on requested node or all nodes in case
 // request message doesn't include specific node ID.
 func (s *statusServer) HotRangesV2(
@@ -2330,43 +2322,6 @@ func (s *statusServer) HotRangesV2(
 		if err := start.UnmarshalText([]byte(req.PageToken)); err != nil {
 			return nil, err
 		}
-	}
-
-	rangeReportMetas := make(map[uint32]hotRangeReportMeta)
-	var descrs []catalog.Descriptor
-	var err error
-	if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(
-		ctx, s.sqlServer.internalExecutor, s.db,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			all, err := descriptors.GetAllDescriptors(ctx, txn)
-			if err != nil {
-				return err
-			}
-			descrs = all.OrderedDescriptors()
-			return nil
-		}); err != nil {
-		return nil, err
-	}
-
-	for _, desc := range descrs {
-		id := uint32(desc.GetID())
-		meta := hotRangeReportMeta{
-			indexNames: map[uint32]string{},
-		}
-		switch desc := desc.(type) {
-		case catalog.TableDescriptor:
-			meta.tableName = desc.GetName()
-			meta.parentID = uint32(desc.GetParentID())
-			meta.schemaParentID = uint32(desc.GetParentSchemaID())
-			for _, idx := range desc.AllIndexes() {
-				meta.indexNames[uint32(idx.GetID())] = idx.GetName()
-			}
-		case catalog.SchemaDescriptor:
-			meta.schemaName = desc.GetName()
-		case catalog.DatabaseDescriptor:
-			meta.dbName = desc.GetName()
-		}
-		rangeReportMetas[id] = meta
 	}
 
 	response := &serverpb.HotRangesResponseV2{
@@ -2406,18 +2361,40 @@ func (s *statusServer) HotRangesV2(
 						log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
 						continue
 					}
-					parent := rangeReportMetas[tableID].parentID
-					if parent != 0 {
-						tableName = rangeReportMetas[tableID].tableName
-						dbName = rangeReportMetas[parent].dbName
-					} else {
-						dbName = rangeReportMetas[tableID].dbName
-					}
-					schemaParent := rangeReportMetas[tableID].schemaParentID
-					schemaName = rangeReportMetas[schemaParent].schemaName
-					_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
-					if err == nil {
-						indexName = rangeReportMetas[tableID].indexNames[idxID]
+					if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(
+						ctx, s.sqlServer.internalExecutor, s.db,
+						func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+							commonLookupFlags := tree.CommonLookupFlags{
+								Required:    false,
+								AvoidLeased: true,
+							}
+							desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
+								CommonLookupFlags: commonLookupFlags,
+							})
+							if err != nil {
+								// Skip the range without failing to proceed with other ranges.
+								return nil //nolint:returnerrcheck
+							}
+							tableName = desc.GetName()
+
+							if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err == nil {
+								if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
+									indexName = index.GetName()
+								}
+							}
+							ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags)
+							if err != nil {
+								return err
+							}
+							if ok {
+								dbName = dbDesc.GetName()
+							}
+							if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err == nil {
+								schemaName = schemaDesc.GetName()
+							}
+							return nil
+						}); err != nil {
+						return nil, err
 					}
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
