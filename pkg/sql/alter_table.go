@@ -1870,6 +1870,13 @@ func handleTTLStorageParamChange(
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		tableDesc.RowLevelTTL = nil
+		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
+			return pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot add TTL to table with the %s column already defined",
+				colinfo.TTLDefaultExpirationColumnName,
+			)
+		}
 		col, err := rowLevelTTLAutomaticColumnDef(after)
 		if err != nil {
 			return err
