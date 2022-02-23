@@ -150,13 +150,16 @@ func (b *selectQueryBuilder) nextQuery() (string, []interface{}) {
 }
 
 func (b *selectQueryBuilder) run(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, ie *sql.InternalExecutor,
 ) ([]tree.Datums, error) {
 	q, args := b.nextQuery()
+	// Use a nil txn so that the AOST clause is handled correctly. Currently,
+	// the internal executor will treat a passed-in txn as an explicit txn, so
+	// the AOST clause on the SELECT query would not be interpreted correctly.
 	ret, err := ie.QueryBuffered(
 		ctx,
 		"ttl_scanner",
-		txn,
+		nil, /* txn */
 		q,
 		args...,
 	)

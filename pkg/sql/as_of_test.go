@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -412,4 +413,39 @@ func TestShowTraceAsOfTime(t *testing.T) {
 	} else if i != 1 {
 		t.Fatalf("expected to find one matching row, got %v", i)
 	}
+}
+
+func TestAsOfResolveEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(context.Background())
+	defer db.Close()
+
+	runner := sqlutils.MakeSQLRunner(db)
+	var tsBeforeTypExists string
+	runner.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBeforeTypExists)
+	runner.Exec(t, "CREATE TYPE typ AS ENUM('hi', 'hello')")
+
+	// Use a prepared statement.
+	runner.ExpectErr(
+		t,
+		"type with ID [0-9]+ does not exist",
+		fmt.Sprintf(
+			"SELECT $1::typ FROM generate_series(1,1) AS OF SYSTEM TIME %s",
+			tsBeforeTypExists,
+		),
+		"hi",
+	)
+
+	// Use a simple query.
+	runner.ExpectErr(
+		t,
+		"type \"typ\" does not exist",
+		fmt.Sprintf(
+			"SELECT 'hi'::typ FROM generate_series(1,1) AS OF SYSTEM TIME %s",
+			tsBeforeTypExists,
+		),
+	)
 }
