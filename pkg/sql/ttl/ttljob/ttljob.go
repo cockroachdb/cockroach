@@ -495,7 +495,8 @@ func runTTLOnRange(
 	ie := execCfg.InternalExecutor
 	db := execCfg.DB
 
-	// TODO(#75428): look at using a dist sql flow job
+	// TODO(#76914): look at using a dist sql flow job, utilize any existing index
+	// on crdb_internal_expiration.
 
 	selectBuilder := makeSelectQueryBuilder(
 		details.TableID,
