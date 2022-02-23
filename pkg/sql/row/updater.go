@@ -323,7 +323,7 @@ func (ru *Updater) UpdateRow(
 				return nil, err
 			}
 		}
-		if ru.Helper.Indexes[i].GetType() == descpb.IndexDescriptor_INVERTED {
+		if ru.Helper.Indexes[i].GetType() == descpb.IndexDescriptor_INVERTED && !ru.Helper.Indexes[i].IsTemporaryIndexForBackfill() {
 			// Deduplicate the keys we're adding and removing if we're updating an
 			// inverted index. For example, imagine a table with an inverted index on j:
 			//
@@ -335,6 +335,10 @@ func (ru *Updater) UpdateRow(
 			// want to delete the /foo/bar key and re-add it, that would be wasted work.
 			// So, we are going to remove keys from both the new and old index entry
 			// array if they're identical.
+			//
+			// We don't do this deduplication on temporary indexes used during the
+			// backfill because any deletes that are elided here are not elided on the
+			// newly added index when it is in DELETE_ONLY.
 			newIndexEntries := ru.newIndexEntries[i]
 			oldIndexEntries := ru.oldIndexEntries[i]
 			sort.Slice(oldIndexEntries, func(i, j int) bool {

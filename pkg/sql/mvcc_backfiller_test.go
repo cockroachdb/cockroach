@@ -38,8 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -358,6 +360,66 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+}
+
+func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var chunkSize int64 = 1000
+	var initialRows = 10000
+	rowIdx := 0
+
+	params, _ := tests.CreateTestServerParams()
+	var writeMore func() error
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeDescTxn:  func() error { return writeMore() },
+			BackfillChunkSize: chunkSize,
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	rnd, _ := randutil.NewPseudoRand()
+	var mu syncutil.Mutex
+	writeMore = func() error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		start := rowIdx
+		rowIdx += 20
+		for i := 1; i <= 20; i++ {
+			json, err := json.Random(20, rnd)
+			require.NoError(t, err)
+			_, err = sqlDB.Exec("UPSERT INTO t.test VALUES ($1, $2)", start+i, json.String())
+			require.NoError(t, err)
+		}
+		return nil
+	}
+
+	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v JSONB);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Initial insert
+	for i := 0; i < initialRows; i++ {
+		json, err := json.Random(20, rnd)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec("INSERT INTO t.test VALUES ($1, $2)", i, json.String())
+		require.NoError(t, err)
+	}
+
+	_, err := sqlDB.Exec("CREATE INVERTED INDEX invidx ON t.test (v)")
+	require.NoError(t, err)
 }
 
 // TestIndexBackfillMergeTxnRetry tests that the merge completes
