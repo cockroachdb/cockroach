@@ -183,8 +183,8 @@ func findCandidateCommits(prevRelease string, releaseSeries string) ([]string, e
 func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 	for _, ref := range potentialRefs {
 		fmt.Println("Fetching release qualification metadata for", ref)
-		meta, err := getBuildInfo(context.Background(), qualifyBucket,
-			fmt.Sprintf("%s/%s.json", qualifyObjectPrefix, ref))
+		meta, err := getBuildInfo(context.Background(), pickSHAFlags.qualifyBucket,
+			fmt.Sprintf("%s/%s.json", pickSHAFlags.qualifyObjectPrefix, ref))
 		if err != nil {
 			// TODO: retry if error is not 404
 			fmt.Println("no metadata qualification for", ref, err)
