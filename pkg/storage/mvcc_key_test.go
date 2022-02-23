@@ -63,7 +63,37 @@ func TestMVCCKeys(t *testing.T) {
 	}
 }
 
-func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
+func TestMVCCKeyCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	a1 := MVCCKey{roachpb.Key("a"), hlc.Timestamp{Logical: 1}}
+	a2 := MVCCKey{roachpb.Key("a"), hlc.Timestamp{Logical: 2}}
+	b0 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 0}}
+	b1 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 1}}
+	b2 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 2}}
+
+	testcases := map[string]struct {
+		a      MVCCKey
+		b      MVCCKey
+		expect int
+	}{
+		"equal":               {a1, a1, 0},
+		"key lt":              {a1, b1, -1},
+		"key gt":              {b1, a1, 1},
+		"time lt":             {a2, a1, -1}, // MVCC timestamps sort in reverse order
+		"time gt":             {a1, a2, 1},  // MVCC timestamps sort in reverse order
+		"empty time lt set":   {b0, b1, -1}, // empty MVCC timestamps sort before non-empty
+		"set time gt empty":   {b1, b0, 1},  // empty MVCC timestamps sort before non-empty
+		"key time precedence": {a1, b2, -1}, // a before b, but 2 before 1; key takes precedence
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.a.Compare(tc.b))
+		})
+	}
+}
+
+func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testcases := map[string]struct {
@@ -97,10 +127,19 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 
 			encoded := EncodeMVCCKey(mvccKey)
 			require.Equal(t, expect, encoded)
+			require.Equal(t, len(encoded), encodedMVCCKeyLength(mvccKey))
+			require.Equal(t, len(encoded),
+				encodedMVCCKeyPrefixLength(mvccKey.Key)+encodedMVCCTimestampSuffixLength(mvccKey.Timestamp))
 
 			decoded, err := DecodeMVCCKey(encoded)
 			require.NoError(t, err)
 			require.Equal(t, mvccKey, decoded)
+
+			// Test EncodeMVCCKeyPrefix.
+			expectPrefix, err := hex.DecodeString(tc.encoded[:2*len(tc.key)+2])
+			require.NoError(t, err)
+			require.Equal(t, expectPrefix, EncodeMVCCKeyPrefix(roachpb.Key(tc.key)))
+			require.Equal(t, len(expectPrefix), encodedMVCCKeyPrefixLength(roachpb.Key(tc.key)))
 
 			// Test encode/decodeMVCCTimestampSuffix too, since we can trivially do so.
 			expectTS, err := hex.DecodeString(tc.encoded[2*len(tc.key)+2:])
@@ -109,8 +148,9 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 				expectTS = nil
 			}
 
-			encodedTS := encodeMVCCTimestampSuffix(tc.ts)
+			encodedTS := EncodeMVCCTimestampSuffix(tc.ts)
 			require.Equal(t, expectTS, encodedTS)
+			require.Equal(t, len(encodedTS), encodedMVCCTimestampSuffixLength(tc.ts))
 
 			decodedTS, err := decodeMVCCTimestampSuffix(encodedTS)
 			require.NoError(t, err)
@@ -123,6 +163,7 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 
 			encodedTS = encodeMVCCTimestamp(tc.ts)
 			require.Equal(t, expectTS, encodedTS)
+			require.Equal(t, len(encodedTS), encodedMVCCTimestampLength(tc.ts))
 
 			decodedTS, err = decodeMVCCTimestamp(encodedTS)
 			require.NoError(t, err)
