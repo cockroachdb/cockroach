@@ -18,7 +18,6 @@ go_library(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catid",

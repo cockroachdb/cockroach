@@ -481,14 +481,9 @@ func rewriteSchemaChangerState(
 			*id = rewrite.ID
 			return nil
 		}); err != nil {
-			// We'll permit this in the special case of a schema descriptor
-			// database entry.
-			//
-			// TODO(ajwerner,postamar): it's not obvious that this should be its own
-			// element as opposed to just an extension of the namespace table that only
-			// ops know about.
+			// We'll permit this in the special case of a schema parent element.
 			switch el := t.Element().(type) {
-			case *scpb.DatabaseSchemaEntry:
+			case *scpb.SchemaParent:
 				_, scExists := descriptorRewrites[el.SchemaID]
 				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
 					state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)

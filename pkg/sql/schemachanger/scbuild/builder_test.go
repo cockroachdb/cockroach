@@ -149,7 +149,7 @@ func run(
 			require.NoError(t, err)
 			for i := range stmts {
 				output, err = scbuild.Build(ctx, deps, output, stmts[i].AST)
-				require.NoError(t, err)
+				require.NoErrorf(t, err, "%s", stmts[i].SQL)
 			}
 		})
 		return marshalState(t, output)
@@ -158,14 +158,14 @@ func run(
 		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
-			require.Len(t, stmts, 1)
+			require.NotEmpty(t, stmts)
 
-			stmt := stmts[0]
-			alter, ok := stmt.AST.(*tree.AlterTable)
-			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-
-			_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
-			require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
+			for _, stmt := range stmts {
+				_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST)
+				expected := scerrors.NotImplementedError(nil)
+				require.Errorf(t, err, "%s: expected %T instead of success for", stmt.SQL, expected)
+				require.Truef(t, scerrors.HasNotImplemented(err), "%s: expected %T instead of %v", stmt.SQL, expected, err)
+			}
 		})
 		return ""
 

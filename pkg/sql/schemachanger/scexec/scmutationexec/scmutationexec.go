@@ -18,23 +18,25 @@ import (
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
 func NewMutationVisitor(
-	cr CatalogReader, s MutationVisitorStateUpdater, clock Clock,
+	s MutationVisitorStateUpdater, nr NameResolver, sd SyntheticDescriptors, clock Clock,
 ) scop.MutationVisitor {
 	return &visitor{
-		cr:    cr,
+		nr:    nr,
+		sd:    sd,
 		s:     s,
 		clock: clock,
 	}
 }
 
+var _ scop.MutationVisitor = (*visitor)(nil)
+
 type visitor struct {
 	clock Clock
-	cr    CatalogReader
+	nr    NameResolver
+	sd    SyntheticDescriptors
 	s     MutationVisitorStateUpdater
 }
 
-var _ scop.MutationVisitor = (*visitor)(nil)
-
-func (m *visitor) NotImplemented(_ context.Context, op scop.NotImplemented) error {
+func (m *visitor) NotImplemented(_ context.Context, _ scop.NotImplemented) error {
 	return nil
 }

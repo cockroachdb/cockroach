@@ -253,6 +253,8 @@ type DatabaseDescriptor interface {
 	// GetDefaultPrivilegeDescriptor returns the default privileges for this
 	// database.
 	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
+	// HasPublicSchemaWithDescriptor returns true iff the database has a public
+	// schema which itself has a descriptor.
 	HasPublicSchemaWithDescriptor() bool
 }
 
