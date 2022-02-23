@@ -41,7 +41,7 @@ var systemTargetRe = regexp.MustCompile(
 
 // configRe matches a single word. It's a shorthand for declaring a unique
 // config.
-var configRe = regexp.MustCompile(`^(\w+)$`)
+var configRe = regexp.MustCompile(`^\+?(\w+)$`)
 
 // ParseSpan is helper function that constructs a roachpb.Span from a string of
 // the form "[start, end)".
@@ -244,10 +244,25 @@ func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.
 }
 
 // PrintSpan is a helper function that transforms roachpb.Span into a string of
-// the form "[start,end)". The span is assumed to have been constructed by the
-// ParseSpan helper above.
+// the form "[start,end)". Spans constructed by the ParseSpan helper above
+// roundtrip; spans containing special keys that translate to pretty-printed
+// keys are printed as such.
 func PrintSpan(sp roachpb.Span) string {
-	return fmt.Sprintf("[%s,%s)", string(sp.Key), string(sp.EndKey))
+	s := []string{
+		sp.Key.String(),
+		sp.EndKey.String(),
+	}
+	for i := range s {
+		// Raw keys are quoted, so we unquote them.
+		if strings.Contains(s[i], "\"") {
+			var err error
+			s[i], err = strconv.Unquote(s[i])
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	return fmt.Sprintf("[%s,%s)", s[0], s[1])
 }
 
 // PrintTarget is a helper function that prints a spanconfig.Target.
