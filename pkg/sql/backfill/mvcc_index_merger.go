@@ -205,11 +205,20 @@ func (ibm *IndexBackfillMerger) Merge(
 	var nextStart roachpb.Key
 	err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// For now just grab all of the destination KVs and merge the corresponding entries.
+		log.VInfof(ctx, 2, "merging batch [%s, %s) into index %d", startKey, endKey, destinationID)
 		kvs, err := txn.Scan(ctx, startKey, endKey, chunkSize)
 		if err != nil {
 			return err
 		}
-
+		var deletedCount int
+		txn.AddCommitTrigger(func(ctx context.Context) {
+			log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (nextStart: %s) (commit timestamp: %s)",
+				len(kvs),
+				deletedCount,
+				nextStart,
+				txn.CommitTimestamp(),
+			)
+		})
 		if len(kvs) == 0 {
 			nextStart = nil
 			return nil
@@ -238,6 +247,7 @@ func (ibm *IndexBackfillMerger) Merge(
 			}
 
 			if deleted {
+				deletedCount++
 				wb.Del(mergedEntry.Key)
 			} else {
 				wb.Put(mergedEntry.Key, mergedEntry.Value)

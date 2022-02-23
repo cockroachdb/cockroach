@@ -158,7 +158,13 @@ UPSERT INTO tii VALUES (1, ARRAY[1, 2, 2, NULL, 4, 4])
 ----
 Scan /Table/109/1/1/0
 Put /Table/109/1/1/0 -> /TUPLE/
+Put (delete) /Table/109/2/NULL/1/0
+Put (delete) /Table/109/2/1/1/0
+Put (delete) /Table/109/2/2/1/0
 Put (delete) /Table/109/2/3/1/0
+Put /Table/109/2/NULL/1/0 -> /BYTES/0x0a0103
+Put /Table/109/2/1/1/0 -> /BYTES/0x0a0103
+Put /Table/109/2/2/1/0 -> /BYTES/0x0a0103
 Put /Table/109/2/4/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
