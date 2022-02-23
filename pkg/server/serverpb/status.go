@@ -73,6 +73,15 @@ type RegionsServer interface {
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 }
 
+// TenantStatusServer is the subset of the serverpb.StatusInterface that is
+// used by tenants to query for debug information, such as tenant-specific
+// range reports.
+//
+// It is available for all tenants.
+type TenantStatusServer interface {
+	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
+}
+
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
 // available. If it is not, an error referring to the optionally supplied issues
 // is returned.

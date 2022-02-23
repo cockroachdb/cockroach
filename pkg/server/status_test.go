@@ -1172,6 +1172,28 @@ func TestRangesResponse(t *testing.T) {
 	}
 }
 
+func TestTenantRangesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(ctx)
+
+	t.Run("returns error when TenantID not set in ctx", func(t *testing.T) {
+		rpcStopper := stop.NewStopper()
+		defer rpcStopper.Stop(ctx)
+
+		conn, err := ts.rpcContext.GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := serverpb.NewStatusClient(conn)
+		_, err = client.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no tenant ID found in context")
+	})
+}
+
 func TestRaftDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

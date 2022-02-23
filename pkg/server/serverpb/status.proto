@@ -411,6 +411,62 @@ message PrettySpan {
   string end_key = 2;
 }
 
+// TenantRangeInfo provides metadata about a specific range replica,
+// where concepts not considered to be relevant within the tenant
+// abstraction (e.g. NodeIDs) are omitted. Instead, Locality information
+// is used to distinguish replicas.
+message TenantRangeInfo {
+  // The ID of the Range.
+  int64 range_id = 1 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) =
+      "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  // The pretty-printed key span of the range.
+  PrettySpan span = 2 [ (gogoproto.nullable) = false ];
+  // Any locality information associated with this specific replica.
+  Locality locality = 3;
+  // Whether the range's specific replica is a leaseholder.
+  bool is_leaseholder = 4;
+  // Whether the range's specific replica holds a valid lease.
+  bool lease_valid = 5;
+  // Statistics about the range replica, e.g. QPS, WPS.
+  RangeStatistics range_stats = 6 [ (gogoproto.nullable) = false ];
+  // MVCC stats about the range replica, e.g. live_bytes.
+  storage.enginepb.MVCCStats mvcc_stats = 7;
+  // Read count as reported by the range replica's spanlatch.Manager.
+  int64 read_latches = 8;
+  // Write count as reported by the range replica's spanlatch.Manager.
+  int64 write_latches = 9;
+  // The number of locks as reported by the range replica's lockTable.
+  int64 locks = 10;
+  // The number of locks with non-empty wait-queues as reported by
+  // the range replica's lockTable
+  int64 locks_with_wait_queues = 11;
+  // The aggregate number of waiters in wait-queues across all locks
+  // as reported by the range replica's lockTable
+  int64 lock_wait_queue_waiters = 12;
+  // LockInfo provides metadata about the state of a single lock
+  // in the range replica's lockTable.
+  message LockInfo {
+    // The lock's key in pretty format.
+    string pretty_key = 1;
+    // The lock's key.
+    bytes key = 2 [ (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key" ];
+    // Is the lock actively held by a transaction, or just a reservation?
+    bool held = 3;
+    // The number of waiters in the lock's wait queue.
+    int64 waiters = 4;
+    // The number of waiting readers in the lock's wait queue.
+    int64 waiting_readers = 5;
+    // The number of waiting writers in the lock's wait queue.
+    int64 waiting_writers = 6;
+  }
+  // The top-k locks with the most waiters (readers + writers) in their
+  // wait-queue, ordered in descending order.
+  repeated LockInfo top_k_locks_by_wait_queue_waiters = 13 [ (gogoproto.nullable) = false ];
+}
+
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
@@ -465,6 +521,19 @@ message RangesRequest {
 
 message RangesResponse {
   repeated RangeInfo ranges = 1 [ (gogoproto.nullable) = false ];
+}
+
+message TenantRangesRequest {}
+
+message TenantRangesResponse {
+  message TenantRangeList {
+    repeated TenantRangeInfo ranges = 1 [ (gogoproto.nullable) = false ];
+  }
+  // ranges_by_locality maps each range replica to its specified availability
+  // zone, as defined within the replica's locality metadata (default key `az`).
+  // Replicas without the default available zone key set will fall under the
+  // `locality-unset` key.
+  map<string, TenantRangeList> ranges_by_locality = 1 [ (gogoproto.nullable) = false ];
 }
 
 message GossipRequest {
@@ -1704,6 +1773,14 @@ service Status {
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
       get : "/_status/ranges/{node_id}"
+    };
+  }
+
+  // TenantRanges requests internal details about all range replicas within
+  // the tenant's keyspace.
+  rpc TenantRanges(TenantRangesRequest) returns (TenantRangesResponse) {
+    option (google.api.http) = {
+      get : "/_status/tenant_ranges"
     };
   }
 

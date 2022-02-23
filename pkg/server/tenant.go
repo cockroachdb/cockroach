@@ -566,6 +566,7 @@ func makeTenantSQLServerArgs(
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		regionsServer:            tenantConnect,
+		tenantStatusServer:       tenantConnect,
 		costController:           costController,
 		grpc:                     grpcServer,
 	}, nil
