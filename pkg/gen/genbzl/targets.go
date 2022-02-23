@@ -72,6 +72,11 @@ in ($all ^ labels("out", kind("_gomock_prog_gen rule",  {{ .All }})))
 		doNotGenerate: true,
 	},
 	{
+		target: "bindata",
+		query: `
+kind("bindata", {{ .All }})`,
+	},
+	{
 		target: "misc",
 		query: `
 kind("generated file", {{ .All }}) - (

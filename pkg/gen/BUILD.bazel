@@ -1,4 +1,6 @@
-load(":gen.bzl", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
+load(":gen.bzl", "bindata", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
+
+bindata()
 
 execgen()
 
@@ -25,6 +27,7 @@ gen(
 gen(
     name = "code",
     srcs = [
+        ":bindata",
         ":execgen",
         ":go_proto",
         ":gomock",
