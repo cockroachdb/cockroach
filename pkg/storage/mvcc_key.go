@@ -173,12 +173,6 @@ func encodeMVCCKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 	}
 }
 
-// encodeMVCCKeyPrefix encodes an MVCC user key (without timestamp) into its
-// Pebble prefix representation.
-func encodeMVCCKeyPrefix(key roachpb.Key) []byte {
-	return EncodeMVCCKey(MVCCKey{Key: key})
-}
-
 // encodeMVCCTimestamp encodes an MVCC timestamp into its Pebble
 // representation, excluding length suffix and sentinel byte.
 func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
@@ -292,69 +286,4 @@ func decodeMVCCTimestampSuffix(encodedTS []byte) (hlc.Timestamp, error) {
 			"bad timestamp: found length suffix %d, actual length %d", suffixLen, encodedLen)
 	}
 	return decodeMVCCTimestamp(encodedTS[:encodedLen-1])
-}
-
-// MVCCRangeKey is a versioned key span.
-type MVCCRangeKey struct {
-	StartKey  roachpb.Key
-	EndKey    roachpb.Key
-	Timestamp hlc.Timestamp
-}
-
-// Clone returns a copy of the range key.
-func (k MVCCRangeKey) Clone() MVCCRangeKey {
-	// k is already a copy, but byte slices must be cloned.
-	k.StartKey = k.StartKey.Clone()
-	k.EndKey = k.EndKey.Clone()
-	return k
-}
-
-// Compare returns -1 if this key is less than the given key, 0 if they're
-// equal, or 1 if this is greater. Comparison is by start,timestamp,end, where
-// larger timestamps sort before smaller ones except empty ones which sort first
-// (like elsewhere in MVCC).
-func (k MVCCRangeKey) Compare(o MVCCRangeKey) int {
-	if c := k.StartKey.Compare(o.StartKey); c != 0 {
-		return c
-	}
-	if k.Timestamp.IsEmpty() && !o.Timestamp.IsEmpty() {
-		return -1
-	} else if !k.Timestamp.IsEmpty() && o.Timestamp.IsEmpty() {
-		return 1
-	} else if c := k.Timestamp.Compare(o.Timestamp); c != 0 {
-		return -c // timestamps sort in reverse
-	}
-	return k.EndKey.Compare(o.EndKey)
-}
-
-// String formats the range key.
-func (k MVCCRangeKey) String() string {
-	s := roachpb.Span{Key: k.StartKey, EndKey: k.EndKey}.String()
-	if !k.Timestamp.IsEmpty() {
-		s += fmt.Sprintf("/%s", k.Timestamp)
-	}
-	return s
-}
-
-// Validate returns an error if the range key is invalid.
-func (k MVCCRangeKey) Validate() (err error) {
-	defer func() {
-		err = errors.Wrapf(err, "invalid range key %s", k)
-	}()
-
-	if k.StartKey == nil {
-		return errors.Errorf("no start key")
-	}
-	if k.EndKey == nil {
-		return errors.Errorf("no end key")
-	}
-	if k.Timestamp.IsEmpty() {
-		return errors.Errorf("no timestamp")
-	}
-	// We allow equal start and end key, since we allow empty spans in many MVCC
-	// APIs (e.g. scans).
-	if k.StartKey.Compare(k.EndKey) > 0 {
-		return errors.Errorf("start key %s is after end key %s", k.StartKey, k.EndKey)
-	}
-	return nil
 }
