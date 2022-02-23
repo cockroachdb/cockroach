@@ -778,8 +778,8 @@ func (crr *ClearRangeRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (rrr *RevertRangeRequest) ShallowCopy() Request {
-	shallowCopy := *rrr
+func (crr *RevertRangeRequest) ShallowCopy() Request {
+	shallowCopy := *crr
 	return &shallowCopy
 }
 
@@ -1270,14 +1270,9 @@ func (*ClearRangeRequest) flags() flag {
 	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
 }
 
-// Note that RevertRange commands cannot be part of a transaction, as they
-// either clear MVCC versions or write MVCC range tombstones, neither of which
-// is supported within transactions.
-func (rrr *RevertRangeRequest) flags() flag {
-	if rrr.ExperimentalPreserveHistory {
-		return isRead | isWrite | isRange | isAlone | updatesTSCache | appliesTSCache |
-			bypassesReplicaCircuitBreaker
-	}
+// Note that RevertRange commands cannot be part of a transaction as
+// they clear all MVCC versions above their target time.
+func (*RevertRangeRequest) flags() flag {
 	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
 }
 
