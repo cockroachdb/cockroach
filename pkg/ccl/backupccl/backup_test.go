@@ -91,7 +91,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
-	pgx "github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -7136,14 +7136,13 @@ INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510,
 func TestBackupRestoreInsideTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	const numAccounts = 1
 
 	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64) (*sqlutils.SQLRunner, func()) {
 		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant)})
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
-
-	const numAccounts = 1
 	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	_, _ = tc, systemDB
 	defer cleanupFn()
@@ -7249,6 +7248,143 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 			tenant10.Exec(t, `CREATE DATABASE data`)
 			tenant10.Exec(t, `RESTORE data.bank FROM $1`, httpAddr)
 			systemDB.CheckQueryResults(t, `SELECT * FROM data.bank`, tenant10.QueryStr(t, `SELECT * FROM data.bank`))
+		})
+
+	})
+}
+
+// TestBackupRestoreInsideMultiPodTenant verifies that backup and restore work inside
+// tenants with multiple SQL pods. Currently, verification
+// that restore is distributed to all pods in the multi-pod tests must be done
+// manually and by enabling logging and checking the log for messages containing
+// "starting restore data" for nsql1 and nsql2.
+// TODO(harding): Verify that backup and restore are distributed in test.
+func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "may time out due to multiple servers")
+
+	const numAccounts = 1
+	const npods = 2
+
+	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64, existing bool) (*sqlutils.SQLRunner, func()) {
+		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant), Existing: existing})
+		cleanup := func() { conn.Close() }
+		return sqlutils.MakeSQLRunner(conn), cleanup
+	}
+
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, _ = tc, systemDB
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	// NB: tenant certs for 10, 11, and 20 are embedded. See:
+	_ = security.EmbeddedTenantIDs()
+
+	// Create another server.
+	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	srv2 := tc2.Server(0)
+	defer cleanupEmptyCluster()
+
+	tenant10 := make([]*sqlutils.SQLRunner, npods)
+	cleanupT10 := make([]func(), npods)
+	tenant11 := make([]*sqlutils.SQLRunner, npods)
+	cleanupT11 := make([]func(), npods)
+	tenant10C2 := make([]*sqlutils.SQLRunner, npods)
+	cleanupT10C2 := make([]func(), npods)
+	for i := 0; i < npods; i++ {
+		tenant10[i], cleanupT10[i] = makeTenant(srv, 10, i != 0)
+		defer cleanupT10[i]()
+		tenant11[i], cleanupT11[i] = makeTenant(srv, 11, i != 0)
+		defer cleanupT11[i]()
+		tenant10C2[i], cleanupT10C2[i] = makeTenant(srv2, 10, i != 0)
+		defer cleanupT10C2[i]()
+	}
+
+	tenant11C2, cleanupT11C2 := makeTenant(srv2, 11, false)
+	defer cleanupT11C2()
+
+	tenant10[0].Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210), (310)`)
+
+	t.Run("tenant-backup", func(t *testing.T) {
+		// This test uses this mock HTTP server to pass the backup files between tenants.
+		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
+		defer httpServerCleanup()
+
+		tenant10[0].Exec(t, `BACKUP TO $1`, httpAddr)
+
+		t.Run("cluster-restore", func(t *testing.T) {
+			t.Run("into-same-tenant-id", func(t *testing.T) {
+				tenant10C2[0].Exec(t, `RESTORE FROM $1`, httpAddr)
+				tenant10C2[0].CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10[0].QueryStr(t, `SELECT * FROM foo.bar`))
+			})
+			t.Run("into-different-tenant-id", func(t *testing.T) {
+				tenant11C2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: 10`,
+					`RESTORE FROM $1`, httpAddr)
+			})
+			t.Run("into-system-tenant-id", func(t *testing.T) {
+				systemDB2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: 10`,
+					`RESTORE FROM $1`, httpAddr)
+			})
+		})
+
+		t.Run("database-restore", func(t *testing.T) {
+			t.Run("into-same-tenant-id", func(t *testing.T) {
+				tenant10[0].Exec(t, `CREATE DATABASE foo2`)
+				tenant10[0].Exec(t, `RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+				tenant10[0].CheckQueryResults(t, `SELECT * FROM foo2.bar`, tenant10[0].QueryStr(t, `SELECT * FROM foo.bar`))
+			})
+			t.Run("into-different-tenant-id", func(t *testing.T) {
+				tenant11[0].Exec(t, `CREATE DATABASE foo`)
+				tenant11[0].Exec(t, `RESTORE foo.bar FROM $1`, httpAddr)
+				tenant11[0].CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10[0].QueryStr(t, `SELECT * FROM foo.bar`))
+			})
+			t.Run("into-system-tenant-id", func(t *testing.T) {
+				systemDB.Exec(t, `CREATE DATABASE foo2`)
+				systemDB.Exec(t, `RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+				systemDB.CheckQueryResults(t, `SELECT * FROM foo2.bar`, tenant10[0].QueryStr(t, `SELECT * FROM foo.bar`))
+			})
+		})
+	})
+
+	t.Run("system-backup", func(t *testing.T) {
+		// This test uses this mock HTTP server to pass the backup files between tenants.
+		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
+		defer httpServerCleanup()
+
+		systemDB.Exec(t, `BACKUP TO $1`, httpAddr)
+
+		tenant20C2, cleanupT20C2 := makeTenant(srv2, 20, false)
+		defer cleanupT20C2()
+
+		t.Run("cluster-restore", func(t *testing.T) {
+			t.Run("with-tenant", func(t *testing.T) {
+				// This is disallowed because the cluster restore includes other
+				// tenants, which can't be restored inside a tenant.
+				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
+					`RESTORE FROM $1`, httpAddr)
+			})
+
+			t.Run("with-no-tenant", func(t *testing.T) {
+				// Now restore a cluster backup taken from a system tenant that
+				// hasn't created any tenants.
+				httpAddrEmpty, cleanupEmptyHTTPServer := makeInsecureHTTPServer(t)
+				defer cleanupEmptyHTTPServer()
+
+				_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
+					dir, InitManualReplication, base.TestClusterArgs{})
+				defer cleanupEmptyCluster()
+
+				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
+				tenant20C2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: system`,
+					`RESTORE FROM $1`, httpAddrEmpty)
+			})
+		})
+
+		t.Run("database-restore-into-tenant", func(t *testing.T) {
+			tenant10[0].Exec(t, `CREATE DATABASE data`)
+			tenant10[0].Exec(t, `RESTORE data.bank FROM $1`, httpAddr)
+			systemDB.CheckQueryResults(t, `SELECT * FROM data.bank`, tenant10[0].QueryStr(t, `SELECT * FROM data.bank`))
 		})
 	})
 }

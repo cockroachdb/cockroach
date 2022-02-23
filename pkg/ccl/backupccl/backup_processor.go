@@ -184,6 +184,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		for range bp.progCh {
 		}
 	}
+	log.Infof(ctx, "starting backup data")
 	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "backup-worker",
 		SpanOpt:  stop.ChildSpan,

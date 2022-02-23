@@ -440,6 +440,53 @@ func TestImportInTenant(t *testing.T) {
 	t11.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"11", "22"}, {"33", "44"}, {"55", "66"}})
 }
 
+// TestImportInMultiServerTenant tests that import is successful in a tenant
+// with multiple SQL pods.
+// Currently, verification that the import is distributed needs to be done
+// manually, and can be done by running the test with logging enabled and
+// checking that the log contains the message "starting read import" for both
+// instance nsql1 and nsql 2.
+func TestImportInMultiServerTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseDir := testutils.TestDataPath(t)
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+
+	// Setup a SQL server on a tenant.
+	_, conn1 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID: roachpb.MakeTenantID(10),
+	})
+	defer conn1.Close()
+	t1 := sqlutils.MakeSQLRunner(conn1)
+
+	// Setup another SQL server on the same tenant.
+	_, conn2 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID: roachpb.MakeTenantID(10),
+		Existing: true,
+	})
+	defer conn2.Close()
+	t2 := sqlutils.MakeSQLRunner(conn2)
+
+	const userfileURI = "userfile://defaultdb.public.root/test.csv"
+	const userfile2URI = "userfile://defaultdb.public.root/test2.csv"
+	const createStmt = "CREATE TABLE foo (k INT PRIMARY KEY, v INT)"
+	const importStmt = "IMPORT INTO foo CSV DATA ($1, $2)"
+
+	// Upload files.
+	require.NoError(t, putUserfile(ctx, conn1, security.RootUserName(), userfileURI, []byte("10,2")))
+	require.NoError(t, putUserfile(ctx, conn2, security.RootUserName(), userfile2URI, []byte("11,22\n33,44\n55,66")))
+
+	t1.Exec(t, createStmt)
+	// TODO(harding): Verify that the import is distributed to both pods.
+	t1.Exec(t, importStmt, userfileURI, userfile2URI)
+	t1.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}, {"11", "22"}, {"33", "44"}, {"55", "66"}})
+	t2.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}, {"11", "22"}, {"33", "44"}, {"55", "66"}})
+}
+
 func putUserfile(
 	ctx context.Context, conn *gosql.DB, user security.SQLUsername, uri string, content []byte,
 ) error {
