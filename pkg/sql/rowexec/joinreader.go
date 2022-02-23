@@ -352,7 +352,6 @@ func newJoinReader(
 	}
 
 	var leftTypes []*types.T
-	var leftEqCols []uint32
 	switch readerType {
 	case indexJoinReaderType:
 		// Index join performs a join between a secondary index, the `input`,
@@ -362,10 +361,8 @@ func newJoinReader(
 		// will contain all columns from the table) whereas the columns that
 		// came from the secondary index (input rows) are ignored. As a result,
 		// we leave leftTypes as empty.
-		leftEqCols = indexCols
 	case lookupJoinReaderType:
 		leftTypes = input.OutputTypes()
-		leftEqCols = jr.lookupCols
 	default:
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
@@ -378,8 +375,6 @@ func newJoinReader(
 		columnTypes,
 		spec.Type,
 		spec.OnExpr,
-		leftEqCols,
-		indexCols,
 		spec.OutputGroupContinuationForLeftRow,
 		post,
 		output,
