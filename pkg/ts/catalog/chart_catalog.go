@@ -2416,6 +2416,14 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Latency (nanoseconds)",
 			},
+			{
+				Title: "Row Statistics",
+				Metrics: []string{
+					"jobs.row_level_ttl.total_rows",
+					"jobs.row_level_ttl.total_expired_rows",
+				},
+				AxisLabel: "Number of Rows",
+			},
 		},
 	},
 	{

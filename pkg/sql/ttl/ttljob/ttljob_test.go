@@ -302,6 +302,15 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numNonExpiredRows: 5,
 		},
 		{
+			desc: "one column pk with statistics",
+			createTable: `CREATE TABLE tbl (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	text TEXT
+) WITH (ttl_expire_after = '30 days', ttl_automatic_stats_poll_interval = '1 minute')`,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
+		},
+		{
 			desc: "one column pk, concurrentSchemaChange",
 			createTable: `CREATE TABLE tbl (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -398,6 +407,9 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			var zeroDuration time.Duration
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
 				AOSTDuration: &zeroDuration,
+				OnStatisticsError: func(err error) {
+					require.NoError(t, err, "error gathering statistics")
+				},
 			})
 			defer cleanupFunc()
 
