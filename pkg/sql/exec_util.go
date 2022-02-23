@@ -321,13 +321,6 @@ var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.defaults.experimental_hash_sharded_indexes.enabled",
-	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
-	false,
-).WithPublic()
-
 var maxHashShardedIndexRangePreSplit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"sql.hash_sharded_range_pre_split.max",
@@ -3025,10 +3018,6 @@ func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 
 func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {
 	m.data.OverrideMultiRegionZoneConfigEnabled = val
-}
-
-func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
-	m.data.HashShardedIndexesEnabled = val
 }
 
 func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {

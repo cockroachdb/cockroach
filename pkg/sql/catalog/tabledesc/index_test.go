@@ -51,7 +51,6 @@ func TestIndexInterface(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	sqlutils.MakeSQLRunner(conn).Exec(t, `
-		SET experimental_enable_hash_sharded_indexes = on;
 		CREATE TABLE d.t (
 			c1 INT,
 			c2 INT,

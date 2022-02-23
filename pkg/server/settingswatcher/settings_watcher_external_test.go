@@ -53,10 +53,9 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 
 	const systemOnlySetting = "kv.snapshot_rebalance.max_rate"
 	toSet := map[string][]interface{}{
-		"sql.defaults.experimental_hash_sharded_indexes.enabled": {true, false},
-		"kv.queue.process.guaranteed_time_budget":                {"17s", "20s"},
-		"sql.txn_stats.sample_rate":                              {.23, .55},
-		"cluster.organization":                                   {"foobar", "bazbax"},
+		"kv.queue.process.guaranteed_time_budget": {"17s", "20s"},
+		"sql.txn_stats.sample_rate":               {.23, .55},
+		"cluster.organization":                    {"foobar", "bazbax"},
 		// Include a system-only setting to verify that we don't try to change its
 		// value (which would cause a panic in test builds).
 		systemOnlySetting: {2 << 20, 4 << 20},

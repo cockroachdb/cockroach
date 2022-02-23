@@ -101,8 +101,7 @@ message LocalOnlySessionData {
   // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
   // modified for multi-region databases and tables/indexes/partitions.
   bool override_multi_region_zone_config_enabled = 24;
-  // HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
-  bool hash_sharded_indexes_enabled = 25;
+  reserved 25;
   // DisallowFullTableScans indicates whether queries that plan full table scans
   // should be rejected.
   bool disallow_full_table_scans = 26;
