@@ -670,6 +670,8 @@ type TableDescriptor interface {
 	// GetExcludeDataFromBackup returns true if the table's row data is configured
 	// to be excluded during backup.
 	GetExcludeDataFromBackup() bool
+	// GetStorageParams returns a list of storage parameters for the table.
+	GetStorageParams(spaceBetweenEqual bool) []string
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.

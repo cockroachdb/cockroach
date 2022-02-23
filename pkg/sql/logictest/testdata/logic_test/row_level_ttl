@@ -59,7 +59,7 @@ ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
 query T
 SELECT reloptions FROM pg_class WHERE relname = 'tbl'
 ----
-{ttl_expire_after='00:10:00':::INTERVAL}
+{ttl='on',ttl_automatic_column='on',ttl_expire_after='00:10:00':::INTERVAL}
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -266,11 +266,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
 ----
 CREATE TABLE public.tbl (
-                                                                                                                              id INT8 NOT NULL,
-                                                                                                                              text STRING NULL,
-                                                                                                                              crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-                                                                                                                              CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                                                                                              FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+                                                                                                                     id INT8 NOT NULL,
+                                                                                                                     text STRING NULL,
+                                                                                                                     crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                     CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                     FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@daily')
 
 let $table_id
@@ -347,6 +347,11 @@ CREATE TABLE tbl (
   text TEXT,
   FAMILY (id, text)
 ) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50, ttl_range_concurrency = 2, ttl_delete_rate_limit = 100, ttl_pause = true)
+
+query T
+SELECT reloptions FROM pg_class WHERE relname = 'tbl'
+----
+{ttl='on',ttl_automatic_column='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_select_batch_size=50,ttl_range_concurrency=2,ttl_delete_rate_limit=100,ttl_pause=true}
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
