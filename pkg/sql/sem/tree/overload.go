@@ -743,9 +743,6 @@ func typeCheckOverloadedExprs(
 					return err == nil
 				})
 		}
-		if ok, typedExprs, fn, err := checkReturn(ctx, semaCtx, &s); ok {
-			return typedExprs, fn, err
-		}
 
 		// The fourth heuristic is to prefer candidates that accepts the "best"
 		// mutual type in the resolvable type set of all constants.
