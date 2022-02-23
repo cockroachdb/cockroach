@@ -10,6 +10,22 @@ CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl = 'on')
 statement error "ttl_expire_after" must be set if "ttl_automatic_column" is set
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_automatic_column = 'on')
 
+statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration TIMESTAMPTZ,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
+statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration TIMESTAMPTZ DEFAULT current_timestamp() + '10 minutes'::interval,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
 statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
@@ -30,6 +46,12 @@ CREATE TABLE public.tbl (
 
 statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl_automatic_column\)` to remove the automatic column or use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
+
+statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+ALTER TABLE tbl ALTER COLUMN crdb_internal_expiration SET DEFAULT current_timestamp()
+
+statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+ALTER TABLE tbl ALTER COLUMN crdb_internal_expiration SET ON UPDATE current_timestamp()
 
 statement error cannot drop column crdb_internal_expiration while row-level TTL is active
 ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
@@ -225,7 +247,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [120 as T] WITH (expire_after = ...)
+ALTER TABLE [122 as T] WITH (expire_after = ...)
 
 statement ok
 DROP TABLE tbl

@@ -1457,7 +1457,6 @@ func NewTableDesc(
 							types.TimestampTZ.SQLString(),
 						)
 					}
-					// TODO(#75428): decide whether we need DefaultExpr/UpdateExpr to match.
 					hasRowLevelTTLColumn = true
 					break
 				}
