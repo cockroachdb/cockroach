@@ -2819,6 +2819,152 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"overlaps": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryDateAndTime,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.Timestamp},
+				{"ie1", types.Timestamp},
+				{"is2", types.Timestamp},
+				{"ie2", types.Timestamp}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, ie1, is2, ie2 := args[0], args[1], args[2], args[3]
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.TimeTZ},
+				{"ie1", types.TimeTZ},
+				{"is2", types.TimeTZ},
+				{"ie2", types.TimeTZ}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, ie1, is2, ie2 := args[0], args[1], args[2], args[3]
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.Date},
+				{"ie1", types.Date},
+				{"is2", types.Date},
+				{"ie2", types.Date}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, ie1, is2, ie2 := args[0], args[1], args[2], args[3]
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.TimestampTZ},
+				{"ie1", types.TimestampTZ},
+				{"is2", types.TimestampTZ},
+				{"ie2", types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, ie1, is2, ie2 := args[0], args[1], args[2], args[3]
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.Timestamp},
+				{"int1", types.Interval},
+				{"is2", types.Timestamp},
+				{"int2", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, int1, is2, int2 := args[0], args[1], args[2], args[3]
+				ie1, err := tree.MakeDTimestamp(duration.Add(is1.(*tree.DTimestamp).Time, int1.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				ie2, err := tree.MakeDTimestamp(duration.Add(is2.(*tree.DTimestamp).Time, int2.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.Date},
+				{"int1", types.Interval},
+				{"is2", types.Date},
+				{"int2", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, int1, is2, int2 := args[0], args[1], args[2], args[3]
+				ist1, err := is1.(*tree.DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				ist2, err := is2.(*tree.DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				ie1, err := tree.MakeDTimestamp(duration.Add(ist1, int1.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				ie2, err := tree.MakeDTimestamp(duration.Add(ist2, int2.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.TimestampTZ},
+				{"int1", types.Interval},
+				{"is2", types.TimestampTZ},
+				{"int2", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, int1, is2, int2 := args[0], args[1], args[2], args[3]
+				ie1, err := tree.MakeDTimestamp(duration.Add(is1.(*tree.DTimestampTZ).Time, int1.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				ie2, err := tree.MakeDTimestamp(duration.Add(is2.(*tree.DTimestampTZ).Time, int2.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"is1", types.TimeTZ},
+				{"int1", types.Interval},
+				{"is2", types.TimeTZ},
+				{"int2", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				is1, int1, is2, int2 := args[0], args[1], args[2], args[3]
+				ie1, err := tree.MakeDTimestamp(duration.Add(is1.(*tree.DTimeTZ).ToTime(), int1.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				ie2, err := tree.MakeDTimestamp(duration.Add(is2.(*tree.DTimeTZ).ToTime(), int2.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				return checkIfDateTimeOverlap(ctx, is1, ie1, is2, ie2)
+			},
+		},
+	),
+
 	"extract":   extractBuiltin,
 	"date_part": extractBuiltin,
 
@@ -9022,4 +9168,94 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 		formattedStmt.WriteString("\n")
 	}
 	return formattedStmt.String(), nil
+}
+
+func checkIfDateTimeOverlap(
+	ctx *tree.EvalContext, is1 tree.Datum, ie1 tree.Datum, is2 tree.Datum, ie2 tree.Datum,
+) (tree.Datum, error) {
+
+	is1IsNull := is1 == tree.DNull
+	ie1IsNull := ie1 == tree.DNull
+	is2IsNull := is2 == tree.DNull
+	ie2IsNull := ie2 == tree.DNull
+
+	if is1IsNull {
+		if ie1IsNull {
+			return tree.DNull, nil
+		}
+		is1 = ie1
+		ie1IsNull = true
+	} else if !ie1IsNull {
+		res, err := is1.CompareError(ctx, is2)
+		if err != nil {
+			return nil, err
+		}
+		// If is1 > ie1, swap.
+		if res > 0 {
+			is1, ie1 = ie1, is1
+		}
+	}
+
+	if is2IsNull {
+		if ie2IsNull {
+			return tree.DNull, nil
+		}
+		is2 = ie2
+		ie2IsNull = true
+	} else if !ie2IsNull {
+		res, err := is2.CompareError(ctx, is2)
+		if err != nil {
+			return nil, err
+		}
+		// If is2 > ie2, swap.
+		if res > 0 {
+			is2, ie2 = ie2, is2
+		}
+	}
+
+	compIs1Is2, err := is1.CompareError(ctx, is2)
+	if err != nil {
+		return nil, err
+	}
+	switch compIs1Is2 {
+	case 1:
+		if ie2IsNull {
+			return tree.DNull, nil
+		}
+		compIs1Ie2, err := is1.CompareError(ctx, ie2)
+		if err != nil {
+			return nil, err
+		}
+		if compIs1Ie2 < 0 {
+			return tree.DBoolTrue, nil
+		}
+		if ie1IsNull {
+			return tree.DNull, nil
+		}
+		return tree.DBoolFalse, nil
+	case -1:
+
+		if ie1IsNull {
+			return tree.DNull, nil
+		}
+		compIs2Ie1, err := is2.CompareError(ctx, ie1)
+		if err != nil {
+			return nil, err
+		}
+		if compIs2Ie1 < 0 {
+			return tree.DBoolTrue, nil
+		}
+		if ie2IsNull {
+			return tree.DNull, nil
+		}
+
+		return tree.DBoolFalse, nil
+
+	default:
+		if ie1IsNull || ie2IsNull {
+			return tree.DNull, nil
+		}
+		return tree.DBoolTrue, nil
+	}
+
 }
