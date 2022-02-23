@@ -300,6 +300,9 @@ type sqlServerArgs struct {
 	// Used to query valid regions on the server.
 	regionsServer serverpb.RegionsServer
 
+	// Used to query status information useful for debugging on the server.
+	debugStatusServer serverpb.DebugStatusServer
+
 	// Used for multi-tenant cost control (on the host cluster side).
 	tenantUsageServer multitenant.TenantUsageServer
 
@@ -677,6 +680,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DistSender:              cfg.distSender,
 		RPCContext:              cfg.rpcContext,
 		LeaseManager:            leaseMgr,
+		DebugStatusServer:       cfg.debugStatusServer,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
 		NodesStatusServer:       cfg.nodesStatusServer,

@@ -477,6 +477,11 @@ func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 	return nil
 }
 
+// DebugStatusServer returns the DebugStatusServer used by the TestServer.
+func (ts *TestServer) DebugStatusServer() interface{} {
+	return ts.status
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -552,6 +557,11 @@ func (t *TestTenant) DiagnosticsReporter() interface{} {
 // StatusServer is part of TestTenantInterface.
 func (t *TestTenant) StatusServer() interface{} {
 	return t.execCfg.SQLStatusServer
+}
+
+// DebugStatusServer is part of TestTenantInterface.
+func (t *TestTenant) DebugStatusServer() interface{} {
+	return t.execCfg.DebugStatusServer
 }
 
 // DistSQLServer is part of TestTenantInterface.
