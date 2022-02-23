@@ -18,12 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 // TestEncodeDecodeSystemTarget ensures that encoding/decoding a SystemTarget
 // is roundtripable.
 func TestEncodeDecodeSystemTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, testTarget := range []SystemTarget{
 		// Tenant targeting its logical cluster.
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
@@ -48,6 +51,8 @@ func TestEncodeDecodeSystemTarget(t *testing.T) {
 // TestTargetToFromProto ensures that converting system targets to protos and
 // from protos is roundtripable.
 func TestTargetToFromProto(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, testSystemTarget := range []SystemTarget{
 		// Tenant targeting its logical cluster.
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
@@ -76,9 +81,60 @@ func TestTargetToFromProto(t *testing.T) {
 	}
 }
 
+// TestKeyspaceTargeted ensures targets correctly return the keyspace they
+// target.
+func TestKeyspaceTargeted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ten10 := roachpb.MakeTenantID(10)
+
+	for _, tc := range []struct {
+		target  Target
+		expSpan roachpb.Span
+	}{
+		{
+			target:  MakeTargetFromSystemTarget(MakeEntireKeyspaceTarget()),
+			expSpan: keys.EverythingSpan,
+		},
+		{
+			target: MakeTargetFromSystemTarget(TestingMakeTenantKeyspaceTargetOrFatal(t, ten10, ten10)),
+			expSpan: roachpb.Span{
+				Key:    keys.MakeTenantPrefix(ten10),
+				EndKey: keys.MakeTenantPrefix(ten10).PrefixEnd(),
+			},
+		},
+		{
+			target: MakeTargetFromSystemTarget(
+				TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
+			),
+			expSpan: roachpb.Span{
+				Key:    keys.MinKey,
+				EndKey: keys.TenantTableDataMin,
+			},
+		},
+		{
+			target: MakeTargetFromSystemTarget(
+				TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, ten10),
+			),
+			expSpan: roachpb.Span{
+				Key:    keys.MakeTenantPrefix(ten10),
+				EndKey: keys.MakeTenantPrefix(ten10).PrefixEnd(),
+			},
+		},
+		{
+			target:  MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}),
+			expSpan: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		},
+	} {
+		require.Equal(t, tc.target.KeyspaceTargeted(), tc.expSpan)
+	}
+}
+
 // TestDecodeInvalidSpanAsSystemTarget ensures that decoding an invalid span
 // as a system target fails.
 func TestDecodeInvalidSpanAsSystemTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, tc := range []struct {
 		span        roachpb.Span
 		expectedErr string
@@ -118,6 +174,8 @@ func TestDecodeInvalidSpanAsSystemTarget(t *testing.T) {
 
 // TestSystemTargetValidation ensures target.validate() works as expected.
 func TestSystemTargetValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	tenant10 := roachpb.MakeTenantID(10)
 	tenant20 := roachpb.MakeTenantID(20)
 	for _, tc := range []struct {
@@ -245,6 +303,8 @@ func TestSystemTargetValidation(t *testing.T) {
 
 // TestTargetSortingRandomized ensures we sort targets correctly.
 func TestTargetSortingRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Construct a set of sorted targets.
 	sortedTargets := Targets{
 		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID)),
@@ -287,6 +347,8 @@ func TestTargetSortingRandomized(t *testing.T) {
 // TestSpanTargetsConstructedInSystemSpanConfigKeyspace ensures that
 // constructing span targets
 func TestSpanTargetsConstructedInSystemSpanConfigKeyspace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, tc := range []roachpb.Span{
 		MakeEntireKeyspaceTarget().encode(),
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)).encode(),
