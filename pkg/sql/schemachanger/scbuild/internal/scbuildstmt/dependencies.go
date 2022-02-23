@@ -192,6 +192,9 @@ type TableHelpers interface {
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
 	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) (tree.Expr, scpb.TypeT)
+
+	// IsTableEmpty returns if the table is empty or not.
+	IsTableEmpty(tbl *scpb.Table) bool
 }
 
 // ElementResultSet wraps the results of an element query.
