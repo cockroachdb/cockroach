@@ -1,0 +1,173 @@
+# Write a protected timestamp record on the cluster.
+protect record-id=1 ts=1
+cluster
+----
+
+# Write a protected timestamp record on the system tenant keyspace, and on the
+# secondary tenant keyspace.
+protect record-id=2 ts=2
+tenants 1,2
+----
+
+reconcile
+----
+
+mutations
+----
+upsert {entire-keyspace}                   pts=[1]
+upsert {source=1,target=1}                 pts=[2]
+upsert {source=1,target=2}                 pts=[2]
+upsert /{Min-System/NodeLiveness}          ttl_seconds=3600 num_replicas=5
+upsert /System/NodeLiveness{-Max}          ttl_seconds=600 num_replicas=5
+upsert /System/{NodeLivenessMax-tsd}       range system
+upsert /System{/tsd-tse}                   range default
+upsert /System{tse-/SystemSpanConfigKeys}  range system
+upsert /Table/{SystemConfigSpan/Start-4}   database system (host)
+upsert /Table/{4-5}                        database system (host)
+upsert /Table/{5-6}                        database system (host)
+upsert /Table/{6-7}                        database system (host)
+upsert /Table/{8-9}                        database system (host)
+upsert /Table/1{1-2}                       database system (host)
+upsert /Table/1{2-3}                       database system (host)
+upsert /Table/1{3-4}                       database system (host)
+upsert /Table/1{4-5}                       database system (host)
+upsert /Table/1{5-6}                       database system (host)
+upsert /Table/1{6-7}                       range system
+upsert /Table/1{7-8}                       range system
+upsert /Table/1{8-9}                       range system
+upsert /Table/{19-20}                      database system (host)
+upsert /Table/2{0-1}                       database system (host)
+upsert /Table/2{1-2}                       database system (host)
+upsert /Table/2{2-3}                       range system
+upsert /Table/2{3-4}                       database system (host)
+upsert /Table/2{4-5}                       database system (host)
+upsert /Table/2{5-6}                       ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+upsert /Table/2{6-7}                       database system (host)
+upsert /Table/2{7-8}                       ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+upsert /Table/2{8-9}                       database system (host)
+upsert /{Table/29-NamespaceTable/30}       range system
+upsert /NamespaceTable/{30-Max}            database system (host)
+upsert /{NamespaceTable/Max-Table/32}      database system (host)
+upsert /Table/3{2-3}                       database system (host)
+upsert /Table/3{3-4}                       database system (host)
+upsert /Table/3{4-5}                       database system (host)
+upsert /Table/3{5-6}                       database system (host)
+upsert /Table/3{6-7}                       database system (host)
+upsert /Table/3{7-8}                       database system (host)
+upsert /Table/3{8-9}                       range system
+upsert /Table/{39-40}                      database system (host)
+upsert /Table/4{0-1}                       database system (host)
+upsert /Table/4{1-2}                       database system (host)
+upsert /Table/4{2-3}                       database system (host)
+upsert /Table/4{3-4}                       database system (host)
+upsert /Table/4{4-5}                       database system (host)
+upsert /Table/4{5-6}                       ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+upsert /Table/4{6-7}                       database system (host)
+upsert /Table/4{7-8}                       database system (host)
+upsert /Table/5{0-1}                       database system (host)
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+mutations
+----
+upsert /Table/10{6-7}                      range default
+upsert /Table/10{7-8}                      range default
+
+# Write a protected timestamp record on each table.
+protect record-id=3 ts=3
+descs 106,107
+----
+
+mutations
+----
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      pts=[3]
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      pts=[3]
+
+# Write a protected timestamp record on the database to ensure
+# it applies to the tables in the database.
+protect record-id=4 ts=4
+descs 104
+----
+
+# Write a protected timestamp record on the entire keyspace.
+protect record-id=5 ts=5
+cluster
+----
+
+mutations
+----
+delete {entire-keyspace}
+upsert {entire-keyspace}                   pts=[1 5]
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      pts=[3 4]
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      pts=[3 4]
+
+state limit=3
+----
+{entire-keyspace}                          pts=[1 5]
+{source=1,target=1}                        pts=[2]
+{source=1,target=2}                        pts=[2]
+...
+
+state offset=51
+----
+...
+/Table/10{6-7}                             pts=[3 4]
+/Table/10{7-8}                             pts=[3 4]
+
+# Release the cluster records.
+release record-id=5
+----
+
+release record-id=1
+----
+
+# At this point there are no cluster target protected timestamp records, and so we should only see
+# a delete entry.
+mutations
+----
+delete {entire-keyspace}
+
+state limit=2
+----
+{source=1,target=1}                        pts=[2]
+{source=1,target=2}                        pts=[2]
+...
+
+# Release the tenant records.
+release record-id=2
+----
+
+# At this point there are no tenant target protected timestamp records on the
+# system tenant, or secondary tenant and so we should only see delete entries.
+mutations
+----
+delete {source=1,target=1}
+delete {source=1,target=2}
+
+state limit=2
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
+...
+
+# Release the schema object records.
+release record-id=3
+----
+
+release record-id=4
+----
+
+mutations
+----
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      range default
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      range default

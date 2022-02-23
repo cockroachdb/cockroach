@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigsqltranslator
+package spanconfig
 
 import (
 	"context"
@@ -18,22 +18,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
-// protectedTimestampStateReader provides a target specific view of the
+// ProtectedTimestampStateReader provides a target specific view of the
 // protected timestamp records stored in the system table.
-type protectedTimestampStateReader struct {
+type ProtectedTimestampStateReader struct {
 	schemaObjectProtections map[descpb.ID][]roachpb.ProtectionPolicy
 	tenantProtections       []tenantProtectedTimestamps
 	clusterProtections      []roachpb.ProtectionPolicy
 }
 
-// newProtectedTimestampStateReader returns an instance of a
-// protectedTimestampStateReader that can be used to fetch target specific
+// NewProtectedTimestampStateReader returns an instance of a
+// ProtectedTimestampStateReader that can be used to fetch target specific
 // protected timestamp records given the supplied ptpb.State. The ptpb.State is
 // the transactional state of the `system.protected_ts_records` table.
-func newProtectedTimestampStateReader(
+func NewProtectedTimestampStateReader(
 	_ context.Context, ptsState ptpb.State,
-) *protectedTimestampStateReader {
-	reader := &protectedTimestampStateReader{
+) *ProtectedTimestampStateReader {
+	reader := &ProtectedTimestampStateReader{
 		schemaObjectProtections: make(map[descpb.ID][]roachpb.ProtectionPolicy),
 		tenantProtections:       make([]tenantProtectedTimestamps, 0),
 		clusterProtections:      make([]roachpb.ProtectionPolicy, 0),
@@ -42,9 +42,9 @@ func newProtectedTimestampStateReader(
 	return reader
 }
 
-// getProtectionPoliciesForCluster returns all the protected timestamps that
+// GetProtectionPoliciesForCluster returns all the protected timestamps that
 // apply to the entire cluster's keyspace.
-func (p *protectedTimestampStateReader) getProtectionPoliciesForCluster() []roachpb.ProtectionPolicy {
+func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForCluster() []roachpb.ProtectionPolicy {
 	return p.clusterProtections
 }
 
@@ -55,22 +55,46 @@ type tenantProtectedTimestamps struct {
 	tenantID    roachpb.TenantID
 }
 
-// getProtectionPoliciesForTenants returns all the protected timestamps that
+// GetTenantProtections returns the ProtectionPolicies that apply to this tenant.
+func (t *tenantProtectedTimestamps) GetTenantProtections() []roachpb.ProtectionPolicy {
+	return t.protections
+}
+
+// GetTenantID returns the tenant ID of the tenant that the protected timestamp
+// records target.
+func (t *tenantProtectedTimestamps) GetTenantID() roachpb.TenantID {
+	return t.tenantID
+}
+
+// GetProtectionPoliciesForTenants returns all the protected timestamps that
 // apply to a particular tenant's keyspace. It returns this for all tenants that
 // have protected timestamp records.
-func (p *protectedTimestampStateReader) getProtectionPoliciesForTenants() []tenantProtectedTimestamps {
+func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForTenants() []tenantProtectedTimestamps {
 	return p.tenantProtections
 }
 
-// getProtectionPoliciesForSchemaObject returns all the protected timestamps
+// GetProtectionPoliciesForTenant returns all the protected timestamps that
+// apply to a particular tenant's keyspace.
+func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForTenant(
+	tenantID roachpb.TenantID,
+) []roachpb.ProtectionPolicy {
+	for _, tp := range p.tenantProtections {
+		if tp.tenantID.Equal(tenantID) {
+			return tp.protections
+		}
+	}
+	return []roachpb.ProtectionPolicy{}
+}
+
+// GetProtectionPoliciesForSchemaObject returns all the protected timestamps
 // that apply to the descID's keyspan.
-func (p *protectedTimestampStateReader) getProtectionPoliciesForSchemaObject(
+func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForSchemaObject(
 	descID descpb.ID,
 ) []roachpb.ProtectionPolicy {
 	return p.schemaObjectProtections[descID]
 }
 
-func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState ptpb.State) {
+func (p *ProtectedTimestampStateReader) loadProtectedTimestampRecords(ptsState ptpb.State) {
 	tenantProtections := make(map[roachpb.TenantID][]roachpb.ProtectionPolicy)
 	for _, record := range ptsState.Records {
 		switch t := record.Target.GetUnion().(type) {

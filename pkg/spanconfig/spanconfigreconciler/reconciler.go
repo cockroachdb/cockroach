@@ -292,6 +292,14 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 			Key:    keys.TableDataMin,
 			EndKey: keys.TableDataMax,
 		}))
+
+		// The system tenant also governs all SystemSpanConfigs set on its entire
+		// keyspace (including secondary tenants), on its tenant keyspace, and on
+		// other secondary tenant keyspaces.
+		targets = append(targets,
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()))
+		targets = append(targets,
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 		if f.knobs.ConfigureScratchRange {
 			sp := targets[1].GetSpan()
 			targets[1] = spanconfig.MakeTargetFromSpan(roachpb.Span{Key: sp.Key, EndKey: keys.ScratchRangeMax})
@@ -303,6 +311,10 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 			Key:    tenPrefix,
 			EndKey: tenPrefix.PrefixEnd(),
 		}))
+		// Secondary tenants also govern all SystemSpanConfigs set by the tenant on
+		// its entire keyspace.
+		targets = append(targets,
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 	}
 	store := spanconfigstore.New(roachpb.SpanConfig{})
 	{
@@ -373,14 +385,13 @@ func (r *incrementalReconciler) reconcile(
 			// translation. If the SQLUpdates includes ProtectedTimestampUpdates then
 			// instruct the translator to generate all records that apply to
 			// spanconfig.SystemTargets as well.
-			//
-			// TODO(adityamaru): Conditionally set the bool to true to generate system
-			// span configurations.
 			var generateSystemSpanConfigurations bool
 			var allIDs descpb.IDs
 			for _, update := range sqlUpdates {
 				if update.IsDescriptorUpdate() {
 					allIDs = append(allIDs, update.GetDescriptorUpdate().ID)
+				} else if update.IsProtectedTimestampUpdate() {
+					generateSystemSpanConfigurations = true
 				}
 			}
 
@@ -394,12 +405,19 @@ func (r *incrementalReconciler) reconcile(
 				return err
 			}
 
+			missingProtectedTimestampTargets, err := r.filterForMissingProtectedTimestampSystemTargets(
+				ctx, sqlUpdates)
+			if err != nil {
+				return err
+			}
+
 			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
 			if err != nil {
 				return err
 			}
 
-			updates := make([]spanconfig.Update, 0, len(missingTableIDs)+len(entries))
+			updates := make([]spanconfig.Update, 0,
+				len(missingTableIDs)+len(missingProtectedTimestampTargets)+len(entries))
 			for _, entry := range entries {
 				// Update span configs for SQL state that changed.
 				updates = append(updates, spanconfig.Update(entry))
@@ -412,6 +430,10 @@ func (r *incrementalReconciler) reconcile(
 				}
 				updates = append(updates, spanconfig.Deletion(spanconfig.MakeTargetFromSpan(tableSpan)))
 			}
+			for _, missingSystemTarget := range missingProtectedTimestampTargets {
+				updates = append(updates, spanconfig.Deletion(
+					spanconfig.MakeTargetFromSystemTarget(missingSystemTarget)))
+			}
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
 			if len(toDelete) != 0 || len(toUpsert) != 0 {
@@ -423,6 +445,86 @@ func (r *incrementalReconciler) reconcile(
 			return callback(checkpoint)
 		},
 	)
+}
+
+// filterForMissingProtectedTimestampSystemTargets filters the set of updates
+// returning only the set of "missing" protected timestamp system targets. These
+// correspond to cluster or tenant target protected timestamp records that are
+// no longer found, because they've been released.
+func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
+	ctx context.Context, updates []spanconfig.SQLUpdate,
+) ([]spanconfig.SystemTarget, error) {
+	seen := make(map[spanconfig.SystemTarget]struct{})
+	var missingSystemTargets []spanconfig.SystemTarget
+	tenantPrefix := r.codec.TenantPrefix()
+	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sql.DescsTxn(ctx, r.execCfg,
+		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+			// Construct an in-memory view of the system.protected_ts_records table to
+			// populate the protected timestamp field on the emitted span configs.
+			//
+			// TODO(adityamaru): This does a full table scan of the
+			// `system.protected_ts_records` table. While this is not assumed to be very
+			// expensive given the limited number of concurrent users of the protected
+			// timestamp subsystem, and the internal limits to limit the size of this
+			// table, there is scope for improvement in the future. One option could be
+			// a rangefeed-backed materialized view of the system table.
+			ptsState, err := r.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
+			if err != nil {
+				return errors.Wrap(err, "failed to get protected timestamp state")
+			}
+			ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+			clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
+			missingClusterProtection := len(clusterProtections) == 0
+			for _, update := range updates {
+				if update.IsDescriptorUpdate() {
+					continue // nothing to do
+				}
+
+				ptsUpdate := update.GetProtectedTimestampUpdate()
+				missingSystemTarget := spanconfig.SystemTarget{}
+				if ptsUpdate.IsClusterUpdate() && missingClusterProtection {
+					// For the host tenant a Cluster ProtectedTimestampUpdate corresponds
+					// to the entire keyspace (including secondary tenants).
+					if r.codec.ForSystemTenant() {
+						missingSystemTarget = spanconfig.MakeEntireKeyspaceTarget()
+					} else {
+						// For a secondary tenant a Cluster ProtectedTimestampUpdate
+						// corresponds to the tenants keyspace.
+						missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
+							sourceTenantID)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				if ptsUpdate.IsTenantsUpdate() {
+					if len(ptsStateReader.GetProtectionPoliciesForTenant(ptsUpdate.TenantTarget)) == 0 {
+						missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
+							ptsUpdate.TenantTarget)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				if !missingSystemTarget.IsEmpty() {
+					if _, found := seen[missingSystemTarget]; !found {
+						seen[missingSystemTarget] = struct{}{}
+						missingSystemTargets = append(missingSystemTargets, missingSystemTarget)
+					}
+				}
+			}
+			return nil
+		}); err != nil {
+		return missingSystemTargets, err
+	}
+	return missingSystemTargets, nil
 }
 
 // filterForMissingTableIDs filters the set of updates returning only the set of

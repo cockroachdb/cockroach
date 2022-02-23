@@ -88,7 +88,7 @@ func (t Target) GetSpan() roachpb.Span {
 
 // IsSystemTarget returns true if the underlying target is a system target.
 func (t Target) IsSystemTarget() bool {
-	return !t.systemTarget.isEmpty()
+	return !t.systemTarget.IsEmpty()
 }
 
 // GetSystemTarget returns the underlying SystemTarget; it panics if that is not
@@ -163,7 +163,7 @@ func (t Target) String() string {
 
 // isEmpty returns true if the receiver is an empty target.
 func (t Target) isEmpty() bool {
-	return t.systemTarget.isEmpty() && t.span.Equal(roachpb.Span{})
+	return t.systemTarget.IsEmpty() && t.span.Equal(roachpb.Span{})
 }
 
 // ToProto returns a roachpb.SpanConfigTarget equivalent to the receiver.

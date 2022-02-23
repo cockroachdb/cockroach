@@ -19,6 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -85,11 +86,13 @@ func TestDataDriven(t *testing.T) {
 			// Checkpoint noops frequently; speeds this test up.
 			SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
 		}
+		ptsKnobs := &protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
+					ProtectedTS:      ptsKnobs,
 				},
 			},
 		})
@@ -101,7 +104,7 @@ func TestDataDriven(t *testing.T) {
 			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		}
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, nil /* ptsKnobs */)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, ptsKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		systemTenant := spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
@@ -131,7 +134,7 @@ func TestDataDriven(t *testing.T) {
 			case "exec-sql":
 				// Run under an explicit transaction -- we rely on having a
 				// single timestamp for the statements (see
-				// tenant.TimestampAfterLastExec) for ordering guarantees.
+				// tenant.TimestampAfterLastSQLChange) for ordering guarantees.
 				tenant.Exec(fmt.Sprintf("BEGIN; %s; COMMIT;", d.Input))
 
 			case "query-sql":
@@ -159,7 +162,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "mutations":
 				testutils.SucceedsSoon(t, func() error {
-					lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastExec()
+					lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastSQLChange()
 					if lastCheckpoint.Less(lastExec) {
 						return errors.Newf("last checkpoint timestamp (%s) lagging last sql execution (%s)",
 							lastCheckpoint.GoTime(), lastExec.GoTime())
@@ -179,7 +182,7 @@ func TestDataDriven(t *testing.T) {
 					// tenant checkpoints to cross their last execution
 					// timestamp.
 					for _, tenant := range spanConfigTestCluster.Tenants() {
-						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastExec()
+						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastSQLChange()
 						if lastCheckpoint.IsEmpty() {
 							continue // reconciler wasn't started
 						}
@@ -200,11 +203,31 @@ func TestDataDriven(t *testing.T) {
 
 				lines := make([]string, len(records))
 				for i, record := range records {
-					lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSpan().String(),
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config))
+					switch {
+					case record.Target.IsSpanTarget():
+						lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSpan(),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config))
+					case record.Target.IsSystemTarget():
+						lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSystemTarget(),
+							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.Config))
+					default:
+						panic("unsupported target type")
+					}
 				}
 				return spanconfigtestutils.MaybeLimitAndOffset(t, d, "...", lines)
 
+			case "protect":
+				var recordID string
+				var protectTS int
+				d.ScanArgs(t, "record-id", &recordID)
+				d.ScanArgs(t, "ts", &protectTS)
+				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
+				tenant.MakeProtectedTimestampRecordAndProtect(ctx, recordID, protectTS, target)
+
+			case "release":
+				var recordID string
+				d.ScanArgs(t, "record-id", &recordID)
+				tenant.ReleaseProtectedTimestampRecord(ctx, recordID)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
