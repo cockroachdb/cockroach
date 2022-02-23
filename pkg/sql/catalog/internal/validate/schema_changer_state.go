@@ -42,10 +42,6 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 		report(errors.New("empty job ID"))
 	}
 
-	if len(scs.Targets) == 0 {
-		report(errors.New("no targets"))
-	}
-
 	// Validate that the targets correspond to this descriptor.
 	for i, t := range scs.Targets {
 		if got := screl.GetDescID(t.Element()); got != d.GetID() {

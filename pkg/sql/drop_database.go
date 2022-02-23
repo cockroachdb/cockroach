@@ -192,7 +192,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	err = metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc)
+	err = metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc.GetID())
 	if err != nil {
 		return err
 	}

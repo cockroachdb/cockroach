@@ -22,7 +22,6 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/types",
     ],
 )
 

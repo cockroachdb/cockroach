@@ -317,6 +317,9 @@ func (desc *immutable) ValidateCrossReferences(
 			report(err)
 			return
 		}
+		if typ.Dropped() {
+			report(errors.Errorf("type descriptor is dropped"))
+		}
 		if typ.GetParentID() != desc.GetID() {
 			report(errors.Errorf("parentID is actually %d", typ.GetParentID()))
 		}
@@ -349,6 +352,10 @@ func (desc *immutable) ValidateTxnCommit(
 		}
 		if schemaDesc.GetParentID() != desc.GetID() {
 			report(errors.Errorf("schema parentID is actually %d", schemaDesc.GetParentID()))
+		}
+		if schemaDesc.Dropped() {
+			report(errors.Errorf("back-referenced schema %q (%d) is dropped",
+				schemaDesc.GetName(), schemaDesc.GetID()))
 		}
 	}
 }

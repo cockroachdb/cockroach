@@ -49,11 +49,14 @@ type Dependencies interface {
 // This involves reading descriptors, as well as preparing batches of catalog
 // changes.
 type Catalog interface {
-	scmutationexec.CatalogReader
+	scmutationexec.NameResolver
+	scmutationexec.SyntheticDescriptors
+
+	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
+	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
 
 	// MustReadMutableDescriptor the mutable equivalent to
-	// MustReadImmutableDescriptors in scmutationexec.CatalogReader.
-	// This method should be used carefully.
+	// MustReadImmutableDescriptors.
 	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
 
 	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
@@ -258,13 +261,13 @@ type DescriptorMetadataUpdater interface {
 	DeleteDescriptorComment(id int64, subID int64, commentType keys.CommentType) error
 
 	//UpsertConstraintComment upserts a comment associated with a constraint.
-	UpsertConstraintComment(desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string) error
+	UpsertConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID, comment string) error
 
 	//DeleteConstraintComment deletes a comment associated with a constraint.
-	DeleteConstraintComment(desc catalog.TableDescriptor, constraintID descpb.ConstraintID) error
+	DeleteConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID) error
 
 	// DeleteDatabaseRoleSettings deletes role settings associated with a database.
-	DeleteDatabaseRoleSettings(ctx context.Context, database catalog.DatabaseDescriptor) error
+	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// SwapDescriptorSubComment moves a comment from one sub ID to another.
 	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error

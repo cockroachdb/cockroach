@@ -17,11 +17,15 @@ import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 type TestingKnobs struct {
 	// BeforeStage is called before ops passed to the executor are executed.
 	// Errors returned are injected into the executor.
-	BeforeStage func(ops scplan.Plan, stageIdx int) error
+	BeforeStage func(p scplan.Plan, stageIdx int) error
 
 	// BeforeWaitingForConcurrentSchemaChanges is called at the start of waiting
 	// for concurrent schema changes to finish.
 	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
+
+	// OnPostCommitError is called whenever the schema changer job returns an
+	// error.
+	OnPostCommitError func(p scplan.Plan, stageIdx int, err error) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

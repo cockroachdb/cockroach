@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"sort"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -69,16 +70,38 @@ type ElementStatusIterator interface {
 
 func (e {{ . }}) element() {}
 
-// ForEach{{ . }} iterates over nodes of type {{ . }}.
+// ForEach{{ . }} iterates over elements of type {{ . }}.
 func ForEach{{ . }}(
 	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *{{ . }}),
 ) {
+  if b == nil {
+    return
+  }
 	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
 		if e, ok := elem.(*{{ . }}); ok {
 			elementFunc(status, targetStatus, e)
 		}
 	})
 }
+
+// Find{{ . }} finds the first element of type {{ . }}.
+func Find{{ . }}(b ElementStatusIterator) (currentStatus, targetStatus Status, element *{{ . }}) {
+  if b == nil {
+    return currentStatus, targetStatus, element
+  }
+	b.ForEachElementStatus(func(cs, ts Status, elem Element) {
+		if element != nil {
+			return
+		}
+		if e, ok := elem.(*{{ . }}); ok {
+			element = e
+			currentStatus = cs
+      targetStatus = ts
+		}
+	})
+	return currentStatus, targetStatus, element
+}
+
 {{- end -}}
 `)).Execute(&buf, elementNames); err != nil {
 		return err
@@ -104,9 +127,13 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 		elementFieldRegexp  = regexp.MustCompile(elementFieldPat)
 		elementFieldTypeIdx = elementFieldRegexp.SubexpIndex("type")
 		elementFieldsIdx    = elementProtoRegexp.SubexpIndex("fields")
+		commentPat          = "\\/\\/[^\n]*\n"
+		commentRegexp       = regexp.MustCompile(commentPat)
 	)
 
 	got, err := ioutil.ReadFile(inProtoFile)
+	got = commentRegexp.ReplaceAll(got, nil)
+
 	if err != nil {
 		return nil, err
 	}
@@ -120,5 +147,6 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 	for _, m := range fieldMatches {
 		names = append(names, string(m[elementFieldTypeIdx]))
 	}
+	sort.Strings(names)
 	return names, nil
 }

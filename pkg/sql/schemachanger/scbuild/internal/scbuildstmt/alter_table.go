@@ -13,9 +13,11 @@ package scbuildstmt
 import (
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -37,9 +39,9 @@ func init() {
 		}
 		if callBackType.NumIn() != 4 ||
 			!callBackType.In(0).Implements(reflect.TypeOf((*BuildCtx)(nil)).Elem()) ||
-			!callBackType.In(1).Implements(reflect.TypeOf((*catalog.TableDescriptor)(nil)).Elem()) ||
-			callBackType.In(2) != statementType ||
-			callBackType.In(3) != reflect.TypeOf((*tree.TableName)(nil)) {
+			callBackType.In(1) != reflect.TypeOf((*tree.TableName)(nil)) ||
+			callBackType.In(2) != reflect.TypeOf((*scpb.Table)(nil)) ||
+			callBackType.In(3) != statementType {
 			panic(errors.AssertionFailedf("%v entry for alter table statement "+
 				"does not have a valid signature got %v", statementType, callBackType))
 		}
@@ -52,44 +54,43 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	// that is how the commands will look.
 	n.HoistAddColumnConstraints()
 	tn := n.Table.ToTableName()
-	prefix, tbl := b.ResolveTable(n.Table, ResolveParams{
+	elts := b.ResolveTable(n.Table, ResolveParams{
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.CREATE,
 	})
-	tn.ObjectNamePrefix = prefix.NamePrefix()
-	b.SetUnresolvedNameAnnotation(n.Table, &tn)
+	_, targetStatus, tbl := scpb.FindTable(elts)
 	if tbl == nil {
 		b.MarkNameAsNonExistent(&tn)
 		return
 	}
-	if catalog.HasConcurrentSchemaChanges(tbl) {
-		panic(scerrors.ConcurrentSchemaChangeError(tbl))
+	if targetStatus != scpb.Status_PUBLIC {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"table %q is being dropped, try again later", n.Table.Object()))
 	}
+	tn.ObjectNamePrefix = b.NamePrefix(tbl)
+	b.SetUnresolvedNameAnnotation(n.Table, &tn)
+	b.CheckNoConcurrentSchemaChanges(tbl)
 	for _, cmd := range n.Cmds {
-		alterTableCmd(b, tbl, cmd, &tn)
+		// Check if an entry exists for the statement type, in which
+		// case its either fully or partially supported.
+		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		if !ok {
+			panic(scerrors.NotImplementedError(cmd))
+		}
+		// Check if partially supported operations are allowed next. If an
+		// operation is not fully supported will not allow it to be run in
+		// the declarative schema changer until its fully supported.
+		if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
+			panic(scerrors.NotImplementedError(cmd))
+		}
+		// Next invoke the callback function, with the concrete types.
+		fn := reflect.ValueOf(info.fn)
+		fn.Call([]reflect.Value{
+			reflect.ValueOf(b),
+			reflect.ValueOf(&tn),
+			reflect.ValueOf(tbl),
+			reflect.ValueOf(cmd),
+		})
 		b.IncrementSubWorkID()
 	}
-}
-
-func alterTableCmd(
-	b BuildCtx, table catalog.TableDescriptor, cmd tree.AlterTableCmd, tn *tree.TableName,
-) {
-	// Check if an entry exists for the statement type, in which
-	// case its either fully or partially supported.
-	info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-	if !ok {
-		panic(scerrors.NotImplementedError(cmd))
-	}
-	// Check if partially supported operations are allowed next. If an
-	// operation is not fully supported will not allow it to be run in
-	// the declarative schema changer until its fully supported.
-	if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
-		panic(scerrors.NotImplementedError(cmd))
-	}
-
-	// Next invoke the callback function, with the concrete types.
-	fn := reflect.ValueOf(info.fn)
-	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(table),
-		reflect.ValueOf(cmd), reflect.ValueOf(tn)}
-	fn.Call(in)
 }

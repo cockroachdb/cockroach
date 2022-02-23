@@ -25,7 +25,13 @@ import (
 // Note that a zero Splitter (NoopSplitter) is a usable instance that never
 // splits spans.
 type Splitter struct {
-	numKeyColumns  int
+	// numKeyColumns is the number of key columns in the index; a span needs to
+	// constrain this many columns to be considered for splitting.
+	// It is 0 if splitting is not possible.
+	numKeyColumns int
+
+	// neededFamilies contains the family IDs into which spans will be split, or
+	// nil if splitting is not possible.
 	neededFamilies []descpb.FamilyID
 }
 
@@ -82,6 +88,12 @@ func MakeSplitter(
 		numKeyColumns:  index.NumKeyColumns(),
 		neededFamilies: neededFamilies,
 	}
+}
+
+// FamilyIDs returns the family IDs into which spans will be split, or nil if
+// splitting is not possible.
+func (s *Splitter) FamilyIDs() []descpb.FamilyID {
+	return s.neededFamilies
 }
 
 // IsNoop returns true if this instance will never split spans.

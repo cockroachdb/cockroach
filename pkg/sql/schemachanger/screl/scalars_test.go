@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,5 +28,68 @@ func TestAllElementsHaveDescID(t *testing.T) {
 		f := typ.Field(i)
 		elem := reflect.New(f.Type.Elem()).Interface().(scpb.Element)
 		require.Equal(t, descpb.ID(0), GetDescID(elem))
+	}
+}
+
+func TestAllDescIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		input    scpb.Element
+		expected []catid.DescID
+	}{
+		{
+			name: "schema parent",
+			input: &scpb.SchemaParent{
+				SchemaID:         1,
+				ParentDatabaseID: 2,
+			},
+			expected: []catid.DescID{1, 2},
+		},
+		{
+			name: "default expr",
+			input: &scpb.ColumnDefaultExpression{
+				TableID:  1,
+				ColumnID: 10,
+				Expression: scpb.Expression{
+					Expr:            "foo",
+					UsesTypeIDs:     []catid.DescID{2, 3},
+					UsesSequenceIDs: []catid.DescID{4, 5},
+				},
+			},
+			expected: []catid.DescID{1, 2, 3, 4, 5},
+		},
+		{
+			name: "udf column",
+			input: &scpb.ColumnType{
+				TableID:  1,
+				ColumnID: 10,
+				TypeT: scpb.TypeT{
+					Type:          types.Any,
+					ClosedTypeIDs: []catid.DescID{2, 3},
+				},
+			},
+			expected: []catid.DescID{1, 2, 3},
+		},
+		{
+			name: "computed column",
+			input: &scpb.ColumnType{
+				TableID:  1,
+				ColumnID: 10,
+				TypeT: scpb.TypeT{
+					Type:          types.Any,
+					ClosedTypeIDs: []catid.DescID{2, 3},
+				},
+				ComputeExpr: &scpb.Expression{
+					Expr:            "foo",
+					UsesTypeIDs:     []catid.DescID{3, 4},
+					UsesSequenceIDs: []catid.DescID{5, 6},
+				},
+			},
+			expected: []catid.DescID{1, 2, 3, 4, 5, 6},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ElementsMatch(t, tc.expected, AllDescIDs(tc.input).Ordered())
+		})
 	}
 }

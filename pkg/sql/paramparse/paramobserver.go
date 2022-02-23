@@ -372,6 +372,23 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_pause`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			b, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			po.tableDesc.RowLevelTTL.Pause = b
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL.Pause = false
+			return nil
+		},
+	},
 	`exclude_data_from_backup`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
 			evalCtx *tree.EvalContext, key string, datum tree.Datum) error {

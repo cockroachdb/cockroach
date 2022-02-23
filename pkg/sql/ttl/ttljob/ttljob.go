@@ -70,6 +70,12 @@ var (
 		settings.NonNegativeInt,
 	).WithPublic()
 
+	jobEnabled = settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"sql.ttl.job.enabled",
+		"whether the TTL job is enabled",
+		true,
+	).WithPublic()
 	rangeBatchSize = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"sql.ttl.range_batch_size",
@@ -211,6 +217,14 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
 	descs := p.ExtendedEvalContext().Descs
+
+	if enabled := jobEnabled.Get(p.ExecCfg().SV()); !enabled {
+		return errors.Newf(
+			"ttl jobs are currently disabled by CLUSTER SETTING %s",
+			jobEnabled.Key(),
+		)
+	}
+
 	var knobs sql.TTLTestingKnobs
 	if ttlKnobs := p.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
 		knobs = *ttlKnobs
@@ -269,6 +283,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		ttl := desc.GetRowLevelTTL()
 		if ttl == nil {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
+		}
+
+		if ttl.Pause {
+			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
 		_, dbDesc, err := descs.GetImmutableDatabaseByID(
@@ -497,6 +515,20 @@ func runTTLOnRange(
 	)
 
 	for {
+		if f := execCfg.TTLTestingKnobs.OnDeleteLoopStart; f != nil {
+			if err := f(); err != nil {
+				return err
+			}
+		}
+
+		// Check the job is enabled on every iteration.
+		if enabled := jobEnabled.Get(execCfg.SV()); !enabled {
+			return errors.Newf(
+				"ttl jobs are currently disabled by CLUSTER SETTING %s",
+				jobEnabled.Key(),
+			)
+		}
+
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
 		var expiredRowsPKs []tree.Datums

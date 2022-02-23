@@ -1,0 +1,389 @@
+setup
+CREATE SEQUENCE seq;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  cexpr INT DEFAULT (nextval('seq')) ON UPDATE (123)
+);
+----
+
+decompose
+seq
+----
+BackReferencedIDs:
+  - 105
+ElementState:
+- Sequence:
+    sequenceId: 104
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: seq
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC
+
+setup
+CREATE SEQUENCE otherseq OWNED BY tbl.cexpr;
+----
+
+decompose
+otherseq
+----
+BackReferencedIDs:
+  - 105
+ElementState:
+- Sequence:
+    sequenceId: 106
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 106
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 106
+    name: otherseq
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 106
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 106
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 106
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 106
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 106
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+tbl
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 105
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    tableId: 105
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: cexpr
+    tableId: 105
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 105
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 105
+  Status: PUBLIC
+- ColumnDefaultExpression:
+    columnId: 2
+    embeddedExpr:
+      expr: nextval(104:::REGCLASS)
+      usesSequenceIds:
+      - 104
+    tableId: 105
+  Status: PUBLIC
+- ColumnOnUpdateExpression:
+    columnId: 2
+    embeddedExpr:
+      expr: 123:::INT8
+    tableId: 105
+  Status: PUBLIC
+- SequenceOwner:
+    columnId: 2
+    sequenceId: 106
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
+    tableId: 105
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 105
+    name: tbl
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 105
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 105
+    parentSchemaId: 101
+  Status: PUBLIC
+
+setup
+ALTER TABLE tbl ALTER COLUMN cexpr DROP DEFAULT;
+ALTER TABLE tbl ALTER COLUMN cexpr DROP ON UPDATE;
+DROP SEQUENCE otherseq CASCADE;
+----
+
+decompose
+tbl
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 105
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    tableId: 105
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: cexpr
+    tableId: 105
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 105
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
+    tableId: 105
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 105
+    name: tbl
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 105
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 105
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+seq
+----
+BackReferencedIDs:
+ElementState:
+- Sequence:
+    sequenceId: 104
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: seq
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC

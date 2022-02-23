@@ -141,9 +141,9 @@ func (h *rowLevelTTLTestJobTestHelper) waitForSuccessfulScheduledJob(t *testing.
 	h.waitForScheduledJob(t, jobs.StatusSucceeded, "")
 }
 
-// TestRowLevelTTLJobRandomEntries tests that row-level TTL errors as appropriate
-// when there is a schema change..
-func TestRowLevelTTLJobSchemaChange(t *testing.T) {
+// TestRowLevelTTLInterruptDuringExecution tests that row-level TTL errors
+// as appropriate if there is some sort of "interrupting" request.
+func TestRowLevelTTLInterruptDuringExecution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -159,6 +159,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 		expectedTTLError                  string
 		aostDuration                      time.Duration
 		mockDescriptorVersionDuringDelete *descpb.DescriptorVersion
+		onDeleteLoopStart                 func(*testing.T, **sqlutils.SQLRunner) func() error
 	}{
 		{
 			desc:             "schema change too recent to start TTL job",
@@ -174,23 +175,94 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			// blocked and may not run.
 			mockDescriptorVersionDuringDelete: &mockVersion,
 		},
+		{
+			desc:             "disable cluster setting",
+			expectedTTLError: `ttl jobs are currently disabled by CLUSTER SETTING sql.ttl.job.enabled`,
+			onDeleteLoopStart: func(t *testing.T, sqlDB **sqlutils.SQLRunner) func() error {
+				return func() error {
+					(*sqlDB).Exec(t, `SET CLUSTER SETTING sql.ttl.job.enabled = false`)
+					return nil
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			var onDeleteLoopStart func() error
+			var sqlDB *sqlutils.SQLRunner
+			if tc.onDeleteLoopStart != nil {
+				onDeleteLoopStart = tc.onDeleteLoopStart(t, &sqlDB)
+			}
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
 				AOSTDuration:                      &tc.aostDuration,
 				MockDescriptorVersionDuringDelete: tc.mockDescriptorVersionDuringDelete,
+				OnDeleteLoopStart:                 onDeleteLoopStart,
 			})
 			defer cleanupFunc()
-
-			th.sqlDB.Exec(t, createTable)
+			sqlDB = th.sqlDB
+			sqlDB.Exec(t, createTable)
 
 			// Force the schedule to execute.
 			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 			require.NoError(t, th.executeSchedules())
 
 			th.waitForScheduledJob(t, jobs.StatusFailed, tc.expectedTTLError)
+		})
+	}
+}
+
+func TestRowLevelTTLJobDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	createTable := func(addPause bool) string {
+		var pauseStr string
+		if addPause {
+			pauseStr = `, ttl_pause = true`
+		}
+		return fmt.Sprintf(`CREATE TABLE t (
+	id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2%s);
+ALTER TABLE t SPLIT AT VALUES (1), (2);
+INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`, pauseStr)
+	}
+
+	testCases := []struct {
+		desc             string
+		expectedTTLError string
+		setup            string
+	}{
+		{
+			desc:             "disabled by cluster setting",
+			expectedTTLError: "ttl jobs are currently disabled by CLUSTER SETTING sql.ttl.job.enabled",
+			setup:            createTable(false) + `SET CLUSTER SETTING sql.ttl.job.enabled = false`,
+		},
+		{
+			desc:             "disabled by TTL pause",
+			expectedTTLError: "ttl jobs on table t are currently paused",
+			setup:            createTable(true),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			var zeroDuration time.Duration
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+				AOSTDuration: &zeroDuration,
+			})
+			defer cleanupFunc()
+
+			th.sqlDB.Exec(t, tc.setup)
+
+			// Force the schedule to execute.
+			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
+			require.NoError(t, th.executeSchedules())
+
+			th.waitForScheduledJob(t, jobs.StatusFailed, tc.expectedTTLError)
+			var numRows int
+			th.sqlDB.QueryRow(t, `SELECT count(1) FROM t`).Scan(&numRows)
+			require.Equal(t, 2, numRows)
 		})
 	}
 }
