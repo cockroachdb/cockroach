@@ -46,6 +46,8 @@ func TestTenantZip(t *testing.T) {
 		StoreSpecs: []base.StoreSpec{{
 			Path: hostDir,
 		}},
+		// TODO(abarganier): Switch to secure mode once underlying infra has been
+		// updated to support it. See: https://github.com/cockroachdb/cockroach/issues/77173
 		Insecure:   true,
 		TenantArgs: &tenantArgs,
 	})
