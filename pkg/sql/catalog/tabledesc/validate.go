@@ -1089,7 +1089,17 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), name, colID, inIndexColID)
 			}
 			if validateIndexDup.Contains(colID) {
-				return pgerror.Newf(pgcode.FeatureNotSupported, "index %q contains duplicate column %q", idx.GetName(), name)
+				col, _ := desc.FindColumnWithID(colID)
+				if col.IsExpressionIndexColumn() {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"index %q contains duplicate expression %q",
+						idx.GetName(), col.GetComputeExpr(),
+					)
+				}
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"index %q contains duplicate column %q",
+					idx.GetName(), name,
+				)
 			}
 			validateIndexDup.Add(colID)
 		}
