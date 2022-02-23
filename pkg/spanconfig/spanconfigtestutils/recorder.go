@@ -113,8 +113,16 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 		if m.update.Deletion() {
 			output.WriteString(fmt.Sprintf("delete %s\n", m.update.Target))
 		} else {
-			output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
-				PrintSpanConfigDiffedAgainstDefaults(m.update.Config)))
+			switch {
+			case m.update.Target.IsSpanTarget():
+				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
+					PrintSpanConfigDiffedAgainstDefaults(m.update.Config)))
+			case m.update.Target.IsSystemTarget():
+				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
+					PrintSystemSpanConfigDiffedAgainstDefault(m.update.Config)))
+			default:
+				panic("unsupported target type")
+			}
 		}
 	}
 

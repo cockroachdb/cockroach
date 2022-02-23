@@ -19,8 +19,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -31,10 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -220,31 +216,12 @@ func TestDataDriven(t *testing.T) {
 				d.ScanArgs(t, "record-id", &recordID)
 				d.ScanArgs(t, "ts", &protectTS)
 				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
-
-				jobID := tenant.JobsRegistry().MakeJobID()
-				require.NoError(t, tenant.ExecCfg().DB.Txn(ctx,
-					func(ctx context.Context, txn *kv.Txn) (err error) {
-						require.Len(t, recordID, 1,
-							"datadriven test only supports single character record IDs")
-						recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
-						require.NoError(t, err)
-						rec := jobsprotectedts.MakeRecord(recID, int64(jobID),
-							hlc.Timestamp{WallTime: int64(protectTS)}, nil, /* deprecatedSpans */
-							jobsprotectedts.Jobs, target)
-						return tenant.ProtectedTimestampProvider().Protect(ctx, txn, rec)
-					}))
+				tenant.MakeProtectedTimestampRecordAndProtect(ctx, recordID, protectTS, target)
 
 			case "release":
 				var recordID string
 				d.ScanArgs(t, "record-id", &recordID)
-				require.NoError(t, tenant.ExecCfg().DB.Txn(ctx,
-					func(ctx context.Context, txn *kv.Txn) error {
-						require.Len(t, recordID, 1,
-							"datadriven test only supports single character record IDs")
-						recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
-						require.NoError(t, err)
-						return tenant.ProtectedTimestampProvider().Release(ctx, txn, recID)
-					}))
+				tenant.ReleaseProtectedTimestampRecord(ctx, recordID)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
