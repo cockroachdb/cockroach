@@ -260,12 +260,21 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 		}
 	}
 
-	// A script to summarize the hottest ranges.
+	// A script to summarize the hottest ranges for host cluster range reports.
 	{
 		s := zc.clusterPrinter.start("hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
 find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
+			return err
+		}
+	}
+
+	// A script to summarize the hottest ranges for a tenant range report.
+	{
+		s := zc.clusterPrinter.start("tenant hot range summary script")
+		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+grep -E 'range_id|per_second'  tenant_ranges.json | sed 's/^ *//g' | awk 'BEGIN{RS="\"range_id\"";} {gsub(",", ""); print "range_id: " $2 "\tQPS: " $4 "\n" "range_id: " $2 "\tWPS: " $6}' | sort -t":" -k3 -r | head -n 20`)); err != nil {
 			return err
 		}
 	}
