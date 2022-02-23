@@ -362,7 +362,7 @@ func DecodeKeyIntoZoneIDAndSuffix(
 	if !ok {
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
-	} else if objectID <= keys.SystemDatabaseID || isPseudoTableID(uint32(objectID)) {
+	} else if objectID <= keys.SystemDatabaseID || keys.IsPseudoTableID(uint32(objectID)) {
 		// Pseudo-table ids should be considered to be a part of the
 		// system database as they aren't real tables.
 		objectID = keys.SystemDatabaseID
@@ -383,16 +383,6 @@ func DecodeKeyIntoZoneIDAndSuffix(
 		objectID = keys.TenantsRangesID
 	}
 	return objectID, keySuffix
-}
-
-// isPseudoTableID returns true if id is in keys.PseudoTableIDs.
-func isPseudoTableID(id uint32) bool {
-	for _, pseudoTableID := range keys.PseudoTableIDs {
-		if id == pseudoTableID {
-			return true
-		}
-	}
-	return false
 }
 
 // GetZoneConfigForObject returns the combined zone config for the given object
