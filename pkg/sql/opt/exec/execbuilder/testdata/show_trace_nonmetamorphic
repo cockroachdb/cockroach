@@ -369,4 +369,3 @@ WHERE message     LIKE '%r$rangeid: sending batch 42 Get%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r45: sending batch 42 Get to (n1,s1):1

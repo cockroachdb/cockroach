@@ -39,7 +39,7 @@ query T kvtrace
 SELECT * FROM t WHERE i = 333 AND j @> '{"a": "b"}'
 ----
 Scan /Table/106/2/333/"a"/"b"{-/PrefixEnd}
-Scan /Table/106/1/1/0
+Scan /Table/106/1/{1-2}
 
 # Don't insert duplicate values.
 query T kvtrace
