@@ -54,6 +54,22 @@ func (t Timestamp) LessEq(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical <= s.Logical)
 }
 
+// Compare returns -1 if this timestamp is lesser than the given timestamp, 1 if
+// it is greater, and 0 if they are equal.
+func (t Timestamp) Compare(s Timestamp) int {
+	if t.WallTime > s.WallTime {
+		return 1
+	} else if t.WallTime < s.WallTime {
+		return -1
+	} else if t.Logical > s.Logical {
+		return 1
+	} else if t.Logical < s.Logical {
+		return -1
+	} else {
+		return 0
+	}
+}
+
 // String implements the fmt.Stringer interface.
 func (t Timestamp) String() string {
 	// The following code was originally written as
