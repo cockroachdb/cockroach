@@ -1721,7 +1721,6 @@ bins = \
   bin/cockroach-oss \
   bin/cockroach-short \
   bin/cockroach-sql \
-  bin/compile-builds \
   bin/docgen \
   bin/execgen \
   bin/fuzz \
