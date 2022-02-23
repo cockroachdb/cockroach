@@ -82,12 +82,6 @@ func (p *planner) AlterPrimaryKey(
 		}
 	}
 
-	if alterPKNode.Sharded != nil {
-		if !p.EvalContext().SessionData().HashShardedIndexesEnabled {
-			return hashShardedIndexesDisabledError
-		}
-	}
-
 	// Ensure that other schema changes on this table are not currently
 	// executing, and that other schema changes have not been performed
 	// in the current transaction.
@@ -190,7 +184,6 @@ func (p *planner) AlterPrimaryKey(
 			ctx,
 			p.EvalContext(),
 			&p.semaCtx,
-			p.SessionData().HashShardedIndexesEnabled,
 			alterPKNode.Columns,
 			alterPKNode.Sharded.ShardBuckets,
 			tableDesc,
