@@ -225,7 +225,6 @@ func TestWorkQueueBasic(t *testing.T) {
 				return buf.stringAndReset()
 
 			case "cancel-work":
-				// TODO: test cancellation of something in openepochheap
 				var id int
 				d.ScanArgs(t, "id", &id)
 				work, ok := wrkMap.get(id)
@@ -263,7 +262,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				d.ScanArgs(t, "millis", &millis)
 				timeSource.Advance(time.Duration(millis) * time.Millisecond)
 				EpochLIFOEnabled.Override(context.Background(), &st.SV, true)
-				q.tryCloseEpoch()
+				q.tryCloseEpoch(timeSource.Now())
 				return q.String()
 
 			default:
@@ -289,8 +288,9 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 
 	var buf builderWithMu
 	tg := &testGranter{buf: &buf}
+	st := cluster.MakeTestingClusterSettings()
 	q := makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()), SQLKVResponseWork, tg,
-		nil, makeWorkQueueOptions(SQLKVResponseWork)).(*WorkQueue)
+		st, makeWorkQueueOptions(SQLKVResponseWork)).(*WorkQueue)
 	tg.r = q
 	createTime := int64(0)
 	stopCh := make(chan struct{})
@@ -400,7 +400,8 @@ func TestPriorityStates(t *testing.T) {
 				return printFunc()
 
 			case "get-threshold":
-				curThreshold = ps.getFIFOPriorityThresholdAndReset(curThreshold)
+				curThreshold = ps.getFIFOPriorityThresholdAndReset(
+					curThreshold, int64(epochLength), maxQueueDelayToSwitchToLifo)
 				return fmt.Sprintf("threshold: %d", curThreshold)
 
 			default:
