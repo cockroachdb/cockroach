@@ -303,9 +303,6 @@ const (
 	// BackupResolutionInJob defaults to resolving backup destinations during the
 	// execution of a backup job rather than during planning.
 	BackupResolutionInJob
-	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
-	// range tombstones.
-	ExperimentalMVCCRangeTombstones
 	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
 	// for raft log truncation, by allowing each replica to treat a truncation
 	// proposal as an upper bound on what should be truncated.
@@ -494,14 +491,12 @@ var versionsSingleton = keyedVersions{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 74},
 	},
+
 	{
 		Key:     BackupResolutionInJob,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 76},
 	},
-	{
-		Key:     ExperimentalMVCCRangeTombstones,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 78},
-	},
+	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
 	{
 		Key:     LooselyCoupledRaftLogTruncation,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},

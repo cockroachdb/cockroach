@@ -178,17 +178,17 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (i *MVCCIterator) HasPointAndRange() (bool, bool) {
-	return i.i.HasPointAndRange()
+	panic("not implemented")
 }
 
 // RangeBounds implements SimpleMVCCIterator.
 func (i *MVCCIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
-	return i.i.RangeBounds()
+	panic("not implemented")
 }
 
 // RangeKeys implements SimpleMVCCIterator.
 func (i *MVCCIterator) RangeKeys() []storage.MVCCRangeKeyValue {
-	return i.i.RangeKeys()
+	panic("not implemented")
 }
 
 // ComputeStats is part of the storage.MVCCIterator interface.
@@ -617,17 +617,11 @@ func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roac
 func (s spanSetWriter) ExperimentalPutMVCCRangeKey(
 	rangeKey storage.MVCCRangeKey, value []byte,
 ) error {
-	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
-		return err
-	}
-	return s.w.ExperimentalPutMVCCRangeKey(rangeKey, value)
+	panic("not implemented")
 }
 
 func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
-	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
-		return err
-	}
-	return s.w.ExperimentalClearMVCCRangeKey(rangeKey)
+	panic("not implemented")
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
