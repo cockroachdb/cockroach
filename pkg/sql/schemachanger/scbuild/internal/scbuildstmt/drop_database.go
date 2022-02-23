@@ -31,6 +31,7 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	if string(n.Name) == b.SessionData().Database && b.SessionData().SafeUpdates {
 		panic(pgerror.DangerousStatementf("DROP DATABASE on current database"))
 	}
+	b.IncrementSchemaChangeDropCounter("database")
 	// Perform explicit or implicit DROP DATABASE CASCADE.
 	if n.DropBehavior == tree.DropCascade || (n.DropBehavior == tree.DropDefault && !b.SessionData().SafeUpdates) {
 		dropCascadeDescriptor(b, db.DatabaseID)

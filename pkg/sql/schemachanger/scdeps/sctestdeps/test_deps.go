@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -80,6 +81,35 @@ func (s *TestState) ClusterSettings() *cluster.Settings {
 // Statements implements the scbuild.Dependencies interface.
 func (s *TestState) Statements() []string {
 	return s.statements
+}
+
+// IncrementSchemaChangeAlterCounter implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementSchemaChangeAlterCounter(counterType string, extra ...string) {
+	var maybeExtra string
+	if len(extra) > 0 {
+		maybeExtra = "." + extra[0]
+	}
+	s.LogSideEffectf("increment telemetry for sql.schema.alter_%s%s", counterType, maybeExtra)
+}
+
+// IncrementSchemaChangeDropCounter implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementSchemaChangeDropCounter(counterType string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.drop_%s", counterType)
+}
+
+// IncrementUserDefinedSchemaCounter implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementUserDefinedSchemaCounter(
+	counterType sqltelemetry.UserDefinedSchemaTelemetryType,
+) {
+	s.LogSideEffectf("increment telemetry for sql.uds.%s", counterType)
+}
+
+// IncrementEnumCounter implements the scbuild.Dependencies interface.
+func (s *TestState) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType) {
+	s.LogSideEffectf("increment telemetry for sql.udts.%s", counterType)
 }
 
 var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
