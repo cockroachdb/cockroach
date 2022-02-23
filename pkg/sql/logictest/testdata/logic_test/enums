@@ -704,6 +704,13 @@ DROP INDEX sc@i3
 statement ok
 DROP TABLE sc
 
+# Temporary disable declarative schema changer, since something shifts
+# the timing below to increase likelihood of transaction retries. Since we
+# are executing a select a result set is already sent to the client, so an
+# automatic retry isn't possible.
+statement ok
+SET use_declarative_schema_changer = 'off';
+
 statement ok
 BEGIN;
 CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
@@ -731,6 +738,9 @@ DROP INDEX sc@i1;
 DROP INDEX sc@i2;
 DROP INDEX sc@i3;
 COMMIT
+
+statement ok
+SET use_declarative_schema_changer = 'on';
 
 # Ensure that we can create an index on a table and type created in
 # the same transaction.
@@ -899,6 +909,13 @@ hello 1 howdy hi true
 statement ok
 DROP TABLE column_add
 
+# Temporary disable declarative schema changer, since something shifts
+# the timing below to increase likelihood of transaction retries. Since we
+# are executing a select a result set is already sent to the client, so an
+# automatic retry isn't possible.
+statement ok
+SET use_declarative_schema_changer = 'off';
+
 statement ok
 BEGIN;
 CREATE TABLE column_add (x greeting);
@@ -915,6 +932,9 @@ hello 1 howdy hi true
 
 statement ok
 COMMIT
+
+statement ok
+SET use_declarative_schema_changer = 'on';
 
 # Lastly, ensure that we can create a column using a type created in the
 # same transaction.
