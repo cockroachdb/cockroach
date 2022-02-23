@@ -247,7 +247,7 @@ func parseGeoHash(g string, precision int) (geohash.Box, error) {
 	}
 	box, err := geohash.Decode(g[:precision])
 	if err != nil {
-		return geohash.Box{}, err
+		return geohash.Box{}, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid GeoHash")
 	}
 	return box, nil
 }
