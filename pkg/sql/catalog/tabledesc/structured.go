@@ -2523,6 +2523,45 @@ func (desc *wrapper) GetExcludeDataFromBackup() bool {
 	return desc.ExcludeDataFromBackup
 }
 
+// GetStorageParams implements the TableDescriptor interface.
+func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
+	var storageParams []string
+	var spacing string
+	if spaceBetweenEqual {
+		spacing = ` `
+	}
+	appendStorageParam := func(key, value string) {
+		storageParams = append(storageParams, key+spacing+`=`+spacing+value)
+	}
+	if ttl := desc.GetRowLevelTTL(); ttl != nil {
+		appendStorageParam(`ttl`, `'on'`)
+		appendStorageParam(`ttl_automatic_column`, `'on'`)
+		appendStorageParam(`ttl_expire_after`, string(ttl.DurationExpr))
+		if bs := ttl.SelectBatchSize; bs != 0 {
+			appendStorageParam(`ttl_select_batch_size`, fmt.Sprintf(`%d`, bs))
+		}
+		if bs := ttl.DeleteBatchSize; bs != 0 {
+			appendStorageParam(`ttl_delete_batch_size`, fmt.Sprintf(`%d`, bs))
+		}
+		if cron := ttl.DeletionCron; cron != "" {
+			appendStorageParam(`ttl_job_cron`, fmt.Sprintf(`'%s'`, cron))
+		}
+		if rc := ttl.RangeConcurrency; rc != 0 {
+			appendStorageParam(`ttl_range_concurrency`, fmt.Sprintf(`%d`, rc))
+		}
+		if rl := ttl.DeleteRateLimit; rl != 0 {
+			appendStorageParam(`ttl_delete_rate_limit`, fmt.Sprintf(`%d`, rl))
+		}
+		if pause := ttl.Pause; pause {
+			appendStorageParam(`ttl_pause`, fmt.Sprintf(`%t`, pause))
+		}
+	}
+	if exclude := desc.GetExcludeDataFromBackup(); exclude {
+		appendStorageParam(`exclude_data_from_backup`, `true`)
+	}
+	return storageParams
+}
+
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"
 // dependency on the multi-region enum. An implicit dependency exists for
 // REGIONAL BY TABLE table's which are homed in an explicit region
