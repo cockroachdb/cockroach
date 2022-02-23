@@ -20,12 +20,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -86,19 +84,6 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
-// CanUseExperimentalMVCCRangeTombstones returns true if MVCC range tombstones
-// are enabled. Callers must check this before using range tombstones.
-//
-// These are EXPERIMENTAL: range tombstones are under active
-// development, and have severe limitations including being ignored by all
-// KV and MVCC APIs and only being stored in memory.
-func CanUseExperimentalMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	// TODO(erikgrinaker): Consider using a cluster setting rather than an
-	// environment variable once range tombstones are fully implemented.
-	return st.Version.IsActive(ctx, clusterversion.ExperimentalMVCCRangeTombstones) &&
-		envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_MVCC_RANGE_TOMBSTONES", false)
-}
-
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
@@ -111,12 +96,6 @@ func emptyKeyError() error {
 // MVCCKeyValue contains the raw bytes of the value for a key.
 type MVCCKeyValue struct {
 	Key   MVCCKey
-	Value []byte
-}
-
-// MVCCRangeKeyValue represents a ranged key/value pair.
-type MVCCRangeKeyValue struct {
-	Key   MVCCRangeKey
 	Value []byte
 }
 
@@ -1967,8 +1946,6 @@ func MVCCMerge(
 //
 // If the underlying iterator encounters an intent with a timestamp in the span
 // (startTime, endTime], or any inline meta, this method will return an error.
-//
-// TODO(erikgrinaker): This should clear any range keys as well.
 func MVCCClearTimeRange(
 	_ context.Context,
 	rw ReadWriter,
@@ -2225,39 +2202,6 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
-// ExperimentalMVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at
-// the given timestamp using a range tombstone (rather than point tombstones).
-// This operation is non-transactional, but will check for existing intents and
-// return a WriteIntentError containing up to maxIntents intents.
-//
-// This method is EXPERIMENTAL: range keys are under active development, and
-// have severe limitations including being ignored by all KV and MVCC APIs and
-// only being stored in memory.
-func ExperimentalMVCCDeleteRangeUsingTombstone(
-	ctx context.Context,
-	rw ReadWriter,
-	ms *enginepb.MVCCStats,
-	startKey, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
-	maxIntents int64,
-) error {
-	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
-		return err
-	} else if len(intents) > 0 {
-		return &roachpb.WriteIntentError{Intents: intents}
-	}
-	return experimentalMVCCDeleteRangeUsingTombstoneInternal(ctx, rw, ms, MVCCRangeKey{
-		StartKey: startKey, EndKey: endKey, Timestamp: timestamp})
-}
-
-// TODO(erikgrinaker): Needs handling of conflicts (e.g. WriteTooOldError),
-// MVCCStats, and tests.
-func experimentalMVCCDeleteRangeUsingTombstoneInternal(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, rangeKey MVCCRangeKey,
-) error {
-	return rw.ExperimentalPutMVCCRangeKey(rangeKey, nil)
-}
-
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 	stats := iteratorStats.Stats
 	if traceSpan != nil {
@@ -2272,222 +2216,6 @@ func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 			NumInternalSteps:  uint64(internalSteps),
 		})
 	}
-}
-
-// ExperimentalMVCCRevertRange will revert a range back to its state as of some
-// past timestamp, writing tombstones or key updates as appropriate at the given
-// write timestamp. Long runs of key deletions will be written using MVCC range
-// tombstones.
-//
-// This function cannot be used in a transaction. However, it will scan for
-// existing intents and return a WriteIntentError, and scan for newer writes
-// and return WriteTooOldError.
-//
-// This function is EXPERIMENTAL. Range tombstones are not supported throughout
-// the MVCC API, and the on-disk format is unstable.
-//
-// TODO(erikgrinaker): Handle range keys.
-func ExperimentalMVCCRevertRange(
-	ctx context.Context,
-	rw ReadWriter,
-	ms *enginepb.MVCCStats,
-	startKey, endKey roachpb.Key,
-	writeTimestamp hlc.Timestamp,
-	revertTimestamp hlc.Timestamp,
-	deleteRangeThreshold int,
-	maxBatchSize int64,
-	maxBatchBytes int64,
-	maxIntents int64,
-) (*roachpb.Span, error) {
-	// We must resolve any intents within the span, so we may as well scan for
-	// separated intents before doing any work.
-	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
-		return nil, err
-	} else if len(intents) > 0 {
-		return nil, &roachpb.WriteIntentError{Intents: intents}
-	}
-
-	// We accumulate point deletes in deleteBuf until we either reach
-	// deleteRangeThreshold and switch to using a range deletion tombstone
-	// anchored at deleteRangeStart, or until we hit a visible key at which
-	// point we flush the deleteBuf as point deletes.
-	var deleteRangeStart roachpb.Key
-	var deleteBuf []roachpb.Key
-	var deleteBufIdx int
-	var deleteBufBytes int64
-	if deleteRangeThreshold > 1 {
-		deleteBuf = make([]roachpb.Key, deleteRangeThreshold-1)
-	}
-
-	putBuf := newPutBuffer()
-	defer putBuf.release()
-
-	var batchSize, batchBytes int64
-
-	flushDeletes := func(nonMatch roachpb.Key) error {
-		if len(deleteRangeStart) > 0 {
-			err := experimentalMVCCDeleteRangeUsingTombstoneInternal(ctx, rw, ms, MVCCRangeKey{
-				StartKey: deleteRangeStart, EndKey: nonMatch, Timestamp: writeTimestamp})
-			deleteRangeStart = nil
-			batchBytes += int64(encodedMVCCKeyLength(MVCCKey{Key: nonMatch})) // account for end key
-			return err
-		}
-
-		if deleteBufIdx > 0 {
-			iter := newMVCCIterator(rw, false, IterOptions{Prefix: true})
-			defer iter.Close()
-			for i := 0; i < deleteBufIdx; i++ {
-				err := mvccPutInternal(
-					ctx, rw, iter, ms, deleteBuf[i], writeTimestamp, nil, nil, putBuf, nil)
-				if err != nil {
-					return err
-				}
-			}
-			deleteBufIdx = 0
-			deleteBufBytes = 0
-		}
-		return nil
-	}
-
-	revert := func(k roachpb.Key, v []byte) (*roachpb.Key, error) {
-		// For non-deletions, we have to flush any pending deletes first. This may also
-		// flush a range tombstone, which will add to batchBytes.
-		if len(v) > 0 {
-			if err := flushDeletes(k); err != nil {
-				return nil, err
-			}
-		}
-
-		// If the batch is full, return a resume key after flushing any deletes.
-		if batchSize >= maxBatchSize || batchBytes >= maxBatchBytes {
-			err := flushDeletes(k)
-			return &k, err
-		}
-		bytes := int64(encodedMVCCKeyLength(MVCCKey{Key: k, Timestamp: writeTimestamp}) + len(v))
-
-		if len(v) > 0 || len(deleteBuf) == 0 {
-			batchSize++
-			batchBytes += bytes
-			iter := newMVCCIterator(rw, false, IterOptions{Prefix: true})
-			defer iter.Close()
-			return nil, mvccPutInternal(ctx, rw, iter, ms, k, writeTimestamp, v, nil, putBuf, nil)
-
-		} else if len(deleteRangeStart) == 0 {
-			// We're currently buffering point deletions.
-			if deleteBufIdx < len(deleteBuf) {
-				deleteBuf[deleteBufIdx] = append(deleteBuf[deleteBufIdx][:0], k...)
-				deleteBufIdx++
-				deleteBufBytes += bytes
-				batchSize++
-				batchBytes += bytes
-			} else {
-				// Buffer is full -- switch to tracking the start of the range delete. We
-				// remove the buffered keys from the batch size, and instead only track
-				// the range key.
-				batchSize -= int64(deleteBufIdx) - 1 // -1 accounts for the range key
-				batchBytes -= deleteBufBytes -
-					int64(encodedMVCCKeyLength(MVCCKey{Key: deleteBuf[0], Timestamp: writeTimestamp}))
-				deleteRangeStart = deleteBuf[0]
-				deleteBufIdx = 0
-				deleteBufBytes = 0
-			}
-		}
-		return nil, nil
-	}
-
-	// We set up an incremental iterator from the revert time to look for any
-	// changes that need to be reverted. However, we also need to inspect older
-	// values to e.g. find the value to revert to or make sure we don't drop range
-	// tombstones across them -- we do this by using the IgnoringTime() methods on
-	// the MVCCIncrementalIterator.
-	iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
-		EnableTimeBoundIteratorOptimization: true,
-		EndKey:                              endKey,
-		StartTime:                           revertTimestamp,
-		EndTime:                             writeTimestamp, // puts will error on any newer versions
-	})
-	defer iter.Close()
-
-	// TODO(erikgrinaker): Consider rewriting the below to iterate over keys and
-	// versions separately, which might make the logic clearer. Also consider
-	// using a struct to manage the deletion state.
-	var revertKey roachpb.Key
-	var revertValue, revertValueFrom []byte
-	iter.SeekGE(MVCCKey{Key: startKey})
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-
-		key := iter.UnsafeKey()
-
-		if key.Timestamp.IsEmpty() {
-			return nil, errors.Errorf("encountered inline key %s", key)
-		}
-
-		// If a key was scheduled for reversion, revert it when the key changes,
-		// but only if the original value differs from the latest value.
-		if len(revertKey) > 0 && !revertKey.Equal(key.Key) {
-			if !bytes.Equal(revertValue, revertValueFrom) {
-				if resumeKey, err := revert(revertKey, revertValue); err != nil || resumeKey != nil {
-					return &roachpb.Span{Key: *resumeKey, EndKey: endKey}, err
-				}
-			}
-			revertKey, revertValue, revertValueFrom = nil, nil, nil // TODO(erikgrinaker): reuse slices
-		}
-
-		if revertTimestamp.Less(key.Timestamp) {
-			// Schedule this key for reversion.
-			if len(revertKey) == 0 {
-				// TODO(erikgrinaker): reuse byte slices
-				revertKey = key.Key.Clone()
-				revertValueFrom = append([]byte(nil), iter.Value()...)
-			}
-
-			// Move the iterator to the next key, even if <= resumeTimestamp. If it
-			// finds an old version of this key, it will set the value to revert to.
-			iter.NextIgnoringTime()
-
-		} else if bytes.Equal(revertKey, key.Key) {
-			// This is the version of revertKey that we should revert back to. If it
-			// is visible we can move to the next TBI key, because it's going to flush
-			// any pending deletes. However, if it's a tombstone we have to move to
-			// the next key even if it's outside of the TBI bounds to see if it's
-			// visible and avoid dropping a range tombstone across it.
-			revertValue = append([]byte(nil), iter.Value()...)
-			if len(revertValue) > 0 {
-				iter.Next()
-			} else {
-				iter.NextKeyIgnoringTime()
-			}
-
-		} else if len(iter.Value()) > 0 {
-			// This is a different visible key at or below the revert timestamp. We
-			// have to flush any deletes up to here to avoid dropping a range
-			// tombstone across it.
-			if err := flushDeletes(key.Key); err != nil {
-				return nil, err
-			}
-			iter.Next()
-
-		} else {
-			// This is a tombstone for a different key. We have to move to the next
-			// key (ignoring TBI) to check whether it could be a visible key outside
-			// of the time bounds -- if it is, we don't want to drop a range tombstone
-			// across it.
-			iter.NextKeyIgnoringTime()
-		}
-	}
-
-	// Handle a revert at the very end of the iteration.
-	if len(revertKey) > 0 && !bytes.Equal(revertValue, revertValueFrom) {
-		if resumeKey, err := revert(revertKey, revertValue); err != nil || resumeKey != nil {
-			return &roachpb.Span{Key: *resumeKey, EndKey: endKey}, err
-		}
-	}
-	return nil, flushDeletes(endKey)
 }
 
 func mvccScanToBytes(
