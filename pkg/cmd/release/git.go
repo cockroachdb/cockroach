@@ -31,6 +31,19 @@ type releaseInfo struct {
 	releaseSeries string
 }
 
+// findNextVersion returns the next release version for given releaseSeries.
+func findNextVersion(releaseSeries string) (string, error) {
+	prevReleaseVersion, err := findPreviousRelease(releaseSeries)
+	if err != nil {
+		return "", fmt.Errorf("cannot find previous release: %w", err)
+	}
+	nextReleaseVersion, err := bumpVersion(prevReleaseVersion)
+	if err != nil {
+		return "", fmt.Errorf("cannot bump version: %w", err)
+	}
+	return nextReleaseVersion, nil
+}
+
 // findNextRelease finds all required information for the next release.
 func findNextRelease(releaseSeries string) (releaseInfo, error) {
 	prevReleaseVersion, err := findPreviousRelease(releaseSeries)
