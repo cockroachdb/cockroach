@@ -292,7 +292,7 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
 	max(128, int64(8*runtime.GOMAXPROCS(0))),
-	settings.NonNegativeInt,
+	settings.PositiveInt,
 )
 
 func max(a, b int64) int64 {
@@ -822,7 +822,13 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 
-		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, avgResponseSize)
+		// Now check how many requests we can issue.
+		maxNumRequestsToIssue, shouldExit := w.getMaxNumRequestsToIssue(ctx)
+		if shouldExit {
+			return
+		}
+
+		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, maxNumRequestsToIssue, avgResponseSize)
 		if err != nil {
 			w.s.setError(err)
 			return
@@ -914,6 +920,48 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 	return false
 }
 
+// getMaxNumRequestsToIssue returns the maximum number of new async requests the
+// worker coordinator can issue without exceeding streamerConcurrencyLimit
+// limit. It blocks until at least one request can be issued.
+//
+// This behavior is needed to ensure that the creation of a new async task in
+// performRequestAsync doesn't block on w.asyncSem. If it did block, then we
+// could get into a deadlock because the main goroutine of the worker
+// coordinator is holding the budget's mutex waiting for quota to open up while
+// all asynchronous requests that could free up that quota would block on
+// attempting to acquire the budget's mutex.
+//
+// A boolean that indicates whether the coordinator should exit is also
+// returned.
+func (w *workerCoordinator) getMaxNumRequestsToIssue(ctx context.Context) (_ int, shouldExit bool) {
+	// Start with the approximate quota and attempt to acquire it without
+	// blocking. If an attempt fails, cut the quota in half until it gets to
+	// zero.
+	//
+	// Note that the current goroutine (the worker coordinator goroutine) is the
+	// only one that acquires quota from the semaphore, it is safe to release
+	// the allocations right away - concurrently, only other alloc.Release()
+	// calls can occur (when async requests are finished).
+	q := w.asyncSem.ApproximateQuota()
+	for q > 0 {
+		alloc, err := w.asyncSem.TryAcquire(ctx, q)
+		if err == nil {
+			alloc.Release()
+			return int(q), false
+		}
+		q = q / 2
+	}
+	// If we've gotten to this point, then the whole limit is used, so we
+	// blockingly acquire a quota of 1.
+	alloc, err := w.asyncSem.Acquire(ctx, 1)
+	if err != nil {
+		w.s.setError(err)
+		return 0, true
+	}
+	alloc.Release()
+	return 1, false
+}
+
 // issueRequestsForAsyncProcessing iterates over the given requests and issues
 // them to be served asynchronously while there is enough budget available to
 // receive the responses. Once the budget is exhausted, no new requests are
@@ -921,12 +969,19 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 // progress (both requests in flight as well as unreleased results), and in that
 // scenario, a single request will be issued.
 //
+// maxNumRequestsToIssue specifies the maximum number of requests that can be
+// issued as part of this call. The caller guarantees that w.asyncSem has at
+// least that much quota available.
+//
 // It is assumed that requestsToServe is a prefix of w.s.mu.requestsToServe
 // (i.e. it is possible that some other requests have been appended to
 // w.s.mu.requestsToServe after requestsToServe have been grabbed). All issued
 // requests are removed from w.s.mu.requestToServe.
 func (w *workerCoordinator) issueRequestsForAsyncProcessing(
-	ctx context.Context, requestsToServe []singleRangeBatch, avgResponseSize int64,
+	ctx context.Context,
+	requestsToServe []singleRangeBatch,
+	maxNumRequestsToIssue int,
+	avgResponseSize int64,
 ) error {
 	var numRequestsIssued int
 	defer func() {
@@ -950,7 +1005,7 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
-	for numRequestsIssued < len(requestsToServe) && !budgetIsExhausted {
+	for numRequestsIssued < len(requestsToServe) && numRequestsIssued < maxNumRequestsToIssue && !budgetIsExhausted {
 		singleRangeReqs := requestsToServe[numRequestsIssued]
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minAcceptableBudget is the minimum TargetBytes limit with which it
@@ -1103,6 +1158,9 @@ const AsyncRequestOp = "streamer-lookup-async"
 // memory limitBytes), the "resume" single-range batch will be added into
 // requestsToServe, and mainLoop will pick that up to process later.
 //
+// The caller is responsible for ensuring that there is enough quota in
+// w.asyncSem to spin up a new goroutine for this request.
+//
 // targetBytes specifies the memory budget that this single-range batch should
 // be issued with. targetBytes bytes have already been consumed from the budget,
 // and this amount of memory is owned by the goroutine that is spun up to
@@ -1125,10 +1183,11 @@ func (w *workerCoordinator) performRequestAsync(
 	if err := w.s.stopper.RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
-			TaskName:   AsyncRequestOp,
-			SpanOpt:    stop.ChildSpan,
-			Sem:        w.asyncSem,
-			WaitForSem: true,
+			TaskName: AsyncRequestOp,
+			SpanOpt:  stop.ChildSpan,
+			// Note that we don't wait for the semaphore since it's the caller's
+			// responsibility to ensure that a new goroutine can be spun up.
+			Sem: w.asyncSem,
 		},
 		func(ctx context.Context) {
 			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
