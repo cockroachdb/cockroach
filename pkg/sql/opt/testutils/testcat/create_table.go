@@ -1048,10 +1048,20 @@ func (ti *Index) addColumn(
 
 // columnForIndexElemExpr returns a VirtualComputed table column that can be
 // used as an index column when the index element is an expression. If an
-// existing VirtualComputed column with the same expression exists, it is
-// reused. Otherwise, a new column is added to the table.
+// existing, inaccessible, VirtualComputed column with the same expression
+// exists, it is reused. Otherwise, a new column is added to the table.
 func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	exprStr := serializeTableDefExpr(expr)
+
+	// Find an existing, inaccessible, virtual computed column with the same
+	// expression.
+	for _, col := range tt.Columns {
+		if col.IsVirtualComputed() &&
+			col.Visibility() == cat.Inaccessible &&
+			col.ComputedExprStr() == exprStr {
+			return col
+		}
+	}
 
 	// Add a new virtual computed column with a unique name.
 	prefix := "crdb_internal_idx_expr"
