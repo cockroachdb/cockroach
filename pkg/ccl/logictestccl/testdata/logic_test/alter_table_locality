@@ -2616,9 +2616,6 @@ TABLE rbt_table_gc_ttl  ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING
                         lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE hash_sharded_idx_table (
   pk INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 )
