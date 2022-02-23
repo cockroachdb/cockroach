@@ -205,7 +205,7 @@ t  CREATE TABLE public.t (
    z INT8 NOT NULL,
    w INT8 NULL,
    v JSONB NULL,
-   crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) VIRTUAL,
+   crdb_internal_z_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    UNIQUE INDEX i3 (z ASC) STORING (y),
    UNIQUE INDEX t_x_key (x ASC),
@@ -359,8 +359,8 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
-   crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
-   crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
+   crdb_internal_z_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
+   crdb_internal_y_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10),
    UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
@@ -416,7 +416,7 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 5:::INT8)) VIRTUAL,
+   crdb_internal_x_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 5:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
@@ -544,7 +544,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
+   crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
 )
 
@@ -933,9 +933,9 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
+   crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
-   crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
+   crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
 )
 
@@ -950,10 +950,10 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
+   crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
+   crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
    UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
    FAMILY fam_0_x_y (x, y)
@@ -1383,7 +1383,7 @@ SELECT @2 FROM [SHOW CREATE TABLE t_test_param]
 CREATE TABLE public.t_test_param (
    a INT8 NOT NULL,
    b INT8 NOT NULL,
-   crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+   crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
    CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
    UNIQUE INDEX t_test_param_a_key (a ASC),
    FAMILY fam_0_a_b (a, b)
