@@ -286,6 +286,7 @@ func (ts *txnState) setHistoricalTimestamp(
 	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
 		return err
 	}
+	ts.sqlTimestamp = historicalTimestamp.GoTime()
 	ts.isHistorical = true
 	return nil
 }
