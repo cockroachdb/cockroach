@@ -160,7 +160,6 @@ go_library(
         "//pkg/spanconfig/spanconfigsqlwatcher",
         "//pkg/sql",
         "//pkg/sql/cacheutil",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",

@@ -525,3 +525,13 @@ var MaxPseudoTableID = func() uint32 {
 	}
 	return max
 }()
+
+// IsPseudoTableID returns true if id is in PseudoTableIDs.
+func IsPseudoTableID(id uint32) bool {
+	for _, pseudoTableID := range PseudoTableIDs {
+		if id == pseudoTableID {
+			return true
+		}
+	}
+	return false
+}
