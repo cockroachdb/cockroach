@@ -402,33 +402,17 @@ message ClearRangeResponse {
 }
 
 
-// A RevertRangeRequest specifies a range of keys to revert to some past time.
-// By default, it will clear all revision more recent that TargetTime from the
-// underlying engine. However, this violates several guarantees including MVCC
-// immutability, the closed timestamp, timestamp cache, and others. See the
-// ExperimentalPreserveHistory parameter which will uphold these guarantees.
+// A RevertRangeRequest specifies a range of keys in which to clear all MVCC
+// revisions more recent than some TargetTime from the underlying engine, thus
+// reverting the range (from the perspective of an MVCC scan) to that time.
 message RevertRangeRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // TargetTime specifies a the time to which to "revert" the range to. Any
-  // versions later than TargetTime will be undone. TargetTime must be higher
+  // TargetTime specifies a the time to which to "revert" the range by clearing
+  // any MVCC key with a strictly higher timestamp. TargetTime must be higher
   // than the GC Threshold for the replica - so that it is assured that the keys
   // for that time are still there — or the request will fail.
   util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
-
-  // ExperimentalPreserveHistory will preserve MVCC history by, rather than
-  // clearing newer versions, deleting them using tombstones or updating them
-  // back to their original value as of the target time. Long runs of key
-  // deletions will use an MVCC range tombstone instead. This respects the
-  // closed timestamp and timestamp cache.
-  //
-  // The caller must check storage.CanUseExperimentalMVCCRangeTombstones()
-  // before enabling this parameter.
-  //
-  // This parameter is EXPERIMENTAL: range tombstones are under active
-  // development, and have severe limitations including being ignored by all
-  // KV and MVCC APIs and only being stored in memory.
-  bool experimental_preserve_history = 5;
 
   bool enable_time_bound_iterator_optimization = 3;
 
