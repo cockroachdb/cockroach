@@ -176,6 +176,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
 			pa1Key := roachpb.Key(pa1)
 			pa2Key := roachpb.Key(pa2)
+			frontierSpec.StreamAddress = spec.StreamAddress
 			frontierSpec.TrackedSpans = []roachpb.Span{{Key: pa1Key, EndKey: pa1Key.Next()}, {Key: pa2Key,
 				EndKey: pa2Key.Next()}}
 

@@ -394,7 +394,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 
 func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 	const defaultInitialScanParallelism = 16
-	const defaultMinCheckpointFrequency = time.Minute
+	const defaultMinCheckpointFrequency = 10 * time.Second
 	const defaultBatchSize = 1 << 20
 
 	if cfg.InitialScanParallelism <= 0 {
