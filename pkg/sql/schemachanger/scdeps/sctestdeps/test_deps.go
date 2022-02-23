@@ -1032,3 +1032,15 @@ func (s *TestState) DescriptorMetadataUpdater(
 ) scexec.DescriptorMetadataUpdater {
 	return s
 }
+
+// IsTableEmpty implement scbuild.TableReader.
+func (s *TestState) IsTableEmpty(
+	ctx context.Context, id descpb.ID, primaryIndexID descpb.IndexID,
+) bool {
+	return true
+}
+
+// TableReader implement scexec.Dependencies.
+func (s *TestState) TableReader() scbuild.TableReader {
+	return s
+}

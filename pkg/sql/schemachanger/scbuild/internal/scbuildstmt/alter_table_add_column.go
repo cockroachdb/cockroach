@@ -125,6 +125,11 @@ func alterTableAddColumn(
 			Expression: *b.WrapExpression(cdd.DefaultExpr),
 		}
 	}
+	// We're checking to see if a user is trying add a non-nullable column without a default to a
+	// non-empty table by scanning the primary index span with a limit of 1 to see if any key exists.
+	if !desc.Nullable && !desc.HasDefault() && !desc.IsComputed() && !b.IsTableEmpty(tbl) {
+		panic(sqlerrors.NewNonNullViolationError(d.Name.String()))
+	}
 	if desc.HasOnUpdate() {
 		spec.onUpdate = &scpb.ColumnOnUpdateExpression{
 			TableID:    tbl.TableID,
