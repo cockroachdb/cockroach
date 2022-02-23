@@ -476,6 +476,48 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestUniqueViolationsAreCaught(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	readyToMerge := make(chan struct{})
+	startMerge := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeTempIndexMerge: func() {
+				close(readyToMerge)
+				<-startMerge
+			},
+		},
+	}
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.Background())
+
+	_, err := sqlDB.Exec(`CREATE DATABASE t;
+CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
+INSERT INTO t.test VALUES (1,1), (2,2), (3,3)
+`)
+	require.NoError(t, err)
+	grp := ctxgroup.WithContext(context.Background())
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := sqlDB.Exec(`CREATE UNIQUE INDEX ON t.test (v)`)
+		return err
+	})
+
+	<-readyToMerge
+	// This conflicts with the new index but doesn't conflict with
+	// the online indexes. It should produce a failure on
+	// validation.
+	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (4, 1), (5, 2)`)
+	require.NoError(t, err)
+
+	close(startMerge)
+	err = grp.Wait()
+	require.Error(t, err)
+}
+
 // Test schema change backfills are not affected by various operations
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
