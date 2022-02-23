@@ -126,6 +126,7 @@ close_cursor_stmt ::=
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_role_stmt
+	| alter_tenant_csetting_stmt
 
 backup_stmt ::=
 	'BACKUP' opt_backup_targets 'INTO' sconst_or_placeholder 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
@@ -409,6 +410,12 @@ alter_role_stmt ::=
 	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
 	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
 
+alter_tenant_csetting_stmt ::=
+	'ALTER' 'TENANT' iconst64 'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value
+	| 'ALTER' 'TENANT' 'ALL' 'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value
+	| 'ALTER' 'TENANT' iconst64 'RESET' 'CLUSTER' 'SETTING' var_name
+	| 'ALTER' 'TENANT' 'ALL' 'RESET' 'CLUSTER' 'SETTING' var_name
+
 opt_backup_targets ::=
 	targets
 
@@ -668,6 +675,10 @@ show_csettings_stmt ::=
 	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
 	| 'SHOW' 'CLUSTER' 'SETTINGS'
 	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS'
+	| 'SHOW' 'CLUSTER' 'SETTING' var_name 'FOR' 'TENANT' iconst64
+	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
+	| 'SHOW' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
+	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
 
 show_databases_stmt ::=
 	'SHOW' 'DATABASES' with_comment
@@ -1406,6 +1417,18 @@ set_or_reset_clause ::=
 	| 'RESET_ALL' 'ALL'
 	| 'RESET' session_var
 
+var_name ::=
+	name
+	| name attrs
+
+to_or_eq ::=
+	'='
+	| 'TO'
+
+var_value ::=
+	a_expr
+	| extra_var_value
+
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
@@ -1576,10 +1599,6 @@ session_var ::=
 	| 'LC_CTYPE'
 	| 'TIME' 'ZONE'
 
-var_name ::=
-	name
-	| name attrs
-
 restore_options_list ::=
 	( restore_options ) ( ( ',' restore_options ) )*
 
@@ -1620,14 +1639,6 @@ set_rest_more ::=
 
 set_rest ::=
 	generic_set
-
-to_or_eq ::=
-	'='
-	| 'TO'
-
-var_value ::=
-	a_expr
-	| extra_var_value
 
 with_comment ::=
 	'WITH' 'COMMENT'
@@ -1889,6 +1900,13 @@ alter_changefeed_cmds ::=
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
+attrs ::=
+	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
+
+extra_var_value ::=
+	'ON'
+	| cockroachdb_extra_reserved_keyword
+
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'REVISION_HISTORY'
@@ -2123,9 +2141,6 @@ column_name ::=
 session_var_parts ::=
 	( '.' 'identifier' ) ( ( '.' 'identifier' ) )*
 
-attrs ::=
-	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
-
 restore_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'KMS' '=' string_or_placeholder_opt_list
@@ -2168,10 +2183,6 @@ offset_clause ::=
 
 generic_set ::=
 	var_name to_or_eq var_list
-
-extra_var_value ::=
-	'ON'
-	| cockroachdb_extra_reserved_keyword
 
 targets_roles ::=
 	'ROLE' role_spec_list

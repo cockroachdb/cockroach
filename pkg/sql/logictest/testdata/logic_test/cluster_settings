@@ -22,6 +22,9 @@ SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
 statement ok
 SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'
 
+statement ok
+RESET CLUSTER SETTING sql.conn.max_read_buffer_message_size
+
 # Test permissions for modifying cluster settings.
 
 user testuser
@@ -116,3 +119,35 @@ SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
 onlyif config 3node-tenant
 statement error unknown setting
 SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+
+subtest tenant-cluster-settings
+statement error unimplemented
+ALTER TENANT 10 SET CLUSTER SETTING admission.kv.enabled=true
+
+statement error unimplemented
+ALTER TENANT ALL SET CLUSTER SETTING admission.kv.enabled=true
+
+statement error unimplemented
+ALTER TENANT 10 RESET CLUSTER SETTING admission.kv.enabled
+
+statement error unimplemented
+ALTER TENANT ALL RESET CLUSTER SETTING admission.kv.enabled
+
+statement error pq: at or near "EOF": syntax error: invalid tenant ID
+ALTER TENANT 0 SET CLUSTER SETTING admission.kv.enabled=true
+
+statement error pq: at or near "EOF": syntax error: invalid tenant ID
+ALTER TENANT 0 RESET CLUSTER SETTING admission.kv.enabled
+
+statement error unimplemented
+SHOW CLUSTER SETTING admission.kv.enabled FOR TENANT 10
+
+statement error unimplemented
+SHOW CLUSTER SETTINGS FOR TENANT 10
+
+statement error unimplemented
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT 10
+
+statement error unimplemented
+SHOW ALL CLUSTER SETTINGS FOR TENANT 10
+
