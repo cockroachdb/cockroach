@@ -402,6 +402,27 @@ CREATE TABLE ttl_become_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table 
 statement error foreign keys to/from table with TTL "ttl_become_table" are not permitted
 ALTER TABLE ttl_become_table SET (ttl_expire_after = '10 minutes')
 
+# Check non-ascending PKs are not permitted.
+
+statement ok
+DROP TABLE tbl
+
+statement error non-ascending ordering on PRIMARY KEYs are not supported
+CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text DESC)) WITH (ttl_expire_after = '10 minutes')
+
+statement ok
+CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text DESC))
+
+statement error non-ascending ordering on PRIMARY KEYs are not supported
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
+
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text)) WITH (ttl_expire_after = '10 minutes')
+
+statement error non-ascending ordering on PRIMARY KEYs are not supported
+ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (id, text DESC)
+
 # Create a table without a TTL. Add the TTL to the table and ensure
 # the schedule and TTL is setup correctly.
 statement ok
@@ -422,7 +443,6 @@ ALTER TABLE tbl RESET (ttl_select_batch_size)
 
 statement ok
 ROLLBACK
-
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN;

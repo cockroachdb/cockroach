@@ -244,7 +244,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var initialVersion descpb.DescriptorVersion
 
 	// TODO(#75428): feature flag check, ttl pause check.
-	// TODO(#75428): only allow ascending order PKs for now schema side.
 	var ttlSettings catpb.RowLevelTTL
 	var pkColumns []string
 	var pkTypes []*types.T
