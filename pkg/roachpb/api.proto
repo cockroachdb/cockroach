@@ -1665,7 +1665,9 @@ message AddSSTableRequest {
   //
   // Callers should always set this, except in very special circumstances when
   // the timestamp cache and closed timestamp can safely be ignored (e.g.
-  // streaming replication into an offline tenant).
+  // streaming replication into an offline tenant). As of the cluster version
+  // AddSSTableRequireAtRequestTimestamp, this parameter is required, but the
+  // check can be circumvented via the corresponding cluster setting.
   //
   // Note that this alone is not sufficient to guarantee MVCC correctness, since
   // it can write below or replace existing committed versions (the tscache is

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -47,6 +48,16 @@ var AddSSTableRewriteConcurrency = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// AddSSTableRequireAtRequestTimestamp will reject any AddSSTable requests that
+// aren't sent with SSTTimestampToRequestTimestamp. Also requires the
+// corresponding cluster version gate to be active.
+var AddSSTableRequireAtRequestTimestamp = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.bulk_io_write.sst_require_at_request_timestamp",
+	"rejects addsstable requests that don't write at the request timestamp",
+	true,
+)
+
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
 func EvalAddSSTable(
@@ -64,6 +75,15 @@ func EvalAddSSTable(
 	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", start.Key, end.Key))
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
+
+	// Reject AddSSTable requests not writing at the request timestamp if requested.
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.AddSSTableRequireAtRequestTimestamp) &&
+		AddSSTableRequireAtRequestTimestamp.Get(&cArgs.EvalCtx.ClusterSettings().SV) &&
+		sstToReqTS.IsEmpty() {
+		return result.Result{}, errors.AssertionFailedf(
+			"AddSSTable requests must set SSTTimestampToRequestTimestamp")
+	}
 
 	// Under the race detector, check that the SST contents satisfy AddSSTable
 	// requirements. We don't always do this otherwise, due to the cost.

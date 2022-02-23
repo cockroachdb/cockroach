@@ -60,6 +60,7 @@ func TestEvalAddSSTable(t *testing.T) {
 		noConflict     bool  // DisallowConflicts
 		noShadow       bool  // DisallowShadowing
 		noShadowBelow  int64 // DisallowShadowingBelow
+		requireReqTS   bool  // AddSSTableRequireAtRequestTimestamp
 		expect         []sstutil.KV
 		expectErr      interface{} // error type, substring, substring slice, or true (any)
 		expectErrRace  interface{}
@@ -77,6 +78,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            []sstutil.KV{{"a", 2, "sst"}},
 			expect:         []sstutil.KV{{"a", 2, "sst"}},
 			expectStatsEst: true,
+		},
+		"blind errors on AddSSTableRequireAtRequestTimestamp": {
+			data:         []sstutil.KV{{"a", 5, "a5"}, {"b", 7, ""}},
+			sst:          []sstutil.KV{{"a", 3, "sst"}, {"b", 2, "sst"}},
+			requireReqTS: true,
+			expectErr:    "AddSSTable requests must set SSTTimestampToRequestTimestamp",
 		},
 		"blind returns WriteIntentError on conflict": {
 			data:      []sstutil.KV{{"b", intentTS, "b0"}},
@@ -652,6 +659,7 @@ func TestEvalAddSSTable(t *testing.T) {
 					ctx := context.Background()
 					st := cluster.MakeTestingClusterSettings()
 					batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
+					batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
 					dir := t.TempDir()
 					engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
@@ -843,6 +851,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			engine := storage.NewDefaultInMemForTesting()
 			defer engine.Close()
 			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
+			batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, false)
 
 			// Build and add SST.
 			sst, start, end := sstutil.MakeSST(t, st, tc.sst)
@@ -890,32 +899,43 @@ func TestDBAddSSTable(t *testing.T) {
 
 	t.Run("store=in-memory", func(t *testing.T) {
 		ctx := context.Background()
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+		st := cluster.MakeTestingClusterSettings()
+		s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			Insecure: true,
+			Settings: st,
+		})
 		defer s.Stopper().Stop(ctx)
 		tr := s.TracerI().(*tracing.Tracer)
-		runTestDBAddSSTable(ctx, t, db, tr, nil)
+		runTestDBAddSSTable(ctx, t, db, tr, st, nil)
 	})
 
 	t.Run("store=on-disk", func(t *testing.T) {
 		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
 		storeSpec := base.DefaultTestStoreSpec
 		storeSpec.InMemory = false
 		storeSpec.Path = t.TempDir()
 		s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			Insecure:   true,
+			Settings:   st,
 			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
 		defer s.Stopper().Stop(ctx)
 		tr := s.TracerI().(*tracing.Tracer)
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
-		runTestDBAddSSTable(ctx, t, db, tr, store)
+		runTestDBAddSSTable(ctx, t, db, tr, st, store)
 	})
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
 func runTestDBAddSSTable(
-	ctx context.Context, t *testing.T, db *kv.DB, tr *tracing.Tracer, store *kvserver.Store,
+	ctx context.Context,
+	t *testing.T,
+	db *kv.DB,
+	tr *tracing.Tracer,
+	st *cluster.Settings,
+	store *kvserver.Store,
 ) {
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	const ingestAsWrites, ingestAsSST = true, false
@@ -924,10 +944,11 @@ func runTestDBAddSSTable(
 	var allowShadowingBelow hlc.Timestamp
 	var nilStats *enginepb.MVCCStats
 	var noTS hlc.Timestamp
-	cs := cluster.MakeTestingClusterSettings()
+
+	batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, false)
 
 	{
-		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 2, "1"}})
+		sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{{"bb", 2, "1"}})
 
 		// Key is before the range in the request span.
 		err := db.AddSSTable(
@@ -969,7 +990,7 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 1, "2"}})
+		sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{{"bb", 1, "2"}})
 		require.NoError(t, db.AddSSTable(
 			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
 		r, err := db.Get(ctx, "bb")
@@ -983,7 +1004,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bc", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{{"bc", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -1019,7 +1040,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bd", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{{"bd", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -1055,7 +1076,7 @@ func runTestDBAddSSTable(
 		value.InitChecksum([]byte("foo"))
 
 		sstFile := &storage.MemFile{}
-		w := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
+		w := storage.MakeBackupSSTWriter(ctx, st, sstFile)
 		defer w.Close()
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
@@ -1075,6 +1096,8 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
+
+	batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, false)
 
 	dir := t.TempDir()
 	engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
@@ -1179,6 +1202,8 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
+
+	batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, false)
 
 	engine := storage.NewDefaultInMemForTesting()
 	defer engine.Close()
@@ -1299,7 +1324,10 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	st := cluster.MakeTestingClusterSettings()
+	batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, false)
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(ctx)
 
 	// Start a transaction that writes an intent at b.
@@ -1309,7 +1337,7 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst, start, end := sstutil.MakeSST(t, s.ClusterSettings(), []sstutil.KV{
+	sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{
 		{"a", 1, "1"},
 		{"b", 1, "2"},
 		{"c", 1, "3"},
