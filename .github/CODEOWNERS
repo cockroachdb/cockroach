@@ -46,6 +46,7 @@
 
 /pkg/sql/sessiondata/        @cockroachdb/sql-experience
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
+/pkg/sql/ttl                 @cockroachdb/sql-experience
 
 /pkg/ccl/schemachangerccl/   @cockroachdb/sql-schema
 /pkg/sql/catalog/            @cockroachdb/sql-schema
