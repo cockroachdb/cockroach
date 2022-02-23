@@ -30,6 +30,7 @@ import (
 func alterTableAddColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddColumn,
 ) {
+	b.IncrementSchemaChangeAlterCounter("table", "add_column")
 	d := t.ColumnDef
 	// Check column non-existence.
 	{
