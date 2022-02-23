@@ -56,10 +56,10 @@ tenants 111,112
 
 translate system-span-configurations
 ----
-{entire-keyspace}                          pts=[3]
-{source=1,target=111}                      pts=[3 4]
-{source=1,target=112}                      pts=[3 4]
-{source=1,target=113}                      pts=[4]
+{entire-keyspace}                          protection_policies=[{ts: 3}]
+{source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=113}                      protection_policies=[{ts: 4}]
 
 translate database=db
 ----
@@ -72,10 +72,10 @@ release record-id=1
 
 translate system-span-configurations
 ----
-{entire-keyspace}                          pts=[3]
-{source=1,target=111}                      pts=[3 4]
-{source=1,target=112}                      pts=[3 4]
-{source=1,target=113}                      pts=[4]
+{entire-keyspace}                          protection_policies=[{ts: 3}]
+{source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=113}                      protection_policies=[{ts: 4}]
 
 translate database=db
 ----
@@ -88,10 +88,10 @@ release record-id=2
 
 translate system-span-configurations
 ----
-{entire-keyspace}                          pts=[3]
-{source=1,target=111}                      pts=[3 4]
-{source=1,target=112}                      pts=[3 4]
-{source=1,target=113}                      pts=[4]
+{entire-keyspace}                          protection_policies=[{ts: 3}]
+{source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=113}                      protection_policies=[{ts: 4}]
 
 translate database=db
 ----
@@ -118,8 +118,8 @@ descs 106
 
 translate system-span-configurations
 ----
-{source=1,target=111}                      pts=[3]
-{source=1,target=112}                      pts=[3]
+{source=1,target=111}                      protection_policies=[{ts: 3}]
+{source=1,target=112}                      protection_policies=[{ts: 3}]
 
 translate database=db
 ----
