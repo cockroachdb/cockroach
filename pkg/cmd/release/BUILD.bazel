@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "release_lib",
@@ -6,10 +6,10 @@ go_library(
         "blockers.go",
         "git.go",
         "jira.go",
-        "mail.go",
         "main.go",
         "metadata.go",
         "pick_sha.go",
+        "sender.go",
         "templates.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
@@ -27,4 +27,15 @@ go_binary(
     name = "release",
     embed = [":release_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "release_test",
+    srcs = ["sender_test.go"],
+    data = glob([
+        "templates/**",
+        "testdata/**",
+    ]),
+    embed = [":release_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
