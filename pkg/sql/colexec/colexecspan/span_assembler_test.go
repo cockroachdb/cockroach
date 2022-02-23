@@ -104,9 +104,18 @@ func TestSpanAssembler(t *testing.T) {
 							builder.Init(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
 							splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
 
+							var fetchSpec descpb.IndexFetchSpec
+							if err := rowenc.InitIndexFetchSpec(
+								&fetchSpec, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex(), nil, /* fetchedColumnIDs */
+							); err != nil {
+								t.Fatal(err)
+							}
+
 							colBuilder := NewColSpanAssembler(
-								keys.TODOSQLCodec, testAllocator, testTable,
-								testTable.GetPrimaryIndex(), typs, neededColumns,
+								keys.TODOSQLCodec, testAllocator,
+								&fetchSpec,
+								splitter.FamilyIDs(),
+								typs,
 							)
 							defer func() {
 								colBuilder.Close()

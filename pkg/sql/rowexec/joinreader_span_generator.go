@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -64,7 +64,6 @@ var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
 type defaultSpanGenerator struct {
 	spanBuilder  span.Builder
 	spanSplitter span.Splitter
-	numKeyCols   int
 	lookupCols   []uint32
 
 	indexKeyRow rowenc.EncDatumRow
@@ -86,22 +85,25 @@ type defaultSpanGenerator struct {
 func (g *defaultSpanGenerator) init(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
-	table catalog.TableDescriptor,
-	index catalog.Index,
-	neededColOrdinals util.FastIntSet,
-	numKeyCols int,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
 	keyToInputRowIndices map[string][]int,
 	lookupCols []uint32,
 	memAcc *mon.BoundAccount,
-) {
-	g.spanBuilder.Init(evalCtx, codec, table, index)
-	g.spanSplitter = span.MakeSplitter(table, index, neededColOrdinals)
-	g.numKeyCols = numKeyCols
+) error {
+	g.spanBuilder.InitWithFetchSpec(evalCtx, codec, fetchSpec)
+	g.spanSplitter = span.MakeSplitterWithFamilyIDs(len(fetchSpec.KeyColumns()), splitFamilyIDs)
 	g.lookupCols = lookupCols
+	if len(lookupCols) > len(fetchSpec.KeyAndSuffixColumns) {
+		return errors.AssertionFailedf(
+			"%d lookup columns specified, expecting at most %d", len(lookupCols), len(fetchSpec.KeyAndSuffixColumns),
+		)
+	}
 	g.indexKeyRow = nil
 	g.keyToInputRowIndices = keyToInputRowIndices
 	g.scratchSpans = nil
 	g.memAcc = memAcc
+	return nil
 }
 
 // Generate spans for a given row.
@@ -113,17 +115,11 @@ func (g *defaultSpanGenerator) init(
 func (g *defaultSpanGenerator) generateSpan(
 	row rowenc.EncDatumRow,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	numLookupCols := len(g.lookupCols)
-	if numLookupCols > g.numKeyCols {
-		return roachpb.Span{}, false, errors.Errorf(
-			"%d lookup columns specified, expecting at most %d", numLookupCols, g.numKeyCols)
-	}
-
 	g.indexKeyRow = g.indexKeyRow[:0]
 	for _, id := range g.lookupCols {
 		g.indexKeyRow = append(g.indexKeyRow, row[id])
 	}
-	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow[:numLookupCols])
+	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow)
 }
 
 func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
@@ -280,9 +276,9 @@ type multiSpanGenerator struct {
 	// multiSpanGenerator. indexOrds must be a prefix of the index columns.
 	indexOrds util.FastIntSet
 
-	// tableOrdToIndexOrd maps the ordinals of columns in the table to their
-	// ordinals in the index.
-	tableOrdToIndexOrd util.FastIntMap
+	// fetchedOrdToIndexKeyOrd maps the ordinals of fetched (right-hand side)
+	// columns to ordinals in the index key columns.
+	fetchedOrdToIndexKeyOrd util.FastIntMap
 
 	// numInputCols is the number of columns in the input to the joinReader.
 	numInputCols int
@@ -369,20 +365,18 @@ func (g *multiSpanGenerator) maxLookupCols() int {
 func (g *multiSpanGenerator) init(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
-	table catalog.TableDescriptor,
-	index catalog.Index,
-	neededColOrdinals util.FastIntSet,
-	numKeyCols int,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
 	numInputCols int,
 	exprHelper *execinfrapb.ExprHelper,
-	tableOrdToIndexOrd util.FastIntMap,
+	fetchedOrdToIndexKeyOrd util.FastIntMap,
 	memAcc *mon.BoundAccount,
 ) error {
-	g.spanBuilder.Init(evalCtx, codec, table, index)
-	g.spanSplitter = span.MakeSplitter(table, index, neededColOrdinals)
+	g.spanBuilder.InitWithFetchSpec(evalCtx, codec, fetchSpec)
+	g.spanSplitter = span.MakeSplitterWithFamilyIDs(len(fetchSpec.KeyColumns()), splitFamilyIDs)
 	g.numInputCols = numInputCols
 	g.keyToInputRowIndices = make(map[string][]int)
-	g.tableOrdToIndexOrd = tableOrdToIndexOrd
+	g.fetchedOrdToIndexKeyOrd = fetchedOrdToIndexKeyOrd
 	g.inequalityColIdx = -1
 	g.memAcc = memAcc
 
@@ -392,7 +386,7 @@ func (g *multiSpanGenerator) init(
 
 	// Process the given expression to fill in g.indexColInfos with info from the
 	// join conditions. This info will be used later to generate the spans.
-	g.indexColInfos = make([]multiSpanGeneratorColInfo, 0, numKeyCols)
+	g.indexColInfos = make([]multiSpanGeneratorColInfo, 0, len(fetchSpec.KeyAndSuffixColumns))
 	if err := g.fillInIndexColInfos(exprHelper.Expr); err != nil {
 		return err
 	}
@@ -405,9 +399,9 @@ func (g *multiSpanGenerator) init(
 			"columns in the join condition do not form a prefix on the index",
 		)
 	}
-	if lookupColsCount > numKeyCols {
+	if lookupColsCount > len(fetchSpec.KeyAndSuffixColumns) {
 		return errors.AssertionFailedf(
-			"%d lookup columns specified, expecting at most %d", lookupColsCount, numKeyCols,
+			"%d lookup columns specified, expecting at most %d", lookupColsCount, len(fetchSpec.KeyAndSuffixColumns),
 		)
 	}
 
@@ -552,7 +546,7 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 			return err
 		}
 
-		idxOrd, ok := g.tableOrdToIndexOrd.Get(tabOrd)
+		idxOrd, ok := g.fetchedOrdToIndexKeyOrd.Get(tabOrd)
 		if !ok {
 			return errors.AssertionFailedf("table column %d not found in index", tabOrd)
 		}
@@ -777,26 +771,24 @@ type localityOptimizedSpanGenerator struct {
 func (g *localityOptimizedSpanGenerator) init(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
-	table catalog.TableDescriptor,
-	index catalog.Index,
-	neededColOrdinals util.FastIntSet,
-	numKeyCols int,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
 	numInputCols int,
 	localExprHelper *execinfrapb.ExprHelper,
 	remoteExprHelper *execinfrapb.ExprHelper,
-	tableOrdToIndexOrd util.FastIntMap,
+	fetchedOrdToIndexKeyOrd util.FastIntMap,
 	localSpanGenMemAcc *mon.BoundAccount,
 	remoteSpanGenMemAcc *mon.BoundAccount,
 ) error {
 	if err := g.localSpanGen.init(
-		evalCtx, codec, table, index, neededColOrdinals,
-		numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
+		evalCtx, codec, fetchSpec, splitFamilyIDs,
+		numInputCols, localExprHelper, fetchedOrdToIndexKeyOrd, localSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
 	if err := g.remoteSpanGen.init(
-		evalCtx, codec, table, index, neededColOrdinals,
-		numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
+		evalCtx, codec, fetchSpec, splitFamilyIDs,
+		numInputCols, remoteExprHelper, fetchedOrdToIndexKeyOrd, remoteSpanGenMemAcc,
 	); err != nil {
 		return err
 	}

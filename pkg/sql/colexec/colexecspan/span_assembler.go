@@ -17,15 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,22 +34,22 @@ import (
 func NewColSpanAssembler(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
-	table catalog.TableDescriptor,
-	index catalog.Index,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
 	inputTypes []*types.T,
-	neededColOrdsInWholeTable util.FastIntSet,
 ) ColSpanAssembler {
 	sa := spanAssemblerPool.Get().(*spanAssembler)
-	sa.colFamStartKeys, sa.colFamEndKeys = getColFamilyEncodings(neededColOrdsInWholeTable, table, index)
-	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
+	sa.colFamStartKeys, sa.colFamEndKeys = getColFamilyEncodings(splitFamilyIDs)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, fetchSpec.TableID, fetchSpec.IndexID)
 	sa.scratchKey = append(sa.scratchKey[:0], keyPrefix...)
 	sa.prefixLength = len(keyPrefix)
 	sa.allocator = allocator
 
 	// Add span encoders to encode each primary key column as bytes. The
 	// ColSpanAssembler will later append these together to form valid spans.
-	for i := 0; i < index.NumKeyColumns(); i++ {
-		asc := index.GetKeyColumnDirection(i) == descpb.IndexDescriptor_ASC
+	keyColumns := fetchSpec.KeyColumns()
+	for i := range keyColumns {
+		asc := keyColumns[i].Direction == descpb.IndexDescriptor_ASC
 		sa.spanEncoders = append(sa.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, i))
 	}
 	if cap(sa.spanCols) < len(sa.spanEncoders) {
@@ -284,18 +281,14 @@ func (sa *spanAssembler) Release() {
 // keys of a span over a specific column family (or adjacent column families).
 // If the returned lists are empty, the spans cannot be split into separate
 // family spans.
-func getColFamilyEncodings(
-	neededCols util.FastIntSet, table catalog.TableDescriptor, index catalog.Index,
-) (startKeys, endKeys []roachpb.Key) {
-	splitter := span.MakeSplitter(table, index, neededCols)
-	if splitter.IsNoop() {
+func getColFamilyEncodings(splitFamilyIDs []descpb.FamilyID) (startKeys, endKeys []roachpb.Key) {
+	if len(splitFamilyIDs) == 0 {
 		return nil, nil
 	}
-	familyIDs := splitter.FamilyIDs()
-	for i, familyID := range familyIDs {
+	for i, familyID := range splitFamilyIDs {
 		var key roachpb.Key
 		key = keys.MakeFamilyKey(key, uint32(familyID))
-		if i > 0 && familyID-1 == familyIDs[i-1] && endKeys != nil {
+		if i > 0 && familyID-1 == splitFamilyIDs[i-1] && endKeys != nil {
 			// This column family is adjacent to the previous one. We can merge
 			// the two spans into one.
 			endKeys[len(endKeys)-1] = key.PrefixEnd()

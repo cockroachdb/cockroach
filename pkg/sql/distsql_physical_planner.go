@@ -2155,27 +2155,28 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.AddProjection(pkCols, execinfrapb.Ordering{})
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
-		IndexIdx:          0,
 		Type:              descpb.InnerJoin,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
-		HasSystemColumns:  n.table.containsSystemColumns,
 	}
 
-	post := execinfrapb.PostProcessSpec{
-		Projection: true,
+	fetchColIDs := make([]descpb.ColumnID, len(n.cols))
+	for i := range n.cols {
+		fetchColIDs[i] = n.cols[i].GetID()
+	}
+	if err := rowenc.InitIndexFetchSpec(
+		&joinReaderSpec.FetchSpec,
+		planCtx.ExtendedEvalCtx.Codec,
+		n.table.desc,
+		n.table.desc.GetPrimaryIndex(),
+		fetchColIDs,
+	); err != nil {
+		return nil, err
 	}
 
 	// Calculate the output columns from n.cols.
-	post.OutputColumns = make([]uint32, len(n.cols))
-	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(n.cols))
-
-	for i := range n.cols {
-		ord := tableOrdinal(n.table.desc, n.cols[i].GetID())
-		post.OutputColumns[i] = uint32(ord)
-	}
+	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(fetchColIDs))
 
 	types, err := getTypesForPlanResult(n, plan.PlanToStreamColMap)
 	if err != nil {
@@ -2185,7 +2186,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
-			post,
+			execinfrapb.PostProcessSpec{},
 			types,
 			dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
 		)
@@ -2194,7 +2195,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		plan.AddSingleGroupStage(
 			plan.Processors[plan.ResultRouters[0]].SQLInstanceID,
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
-			post,
+			execinfrapb.PostProcessSpec{},
 			types,
 		)
 	}
@@ -2211,7 +2212,6 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
 		Type:              n.joinType,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
@@ -2219,15 +2219,25 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		// is late in the sense that the cost of this has not been taken into
 		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
 		MaintainOrdering:                  len(n.reqOrdering) > 0 || n.isFirstJoinInPairedJoiner,
-		HasSystemColumns:                  n.table.containsSystemColumns,
 		LeftJoinWithPairedJoiner:          n.isSecondJoinInPairedJoiner,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
 	}
-	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
-	if err != nil {
+
+	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
+	for i := range n.table.cols {
+		fetchColIDs[i] = n.table.cols[i].GetID()
+	}
+	if err := rowenc.InitIndexFetchSpec(
+		&joinReaderSpec.FetchSpec,
+		planCtx.ExtendedEvalCtx.Codec,
+		n.table.desc,
+		n.table.index,
+		fetchColIDs,
+	); err != nil {
 		return nil, err
 	}
+
 	joinReaderSpec.LookupColumns = make([]uint32, len(n.eqCols))
 	for i, col := range n.eqCols {
 		if plan.PlanToStreamColMap[col] == -1 {
@@ -2237,16 +2247,41 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 	joinReaderSpec.LookupColumnsAreKey = n.eqColsAreKey
 
-	numInputNodeCols, planToStreamColMap, post, types :=
-		mappingHelperForLookupJoins(plan, n.input, n.table, n.isFirstJoinInPairedJoiner)
+	inputTypes := plan.GetResultTypes()
+	fetchedColumns := joinReaderSpec.FetchSpec.FetchedColumns
+	numOutCols := len(inputTypes) + len(fetchedColumns)
+	if n.isFirstJoinInPairedJoiner {
+		// We will add a continuation column.
+		numOutCols++
+	}
+
+	var outTypes []*types.T
+	var planToStreamColMap []int
+	if !n.joinType.ShouldIncludeRightColsInOutput() {
+		if n.isFirstJoinInPairedJoiner {
+			return nil, errors.AssertionFailedf("continuation column without right columns")
+		}
+		outTypes = inputTypes
+		planToStreamColMap = plan.PlanToStreamColMap
+	} else {
+		outTypes = make([]*types.T, numOutCols)
+		copy(outTypes, inputTypes)
+		planToStreamColMap = plan.PlanToStreamColMap
+		for i := range fetchedColumns {
+			outTypes[len(inputTypes)+i] = fetchedColumns[i].Type
+			planToStreamColMap = append(planToStreamColMap, len(inputTypes)+i)
+		}
+		if n.isFirstJoinInPairedJoiner {
+			outTypes[numOutCols-1] = types.Bool
+			planToStreamColMap = append(planToStreamColMap, numOutCols-1)
+		}
+	}
 
 	// Set the lookup condition.
-	var indexVarMap []int
 	if n.lookupExpr != nil {
-		indexVarMap = makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
 		var err error
 		joinReaderSpec.LookupExpr, err = physicalplan.MakeExpression(
-			n.lookupExpr, planCtx, indexVarMap,
+			n.lookupExpr, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
@@ -2258,7 +2293,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 		var err error
 		joinReaderSpec.RemoteLookupExpr, err = physicalplan.MakeExpression(
-			n.remoteLookupExpr, planCtx, indexVarMap,
+			n.remoteLookupExpr, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
@@ -2267,21 +2302,13 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 
 	// Set the ON condition.
 	if n.onCond != nil {
-		if indexVarMap == nil {
-			indexVarMap = makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
-		}
 		var err error
 		joinReaderSpec.OnExpr, err = physicalplan.MakeExpression(
-			n.onCond, planCtx, indexVarMap,
+			n.onCond, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if !n.joinType.ShouldIncludeRightColsInOutput() {
-		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
-			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
 	}
 
 	// Instantiate one join reader for every stream. This is also necessary for
@@ -2290,8 +2317,8 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	// join processor.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
-		post,
-		types,
+		execinfrapb.PostProcessSpec{},
+		outTypes,
 		dsp.convertOrdering(planReqOrdering(n), planToStreamColMap),
 	)
 	plan.PlanToStreamColMap = planToStreamColMap
