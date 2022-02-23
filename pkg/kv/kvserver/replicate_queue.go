@@ -60,11 +60,22 @@ var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
-// TODO(aayush): Expand this metric set to include metrics about non-voting replicas.
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
 		Help:        "Number of replica additions attempted by the replicate queue",
+		Measurement: "Replica Additions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueAddVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.addvoterreplica",
+		Help:        "Number of voter replica additions attempted by the replicate queue",
+		Measurement: "Replica Additions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueAddNonVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.addnonvoterreplica",
+		Help:        "Number of non-voter replica additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -74,9 +85,51 @@ var (
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueueRemoveVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removevoterreplica",
+		Help:        "Number of voter replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRemoveNonVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removenonvoterreplica",
+		Help:        "Number of non-voter replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaReplicateQueueRemoveDeadReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica",
 		Help:        "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRemoveDeadVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removedeadvoterreplica",
+		Help:        "Number of dead voter replica removals attempted by the replicate queue (typically in response to a node outage)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRemoveDeadNonVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removedeadnonvoterreplica",
+		Help:        "Number of dead non-voter replica removals attempted by the replicate queue (typically in response to a node outage)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRemoveDecommissioningReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removedecommissioningreplica",
+		Help:        "Number of decommissioning replica removals attempted by the replicate queue (typically in response to a node outage)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRemoveDecommissioningVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removedecommissioningvoterreplica",
+		Help:        "Number of decommissioning voter replica removals attempted by the replicate queue (typically in response to a node outage)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRemoveDecommissioningNonVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removedecommissioningnonvoterreplica",
+		Help:        "Number of decommissioning non-voter replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -89,6 +142,18 @@ var (
 	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.rebalancereplica",
 		Help:        "Number of replica rebalancer-initiated additions attempted by the replicate queue",
+		Measurement: "Replica Additions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRebalanceVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.rebalancevoterreplica",
+		Help:        "Number of voter replica rebalancer-initiated additions attempted by the replicate queue",
+		Measurement: "Replica Additions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueRebalanceNonVoterReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.rebalancenonvoterreplica",
+		Help:        "Number of non-voter replica rebalancer-initiated additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -132,28 +197,126 @@ func (e *quorumError) Error() string {
 func (*quorumError) purgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
-// TODO(aayush): Track metrics for non-voting replicas separately here.
 type ReplicateQueueMetrics struct {
-	AddReplicaCount           *metric.Counter
-	RemoveReplicaCount        *metric.Counter
-	RemoveDeadReplicaCount    *metric.Counter
-	RemoveLearnerReplicaCount *metric.Counter
-	RebalanceReplicaCount     *metric.Counter
-	TransferLeaseCount        *metric.Counter
-	NonVoterPromotionsCount   *metric.Counter
-	VoterDemotionsCount       *metric.Counter
+	AddReplicaCount                           *metric.Counter
+	AddVoterReplicaCount                      *metric.Counter
+	AddNonVoterReplicaCount                   *metric.Counter
+	RemoveReplicaCount                        *metric.Counter
+	RemoveVoterReplicaCount                   *metric.Counter
+	RemoveNonVoterReplicaCount                *metric.Counter
+	RemoveDeadReplicaCount                    *metric.Counter
+	RemoveDeadVoterReplicaCount               *metric.Counter
+	RemoveDeadNonVoterReplicaCount            *metric.Counter
+	RemoveDecommissioningReplicaCount         *metric.Counter
+	RemoveDecommissioningVoterReplicaCount    *metric.Counter
+	RemoveDecommissioningNonVoterReplicaCount *metric.Counter
+	RemoveLearnerReplicaCount                 *metric.Counter
+	RebalanceReplicaCount                     *metric.Counter
+	RebalanceVoterReplicaCount                *metric.Counter
+	RebalanceNonVoterReplicaCount             *metric.Counter
+	TransferLeaseCount                        *metric.Counter
+	NonVoterPromotionsCount                   *metric.Counter
+	VoterDemotionsCount                       *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 	return ReplicateQueueMetrics{
-		AddReplicaCount:           metric.NewCounter(metaReplicateQueueAddReplicaCount),
-		RemoveReplicaCount:        metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
-		RemoveDeadReplicaCount:    metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
-		RemoveLearnerReplicaCount: metric.NewCounter(metaReplicateQueueRemoveLearnerReplicaCount),
-		RebalanceReplicaCount:     metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
-		TransferLeaseCount:        metric.NewCounter(metaReplicateQueueTransferLeaseCount),
-		NonVoterPromotionsCount:   metric.NewCounter(metaReplicateQueueNonVoterPromotionsCount),
-		VoterDemotionsCount:       metric.NewCounter(metaReplicateQueueVoterDemotionsCount),
+		AddReplicaCount:                           metric.NewCounter(metaReplicateQueueAddReplicaCount),
+		AddVoterReplicaCount:                      metric.NewCounter(metaReplicateQueueAddVoterReplicaCount),
+		AddNonVoterReplicaCount:                   metric.NewCounter(metaReplicateQueueAddNonVoterReplicaCount),
+		RemoveReplicaCount:                        metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
+		RemoveVoterReplicaCount:                   metric.NewCounter(metaReplicateQueueRemoveVoterReplicaCount),
+		RemoveNonVoterReplicaCount:                metric.NewCounter(metaReplicateQueueRemoveNonVoterReplicaCount),
+		RemoveDeadReplicaCount:                    metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
+		RemoveDeadVoterReplicaCount:               metric.NewCounter(metaReplicateQueueRemoveDeadVoterReplicaCount),
+		RemoveDeadNonVoterReplicaCount:            metric.NewCounter(metaReplicateQueueRemoveDeadNonVoterReplicaCount),
+		RemoveLearnerReplicaCount:                 metric.NewCounter(metaReplicateQueueRemoveLearnerReplicaCount),
+		RemoveDecommissioningReplicaCount:         metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaCount),
+		RemoveDecommissioningVoterReplicaCount:    metric.NewCounter(metaReplicateQueueRemoveDecommissioningVoterReplicaCount),
+		RemoveDecommissioningNonVoterReplicaCount: metric.NewCounter(metaReplicateQueueRemoveDecommissioningNonVoterReplicaCount),
+		RebalanceReplicaCount:                     metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
+		RebalanceVoterReplicaCount:                metric.NewCounter(metaReplicateQueueRebalanceVoterReplicaCount),
+		RebalanceNonVoterReplicaCount:             metric.NewCounter(metaReplicateQueueRebalanceNonVoterReplicaCount),
+		TransferLeaseCount:                        metric.NewCounter(metaReplicateQueueTransferLeaseCount),
+		NonVoterPromotionsCount:                   metric.NewCounter(metaReplicateQueueNonVoterPromotionsCount),
+		VoterDemotionsCount:                       metric.NewCounter(metaReplicateQueueVoterDemotionsCount),
+	}
+}
+
+// trackAddReplicaCount increases the AddReplicaCount metric and separately
+// tracks voter/non-voter metrics given a replica targetType.
+func (metrics *ReplicateQueueMetrics) trackAddReplicaCount(targetType targetReplicaType) {
+	metrics.AddReplicaCount.Inc(1)
+	switch targetType {
+	case voterTarget:
+		metrics.AddVoterReplicaCount.Inc(1)
+	case nonVoterTarget:
+		metrics.AddNonVoterReplicaCount.Inc(1)
+	}
+}
+
+// trackRemoveMetric increases total RemoveReplicaCount metrics and
+// increments dead/decommissioning metrics depending on replicaStatus.
+func (metrics *ReplicateQueueMetrics) trackRemoveMetric(
+	targetType targetReplicaType, replicaStatus replicaStatus,
+) {
+	metrics.trackRemoveReplicaCount(targetType)
+	switch replicaStatus {
+	case dead:
+		metrics.trackRemoveDeadReplicaCount(targetType)
+	case decommissioning:
+		metrics.trackRemoveDecommissioningReplicaCount(targetType)
+	}
+}
+
+// trackRemoveReplicaCount increases the RemoveReplicaCount metric and
+// separately tracks voter/non-voter metrics given a replica targetType.
+func (metrics *ReplicateQueueMetrics) trackRemoveReplicaCount(targetType targetReplicaType) {
+	metrics.RemoveReplicaCount.Inc(1)
+	switch targetType {
+	case voterTarget:
+		metrics.RemoveVoterReplicaCount.Inc(1)
+	case nonVoterTarget:
+		metrics.RemoveNonVoterReplicaCount.Inc(1)
+	}
+}
+
+// trackRemoveDeadReplicaCount increases the RemoveDeadReplicaCount metric and
+// separately tracks voter/non-voter metrics given a replica targetType.
+func (metrics *ReplicateQueueMetrics) trackRemoveDeadReplicaCount(targetType targetReplicaType) {
+	metrics.RemoveDeadReplicaCount.Inc(1)
+	switch targetType {
+	case voterTarget:
+		metrics.RemoveDeadVoterReplicaCount.Inc(1)
+	case nonVoterTarget:
+		metrics.RemoveDeadNonVoterReplicaCount.Inc(1)
+	}
+}
+
+// trackRemoveDecommissioningReplicaCount increases the
+// RemoveDecommissioningReplicaCount metric and separately tracks
+// voter/non-voter metrics given a replica targetType.
+func (metrics *ReplicateQueueMetrics) trackRemoveDecommissioningReplicaCount(
+	targetType targetReplicaType,
+) {
+	metrics.RemoveDecommissioningReplicaCount.Inc(1)
+	switch targetType {
+	case voterTarget:
+		metrics.RemoveDecommissioningVoterReplicaCount.Inc(1)
+	case nonVoterTarget:
+		metrics.RemoveDecommissioningNonVoterReplicaCount.Inc(1)
+	}
+}
+
+// trackRebalanceReplicaCount increases the RebalanceReplicaCount metric and
+// separately tracks voter/non-voter metrics given a replica targetType.
+func (metrics *ReplicateQueueMetrics) trackRebalanceReplicaCount(targetType targetReplicaType) {
+	metrics.RebalanceReplicaCount.Inc(1)
+	switch targetType {
+	case voterTarget:
+		metrics.RebalanceVoterReplicaCount.Inc(1)
+	case nonVoterTarget:
+		metrics.RebalanceNonVoterReplicaCount.Inc(1)
 	}
 }
 
@@ -398,9 +561,11 @@ func (rq *replicateQueue) processOneChange(
 
 	// Add replicas.
 	case AllocatorAddVoter:
-		return rq.addOrReplaceVoters(ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, dryRun)
+		return rq.addOrReplaceVoters(
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1, alive, dryRun)
 	case AllocatorAddNonVoter:
-		return rq.addOrReplaceNonVoters(ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, dryRun)
+		return rq.addOrReplaceNonVoters(
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1, alive, dryRun)
 
 	// Remove replicas.
 	case AllocatorRemoveVoter:
@@ -420,7 +585,8 @@ func (rq *replicateQueue) processOneChange(
 				"dead voter %v unexpectedly not found in %v",
 				deadVoterReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplaceVoters(ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dryRun)
+		return rq.addOrReplaceVoters(
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dead, dryRun)
 	case AllocatorReplaceDeadNonVoter:
 		if len(deadNonVoterReplicas) == 0 {
 			// Nothing to do.
@@ -432,7 +598,8 @@ func (rq *replicateQueue) processOneChange(
 				"dead non-voter %v unexpectedly not found in %v",
 				deadNonVoterReplicas[0], nonVoterReplicas)
 		}
-		return rq.addOrReplaceNonVoters(ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dryRun)
+		return rq.addOrReplaceNonVoters(
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dead, dryRun)
 
 	// Replace decommissioning replicas.
 	case AllocatorReplaceDecommissioningVoter:
@@ -447,7 +614,8 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning voter %v unexpectedly not found in %v",
 				decommissioningVoterReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplaceVoters(ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dryRun)
+		return rq.addOrReplaceVoters(
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, decommissioning, dryRun)
 	case AllocatorReplaceDecommissioningNonVoter:
 		decommissioningNonVoterReplicas := rq.allocator.storePool.decommissioningReplicas(nonVoterReplicas)
 		if len(decommissioningNonVoterReplicas) == 0 {
@@ -459,7 +627,8 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning non-voter %v unexpectedly not found in %v",
 				decommissioningNonVoterReplicas[0], nonVoterReplicas)
 		}
-		return rq.addOrReplaceNonVoters(ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dryRun)
+		return rq.addOrReplaceNonVoters(
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, decommissioning, dryRun)
 
 	// Remove decommissioning replicas.
 	//
@@ -528,6 +697,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	repl *Replica,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
+	replicaStatus replicaStatus,
 	dryRun bool,
 ) (requeue bool, _ error) {
 	desc, conf := repl.DescAndSpanConfig()
@@ -606,7 +776,6 @@ func (rq *replicateQueue) addOrReplaceVoters(
 			return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 		}
 	}
-	rq.metrics.AddReplicaCount.Inc(1)
 
 	// Figure out whether we should be promoting an existing non-voting replica to
 	// a voting replica or if we ought to be adding a voter afresh.
@@ -619,16 +788,23 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		}
 		// If the allocation target has a non-voter already, we will promote it to a
 		// voter.
-		rq.metrics.NonVoterPromotionsCount.Inc(1)
+		if !dryRun {
+			rq.metrics.NonVoterPromotionsCount.Inc(1)
+		}
 		ops = roachpb.ReplicationChangesForPromotion(newVoter)
 	} else {
+		if !dryRun {
+			rq.metrics.trackAddReplicaCount(voterTarget)
+		}
 		ops = roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
 	}
 	if removeIdx < 0 {
 		log.VEventf(ctx, 1, "adding voter %+v: %s",
 			newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	} else {
-		rq.metrics.RemoveReplicaCount.Inc(1)
+		if !dryRun {
+			rq.metrics.trackRemoveMetric(voterTarget, replicaStatus)
+		}
 		removeVoter := existingVoters[removeIdx]
 		log.VEventf(ctx, 1, "replacing voter %s with %+v: %s",
 			removeVoter, newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
@@ -667,6 +843,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 	repl *Replica,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
+	replicaStatus replicaStatus,
 	dryRun bool,
 ) (requeue bool, _ error) {
 	desc, conf := repl.DescAndSpanConfig()
@@ -676,14 +853,18 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 	if err != nil {
 		return false, err
 	}
-	rq.metrics.AddReplicaCount.Inc(1)
+	if !dryRun {
+		rq.metrics.trackAddReplicaCount(nonVoterTarget)
+	}
 
 	ops := roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, newNonVoter)
 	if removeIdx < 0 {
 		log.VEventf(ctx, 1, "adding non-voter %+v: %s",
 			newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
 	} else {
-		rq.metrics.RemoveReplicaCount.Inc(1)
+		if !dryRun {
+			rq.metrics.trackRemoveMetric(nonVoterTarget, replicaStatus)
+		}
 		removeNonVoter := existingNonVoters[removeIdx]
 		log.VEventf(ctx, 1, "replacing non-voter %s with %+v: %s",
 			removeNonVoter, newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
@@ -866,7 +1047,10 @@ func (rq *replicateQueue) removeVoter(
 	}
 
 	// Remove a replica.
-	rq.metrics.RemoveReplicaCount.Inc(1)
+	if !dryRun {
+		rq.metrics.trackRemoveMetric(voterTarget, alive)
+	}
+
 	log.VEventf(ctx, 1, "removing voting replica %+v due to over-replication: %s",
 		removeVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	desc := repl.Desc()
@@ -896,7 +1080,6 @@ func (rq *replicateQueue) removeNonVoter(
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	dryRun bool,
 ) (requeue bool, _ error) {
-	rq.metrics.RemoveReplicaCount.Inc(1)
 
 	desc, conf := repl.DescAndSpanConfig()
 	removeNonVoter, details, err := rq.allocator.RemoveNonVoter(
@@ -910,7 +1093,9 @@ func (rq *replicateQueue) removeNonVoter(
 	if err != nil {
 		return false, err
 	}
-
+	if !dryRun {
+		rq.metrics.trackRemoveMetric(nonVoterTarget, alive)
+	}
 	log.VEventf(ctx, 1, "removing non-voting replica %+v due to over-replication: %s",
 		removeNonVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	target := roachpb.ReplicationTarget{
@@ -969,7 +1154,9 @@ func (rq *replicateQueue) removeDecommissioning(
 	}
 
 	// Remove the decommissioning replica.
-	rq.metrics.RemoveReplicaCount.Inc(1)
+	if !dryRun {
+		rq.metrics.trackRemoveMetric(targetType, decommissioning)
+	}
 	log.VEventf(ctx, 1, "removing decommissioning %s %+v from store", targetType, decommissioningReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  decommissioningReplica.NodeID,
@@ -1008,7 +1195,9 @@ func (rq *replicateQueue) removeDead(
 		return true, nil
 	}
 	deadReplica := deadReplicas[0]
-	rq.metrics.RemoveDeadReplicaCount.Inc(1)
+	if !dryRun {
+		rq.metrics.trackRemoveMetric(targetType, dead)
+	}
 	log.VEventf(ctx, 1, "removing dead %s %+v from store", targetType, deadReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  deadReplica.NodeID,
@@ -1045,7 +1234,9 @@ func (rq *replicateQueue) removeLearner(
 		return true, nil
 	}
 	learnerReplica := learnerReplicas[0]
-	rq.metrics.RemoveLearnerReplicaCount.Inc(1)
+	if !dryRun {
+		rq.metrics.RemoveLearnerReplicaCount.Inc(1)
+	}
 	log.VEventf(ctx, 1, "removing learner replica %+v from store", learnerReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  learnerReplica.NodeID,
@@ -1129,8 +1320,10 @@ func (rq *replicateQueue) considerRebalance(
 			if err != nil {
 				return false, err
 			}
-			rq.metrics.RebalanceReplicaCount.Inc(1)
-			if performingSwap {
+			if !dryRun {
+				rq.metrics.trackRebalanceReplicaCount(rebalanceTargetType)
+			}
+			if performingSwap && !dryRun {
 				rq.metrics.VoterDemotionsCount.Inc(1)
 				rq.metrics.NonVoterPromotionsCount.Inc(1)
 			}
