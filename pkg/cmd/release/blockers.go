@@ -17,20 +17,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	envSMTPUser     = "SMTP_USER"
-	envSMTPPassword = "SMTP_PASSWORD"
-	envGithubToken  = "GITHUB_TOKEN"
-	releaseSeries   = "release-series"
-	smtpUser        = "smtp-user"
-	smtpHost        = "smtp-host"
-	smtpPort        = "smtp-port"
-	emailAddresses  = "to"
-	dryRun          = "dry-run"
-)
-
 var blockersFlags = struct {
 	releaseSeries  string
+	templatesDir   string
 	smtpUser       string
 	smtpHost       string
 	smtpPort       int
@@ -48,6 +37,7 @@ var postReleaseSeriesBlockersCmd = &cobra.Command{
 func init() {
 	// TODO: improve flag usage comments
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.releaseSeries, releaseSeries, "", "major release series")
+	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.templatesDir, templatesDir, "", "major release series")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.smtpUser, smtpUser, os.Getenv(envSMTPUser), "SMTP user name")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.smtpHost, smtpHost, "", "SMTP host")
 	postReleaseSeriesBlockersCmd.Flags().IntVar(&blockersFlags.smtpPort, smtpPort, 0, "SMTP port")
@@ -55,7 +45,7 @@ func init() {
 	postReleaseSeriesBlockersCmd.Flags().BoolVar(&blockersFlags.dryRun, dryRun, false, "use dry run Jira project for issues")
 
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(releaseSeries)
-	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(smtpUser)
+	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(templatesDir)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(smtpHost)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(smtpPort)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(emailAddresses)
@@ -70,9 +60,53 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 	if githubToken == "" {
 		return fmt.Errorf("%s environment variable should be set", envGithubToken)
 	}
+	if blockersFlags.smtpUser == "" {
+		return fmt.Errorf("either %s environment variable or %s flag should be set", envGithubToken, smtpUser)
+	}
 
-	// TODO(celia): fetch blockers and send out email
-	fmt.Println("TODO(celia): fetch blockers and send out email")
+	// TODO(celia): fetch blockers
+	fmt.Println("TODO(celia): fetch blockers")
 
+	blockersURL := "go.crdb.dev/blockers/" + blockersFlags.releaseSeries
+	releaseBranch := "release-" + blockersFlags.releaseSeries
+
+	// TODO(celia): dynamically set branchExists, based on whether `releaseBranch` branch exists in crdb repo
+	branchExists := true
+	if !branchExists {
+		blockersURL = "go.crdb.dev/blockers"
+		releaseBranch = "master"
+	}
+	args := messageDataPostBlockers{
+		Version:       "v99.9.999 - alpha - 23",
+		PrepDate:      "Saturday, April 1",
+		ReleaseDate:   "Saturday, April 11",
+		TotalBlockers: 23,
+		BlockersURL:   blockersURL,
+		ReleaseBranch: releaseBranch,
+		BlockerList: []ProjectBlocker{
+			{
+				ProjectName: "Project ABC",
+				NumBlockers: 11,
+			},
+			{
+				ProjectName: "Project XYZ",
+				NumBlockers: 12,
+			},
+		},
+	}
+	opts := sendOpts{
+		templatesDir: blockersFlags.templatesDir,
+		from:         fmt.Sprintf("Justin Beaver <%s>", blockersFlags.smtpUser),
+		host:         blockersFlags.smtpHost,
+		port:         blockersFlags.smtpPort,
+		user:         blockersFlags.smtpUser,
+		password:     smtpPassword,
+		to:           blockersFlags.emailAddresses,
+	}
+
+	fmt.Println("Sending email")
+	if err := sendMailPostBlockers(args, opts); err != nil {
+		return fmt.Errorf("cannot send email: %w", err)
+	}
 	return nil
 }
