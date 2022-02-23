@@ -340,9 +340,6 @@ vectorized: true
 
 # Regression test for #55156: split hash-sharded index scan.
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE IF NOT EXISTS user_checklist_items (
     tenant_id UUID,
     location_id UUID,
