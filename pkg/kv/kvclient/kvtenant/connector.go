@@ -61,6 +61,11 @@ type Connector interface {
 	// primitives.
 	serverpb.RegionsServer
 
+	// DebugStatusServer is the subset of the serverpb.StatusInterface that is
+	// used by the SQL system to query for debug information, such as tenant-specific
+	// range reports.
+	serverpb.DebugStatusServer
+
 	// TokenBucketProvider provides access to the tenant cost control token
 	// bucket.
 	TokenBucketProvider
