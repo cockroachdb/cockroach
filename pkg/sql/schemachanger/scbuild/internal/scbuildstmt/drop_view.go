@@ -56,6 +56,11 @@ func DropView(b BuildCtx, n *tree.DropView) {
 			toCheckBackrefs = append(toCheckBackrefs, view.ViewID)
 		}
 		b.IncrementSubWorkID()
+		if view.IsMaterialized {
+			b.IncrementSchemaChangeDropCounter("materialized_view")
+		} else {
+			b.IncrementSchemaChangeDropCounter("view")
+		}
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, viewID := range toCheckBackrefs {

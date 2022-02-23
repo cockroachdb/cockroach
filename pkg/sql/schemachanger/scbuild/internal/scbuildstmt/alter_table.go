@@ -86,6 +86,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	tn.ObjectNamePrefix = b.NamePrefix(tbl)
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.CheckNoConcurrentSchemaChanges(tbl)
+	b.IncrementSchemaChangeAlterCounter("table")
 	for _, cmd := range n.Cmds {
 		info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
 		// Invoke the callback function, with the concrete types.

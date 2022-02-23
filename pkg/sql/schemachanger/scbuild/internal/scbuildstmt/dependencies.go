@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // BuildCtx wraps BuilderState and exposes various convenience methods for the
@@ -35,6 +36,7 @@ type BuildCtx interface {
 	EventLogState
 	TreeAnnotator
 	TreeContextBuilder
+	Telemetry
 
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
@@ -113,6 +115,25 @@ type TreeAnnotator interface {
 	// in the AST, which will cause it to skip full namespace resolution
 	// validation.
 	MarkNameAsNonExistent(name *tree.TableName)
+}
+
+// Telemetry allows incrementing schema change telemetry counters.
+type Telemetry interface {
+
+	// IncrementSchemaChangeAlterCounter increments the selected ALTER telemetry
+	// counter.
+	IncrementSchemaChangeAlterCounter(counterType string, extra ...string)
+
+	// IncrementSchemaChangeDropCounter increments the selected DROP telemetry
+	// counter.
+	IncrementSchemaChangeDropCounter(counterType string)
+
+	// IncrementUserDefinedSchemaCounter increments the selected user-defined
+	// schema telemetry counter.
+	IncrementUserDefinedSchemaCounter(counterType sqltelemetry.UserDefinedSchemaTelemetryType)
+
+	// IncrementEnumCounter increments the selected enum telemetry counter.
+	IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType)
 }
 
 // SchemaFeatureChecker checks if a schema change feature is allowed by the
