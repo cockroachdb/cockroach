@@ -65,6 +65,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 			}
 		}
 		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("table")
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, tableID := range toCheckBackrefs {

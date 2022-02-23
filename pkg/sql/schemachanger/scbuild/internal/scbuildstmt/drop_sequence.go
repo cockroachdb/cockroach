@@ -51,6 +51,7 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 			toCheckBackrefs = append(toCheckBackrefs, seq.SequenceID)
 		}
 		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("sequence")
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, sequenceID := range toCheckBackrefs {
