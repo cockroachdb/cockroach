@@ -60,6 +60,7 @@ func TestEvalAddSSTable(t *testing.T) {
 		noConflict     bool  // DisallowConflicts
 		noShadow       bool  // DisallowShadowing
 		noShadowBelow  int64 // DisallowShadowingBelow
+		requireReqTS   bool  // AddSSTableRequireAtRequestTimestamp
 		expect         []sstutil.KV
 		expectErr      interface{} // error type, substring, substring slice, or true (any)
 		expectErrRace  interface{}
@@ -77,6 +78,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            []sstutil.KV{{"a", 2, "sst"}},
 			expect:         []sstutil.KV{{"a", 2, "sst"}},
 			expectStatsEst: true,
+		},
+		"blind errors on AddSSTableRequireAtRequestTimestamp": {
+			data:         []sstutil.KV{{"a", 5, "a5"}, {"b", 7, ""}},
+			sst:          []sstutil.KV{{"a", 3, "sst"}, {"b", 2, "sst"}},
+			requireReqTS: true,
+			expectErr:    "AddSSTable requests must set SSTTimestampToRequestTimestamp",
 		},
 		"blind returns WriteIntentError on conflict": {
 			data:      []sstutil.KV{{"b", intentTS, "b0"}},
@@ -117,6 +124,14 @@ func TestEvalAddSSTable(t *testing.T) {
 		"SSTTimestampToRequestTimestamp rewrites timestamp": {
 			reqTS:          10,
 			toReqTS:        1,
+			sst:            []sstutil.KV{{"a", 1, "a1"}, {"b", 1, "b1"}},
+			expect:         []sstutil.KV{{"a", 10, "a1"}, {"b", 10, "b1"}},
+			expectStatsEst: true,
+		},
+		"SSTTimestampToRequestTimestamp succeeds on AddSSTableRequireAtRequestTimestamp": {
+			reqTS:          10,
+			toReqTS:        1,
+			requireReqTS:   true,
 			sst:            []sstutil.KV{{"a", 1, "a1"}, {"b", 1, "b1"}},
 			expect:         []sstutil.KV{{"a", 10, "a1"}, {"b", 10, "b1"}},
 			expectStatsEst: true,
@@ -652,6 +667,7 @@ func TestEvalAddSSTable(t *testing.T) {
 					ctx := context.Background()
 					st := cluster.MakeTestingClusterSettings()
 					batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
+					batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
 					dir := t.TempDir()
 					engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
