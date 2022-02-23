@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -214,13 +215,6 @@ func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user security.SQLUsername,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalPlanner)
-}
-
-// CheckCanBecomeUser is part of the EvalPlanner interface.
-func (ep *DummyEvalPlanner) CheckCanBecomeUser(
-	ctx context.Context, becomeUser security.SQLUsername,
-) error {
-	return errors.WithStack(errEvalPlanner)
 }
 
 // MemberOfWithAdminOption is part of the EvalPlanner interface.
@@ -517,7 +511,12 @@ type DummyPreparedStatementState struct{}
 
 var _ tree.PreparedStatementState = (*DummyPreparedStatementState)(nil)
 
-// HasPrepared is part of the tree.PreparedStatementState interface.
-func (ps *DummyPreparedStatementState) HasPrepared() bool {
+// HasActivePortals is part of the tree.PreparedStatementState interface.
+func (ps *DummyPreparedStatementState) HasActivePortals() bool {
 	return false
+}
+
+// MigratablePreparedStatements is part of the tree.PreparedStatementState interface.
+func (ps *DummyPreparedStatementState) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+	return nil
 }
