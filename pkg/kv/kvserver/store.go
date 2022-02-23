@@ -2968,6 +2968,11 @@ func (s *Store) Metrics() *StoreMetrics {
 	return s.metrics
 }
 
+// ReplicateQueueMetrics returns the store's replicateQueue metric struct.
+func (s *Store) ReplicateQueueMetrics() ReplicateQueueMetrics {
+	return s.replicateQueue.metrics
+}
+
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
 func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreDescriptor, error) {
