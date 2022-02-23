@@ -11,6 +11,8 @@ test
 DROP SCHEMA db.sc;
 ----
 checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
@@ -179,6 +181,7 @@ test
 DROP TABLE db.sc.t;
 ----
 checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
@@ -843,6 +846,8 @@ test
 DROP SCHEMA db.sc CASCADE;
 ----
 checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 3 MutationType ops
@@ -1211,6 +1216,7 @@ test
 DROP DATABASE db CASCADE;
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
@@ -1484,6 +1490,7 @@ test
 DROP DATABASE db1 CASCADE
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 15 MutationType ops

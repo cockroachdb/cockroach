@@ -29,6 +29,7 @@ import (
 // package and its children.
 type Dependencies interface {
 	scbuildstmt.ClusterAndSessionInfo
+	scbuildstmt.Telemetry
 
 	// CatalogReader returns a CatalogReader implementation.
 	CatalogReader() CatalogReader

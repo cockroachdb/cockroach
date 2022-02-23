@@ -11,6 +11,7 @@ test
 DROP DATABASE multi_region_test_db CASCADE
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
