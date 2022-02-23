@@ -399,6 +399,19 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
+# Test adding to TTL table with crdb_internal_expiration already defined.
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration TIMESTAMPTZ,
+  FAMILY (id, text)
+)
+
+statement error cannot add TTL to table with the crdb_internal_expiration column already defined
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
+
 # Test we cannot add FKs to a TTL table.
 statement ok
 CREATE TABLE ref_table (id INT PRIMARY KEY, ref INT)
