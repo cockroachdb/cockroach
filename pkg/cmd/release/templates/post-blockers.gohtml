@@ -1,0 +1,57 @@
+<html>
+  <body>
+    <p>Hello!</p>
+    <p>
+      The <strong>{{ .Args.Version }}</strong> release is scheduled for prep & qualification on
+      <strong>{{ .Args.PrepDate }}</strong> for a scheduled release of <strong>{{ .Args.ReleaseDate }}</strong>.
+    </p>
+    <!-- ----- backport direction, which depends on release-type  ----- -->
+    {{ if .Template.BackportsUseBackboard }}
+      <p>
+        This is a reminder to merge any outstanding backports that need to be included in the next release.
+        Please refer to
+        <a href='https://backboard.crdb.dev/?branch={{ .Args.ReleaseBranch }}&repo=386372623925772289'
+        >backboard</a> to identify any such backports.
+      </p>
+    {{ end }}
+    {{ if .Template.BackportsWeeklyTriageReview }}
+      <p>
+        With the
+        <a href='https://go.crdb.dev/backport-policy-branch-cut'>Restrictive Backport Policy</a> in effect,
+        backports for {{ .Args.ReleaseBranch }} will be reviewed at Monday's triage meeting.
+      </p>
+    {{ end }}
+    <!-- ----- current blocker status and next steps ----- -->
+    {{ if (eq .Args.TotalBlockers 0) }}
+      <p>
+        There are currently <strong>0 open release blockers</strong>
+        (<a href='https://{{ .Args.BlockersURL }}'>{{ .Args.BlockersURL }}</a>)&nbsp;<span font-size='70%%'>🎉</span>.
+        We are clear to proceed with preparation and qualification.
+      </p>
+    {{ else }}
+      <!-- grammar-specific conditional ("there is" vs "there are") -->
+      {{ if (eq .Args.TotalBlockers 1) }}
+      <p>
+        There is currently <strong>1 open release blocker</strong>
+        (<a href='https://{{ .Args.BlockersURL }}'>{{ .Args.BlockersURL }}</a>),
+        which must be resolved before a candidate is chosen:
+      </p>
+      {{ else }}
+      <p>
+        There are currently <strong>{{ .Args.TotalBlockers }} open release blockers</strong>
+        (<a href='https://{{ .Args.BlockersURL }}'>{{ .Args.BlockersURL }}</a>),
+        which must be resolved before a candidate is chosen:
+      </p>
+      {{ end }}
+      <ul>
+        {{ range .Args.BlockerList }}
+        <li>{{ .ProjectName }}: {{ .NumBlockers }}</li>
+        {{ end }}
+      </ul>
+    {{ end }}
+    <p>
+      Thanks,<br />
+      Release Engineering
+    </p>
+  </body>
+</html>

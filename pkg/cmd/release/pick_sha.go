@@ -19,12 +19,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	qualifyBucket       = "qualify-bucket"
+	qualifyObjectPrefix = "qualify-object-prefix"
+	releaseBucket       = "release-bucket"
+	releaseObjectPrefix = "release-object-prefix"
+)
+
 var pickSHAFlags = struct {
 	qualifyBucket       string
 	qualifyObjectPrefix string
 	releaseBucket       string
 	releaseObjectPrefix string
 	releaseSeries       string
+	templatesDir        string
 	smtpUser            string
 	smtpHost            string
 	smtpPort            int
@@ -42,27 +50,29 @@ var pickSHACmd = &cobra.Command{
 
 func init() {
 	// TODO: improve flag usage comments
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.qualifyBucket, "qualify-bucket", "", "release qualification metadata GCS bucket")
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.qualifyObjectPrefix, "qualify-object-prefix", "",
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.qualifyBucket, qualifyBucket, "", "release qualification metadata GCS bucket")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.qualifyObjectPrefix, qualifyObjectPrefix, "",
 		"release qualification object prefix")
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseBucket, "release-bucket", "", "release candidates metadata GCS bucket")
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseObjectPrefix, "release-object-prefix", "", "release candidate object prefix")
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseSeries, "release-series", "", "major release series")
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.smtpUser, "smtp-user", os.Getenv("SMTP_USER"), "SMTP user name")
-	pickSHACmd.Flags().StringVar(&pickSHAFlags.smtpHost, "smtp-host", "", "SMTP host")
-	pickSHACmd.Flags().IntVar(&pickSHAFlags.smtpPort, "smtp-port", 0, "SMTP port")
-	pickSHACmd.Flags().StringArrayVar(&pickSHAFlags.emailAddresses, "to", []string{}, "email addresses")
-	pickSHACmd.Flags().BoolVar(&pickSHAFlags.dryRun, "dry-run", false, "use dry run Jira project for issues")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseBucket, releaseBucket, "", "release candidates metadata GCS bucket")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseObjectPrefix, releaseObjectPrefix, "", "release candidate object prefix")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseSeries, releaseSeries, "", "major release series")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.templatesDir, templatesDir, "", "templates directory")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.smtpUser, smtpUser, os.Getenv(envSMTPUser), "SMTP user name")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.smtpHost, smtpHost, "", "SMTP host")
+	pickSHACmd.Flags().IntVar(&pickSHAFlags.smtpPort, smtpPort, 0, "SMTP port")
+	pickSHACmd.Flags().StringArrayVar(&pickSHAFlags.emailAddresses, emailAddresses, []string{}, "email addresses")
+	pickSHACmd.Flags().BoolVar(&pickSHAFlags.dryRun, dryRun, false, "use dry run Jira project for issues")
+
 	requiredFlags := []string{
-		"qualify-bucket",
-		"qualify-object-prefix",
-		"release-bucket",
-		"release-object-prefix",
-		"release-series",
-		"smtp-user",
-		"smtp-host",
-		"smtp-port",
-		"to",
+		qualifyBucket,
+		qualifyObjectPrefix,
+		releaseBucket,
+		releaseObjectPrefix,
+		releaseSeries,
+		smtpUser,
+		smtpHost,
+		smtpPort,
+		emailAddresses,
 	}
 	for _, flag := range requiredFlags {
 		if err := pickSHACmd.MarkFlagRequired(flag); err != nil {
@@ -120,23 +130,24 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 		fmt.Sprintf("https://github.com/cockroachdb/cockroach/compare/%s...%s",
 			nextRelease.prevReleaseVersion,
 			nextRelease.buildInfo.SHA))
-	args := emailArgs{
+	args := messageDataPickSHA{
 		Version:          nextRelease.nextReleaseVersion,
 		SHA:              nextRelease.buildInfo.SHA,
 		TrackingIssue:    trackingIssue.Key,
 		TrackingIssueURL: template.URL(trackingIssue.url()),
 		DiffURL:          diffURL,
 	}
-	opts := smtpOpts{
-		from:     fmt.Sprintf("Justin Beaver <%s>", pickSHAFlags.smtpUser),
-		host:     pickSHAFlags.smtpHost,
-		port:     pickSHAFlags.smtpPort,
-		user:     pickSHAFlags.smtpUser,
-		password: smtpPassword,
-		to:       pickSHAFlags.emailAddresses,
+	opts := sendOpts{
+		templatesDir: pickSHAFlags.templatesDir,
+		from:         fmt.Sprintf("Justin Beaver <%s>", pickSHAFlags.smtpUser),
+		host:         pickSHAFlags.smtpHost,
+		port:         pickSHAFlags.smtpPort,
+		user:         pickSHAFlags.smtpUser,
+		password:     smtpPassword,
+		to:           pickSHAFlags.emailAddresses,
 	}
 	fmt.Println("Sending email")
-	if err := sendmail(args, opts); err != nil {
+	if err := sendMailPickSHA(args, opts); err != nil {
 		return fmt.Errorf("cannot send email: %w", err)
 	}
 	return nil
