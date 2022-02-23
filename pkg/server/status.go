@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -1916,6 +1917,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
+
 	resp, _, err := s.rangesHelper(ctx, req, 0, 0)
 	return resp, err
 }
@@ -2120,6 +2122,126 @@ func (s *statusServer) rangesHelper(
 		output.Ranges = outputInterface.([]serverpb.RangeInfo)
 	}
 	return &output, next, nil
+}
+
+func (s *statusServer) TenantRanges(
+	ctx context.Context, _ *serverpb.TenantRangesRequest,
+) (*serverpb.TenantRangesResponse, error) {
+	propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	tID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		return nil, errors.New("no tenant ID found in context")
+	}
+
+	tenantPrefix := keys.MakeTenantPrefix(tID)
+	tenantKeySpan := roachpb.Span{
+		Key:    tenantPrefix,
+		EndKey: tenantPrefix.PrefixEnd(),
+	}
+
+	rangeIDs := make([]roachpb.RangeID, 0)
+	replicaNodeIDs := make(map[roachpb.NodeID]struct{})
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		rangeKVs, err := kvclient.ScanMetaKVs(ctx, txn, tenantKeySpan)
+		if err != nil {
+			return err
+		}
+
+		for _, rangeKV := range rangeKVs {
+			var desc roachpb.RangeDescriptor
+			if err := rangeKV.ValueProto(&desc); err != nil {
+				return err
+			}
+			rangeIDs = append(rangeIDs, desc.RangeID)
+			for _, rep := range desc.Replicas().Descriptors() {
+				_, ok := replicaNodeIDs[rep.NodeID]
+				if !ok {
+					replicaNodeIDs[rep.NodeID] = struct{}{}
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, status.Error(
+			codes.Internal,
+			errors.Wrap(err, "there was a problem with the initial fetch of range IDs").Error())
+	}
+
+	nodeResults := make([][]serverpb.RangeInfo, 0, len(rangeIDs))
+	for nodeID := range replicaNodeIDs {
+		nodeIDString := nodeID.String()
+		_, local, err := s.parseNodeID(nodeIDString)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+
+		req := &serverpb.RangesRequest{
+			NodeId:                  nodeIDString,
+			RangeIDs:                rangeIDs,
+			OnlyLeaseholderReplicas: true,
+		}
+
+		var resp *serverpb.RangesResponse
+		if local {
+			resp, _, err = s.rangesHelper(ctx, req, 0, 0)
+		} else {
+			statusServer, err := s.dialNode(ctx, nodeID)
+			if err != nil {
+				return nil, serverError(ctx, err)
+			}
+			resp, err = statusServer.Ranges(ctx, req)
+		}
+		if err != nil {
+			return nil, err
+		}
+		nodeResults = append(nodeResults, resp.Ranges)
+	}
+
+	transformTenantRange := func(
+		rep serverpb.RangeInfo,
+	) *serverpb.TenantRangeInfo {
+		topKLocksByWaiters := make([]serverpb.TenantRangeInfo_LockInfo, 0, len(rep.TopKLocksByWaitQueueWaiters))
+		for _, lm := range rep.TopKLocksByWaitQueueWaiters {
+			topKLocksByWaiters = append(topKLocksByWaiters, serverpb.TenantRangeInfo_LockInfo{
+				PrettyKey:      lm.Key.String(),
+				Key:            lm.Key,
+				Held:           lm.Held,
+				Waiters:        lm.Waiters,
+				WaitingReaders: lm.WaitingReaders,
+				WaitingWriters: lm.WaitingWriters,
+			})
+		}
+		return &serverpb.TenantRangeInfo{
+			RangeID:                     rep.State.Desc.RangeID,
+			Span:                        rep.Span,
+			Locality:                    rep.Locality,
+			RangeStats:                  rep.Stats,
+			MvccStats:                   rep.State.Stats,
+			ReadLatches:                 rep.ReadLatches,
+			WriteLatches:                rep.WriteLatches,
+			Locks:                       rep.Locks,
+			LocksWithWaitQueues:         rep.LocksWithWaitQueues,
+			LockWaitQueueWaiters:        rep.LockWaitQueueWaiters,
+			TopKLocksByWaitQueueWaiters: topKLocksByWaiters,
+		}
+	}
+
+	resp := &serverpb.TenantRangesResponse{
+		Ranges: make([]serverpb.TenantRangeInfo, 0, len(rangeIDs)),
+	}
+
+	for _, rangeMetas := range nodeResults {
+		for _, rangeMeta := range rangeMetas {
+			resp.Ranges = append(resp.Ranges, *transformTenantRange(rangeMeta))
+		}
+	}
+
+	return resp, nil
 }
 
 // HotRanges returns the hottest ranges on each store on the requested node(s).

@@ -104,6 +104,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/CancelQuery":
 		return a.authTenant(tenID)
 
+	case "/cockroach.server.serverpb.Status/TenantRanges":
+		return a.authTenantRanges(tenID)
+
 	case "/cockroach.server.serverpb.Status/CancelLocalQuery":
 		return a.authTenant(tenID)
 
@@ -235,6 +238,18 @@ var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
 	"system-db",
+}
+
+// authTenantRanges authorizes the provided tenant to invoke the
+// TenantRanges RPC with the provided args.
+//
+// We prevent the system tenant from calling this endpoint, as they can
+// (and should) use the `(*statusServer).Ranges()` endpoint instead.
+func (a tenantAuthorizer) authTenantRanges(tenID roachpb.TenantID) error {
+	if !tenID.IsSet() || tenID == roachpb.SystemTenantID {
+		return authErrorf("tenant ranges with unspecified or system tenant not permitted.")
+	}
+	return nil
 }
 
 // authTokenBucket authorizes the provided tenant to invoke the

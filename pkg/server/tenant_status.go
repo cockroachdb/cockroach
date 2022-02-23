@@ -1047,10 +1047,6 @@ func (t *tenantStatusServer) TxnIDResolution(
 	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
 ) (*serverpb.TxnIDResolutionResponse, error) {
 	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
-	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
-		return nil, err
-	}
-
 	instanceID, local, err := t.parseInstanceID(req.CoordinatorID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1069,4 +1065,17 @@ func (t *tenantStatusServer) TxnIDResolution(
 	}
 
 	return statusClient.TxnIDResolution(ctx, req)
+}
+
+func (t *tenantStatusServer) TenantRanges(
+	ctx context.Context, req *serverpb.TenantRangesRequest,
+) (*serverpb.TenantRangesResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+	// The tenant range report contains replica metadata which is admin-only.
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.TenantRanges(ctx, req)
 }

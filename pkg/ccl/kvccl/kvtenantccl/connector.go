@@ -120,6 +120,11 @@ var _ config.SystemConfigProvider = (*Connector)(nil)
 // multi-region primitives.
 var _ serverpb.RegionsServer = (*Connector)(nil)
 
+// Connector is capable of find the debug information about the current
+// tenant within the cluster. This is necessary for things such as
+// debug zip and range reports.
+var _ serverpb.DebugStatusServer = (*Connector)(nil)
+
 // Connector is capable of accessing span configurations for secondary tenants.
 var _ spanconfig.KVAccessor = (*Connector)(nil)
 
@@ -420,6 +425,21 @@ func (c *Connector) Regions(
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		var err error
 		resp, err = c.Regions(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// TenantRanges implements the serverpb.DebugStatusServer interface
+func (c *Connector) TenantRanges(
+	ctx context.Context, req *serverpb.TenantRangesRequest,
+) (resp *serverpb.TenantRangesResponse, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.TenantRanges(ctx, req)
 		return err
 	}); err != nil {
 		return nil, err
