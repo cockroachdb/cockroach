@@ -109,7 +109,7 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 				expectTS = nil
 			}
 
-			encodedTS := encodeMVCCTimestampSuffix(tc.ts)
+			encodedTS := EncodeMVCCTimestampSuffix(tc.ts)
 			require.Equal(t, expectTS, encodedTS)
 
 			decodedTS, err := decodeMVCCTimestampSuffix(encodedTS)
