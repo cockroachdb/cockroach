@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "spanconfigstore.go",
         "store.go",
+        "systemspanconfigstore.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore",
     visibility = ["//visibility:public"],
@@ -26,14 +27,17 @@ go_test(
     srcs = [
         "spanconfigstore_test.go",
         "store_test.go",
+        "systemspanconfigstore_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
     deps = [
+        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

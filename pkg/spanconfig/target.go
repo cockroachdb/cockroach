@@ -11,9 +11,12 @@
 package spanconfig
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // Target specifies the target of an associated span configuration.
@@ -277,4 +280,14 @@ func TestingEntireSpanConfigurationStateTargets() []Target {
 			span: keys.EverythingSpan,
 		},
 	}
+}
+
+// TestingMakeTenantKeyspaceTargetOrFatal is like MakeTenantKeyspaceTarget
+// except it fatals on error.
+func TestingMakeTenantKeyspaceTargetOrFatal(
+	t *testing.T, sourceID roachpb.TenantID, targetID roachpb.TenantID,
+) SystemTarget {
+	target, err := MakeTenantKeyspaceTarget(sourceID, targetID)
+	require.NoError(t, err)
+	return target
 }

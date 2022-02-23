@@ -220,6 +220,7 @@ type StoreWriter interface {
 	//
 	// [1]: Unless dryrun is true. We'll still generate the same {deleted,added}
 	//      lists.
+	// TODO(arul): Get rid of dryrun; we don't make use of it anywhere.
 	Apply(ctx context.Context, dryrun bool, updates ...Update) (
 		deleted []Target, added []Record,
 	)

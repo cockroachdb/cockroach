@@ -12,6 +12,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -59,6 +64,10 @@ type streamIngestionFrontier struct {
 	// span set.
 	frontier *span.Frontier
 
+	// heartbeatSender sends heartbeats to the source cluster to keep the replication
+	// stream alive.
+	heartbeatSender *heartbeatSender
+
 	lastPartitionUpdate time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 }
@@ -82,6 +91,10 @@ func newStreamIngestionFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
+	heartbeatSender, err := newHeartbeatSender(flowCtx, spec)
+	if err != nil {
+		return nil, err
+	}
 	sf := &streamIngestionFrontier{
 		flowCtx:           flowCtx,
 		spec:              spec,
@@ -89,6 +102,7 @@ func newStreamIngestionFrontierProcessor(
 		highWaterAtStart:  spec.HighWaterAtStart,
 		frontier:          frontier,
 		partitionProgress: make(map[string]jobspb.StreamIngestionProgress_PartitionProgress),
+		heartbeatSender:   heartbeatSender,
 	}
 	if err := sf.Init(
 		sf,
@@ -112,14 +126,120 @@ func (sf *streamIngestionFrontier) MustBeStreaming() bool {
 	return true
 }
 
+type heartbeatSender struct {
+	lastSent        time.Time
+	client          streamclient.Client
+	streamID        streaming.StreamID
+	frontierUpdates chan hlc.Timestamp
+	frontier        hlc.Timestamp
+	flowCtx         *execinfra.FlowCtx
+	// cg runs the heartbeatSender thread.
+	cg ctxgroup.Group
+	// Send signal to stopChan to stop heartbeat sender.
+	stopChan chan struct{}
+	// heartbeatSender closes this channel when it stops.
+	stoppedChan chan struct{}
+}
+
+func newHeartbeatSender(
+	flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
+) (*heartbeatSender, error) {
+	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(spec.StreamAddress))
+	if err != nil {
+		return nil, err
+	}
+	return &heartbeatSender{
+		client:          streamClient,
+		streamID:        streaming.StreamID(spec.StreamID),
+		flowCtx:         flowCtx,
+		frontierUpdates: make(chan hlc.Timestamp),
+		stopChan:        make(chan struct{}),
+		stoppedChan:     make(chan struct{}),
+	}, nil
+}
+
+func (h *heartbeatSender) maybeHeartbeat(ctx context.Context, frontier hlc.Timestamp) error {
+	heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.flowCtx.EvalCtx.Settings.SV)
+	if h.lastSent.Add(heartbeatFrequency).After(timeutil.Now()) {
+		return nil
+	}
+	h.lastSent = timeutil.Now()
+	return h.client.Heartbeat(ctx, h.streamID, frontier)
+}
+
+func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
+	h.cg = ctxgroup.WithContext(ctx)
+	h.cg.GoCtx(func(ctx context.Context) error {
+		sendHeartbeats := func() error {
+			// The heartbeat thread send heartbeats when there is a frontier update,
+			// and it has been a while since last time we sent it, or when we need
+			// to heartbeat to keep the stream alive even if the frontier has no update.
+			timer := time.NewTimer(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
+				Get(&h.flowCtx.EvalCtx.Settings.SV))
+			defer timer.Stop()
+			unknownStatusErr := log.Every(1 * time.Minute)
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-h.stopChan:
+					return nil
+				case <-timer.C:
+					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
+						Get(&h.flowCtx.EvalCtx.Settings.SV))
+				case frontier := <-h.frontierUpdates:
+					h.frontier.Forward(frontier)
+				}
+				err := h.maybeHeartbeat(ctx, h.frontier)
+				if err == nil {
+					continue
+				}
+
+				var se streamingccl.StreamStatusErr
+				if !errors.As(err, &se) {
+					return errors.Wrap(err, "unknown stream status error")
+				}
+
+				if se.StreamStatus == streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+					if unknownStatusErr.ShouldLog() {
+						log.Warningf(ctx, "replication stream %d has unknown status error", se.StreamID)
+					}
+					continue
+				}
+				// The replication stream is either paused or inactive.
+				return err
+			}
+		}
+		err := errors.CombineErrors(sendHeartbeats(), h.client.Close())
+		close(h.stoppedChan)
+		return err
+	})
+}
+
+// Stop the heartbeat loop and returns any error at time of heartbeatSender's exit.
+// Should be called at most once.
+func (h *heartbeatSender) stop() error {
+	close(h.stopChan) // Panic if closed multiple times
+	return h.cg.Wait()
+}
+
+// Wait for heartbeatSender to be stopped and returns any error.
+func (h *heartbeatSender) err() error {
+	return h.cg.Wait()
+}
+
 // Start is part of the RowSource interface.
 func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
 	sf.input.Start(ctx)
+	sf.heartbeatSender.startHeartbeatLoop(ctx)
 }
 
 // Next is part of the RowSource interface.
-func (sf *streamIngestionFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (sf *streamIngestionFrontier) Next() (
+	row rowenc.EncDatumRow,
+	meta *execinfrapb.ProducerMetadata,
+) {
 	for sf.State == execinfra.StateRunning {
 		row, meta := sf.input.Next()
 		if meta != nil {
@@ -144,9 +264,18 @@ func (sf *streamIngestionFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.Prod
 			sf.MoveToDraining(err)
 			break
 		}
-		if frontierChanged {
-			// Send back a row to the job so that it can update the progress.
-			newResolvedTS := sf.frontier.Frontier()
+
+		// Send back a row to the job so that it can update the progress.
+		newResolvedTS := sf.frontier.Frontier()
+		select {
+		case <-sf.Ctx.Done():
+			sf.MoveToDraining(sf.Ctx.Err())
+			return nil, sf.DrainHelper()
+		// Send the frontier update in the heartbeat to the source cluster.
+		case sf.heartbeatSender.frontierUpdates <- newResolvedTS:
+			if !frontierChanged {
+				break
+			}
 			progressBytes, err := protoutil.Marshal(&newResolvedTS)
 			if err != nil {
 				sf.MoveToDraining(err)
@@ -158,9 +287,23 @@ func (sf *streamIngestionFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.Prod
 			if outRow := sf.ProcessRowHelper(pushRow); outRow != nil {
 				return outRow, nil
 			}
+			// If heartbeatSender has error, it means remote has error, we want to
+			// stop the processor.
+		case <-sf.heartbeatSender.stoppedChan:
+			sf.MoveToDraining(sf.heartbeatSender.err())
+			return nil, sf.DrainHelper()
 		}
 	}
 	return nil, sf.DrainHelper()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (sf *streamIngestionFrontier) ConsumerClosed() {
+	if sf.InternalClose() {
+		if err := sf.heartbeatSender.stop(); err != nil {
+			log.Errorf(sf.Ctx, "heartbeatSender exited with error: %s", err.Error())
+		}
+	}
 }
 
 // noteResolvedTimestamps processes a batch of resolved timestamp events, and

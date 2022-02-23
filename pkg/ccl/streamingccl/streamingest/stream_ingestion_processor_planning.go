@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -34,6 +35,7 @@ func distStreamIngestionPlanSpecs(
 	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
 	jobID jobspb.JobID,
+	streamID streaming.StreamID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
@@ -46,6 +48,7 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
+				StreamID:           uint64(streamID),
 				JobID:              int64(jobID),
 				StartTime:          initialHighWater,
 				StreamAddress:      string(streamAddress),
@@ -72,7 +75,11 @@ func distStreamIngestionPlanSpecs(
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		HighWaterAtStart: initialHighWater, TrackedSpans: trackedSpans, JobID: int64(jobID),
+		HighWaterAtStart: initialHighWater,
+		TrackedSpans:     trackedSpans,
+		JobID:            int64(jobID),
+		StreamID:         uint64(streamID),
+		StreamAddress:    string(streamAddress),
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
@@ -174,19 +181,16 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 		return errors.New("streamIngestionResultWriter expects non-nil row entry")
 	}
 
-	job, err := s.registry.LoadJob(ctx, s.jobID)
-	if err != nil {
-		return err
+	// Decode the row, write the ts into job record, and send a heartbeat to source cluster.
+	var ingestedHighWatermark hlc.Timestamp
+	if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)),
+		&ingestedHighWatermark); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
 	}
-	return job.Update(s.ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		// Decode the row and write the ts.
-		var ingestedHighWatermark hlc.Timestamp
-		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)),
-			&ingestedHighWatermark); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
-		}
-		return jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju)
-	})
+	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, false, /* useReadLock */
+		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			return jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju)
+		})
 }
 
 // IncrementRowsAffected implements the sql.rowResultWriter interface.
