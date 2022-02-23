@@ -481,7 +481,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 				// TODO(during review): the breaker could no longer be tripped at this point,
 				// so we'd need to manufacture an error. This is at odds with the old setup
 				// which tried to have the breaker be the source of the error.
-				pErr = roachpb.NewError(errors.Wrapf(brErr, "%s", spanlatch.ErrPoisonedLatch))
+				pErr = roachpb.NewError(errors.CombineErrors(brErr, spanlatch.ErrPoisonedLatch))
 			}
 			return nil, pErr
 		} else if resp != nil {
