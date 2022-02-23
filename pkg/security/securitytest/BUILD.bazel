@@ -33,4 +33,5 @@ bindata(
     ],
     metadata = True,
     package = "securitytest",
+    visibility = ["//pkg/gen:__pkg__"],
 )
