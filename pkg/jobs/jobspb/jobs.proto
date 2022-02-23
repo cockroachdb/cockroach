@@ -323,7 +323,11 @@ message RestoreDetails {
   string debug_pause_on = 20;
   bool restore_system_users = 22;
 
-  // NEXT ID: 23.
+  // PreRewrittenTenantID is the ID of tenants[0] in the backup, aka its old ID;
+  // it is only valid to set this if len(tenants) == 1.
+  roachpb.TenantID pre_rewrite_tenant_id = 23; 
+
+  // NEXT ID: 24.
 }
 
 message RestoreProgress {
