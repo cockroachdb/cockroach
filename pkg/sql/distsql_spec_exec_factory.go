@@ -190,8 +190,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
-	defer sb.Release()
+	var sb span.Builder
+	sb.Init(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
 
 	cols := make([]catalog.Column, 0, params.NeededCols.Len())
 	allCols := tabDesc.AllColumns()

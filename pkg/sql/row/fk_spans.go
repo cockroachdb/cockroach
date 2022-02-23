@@ -20,13 +20,13 @@ import (
 // FKCheckSpan returns a span that can be scanned to ascertain existence of a
 // specific row in a given index.
 func FKCheckSpan(
-	s *span.Builder,
+	builder *span.Builder,
 	splitter span.Splitter,
 	values []tree.Datum,
 	colMap catalog.TableColMap,
 	numCols int,
 ) (roachpb.Span, error) {
-	span, containsNull, err := s.SpanFromDatumRow(values, numCols, colMap)
+	span, containsNull, err := builder.SpanFromDatumRow(values, numCols, colMap)
 	if err != nil {
 		return roachpb.Span{}, err
 	}

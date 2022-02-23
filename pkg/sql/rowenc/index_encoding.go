@@ -47,11 +47,11 @@ func MakeIndexKeyPrefix(codec keys.SQLCodec, tableID descpb.ID, indexID descpb.I
 	return codec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
-// EncodeIndexKey creates a key by concatenating keyPrefix with the
-// encodings of the columns in the index, and returns the key and
-// whether any of the encoded values were NULLs.
+// EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
+// the index key columns, and returns the key and whether any of the encoded
+// values were NULLs.
 //
-// Note that KeySuffixColumnIDs are not encoded, so the result isn't always a
+// Note that key suffix columns are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
 	tableDesc catalog.TableDescriptor,
@@ -60,24 +60,16 @@ func EncodeIndexKey(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(
-		index,
-		index.NumKeyColumns(), /* encode all columns */
+	keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+	keyCols := keyAndSuffixCols[:index.NumKeyColumns()]
+	key, containsNull, err = EncodePartialIndexKey(
+		keyCols,
 		colMap,
 		values,
 		keyPrefix,
 	)
-	containsNull = colIDWithNullVal != 0
-	if err == nil && containsNull && index.Primary() {
-		col, findErr := tableDesc.FindColumnWithID(colIDWithNullVal)
-		if findErr != nil {
-			return nil, true, errors.WithAssertionFailure(findErr)
-		}
-		if col.IsNullable() {
-			return nil, true, errors.AssertionFailedf("primary key column %q should not be nullable", col.GetName())
-		}
-		return nil, true, sqlerrors.NewNonNullViolationError(col.GetName())
+	if err != nil {
+		return nil, false, err
 	}
 	return key, containsNull, err
 }
@@ -86,69 +78,51 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	index catalog.Index,
-	numCols int,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
 	var key roachpb.Key
-	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(index, numCols, colMap, values, keyPrefix)
-	containsNull = colIDWithNullVal != 0
+	key, containsNull, err = EncodePartialIndexKey(keyCols, colMap, values, keyPrefix)
 	if err != nil {
-		return span, containsNull, err
+		return span, false, err
 	}
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, containsNull, nil
 }
 
-// EncodePartialIndexKey encodes a partial index key; only the first numCols of
-// the index key columns are encoded. The index key columns are
-//  - index.KeyColumnIDs for unique indexes, and
-//  - append(index.KeyColumnIDs, index.KeySuffixColumnIDs) for non-unique indexes.
+// EncodePartialIndexKey encodes a partial index key; only the given key (or key
+// suffix) columns are encoded; these can be a prefix of the index key columns.
+// Does not directly append to keyPrefix.
 func EncodePartialIndexKey(
-	index catalog.Index,
-	numCols int,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, colIDWithNullVal descpb.ColumnID, err error) {
-	var colIDs, keySuffixColIDs []descpb.ColumnID
-	if numCols <= index.NumKeyColumns() {
-		colIDs = index.IndexDesc().KeyColumnIDs[:numCols]
-	} else {
-		if index.IsUnique() || numCols > index.NumKeyColumns()+index.NumKeySuffixColumns() {
-			return nil, colIDWithNullVal, errors.Errorf("encoding too many columns (%d)", numCols)
-		}
-		colIDs = index.IndexDesc().KeyColumnIDs
-		keySuffixColIDs = index.IndexDesc().KeySuffixColumnIDs[:numCols-index.NumKeyColumns()]
-	}
-
+) (key []byte, containsNull bool, _ error) {
 	// We know we will append to the key which will cause the capacity to grow so
 	// make it bigger from the get-go.
 	// Add the length of the key prefix as an initial guess.
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
 	key = growKey(keyPrefix, len(keyPrefix)+2*len(values))
 
-	dirs := directions(index.IndexDesc().KeyColumnDirections)
+	for i := range keyCols {
+		keyCol := &keyCols[i]
+		val := findColumnValue(keyCol.ColumnID, colMap, values)
+		if val == tree.DNull {
+			containsNull = true
+		}
 
-	var keyColIDWithNullVal, keySuffixColIDWithNullVal descpb.ColumnID
-	key, keyColIDWithNullVal, err = EncodeColumns(colIDs, dirs, colMap, values, key)
-	if colIDWithNullVal == 0 {
-		colIDWithNullVal = keyColIDWithNullVal
-	}
-	if err != nil {
-		return nil, colIDWithNullVal, err
-	}
+		dir, err := keyCol.Direction.ToEncodingDirection()
+		if err != nil {
+			return nil, false, err
+		}
 
-	key, keySuffixColIDWithNullVal, err = EncodeColumns(keySuffixColIDs, nil /* directions */, colMap, values, key)
-	if colIDWithNullVal == 0 {
-		colIDWithNullVal = keySuffixColIDWithNullVal
+		if key, err = keyside.Encode(key, val, dir); err != nil {
+			return nil, false, err
+		}
 	}
-	if err != nil {
-		return nil, colIDWithNullVal, err
-	}
-	return key, colIDWithNullVal, nil
+	return key, containsNull, nil
 }
 
 type directions []descpb.IndexDescriptor_Direction
@@ -169,13 +143,11 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // specified in the same order as the index key columns and may be a prefix.
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	types []*types.T,
-	dirs []descpb.IndexDescriptor_Direction,
-	index catalog.Index,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, _, containsNull, err := MakeKeyFromEncDatums(values, types, dirs, index, alloc, keyPrefix)
+	startKey, containsNull, err := MakeKeyFromEncDatums(values, keyCols, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -351,40 +323,37 @@ func SplitRowKeyIntoFamilySpans(
 }
 
 // MakeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
-// encodings of the given EncDatum values. The values, types, and dirs
-// parameters should be specified in the same order as the index key columns and
-// may be a prefix. The complete return value is true if the resultant key
-// fully constrains the index.
+// encodings of the given EncDatum values.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
-	types []*types.T,
-	dirs []descpb.IndexDescriptor_Direction,
-	index catalog.Index,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
-) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
+) (_ roachpb.Key, containsNull bool, _ error) {
 	// Values may be a prefix of the index columns.
-	if len(values) > len(dirs) {
-		return nil, false, false, errors.Errorf("%d values, %d directions", len(values), len(dirs))
-	}
-	if len(values) != len(types) {
-		return nil, false, false, errors.Errorf("%d values, %d types", len(values), len(types))
+	if len(values) > len(keyCols) {
+		return nil, false, errors.Errorf("%d values, %d key cols", len(values), len(keyCols))
 	}
 	// We know we will append to the key which will cause the capacity to grow
 	// so make it bigger from the get-go.
 	key := make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
 	copy(key, keyPrefix)
 
-	var (
-		err error
-		n   bool
-	)
-	key, n, err = appendEncDatumsToKey(key, types, values, dirs, alloc)
-	if err != nil {
-		return key, false, false, err
+	for i, val := range values {
+		encoding := descpb.DatumEncoding_ASCENDING_KEY
+		if keyCols[i].Direction == descpb.IndexDescriptor_DESC {
+			encoding = descpb.DatumEncoding_DESCENDING_KEY
+		}
+		if val.IsNull() {
+			containsNull = true
+		}
+		var err error
+		key, err = val.Encode(keyCols[i].Type, alloc, encoding, key)
+		if err != nil {
+			return nil, false, err
+		}
 	}
-	containsNull = containsNull || n
-	return key, len(types) == index.NumKeyColumns(), containsNull, err
+	return key, containsNull, nil
 }
 
 // findColumnValue returns the value corresponding to the column. If
@@ -398,32 +367,6 @@ func findColumnValue(
 		return values[i]
 	}
 	return tree.DNull
-}
-
-// appendEncDatumsToKey concatenates the encoded representations of
-// the datums at the end of the given roachpb.Key.
-func appendEncDatumsToKey(
-	key roachpb.Key,
-	types []*types.T,
-	values EncDatumRow,
-	dirs []descpb.IndexDescriptor_Direction,
-	alloc *tree.DatumAlloc,
-) (_ roachpb.Key, containsNull bool, _ error) {
-	for i, val := range values {
-		encoding := descpb.DatumEncoding_ASCENDING_KEY
-		if dirs[i] == descpb.IndexDescriptor_DESC {
-			encoding = descpb.DatumEncoding_DESCENDING_KEY
-		}
-		if val.IsNull() {
-			containsNull = true
-		}
-		var err error
-		key, err = val.Encode(types[i], alloc, encoding, key)
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	return key, containsNull, nil
 }
 
 // DecodePartialTableIDIndexID decodes a table id followed by an index id. The
@@ -893,9 +836,12 @@ func EncodePrimaryIndex(
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
-	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
+	indexKey, containsNull, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
 	if err != nil {
 		return nil, err
+	}
+	if containsNull {
+		return nil, MakeNullPKError(tableDesc, index, colMap, values)
 	}
 	indexedColumns := index.CollectKeyColumnIDs()
 	var entryValue []byte
@@ -966,6 +912,23 @@ func EncodePrimaryIndex(
 	}
 
 	return indexEntries, nil
+}
+
+// MakeNullPKError generates an error when the value for a primary key column is
+// null.
+func MakeNullPKError(
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+) error {
+	for _, col := range table.IndexKeyColumns(index) {
+		ord, ok := colMap.Get(col.GetID())
+		if !ok || values[ord] == tree.DNull {
+			return sqlerrors.NewNonNullViolationError(col.GetName())
+		}
+	}
+	return errors.AssertionFailedf("NULL value in unknown key column")
 }
 
 // EncodeSecondaryIndex encodes key/values for a secondary
@@ -1321,24 +1284,24 @@ func EncodeColumns(
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, colIDWithNullVal descpb.ColumnID, err error) {
+) (key []byte, containsNull bool, err error) {
 	key = keyPrefix
 	for colIdx, id := range columnIDs {
 		val := findColumnValue(id, colMap, values)
 		if val == tree.DNull {
-			colIDWithNullVal = id
+			containsNull = true
 		}
 
 		dir, err := directions.get(colIdx)
 		if err != nil {
-			return nil, colIDWithNullVal, err
+			return nil, false, err
 		}
 
 		if key, err = keyside.Encode(key, val, dir); err != nil {
-			return nil, colIDWithNullVal, err
+			return nil, false, err
 		}
 	}
-	return key, colIDWithNullVal, nil
+	return key, containsNull, nil
 }
 
 // growKey returns a new key with  the same contents as the given key and with

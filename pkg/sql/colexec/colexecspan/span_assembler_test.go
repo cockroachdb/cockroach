@@ -100,7 +100,8 @@ func TestSpanAssembler(t *testing.T) {
 							oracleSource.Init(ctx)
 							converter := colconv.NewAllVecToDatumConverter(len(typs))
 
-							builder := span.MakeBuilder(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
+							var builder span.Builder
+							builder.Init(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
 							splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
 
 							colBuilder := NewColSpanAssembler(
@@ -143,7 +144,7 @@ func TestSpanAssembler(t *testing.T) {
 									}
 									rows[i] = row
 								}
-								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, builder, splitter, rows, len(typs))...)
+								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, &builder, splitter, rows, len(typs))...)
 							}
 
 							if len(oracleSpans) != len(testSpans) {
@@ -176,7 +177,7 @@ func spanGeneratorOracle(
 ) roachpb.Spans {
 	var spans roachpb.Spans
 	for _, inputRow := range rows {
-		generatedSpan, containsNull, err := spanBuilder.SpanFromEncDatums(inputRow, lookupCols)
+		generatedSpan, containsNull, err := spanBuilder.SpanFromEncDatums(inputRow[:lookupCols])
 		if err != nil {
 			t.Fatal(err)
 		}
