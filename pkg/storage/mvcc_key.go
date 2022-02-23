@@ -156,6 +156,12 @@ func EncodeMVCCKeyToBuf(buf []byte, key MVCCKey) []byte {
 	return buf
 }
 
+// EncodeMVCCKeyPrefix encodes an MVCC user key (without timestamp) into its
+// Pebble prefix representation.
+func EncodeMVCCKeyPrefix(key roachpb.Key) []byte {
+	return EncodeMVCCKey(MVCCKey{Key: key})
+}
+
 // encodeMVCCKeyToBuf encodes an MVCCKey into its Pebble representation to the
 // target buffer, which must have the correct size.
 func encodeMVCCKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
@@ -185,10 +191,10 @@ func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
 	return buf
 }
 
-// encodeMVCCTimestampSuffix encodes an MVCC timestamp into its Pebble
+// EncodeMVCCTimestampSuffix encodes an MVCC timestamp into its Pebble
 // representation, including the length suffix but excluding the sentinel byte.
 // This is equivalent to the Pebble suffix.
-func encodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
+func EncodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
 	tsLen := encodedMVCCTimestampLength(ts)
 	if tsLen == 0 {
 		return nil
