@@ -323,17 +323,18 @@ func PrintSystemSpanConfigDiffedAgainstDefault(conf roachpb.SpanConfig) string {
 
 	var diffs []string
 	defaultSystemTargetConf := roachpb.TestingDefaultSystemSpanConfiguration()
-	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies, defaultSystemTargetConf.GCPolicy.ProtectionPolicies) {
+	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies,
+		defaultSystemTargetConf.GCPolicy.ProtectionPolicies) {
 		sort.Slice(conf.GCPolicy.ProtectionPolicies, func(i, j int) bool {
 			lhs := conf.GCPolicy.ProtectionPolicies[i].ProtectedTimestamp
 			rhs := conf.GCPolicy.ProtectionPolicies[j].ProtectedTimestamp
 			return lhs.Less(rhs)
 		})
-		timestamps := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
-		for _, pts := range conf.GCPolicy.ProtectionPolicies {
-			timestamps = append(timestamps, strconv.Itoa(int(pts.ProtectedTimestamp.WallTime)))
+		protectionPolicies := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
+		for _, pp := range conf.GCPolicy.ProtectionPolicies {
+			protectionPolicies = append(protectionPolicies, pp.String())
 		}
-		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
+		diffs = append(diffs, fmt.Sprintf("protection_policies=[%s]", strings.Join(protectionPolicies, " ")))
 	}
 	return strings.Join(diffs, " ")
 }

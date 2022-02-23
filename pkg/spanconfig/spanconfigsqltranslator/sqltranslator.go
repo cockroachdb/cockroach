@@ -82,7 +82,7 @@ func (s *SQLTranslator) Translate(
 		if err != nil {
 			return errors.Wrap(err, "failed to get protected timestamp state")
 		}
-		ptsStateReader := newProtectedTimestampStateReader(ctx, ptsState)
+		ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
 
 		if generateSystemSpanConfigurations {
 			records, err = s.generateSystemSpanConfigRecords(ptsStateReader)
@@ -155,7 +155,7 @@ var descLookupFlags = tree.CommonLookupFlags{
 // generateSystemSpanConfigRecords is responsible for generating all the SpanConfigs
 // that apply to spanconfig.SystemTargets.
 func (s *SQLTranslator) generateSystemSpanConfigRecords(
-	ptsStateReader *protectedTimestampStateReader,
+	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
 ) ([]spanconfig.Record, error) {
 	tenantPrefix := s.codec.TenantPrefix()
 	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
@@ -165,7 +165,7 @@ func (s *SQLTranslator) generateSystemSpanConfigRecords(
 	records := make([]spanconfig.Record, 0)
 
 	// Aggregate cluster target protections for the tenant.
-	clusterProtections := ptsStateReader.getProtectionPoliciesForCluster()
+	clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
 	if len(clusterProtections) != 0 {
 		var systemTarget spanconfig.SystemTarget
 		var err error
@@ -184,17 +184,17 @@ func (s *SQLTranslator) generateSystemSpanConfigRecords(
 	}
 
 	// Aggregate tenant target protections.
-	tenantProtections := ptsStateReader.getProtectionPoliciesForTenants()
+	tenantProtections := ptsStateReader.GetProtectionPoliciesForTenants()
 	for _, protection := range tenantProtections {
 		tenantProtection := protection
-		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, tenantProtection.tenantID)
+		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, tenantProtection.GetTenantID())
 		if err != nil {
 			return nil, err
 		}
 		tenantSystemRecord := spanconfig.Record{
 			Target: spanconfig.MakeTargetFromSystemTarget(systemTarget),
 			Config: roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{
-				ProtectionPolicies: tenantProtection.protections}},
+				ProtectionPolicies: tenantProtection.GetTenantProtections()}},
 		}
 		records = append(records, tenantSystemRecord)
 	}
@@ -209,7 +209,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	id descpb.ID,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-	ptsStateReader *protectedTimestampStateReader,
+	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
 ) (_ []spanconfig.Record, err error) {
 	if zonepb.IsNamedZoneID(id) {
 		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
@@ -307,7 +307,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	desc catalog.Descriptor,
-	ptsStateReader *protectedTimestampStateReader,
+	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
 ) ([]spanconfig.Record, error) {
 	if desc.DescriptorType() != catalog.Table {
 		return nil, errors.AssertionFailedf(
@@ -335,8 +335,8 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	// Set the ProtectionPolicies on the table's SpanConfig to include protected
 	// timestamps that apply to the table, and its parent database.
 	tableSpanConfig.GCPolicy.ProtectionPolicies = append(
-		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetID()),
-		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetParentID())...)
+		ptsStateReader.GetProtectionPoliciesForSchemaObject(desc.GetID()),
+		ptsStateReader.GetProtectionPoliciesForSchemaObject(desc.GetParentID())...)
 
 	// Set whether the table's row data has been marked to be excluded from
 	// backups.
