@@ -4,3 +4,7 @@ show_csettings_stmt ::=
 	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
 	| 'SHOW' 'CLUSTER' 'SETTINGS'
 	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS'
+	| 'SHOW' 'CLUSTER' 'SETTING' var_name 'FOR' 'TENANT' iconst64
+	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
+	| 'SHOW' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
+	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64

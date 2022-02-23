@@ -869,6 +869,25 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *AlterTenantSetClusterSetting) copyNode() *AlterTenantSetClusterSetting {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (stmt *AlterTenantSetClusterSetting) walkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Value != nil {
+		e, changed := WalkExpr(v, stmt.Value)
+		if changed {
+			ret = stmt.copyNode()
+			ret.Value = e
+		}
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Backup) copyNode() *Backup {
 	stmtCopy := *stmt
 	stmtCopy.IncrementalFrom = append(Exprs(nil), stmt.IncrementalFrom...)
@@ -1571,6 +1590,7 @@ func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+var _ walkableStmt = &AlterTenantSetClusterSetting{}
 var _ walkableStmt = &CreateTable{}
 var _ walkableStmt = &Backup{}
 var _ walkableStmt = &Delete{}
