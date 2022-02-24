@@ -39,18 +39,18 @@ func initColumnBackfillerSpec(
 func initIndexBackfillerSpec(
 	desc descpb.TableDescriptor,
 	writeAsOf, readAsOf hlc.Timestamp,
-	writeAtRequestTimestamp bool,
+	writeAtBatchTimestamp bool,
 	chunkSize int64,
 	indexesToBackfill []descpb.IndexID,
 ) (execinfrapb.BackfillerSpec, error) {
 	return execinfrapb.BackfillerSpec{
-		Table:                   desc,
-		WriteAsOf:               writeAsOf,
-		WriteAtRequestTimestamp: writeAtRequestTimestamp,
-		ReadAsOf:                readAsOf,
-		Type:                    execinfrapb.BackfillerSpec_Index,
-		ChunkSize:               chunkSize,
-		IndexesToBackfill:       indexesToBackfill,
+		Table:                 desc,
+		WriteAsOf:             writeAsOf,
+		WriteAtBatchTimestamp: writeAtBatchTimestamp,
+		ReadAsOf:              readAsOf,
+		Type:                  execinfrapb.BackfillerSpec_Index,
+		ChunkSize:             chunkSize,
+		IndexesToBackfill:     indexesToBackfill,
 	}, nil
 }
 

@@ -334,13 +334,13 @@ func ingestKvs(
 	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-	writeAtRequestTime := true
+	writeAtBatchTimestamp := true
 	if !importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
 		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster setting")
-		writeAtRequestTime = false
+		writeAtBatchTimestamp = false
 	} else if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
 		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster version")
-		writeAtRequestTime = false
+		writeAtBatchTimestamp = false
 	}
 
 	flushSize := func() int64 { return bulk.IngestFileSize(flowCtx.Cfg.Settings) }
@@ -365,7 +365,7 @@ func ingestKvs(
 		StepBufferSize:           stepSize,
 		SSTSize:                  flushSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtRequestTime:       writeAtRequestTime,
+		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
 	})
 	if err != nil {
 		return nil, err
@@ -383,7 +383,7 @@ func ingestKvs(
 		StepBufferSize:           stepSize,
 		SSTSize:                  flushSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtRequestTime:       writeAtRequestTime,
+		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
 	})
 	if err != nil {
 		return nil, err
