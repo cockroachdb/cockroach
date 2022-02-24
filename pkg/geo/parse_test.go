@@ -642,6 +642,17 @@ func TestParseHash(t *testing.T) {
 				Max: -120.9375,
 			},
 		}},
+		// In PostGIS, upper case characters are parsed as lower case characters.
+		{"F", 1, geohash.Box{
+			Lat: geohash.Range{
+				Min: 45,
+				Max: 90,
+			},
+			Lon: geohash.Range{
+				Min: -90,
+				Max: -45,
+			},
+		}},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s[:%d]", tc.h, tc.p), func(t *testing.T) {
