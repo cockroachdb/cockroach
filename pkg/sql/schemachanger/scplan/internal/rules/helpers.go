@@ -46,14 +46,14 @@ type depRuleSpec struct {
 func depRule(
 	ruleName string,
 	edgeKind scgraph.DepEdgeKind,
-	targetStatus scpb.Status,
+	targetStatus scpb.TargetStatus,
 	from, to elementSpec,
 	joinAttrs ...screl.Attr,
 ) depRuleSpec {
 	return depRuleSpec{
 		ruleName:     ruleName,
 		edgeKind:     edgeKind,
-		targetStatus: targetStatus,
+		targetStatus: targetStatus.Status(),
 		from:         from,
 		to:           to,
 		joinAttrs:    joinAttrs,

@@ -41,159 +41,159 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [EnumType:{DescID: 111}, DROPPED]
   kind: SameStagePrecedence
   rule: array type drops right before its element enum type
-- from: [Column:{DescID: 106, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 106, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 106, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 106, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 110, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 113, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnComment:{DescID: 113, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -957,15 +957,15 @@ PreCommitPhase stage 1 of 1 with 76 MutationType ops
     [[ObjectParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 106, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -981,7 +981,7 @@ PreCommitPhase stage 1 of 1 with 76 MutationType ops
     [[View:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -993,11 +993,11 @@ PreCommitPhase stage 1 of 1 with 76 MutationType ops
     [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1009,11 +1009,11 @@ PreCommitPhase stage 1 of 1 with 76 MutationType ops
     [[View:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1025,11 +1025,11 @@ PreCommitPhase stage 1 of 1 with 76 MutationType ops
     [[View:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1055,15 +1055,15 @@ PreCommitPhase stage 1 of 1 with 76 MutationType ops
     [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 113, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -1340,27 +1340,27 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
     [[Schema:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 106, IndexID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[View:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[EnumType:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
     [[AliasType:{DescID: 112}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], DELETE_AND_WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
   ops:
     *scop.LogEvent
       Authorization:

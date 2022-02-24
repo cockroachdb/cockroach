@@ -406,7 +406,7 @@ deprules
     - $from-target[TargetStatus] = PUBLIC
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
-    - $to-node[CurrentStatus] = DELETE_AND_WRITE_ONLY
+    - $to-node[CurrentStatus] = WRITE_ONLY
     - $from-target[Type] = '*scpb.Target'
     - $from-target[Element] = $from
     - $from-node[Type] = '*screl.Node'
@@ -544,7 +544,7 @@ deprules
     - $from-target[TargetStatus] = PUBLIC
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
-    - $to-node[CurrentStatus] = DELETE_AND_WRITE_ONLY
+    - $to-node[CurrentStatus] = WRITE_ONLY
     - $from-target[Type] = '*scpb.Target'
     - $from-target[Element] = $from
     - $from-node[Type] = '*screl.Node'
@@ -612,7 +612,7 @@ deprules
     - $to[Type] IN ['*scpb.ColumnType', '*scpb.ColumnName', '*scpb.ColumnComment']
     - $from-target[TargetStatus] = ABSENT
     - $to-target[TargetStatus] = ABSENT
-    - $from-node[CurrentStatus] = DELETE_AND_WRITE_ONLY
+    - $from-node[CurrentStatus] = WRITE_ONLY
     - $to-node[CurrentStatus] = ABSENT
     - $from-target[Type] = '*scpb.Target'
     - $from-target[Element] = $from
@@ -725,7 +725,7 @@ deprules
   kind: Precedence
   to: column-node
   query:
-    - $status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
+    - $status IN [WRITE_ONLY, PUBLIC]
     - $target-status = PUBLIC
     - $column[Type] = '*scpb.Column'
     - $index[Type] = '*scpb.PrimaryIndex'

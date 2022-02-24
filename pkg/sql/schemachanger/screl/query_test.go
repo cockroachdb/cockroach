@@ -25,7 +25,7 @@ import (
 func TestQueryBasic(t *testing.T) {
 	mkSeq := func(id descpb.ID) *scpb.Target {
 		t := scpb.MakeTarget(
-			scpb.Status_PUBLIC,
+			scpb.ToPublic,
 			&scpb.Sequence{SequenceID: id},
 			nil, /* metadata */
 		)
@@ -33,7 +33,7 @@ func TestQueryBasic(t *testing.T) {
 	}
 	mkFK := func(seqID, tblID descpb.ID) *scpb.Target {
 		t := scpb.MakeTarget(
-			scpb.Status_PUBLIC,
+			scpb.ToPublic,
 			&scpb.ForeignKeyConstraint{
 				TableID:           tblID,
 				ReferencedTableID: seqID},
@@ -43,7 +43,7 @@ func TestQueryBasic(t *testing.T) {
 	}
 	mkTable := func(id descpb.ID) *scpb.Target {
 		t := scpb.MakeTarget(
-			scpb.Status_PUBLIC,
+			scpb.ToPublic,
 			&scpb.Table{TableID: id},
 			nil, /* metadata */
 		)

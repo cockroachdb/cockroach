@@ -108,8 +108,6 @@ ElementState:
       keySuffixColumnIds:
       - 1
       tableId: 108
-    partialPredicate:
-      expr: g::STRING = 'hi':::STRING
   Status: PUBLIC
 - CheckConstraint:
     columnIds:
@@ -256,6 +254,12 @@ ElementState:
 - IndexName:
     indexId: 2
     name: partial
+    tableId: 108
+  Status: PUBLIC
+- SecondaryIndexPartial:
+    embeddedExpr:
+      expr: g::STRING = 'hi':::STRING
+    indexId: 2
     tableId: 108
   Status: PUBLIC
 - IndexComment:

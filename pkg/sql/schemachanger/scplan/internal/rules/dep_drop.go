@@ -25,7 +25,7 @@ func init() {
 	depRule(
 		"view drops before the types, views and tables it depends on",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_DROPPED,
 			(*scpb.View)(nil),
 		),
@@ -43,7 +43,7 @@ func init() {
 	depRule(
 		"alias type drops before the types it depends on",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_DROPPED,
 			(*scpb.AliasType)(nil),
 		),
@@ -59,7 +59,7 @@ func init() {
 	depRule(
 		"array type drops right before its element enum type",
 		scgraph.SameStagePrecedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_DROPPED,
 			(*scpb.AliasType)(nil),
 		),
@@ -81,7 +81,7 @@ func init() {
 	depRule(
 		"schema dropped before parent database",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.SchemaParent)(nil),
 		),
@@ -95,7 +95,7 @@ func init() {
 	depRule(
 		"object dropped before parent schema",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ObjectParent)(nil),
 		),
@@ -107,7 +107,7 @@ func init() {
 	depRule(
 		"secondary region locality removed before dropping multi-region enum type",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.TableLocalitySecondaryRegion)(nil),
 		),
@@ -119,7 +119,7 @@ func init() {
 	depRule(
 		"check constraint removed before dropping dependent types and sequences",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.CheckConstraint)(nil),
 		),
@@ -136,7 +136,7 @@ func init() {
 	depRule(
 		"FK removed before dropping dependent table",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ForeignKeyConstraint)(nil),
 		),
@@ -148,7 +148,7 @@ func init() {
 	depRule(
 		"index partial predicate removed before dropping dependent types",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.SecondaryIndexPartial)(nil),
 		),
@@ -163,7 +163,7 @@ func init() {
 	depRule(
 		"column type removed before dropping dependent types",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnType)(nil),
 		),
@@ -182,7 +182,7 @@ func init() {
 	depRule(
 		"column DEFAULT removed before dropping dependent types and sequences",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnDefaultExpression)(nil),
 		),
@@ -199,7 +199,7 @@ func init() {
 	depRule(
 		"column ON UPDATE removed before dropping dependent types and sequences",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnOnUpdateExpression)(nil),
 		),
@@ -216,7 +216,7 @@ func init() {
 	depRule(
 		"sequence ownership removed before dropping sequence",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.SequenceOwner)(nil),
 		),
@@ -228,7 +228,7 @@ func init() {
 	depRule(
 		"database region config removed before dropping multi-region enum type",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.DatabaseRegionConfig)(nil),
 		),
@@ -252,7 +252,7 @@ func init() {
 	depRule(
 		"dependent element removal before descriptor drop",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			// Table elements.
 			(*scpb.ColumnFamily)(nil),
@@ -307,7 +307,7 @@ func init() {
 	depRule(
 		"dependent element removal right after descriptor removal",
 		scgraph.SameStagePrecedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.Table)(nil),
 			(*scpb.View)(nil),

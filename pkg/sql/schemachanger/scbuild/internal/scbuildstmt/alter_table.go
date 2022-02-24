@@ -74,12 +74,12 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.CREATE,
 	})
-	_, targetStatus, tbl := scpb.FindTable(elts)
+	_, target, tbl := scpb.FindTable(elts)
 	if tbl == nil {
 		b.MarkNameAsNonExistent(&tn)
 		return
 	}
-	if targetStatus != scpb.Status_PUBLIC {
+	if target != scpb.ToPublic {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", n.Table.Object()))
 	}
