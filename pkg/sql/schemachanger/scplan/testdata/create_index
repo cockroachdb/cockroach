@@ -22,7 +22,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         StoringColumnIDs:
         - 3
         TableID: 104
-      SecondaryIndex: true
+      IsSecondaryIndex: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -39,7 +39,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -50,7 +50,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -115,7 +115,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         StoringColumnIDs:
         - 3
         TableID: 104
-      SecondaryIndex: true
+      IsSecondaryIndex: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -133,7 +133,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -144,7 +144,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2

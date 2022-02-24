@@ -55,26 +55,27 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	// Set up the encoding type.
 	encodingType := descpb.PrimaryIndexEncoding
 	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
-	if op.SecondaryIndex {
+	if op.IsSecondaryIndex {
 		encodingType = descpb.SecondaryIndexEncoding
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
-		ID:                  op.Index.IndexID,
-		Name:                tabledesc.IndexNamePlaceholder(op.Index.IndexID),
-		Unique:              op.Index.IsUnique,
-		Version:             indexVersion,
-		KeyColumnNames:      colNames,
-		KeyColumnIDs:        op.Index.KeyColumnIDs,
-		StoreColumnIDs:      op.Index.StoringColumnIDs,
-		StoreColumnNames:    storeColNames,
-		KeyColumnDirections: colDirs,
-		Type:                indexType,
-		KeySuffixColumnIDs:  op.Index.KeySuffixColumnIDs,
-		CompositeColumnIDs:  op.Index.CompositeColumnIDs,
-		CreatedExplicitly:   true,
-		EncodingType:        encodingType,
-		ConstraintID:        tbl.GetNextConstraintID(),
+		ID:                          op.Index.IndexID,
+		Name:                        tabledesc.IndexNamePlaceholder(op.Index.IndexID),
+		Unique:                      op.Index.IsUnique,
+		Version:                     indexVersion,
+		KeyColumnNames:              colNames,
+		KeyColumnIDs:                op.Index.KeyColumnIDs,
+		StoreColumnIDs:              op.Index.StoringColumnIDs,
+		StoreColumnNames:            storeColNames,
+		KeyColumnDirections:         colDirs,
+		Type:                        indexType,
+		KeySuffixColumnIDs:          op.Index.KeySuffixColumnIDs,
+		CompositeColumnIDs:          op.Index.CompositeColumnIDs,
+		CreatedExplicitly:           true,
+		EncodingType:                encodingType,
+		ConstraintID:                tbl.GetNextConstraintID(),
+		UseDeletePreservingEncoding: op.IsDeletePreserving,
 	}
 	if op.Index.Sharding != nil {
 		idx.Sharded = *op.Index.Sharding

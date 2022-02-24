@@ -56,7 +56,7 @@ func init() {
 			columnNode.AttrIn(screl.CurrentStatus,
 				// All but DELETE_ONLY which is the status leading to ABSENT.
 				scpb.Status_PUBLIC,
-				scpb.Status_DELETE_AND_WRITE_ONLY,
+				scpb.Status_WRITE_ONLY,
 			),
 		),
 	)
