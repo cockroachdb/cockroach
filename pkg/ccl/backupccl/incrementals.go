@@ -164,8 +164,6 @@ func resolveIncrementalsBackupLocation(
 		}
 		return incPaths, nil
 	}
-	var prev []string
-	var err error
 
 	resolvedIncrementalsBackupLocationOld, err := appendPaths(fullBackupCollections, subdir)
 	if err != nil {
@@ -176,7 +174,7 @@ func resolveIncrementalsBackupLocation(
 	// incremental layer iff all of them do. So it suffices to check only the
 	// first.
 	// Check we can read from this location, though we don't need the backups here.
-	prev, err = backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocationOld[0])
+	prev, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocationOld[0])
 	if err != nil {
 		return nil, err
 	}
