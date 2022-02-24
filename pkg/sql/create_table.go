@@ -1534,9 +1534,6 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.PrimaryKey.Sharded {
-				if !sessionData.HashShardedIndexesEnabled {
-					return nil, hashShardedIndexesDisabledError
-				}
 				if n.PartitionByTable.ContainsPartitions() && !n.PartitionByTable.All {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes cannot be explicitly partitioned")
 				}
@@ -1666,7 +1663,6 @@ func NewTableDesc(
 			ctx,
 			evalCtx,
 			semaCtx,
-			sessionData.HashShardedIndexesEnabled,
 			d.Columns,
 			d.Sharded.ShardBuckets,
 			&desc,

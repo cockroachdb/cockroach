@@ -7432,7 +7432,6 @@ INSERT INTO t.test VALUES (1, 2);
 
 	// Make sure shard column constraint is not validated.
 	tdb.Exec(t, `
-SET experimental_enable_hash_sharded_indexes = ON;
 CREATE INDEX ON t.test (b) USING HASH WITH (bucket_count=8);
 `,
 	)
@@ -7506,7 +7505,6 @@ CREATE TABLE t.test_split(a INT PRIMARY KEY, b INT NOT NULL);
 	}
 
 	tdb.Exec(t, `
-SET experimental_enable_hash_sharded_indexes = on;
 CREATE INDEX idx_test_split_b ON t.test_split (b) USING HASH WITH (bucket_count=8);
 `)
 }

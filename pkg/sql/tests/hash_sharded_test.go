@@ -90,9 +90,6 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 	if _, err := db.Exec(`USE d`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`SET experimental_enable_hash_sharded_indexes = true`); err != nil {
-		t.Fatal(err)
-	}
 
 	t.Run("primary", func(t *testing.T) {
 		if _, err := db.Exec(`

@@ -49,7 +49,6 @@ func ShowCreateTableTest(
 
 	if _, err := sqlDB.Exec(`
     SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
-		SET experimental_enable_hash_sharded_indexes = TRUE;
 		CREATE DATABASE d;
 		USE d;
 		-- Create a table we can point FKs to.

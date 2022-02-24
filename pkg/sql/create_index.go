@@ -235,7 +235,6 @@ func makeIndexDescriptor(
 			params.ctx,
 			params.EvalContext(),
 			&params.p.semaCtx,
-			params.SessionData().HashShardedIndexesEnabled,
 			columns,
 			n.Sharded.ShardBuckets,
 			tableDesc,
@@ -501,9 +500,6 @@ func replaceExpressionElemsWithVirtualCols(
 // and expects to see its own writes.
 func (n *createIndexNode) ReadingOwnWrites() {}
 
-var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
-	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
-
 // setupShardedIndex creates a shard column for the given index descriptor. It
 // returns the shard column and the new column list for the index. If the shard
 // column is new, either of the following happens:
@@ -513,7 +509,6 @@ func setupShardedIndex(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	shardedIndexEnabled bool,
 	columns tree.IndexElemList,
 	bucketsExpr tree.Expr,
 	tableDesc *tabledesc.Mutable,
@@ -521,10 +516,6 @@ func setupShardedIndex(
 	storageParams tree.StorageParams,
 	isNewTable bool,
 ) (shard catalog.Column, newColumns tree.IndexElemList, err error) {
-	if !shardedIndexEnabled {
-		return nil, nil, hashShardedIndexesDisabledError
-	}
-
 	if !isNewTable && tableDesc.IsPartitionAllBy() {
 		partitionAllBy, err := partitionByFromTableDesc(evalCtx.Codec, tableDesc)
 		if err != nil {

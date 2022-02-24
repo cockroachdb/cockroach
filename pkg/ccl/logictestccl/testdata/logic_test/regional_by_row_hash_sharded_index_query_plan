@@ -11,9 +11,6 @@ CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-s
 statement ok
 USE multi_region_test_db
 
-statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
 # Make sure foreign key references checked is planned
 subtest test_fk_constraint
 
