@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 
@@ -983,6 +984,17 @@ func (h *distSQLNodeHealth) check(ctx context.Context, sqlInstanceID base.SQLIns
 func (dsp *DistSQLPlanner) PartitionSpans(
 	planCtx *PlanningCtx, spans roachpb.Spans,
 ) ([]SpanPartition, error) {
+	if dsp.codec.ForSystemTenant() {
+		return dsp.partitionSpansSystem(planCtx, spans)
+	}
+	return dsp.partitionSpansTenant(planCtx, spans)
+}
+
+// partitionSpansSystem finds node owners for ranges touching the given spans
+// for a system tenant.
+func (dsp *DistSQLPlanner) partitionSpansSystem(
+	planCtx *PlanningCtx, spans roachpb.Spans,
+) ([]SpanPartition, error) {
 	if len(spans) == 0 {
 		panic("no spans")
 	}
@@ -1108,6 +1120,54 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 			lastKey = endKey
 			lastSQLInstanceID = sqlInstanceID
 		}
+	}
+	return partitions, nil
+}
+
+// partitionSpansTenant assigns SQL instances in a tenant to spans. Currently
+// assignments are made to all available instances in a round-robin fashion.
+func (dsp *DistSQLPlanner) partitionSpansTenant(
+	planCtx *PlanningCtx, spans roachpb.Spans,
+) ([]SpanPartition, error) {
+	if len(spans) == 0 {
+		panic("no spans")
+	}
+	ctx := planCtx.ctx
+	partitions := make([]SpanPartition, 0, 1)
+	if planCtx.isLocal {
+		// If we're planning locally, map all spans to the local node.
+		partitions = append(partitions,
+			SpanPartition{dsp.gatewaySQLInstanceID, spans})
+		return partitions, nil
+	}
+	if dsp.sqlInstanceProvider == nil {
+		return nil, errors.New("sql instance provider not available in multi-tenant environment")
+	}
+	// GetAllInstances only returns healthy instances.
+	instances, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rand.Shuffle(len(instances), func(i, j int) {
+		instances[i], instances[j] = instances[j], instances[i]
+	})
+
+	// nodeMap maps a SQLInstanceID to an index inside the partitions array.
+	nodeMap := make(map[base.SQLInstanceID]int)
+	for i := range spans {
+		span := spans[i]
+		if log.V(1) {
+			log.Infof(ctx, "partitioning span %s", span)
+		}
+		sqlInstanceID := instances[i%len(instances)].InstanceID
+		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
+		if !inNodeMap {
+			partitionIdx = len(partitions)
+			partitions = append(partitions, SpanPartition{SQLInstanceID: sqlInstanceID})
+			nodeMap[sqlInstanceID] = partitionIdx
+		}
+		partition := &partitions[partitionIdx]
+		partition.Spans = append(partition.Spans, span)
 	}
 	return partitions, nil
 }
