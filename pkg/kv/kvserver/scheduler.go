@@ -121,7 +121,10 @@ func (q *rangeIDQueue) Len() int {
 }
 
 func (q *rangeIDQueue) SetPriorityID(id roachpb.RangeID) {
-	if q.priorityID != 0 && q.priorityID != id {
+	if q.priorityID != 0 && q.priorityID != id &&
+		// This assertion is temporarily disabled, see:
+		// https://github.com/cockroachdb/cockroach/issues/75939
+		false {
 		panic(fmt.Sprintf(
 			"priority range ID already set: old=%d, new=%d",
 			q.priorityID, id))
