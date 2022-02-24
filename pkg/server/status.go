@@ -2455,6 +2455,11 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 			}
 			storeResp.HotRanges[i].Desc = *r.Desc
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
+			storeResp.HotRanges[i].RequestsPerSecond = r.RequestsPerSecond
+			storeResp.HotRanges[i].WritesPerSecond = r.WriteKeysPerSecond
+			storeResp.HotRanges[i].ReadsPerSecond = r.ReadKeysPerSecond
+			storeResp.HotRanges[i].WriteBytesPerSecond = r.WriteBytesPerSecond
+			storeResp.HotRanges[i].ReadBytesPerSecond = r.ReadBytesPerSecond
 		}
 		resp.Stores = append(resp.Stores, storeResp)
 		return nil
