@@ -333,7 +333,8 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
-			if err := s.sink.output(bufs.b[i].Bytes(), sinkOutputOptions{extraFlush: extraFlush, forceSync: isFatal}); err != nil {
+			format := formatParsers[s.formatter.formatterName()]
+			if err := s.sink.output(bufs.b[i].Bytes(), sinkOutputOptions{extraFlush: extraFlush, forceSync: isFatal, format: format}); err != nil {
 				if !s.criticality {
 					// An error on this sink is not critical. Just report
 					// the error and move on.
