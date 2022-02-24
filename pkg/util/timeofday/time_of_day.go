@@ -12,6 +12,7 @@ package timeofday
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"time"
@@ -65,6 +66,17 @@ func (t TimeOfDay) String() string {
 // appropriate.
 func FromInt(i int64) TimeOfDay {
 	return TimeOfDay(positiveMod(i, microsecondsPerDay))
+}
+
+// FromFloat constructs a TimeOfDay from a float64, representing microseconds since
+// midnight. Inputs outside the range [0, microsecondsPerDay) are modded as
+// appropriate.
+func FromFloat(f float64) TimeOfDay {
+	micros := math.Mod(f, microsecondsPerDay)
+	if micros < 0 {
+		micros += microsecondsPerDay
+	}
+	return TimeOfDay(micros)
 }
 
 // positive_mod returns x mod y in the range [0, y). (Go's modulo operator
