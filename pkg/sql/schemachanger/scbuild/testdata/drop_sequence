@@ -5,7 +5,7 @@ CREATE SEQUENCE defaultdb.SQ1
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- [[Namespace:{DescID: 104, ReferencedDescID: 100, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 104
@@ -87,7 +87,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
       - 107
       - 108
     tableId: 109
-- [[Namespace:{DescID: 104, ReferencedDescID: 100, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 104
@@ -134,7 +134,7 @@ CREATE SEQUENCE defaultdb.ownedseq OWNED BY defaultdb.ownertbl.id
 build
 DROP SEQUENCE defaultdb.ownedseq CASCADE
 ----
-- [[Namespace:{DescID: 111, ReferencedDescID: 100, Name: ownedseq}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: ownedseq, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 111
@@ -151,7 +151,7 @@ DROP SEQUENCE defaultdb.ownedseq CASCADE
 - [[Sequence:{DescID: 111}, ABSENT], PUBLIC]
   details:
     sequenceId: 111
-- [[SequenceOwner:{DescID: 110, ReferencedDescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
+- [[SequenceOwner:{DescID: 110, ColumnID: 1, ReferencedDescID: 111}, ABSENT], PUBLIC]
   details:
     columnId: 1
     sequenceId: 111

@@ -533,81 +533,81 @@ DROP DATABASE db1 CASCADE
     indexId: 1
     name: t1_pkey
     tableId: 110
-- [[Namespace:{DescID: 104, ReferencedDescID: 0, Name: db1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     name: db1
-- [[Namespace:{DescID: 105, ReferencedDescID: 104, Name: public}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 105
     name: public
-- [[Namespace:{DescID: 106, ReferencedDescID: 104, Name: sc1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 106
     name: sc1
-- [[Namespace:{DescID: 107, ReferencedDescID: 104, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 107
     name: sq1
     schemaId: 105
-- [[Namespace:{DescID: 108, ReferencedDescID: 104, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 108
     name: sq1
     schemaId: 106
-- [[Namespace:{DescID: 109, ReferencedDescID: 104, Name: t1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 109
     name: t1
     schemaId: 106
-- [[Namespace:{DescID: 110, ReferencedDescID: 104, Name: t1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 110
     name: t1
     schemaId: 105
-- [[Namespace:{DescID: 111, ReferencedDescID: 104, Name: v1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 111
     name: v1
     schemaId: 106
-- [[Namespace:{DescID: 112, ReferencedDescID: 104, Name: v2}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 112
     name: v2
     schemaId: 106
-- [[Namespace:{DescID: 113, ReferencedDescID: 104, Name: v3}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 113
     name: v3
     schemaId: 106
-- [[Namespace:{DescID: 114, ReferencedDescID: 104, Name: v4}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 114
     name: v4
     schemaId: 106
-- [[Namespace:{DescID: 115, ReferencedDescID: 104, Name: typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 115
     name: typ
     schemaId: 106
-- [[Namespace:{DescID: 116, ReferencedDescID: 104, Name: _typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 116
     name: _typ
     schemaId: 106
-- [[Namespace:{DescID: 117, ReferencedDescID: 104, Name: v5}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
     descriptorId: 117

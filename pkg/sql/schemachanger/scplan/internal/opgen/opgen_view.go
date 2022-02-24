@@ -48,8 +48,8 @@ func init() {
 					if len(this.UsesTypeIDs) == 0 {
 						return nil
 					}
-					return &scop.RemoveViewBackReferencesInTypes{
-						BackReferencedViewID: this.ViewID,
+					return &scop.RemoveBackReferenceInTypes{
+						BackReferencedDescID: this.ViewID,
 						TypeIDs:              this.UsesTypeIDs,
 					}
 				}),

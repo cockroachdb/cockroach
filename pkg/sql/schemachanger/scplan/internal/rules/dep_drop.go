@@ -105,11 +105,11 @@ func init() {
 	).withJoinFromReferencedDescIDWithToDescID().register()
 
 	depRule(
-		"table locality removed before dropping multi-region enum typ",
+		"secondary region locality removed before dropping multi-region enum type",
 		scgraph.Precedence,
 		scpb.Status_ABSENT,
 		element(scpb.Status_ABSENT,
-			(*scpb.TableLocality)(nil),
+			(*scpb.TableLocalitySecondaryRegion)(nil),
 		),
 		element(scpb.Status_DROPPED,
 			(*scpb.EnumType)(nil),
@@ -255,12 +255,16 @@ func init() {
 		scpb.Status_ABSENT,
 		element(scpb.Status_ABSENT,
 			// Table elements.
-			(*scpb.TableLocality)(nil),
 			(*scpb.ColumnFamily)(nil),
 			(*scpb.UniqueWithoutIndexConstraint)(nil),
 			(*scpb.CheckConstraint)(nil),
 			(*scpb.ForeignKeyConstraint)(nil),
 			(*scpb.TableComment)(nil),
+			// Multi-region elements.
+			(*scpb.TableLocalityGlobal)(nil),
+			(*scpb.TableLocalityPrimaryRegion)(nil),
+			(*scpb.TableLocalitySecondaryRegion)(nil),
+			(*scpb.TableLocalityRegionalByRow)(nil),
 			// Column elements.
 			(*scpb.ColumnName)(nil),
 			(*scpb.ColumnDefaultExpression)(nil),
