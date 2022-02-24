@@ -7849,7 +7849,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunBeforeDescTxn: func() error {
+				RunBeforeDescTxn: func(_ jobspb.JobID) error {
 					if atomic.LoadInt32(&shouldCount) == 1 {
 						atomic.AddInt32(&count, 1)
 					}
@@ -7882,7 +7882,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 					jobID = id
 					return nil
 				},
-				RunBeforeDescTxn: func() error {
+				RunBeforeDescTxn: func(_ jobspb.JobID) error {
 					if atomic.LoadInt32(&shouldPause) == 0 {
 						return nil
 					}
@@ -7943,5 +7943,88 @@ INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
 			})
 		}
 	}
+}
 
+func TestTruncateWithIndexAdditionAtEveryStateTransition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var (
+		s     serverutils.TestTenantInterface
+		sqlDB *gosql.DB
+		kvDB  *kv.DB
+
+		jobID jobspb.JobID
+		count int32
+	)
+	rowCount := 10
+	writeSomeRows := func() error {
+		for i := 0; i < rowCount; i++ {
+			t.Logf("INSERT INTO t.test VALUES (%d, %d)", i, i)
+			_, err := sqlDB.Exec("INSERT INTO t.test VALUES ($1, $1)", i)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	rng, _ := randutil.NewPseudoRand()
+	truncateAtLim := 14
+	truncateAt := rng.Intn(truncateAtLim) + 1
+	didTruncate := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(id jobspb.JobID) error {
+				if jobID == 0 {
+					jobID = id
+				}
+				return nil
+			},
+			RunBeforeDescTxn: func(id jobspb.JobID) error {
+				if jobID == id {
+					current := int(atomic.AddInt32(&count, 1))
+					if current == truncateAt {
+						didTruncate = true
+						if err := writeSomeRows(); err != nil {
+							return err
+						}
+
+						_, err := sqlDB.Exec("TRUNCATE t.test")
+						if err != nil {
+							return err
+						}
+						truncateAt = -1
+						// Write more rows so that there is something to truncate the next time.
+						return writeSomeRows()
+					}
+				}
+				return nil
+			},
+		},
+	}
+	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	_, err := sqlDB.Exec("CREATE DATABASE t; CREATE TABLE t.test (pk INT PRIMARY KEY, v INT)")
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec("CREATE INDEX ON t.test(v)")
+	require.NoError(t, err)
+
+	require.True(t, didTruncate, "no truncate run, is truncateAtLim = %d (truncateAt: %d) too high?", truncateAtLim, truncateAt)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		return sqltestutils.CheckTableKeyCountExact(ctx, kvDB, 2*rowCount)
+	})
+	indexes := tableDesc.ActiveIndexes()
+	require.Equal(t, 2, len(indexes))
+	require.Equal(t, descpb.IndexID(4), indexes[0].GetID())
+	require.Equal(t, descpb.IndexID(5), indexes[1].GetID())
 }
