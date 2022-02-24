@@ -129,6 +129,15 @@ type Telemetry interface {
 	// counter.
 	IncrementSchemaChangeDropCounter(counterType string)
 
+	// IncrementSchemaChangeAddColumnTypeCounter increments telemetry counters for
+	// different types added as columns.
+	IncrementSchemaChangeAddColumnTypeCounter(typeName string)
+
+	// IncrementSchemaChangeAddColumnQualificationCounter increments telemetry
+	// counters for different qualifications (default expressions) on a newly
+	// added column.
+	IncrementSchemaChangeAddColumnQualificationCounter(qualification string)
+
 	// IncrementUserDefinedSchemaCounter increments the selected user-defined
 	// schema telemetry counter.
 	IncrementUserDefinedSchemaCounter(counterType sqltelemetry.UserDefinedSchemaTelemetryType)

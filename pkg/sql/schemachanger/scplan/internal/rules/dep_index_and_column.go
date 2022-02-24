@@ -430,7 +430,7 @@ func init() {
 		scgraph.SameStagePrecedence,
 		laterColNode, earlierColNode,
 		screl.MustQuery(
-			status.In(scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_PUBLIC),
+			status.In(scpb.Status_WRITE_ONLY, scpb.Status_PUBLIC),
 			targetStatus.Eq(scpb.Status_PUBLIC),
 
 			laterCol.Type((*scpb.Column)(nil)),
