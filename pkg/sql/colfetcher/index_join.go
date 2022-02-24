@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -430,10 +429,8 @@ func NewColIndexJoin(
 	kvFetcherMemAcc *mon.BoundAccount,
 	streamerBudgetAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
-	post *execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
 ) (*ColIndexJoin, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
@@ -450,12 +447,7 @@ func NewColIndexJoin(
 		return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
 	}
 
-	table := flowCtx.TableDescriptor(&spec.Table)
-	index := table.ActiveIndexes()[spec.IndexIdx]
-	tableArgs, neededColumns, err := populateTableArgsLegacy(
-		ctx, flowCtx, table, index, nil, /* invertedCol */
-		spec.HasSystemColumns, post, helper,
-	)
+	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +487,7 @@ func NewColIndexJoin(
 	}
 
 	spanAssembler := colexecspan.NewColSpanAssembler(
-		flowCtx.Codec(), allocator, table, index, inputTypes, neededColumns,
+		flowCtx.Codec(), allocator, &spec.FetchSpec, spec.SplitFamilyIDs, inputTypes,
 	)
 
 	op := &ColIndexJoin{

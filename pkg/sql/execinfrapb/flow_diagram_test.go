@@ -48,11 +48,6 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
-	desc := &descpb.TableDescriptor{
-		Name:         "Table",
-		PrimaryIndex: descpb.IndexDescriptor{Name: "primary"},
-		Indexes:      []descpb.IndexDescriptor{{Name: "SomeIndex"}},
-	}
 	tr := TableReaderSpec{
 		FetchSpec: descpb.IndexFetchSpec{
 			TableName: "Table",
@@ -117,7 +112,16 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 						{StreamID: 2},
 					},
 				}},
-				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
+				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{
+					FetchSpec: descpb.IndexFetchSpec{
+						TableName: "Table",
+						IndexName: "primary",
+						FetchedColumns: []descpb.IndexFetchSpec_Column{
+							{Name: "x"},
+							{Name: "y"},
+						},
+					},
+				}},
 				Post: PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{2},
