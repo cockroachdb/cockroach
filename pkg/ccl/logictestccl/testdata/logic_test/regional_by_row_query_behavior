@@ -624,7 +624,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0, /Table/112/1/"\x80"/10/0, /Table/112/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0, /Table/111/1/"\x80"/10/0, /Table/111/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 
 # Semi join with locality optimized search disabled.
 query T
@@ -654,7 +654,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0, /Table/112/1/"\x80"/10/0, /Table/112/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0, /Table/111/1/"\x80"/10/0, /Table/111/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10]
 
 # Inner join with locality optimized search disabled.
@@ -750,7 +750,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * 
               table: child@child_pkey
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2GLm04Qxt__P8Uwb5L82ZLVWHosBAx3hnpYvSZCDy4SrA539oxr3RVyhHz3oqbcGZrQu7Zv1J2dx_09w7M7VN9zFLh0POcyhP9hvgg-wZ1ze-PNXB-GV-4yXH72RtBvSB6yPIUvH52FA0M_CMG5bRph2G8r44oKfegr11kKU0jWzcdoBDP_CoZJVzT4KIJgPl86IZjIsJAp-fGGFIo7NDBiWFYyIaVk1ZR2bYObblFwhllR1ropRwwTWRGKHepM54QCw_hrTguKU6rGHBmmpOMsb3_berDb57p8pCdkeCnzelMoAQ0WO6Aiw2UZN9XxCler7QVf4djgYw5xkYIBUj9QhdGeoaz1M4nS8T2hMPbsbbTGX6C1D6Qn6cyTdM9QiqoszqEuZJVSRWmPK9r_woYv38lybPYNeNkm02CcROGvGdS1zIrDnCb9Y8KnkgR4zjyEmR-6cB24PjLskmh3r58D9KR8rEv4JrMCZCFgaE9gCrZ5yKZtwRS2A4sPhBC2wbnBP4yQYVBrAbbBbPOkmckbzVj_0kxzn7eDi5d2GGwHSc_fbxq0XmNwQaqUhaKj5JzKQcSQ0nvqUqhkXSV0U8mkPaZbBq2uLaSkdLdrdgu3aLfae_dSbPyJ2DwrnvTE_Fg8OSu2zouts-L3R-Jo_9-PAAAA__9jBNRX
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fro04Qxt__P8Uwb5L82SOr8biyULC0hrN4ppcIV2gkWHdovdpdb1VIKfnuh5qjMVwCzd29UXd2Hvf3DM--YvkjR4ELL_AuI_gfpvPZF7jzbm-CCz-E4ZW_iBZfgxH0G9LHLJfw7bM392AYziLwbptGGPbbisSQqrZ9xSqTcA7pqvkYjeAivIJh2hUtPophNp0uvAhsZKi0pDB5phLFHVoYMyyMTqkstWlKr22DL9coOMNMFXXVlGOGqTaE4hWrrMoJBUbJfU5zSiSZMUeGkqoky9vfth7c9rkqnugFGV7qvH5WpYAGi21RkeGiSJrqeInL5fqML3Fs8TGHREmwQFePZDDeMNR19UZSVskDobA27DRa6y_QulvSg3T2Qbo3qJJMluRQK20kGZI9rnjzGxuh_qCLsd03EGTPWQXWQRT-nkFd60xt5zTpHxO9FCQg8KYRXISRD9czP0SGXRLd7vVrgIHWT3UB33WmQCsBQ3cC5-Da22y6DpzDeuDwgRDCtTi3-KfR7tyLbu5G3q8MPWRaHTQ3OdGc8y_NNfd7PTjbtcdgPUh7fk807LzH8JzKQquS9pJ1KCcxQ5IP1KW01LVJ6cbotD2mW85aXVuQVFbdrt0tfNVutfdyV2z9idg-Kp70xHxfPDkqdo6LnaPij3viePPfzwAAAP__dhHiVw==
 
 statement ok
 SET vectorize=on
@@ -783,7 +783,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
@@ -801,7 +801,7 @@ Scan /Table/112/1/"\x80"/20/0, /Table/112/1/"\xc0"/20/0
 fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/111/1/"@"/20/0
 Scan /Table/111/1/"\x80"/20/0, /Table/111/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 
 # Semi join with locality optimized search enabled.
 query T
@@ -827,7 +827,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2z4Uxd__n-JyX5L80YjsFFYEAZfWYS5u0sWGFRoTPPvSenUkT5IhJeS7D9sZrcPS0W0vtnV1jvTT0fUOzfcSBUZ-6F_G8D_MlosbuPfvbsOLYA7DqyCKo8_hCPqC7LEoc_jyyV_64N81Ghj2FVWqSdqDpFoXOUwhWzcfI7iYX8Ew62oOHyWwmM0iPwYXGUqV0zzdkEFxjw4mDCutMjJG6aa0awVBvkXBGRayqm1TThhmShOKHdrCloQC4_RrSUtKc9JjjgxzsmlRtsu29F77XFdP9IwML1VZb6QR0GCxAykyjKq0qY5XuFptz_kKxw4fc0hlDg4o-0gakz1DVdsXEmPTB0Lh7Nmf0Tr_gNY7kJ6kc0_SvUAZ0kVaQi2VzklT3uNK9r84xlx9UNXY7R8gLDaFBeckCn9PUNeqkIecJv1t4ueKBIT-LIbIvwngehHMkWHXiF73-hlgqNRTXcE3VUhQUsDQm8AUPPfQm94ZTGE7OOMDIYTncO7wjyNkuKSNsgTlb93Nr7MdnL_2M9gOst6CzYqL2grwHOa5J-OZvCeeJZlKSUNHV3Uq-IQh5Q_UXbtRtc7oVqus3aYbLlpfW8jJ2G7W7QaBbKfaRn9tdv7G7L5pnvTM_Ng8edN8dmRO9v_9CAAA__-CWJEk
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAQx9_3KY57STI0IjuBFUHApXWYi5t0sWGFxgTXOlKvjuTJNqSEfPdhO6NxWDq67cW2TveXfve_8w6LHxkKDFzfvQrhI0wX81t4cO_v_EtvBv1rLwiDr_4AugnJU5pJ-PbFXbjg3tc50O9m5LEhVR5S8lUqYQLJqv4YwOXsGvpJG7P4IIL5dBq4IdjIUGlJs3hDBYoHtDBimBudUFFoU4d2TYIntyg4w1TlVVmHI4aJNoRih2VaZoQCw_gxowXFksyQI0NJZZxmzbENvdM8V_kzvSDDK51VG1UIqLHYgRQZBnlcR4dLXC63F3yJQ4sPOcRKggW6fCKD0Z6hrspXkqKM14TC2rO_o7X-A61zID1LZ5-le4UqyKRxBpXSRpIh2eGK9r8pY6Y_6Xxodwvw001agnUWhb_HqBudqoNPo-414UtOAnx3GkLg3npwM_dmyLAdRKd9_TLQ1_q5yuG7ThVoJaDvjGACjn2YTWcME9j2xrwnhHAszi3-eYAMF7TRJUH2R3X962x7F8d6Btte0jlwcNzJvO2kkY8rQ-tUq7N2jd5j14KKXKuCTlp3rhERQ5Jraseg0JVJ6M7opLmmXc4bXROQVJTtrt0uPNVsNYN_LLb-RWy_KR51xPxUPHpTPD4RR_sPPwMAAP__OaSYJA==
 
 statement ok
 SET vectorize=on
@@ -859,7 +859,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10]
 
 statement ok
@@ -878,7 +878,7 @@ Scan /Table/112/1/"\x80"/20/0, /Table/112/1/"\xc0"/20/0
 fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/111/1/"@"/20/0
 Scan /Table/111/1/"\x80"/20/0, /Table/111/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20]
 
 # Inner join with locality optimized search enabled.
@@ -905,7 +905,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9Fq2zAUhu_3FIdzk2RoRLYDK4KAS-swl8zunMAGjQmefWi9OpYnyZAR8u4jckbrsHR0241tHemTPv2Sd6i_VyhwEcyDqyW8hVkSf4S74Mvt_DKMYHgdLpaLT_MR9AfkD2VVQBhFQQI3cRhBkymqDcQRNOuygCnka_vx-UOQBJB3NYenEM9mi2AJLjKsZUFRtiGN4g4dTBk2SuaktVSH0s4OCIstCs6wrJvWHMopw1wqQrFDU5qKUOAy-1pRQllBasyRYUEmKys7rRX17XPdPNIPZHglq3ZTa2Gt2FEUGS6a7FAdr3C12l7wFY4dPuaQ1QU4IM0DKUz3DGVrnky0ye4JhbNnf2fr_Adb_2h61s49a_ckpUmVWQVtLVVBioqeV7r_zTYi-U42Y7e_gXm5KQ04Z1X4a4K6kWV9zMnrL9PdNr97_UpqLuVj28A3WdYgawFD34Mp-O4ILqNrGPoTmMJ2MOEDIYTvcO7w9yNkmNBGGoLqj_Thd9gOLp7zDLaDvDfhYca4NQJ8h_ku872zUXiviSIh3cha08mxnAs5ZUjFPXVHrGWrcrpVMrfLdM3YcrZQkDZdr9s1wtp22Uv9HHb-BXZfhL0ezE9h70V4cgKn-zc_AwAA__8ZoYaJ
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk2Fr2zwQgL-_v-K4L2leNCLbhRVBwKV1mEtmd05gg8YE1zpSr47kyTJkhPz3ETujcVg6uu2LbZ30SI_uzlusv5UocBZMg5s5_A-TJP4ID8GX--l1GMHFbTibzz5Nh9BfkD8VpYQwioIE7uIwgiozpCzEEVTLQsIY8mX78flDkASQdzGHpxBPJrNgDi4yVFpSlK2pRvGADqYMK6Nzqmtt9qFtuyCUGxScYaGqxu7DKcNcG0KxRVvYklDgPHssKaFMkhlxZCjJZkXZbtuK-u1zWT3Td2R4o8tmrWrRWrGDKDKcVdk-OlrgYrG54gscOXzEIVMSHND2iQymO4a6sS8mtc1WhMLZsT-zdf6BrX8wPWvnnrV7karJFFkJjdJGkiHZ80p3v7hGpN_pauT2LzAt1oUF56wKf0ui7nShDnny-sd03eZ3r5-Zmmr93FTwVRcKtBJw4XswBt8dwnV0Cxf-JYxhM7jkAyGE73Du8PdDZJjQWluC8rf0_nfYDK6OeQabQd7bcHhcsqormZGPS0OrQitkGDdWgO8w32W-dzZP3lvylFBdaVXTSc3OVSBlSHJFXf1r3Zic7o3O22O6YdxybUBSbbtZtxuEqp1qO_4Ydv4Gdl-FvR7MT2HvVfjyBE53__0IAAD__5JOkJo=
 
 statement ok
 SET vectorize=on
@@ -983,7 +983,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAUhd_3Ky73Je3QiGwXVgQBl9ZhKZ7dOR4bNCZ49qX16lieJENKyH8fkTNah6Wj215s60jn6tPR9Qb1jxoFzoMwuEzhLUyT-CPcBl9vwotZBCdXs3k6_xSewnBBcV_VJYTBNIXreBZBmytqDMQRtMuqhAkUS_vx5UOQBFD0msMziKfTeZCCiwwbWVKUr0ijuEUHM4atkgVpLdVO2tgFs3KNgjOsmrYzOzljWEhFKDZoKlMTCkzzbzUllJekxhwZlmTyqrZlLadvn8v2gR6R4aWsu1WjhaVie1BkOG_znTpe4GKxPucLHDt8zCFvSnBAmntSmG0Zys48kWiT3xEKZ8v-jtb5D7T-nvQonXuU7glKk6ryGrpGqpIUlQOubPubY0TynWzH7vAAYbWqDDhHUfhrgrqWVbPPyRtukz62JPruiz-nQWJ7EBn2Xej3r18JhlI-dC18l1UDshFw4nswAd89hYvoCk78M5jAenTGR0II3-Hc4e9PkWFCK2kI6j-6d3_JenT-3M9gPSoGBXcV484I8B3mu8z3jkbkvSaihHQrG00H13Us_IwhlXfUX72WnSroRsnCbtMPY-uzQkna9LNuP5g1dso2-3Oz8y9m90WzNzDzQ7P3ovnswJxt3_wMAAD__4udjM4=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk2Fr2zwQgL-_v-K4L2leNCI7hRVBwaV1WIpnd47HBo0JrnW0Xh3Jk2VIKfnvI3JH67B0dNuXxDrpkR7dnR6x_V6jwEUYhecZ_A-zNPkI1-HXq-hsHsPRxXyRLT5FYxguKO-qWkIUzjK4TOYxNIUhZSGJoVlVEk6hXLmPLx_CNISyj3k8h2Q2W4QZ-MhQaUlxsaYWxTV6mDNsjC6pbbXZhR7dgrncoOAMK9V0dhfOGZbaEIpHtJWtCQVmxU1NKRWSzIQjQ0m2qGq3rfMM3O-quacHZHiu626tWuGs2JMoMlw0xS46WeJyuTnhS5x4fMKhUBI80PaODOZbhrqzzyatLW4Jhbdlf2br_QPb4Mn0oJ1_0O5ZqiVTFTV0ShtJhuTAK9_-4hqxfqebiT-8QFStKwveQRX-lkRd6ko95Wk6PCZ7aEj03Zd8zsLU9SAy7Lsw6P9-ZjDS-r5r4JuuFGgl4CiYwikE_hjO4gs4Co7hFDajYz4SQgQe5x5_P0aGKa21Jah_S-9eyWZ08pJnsBmVgw3HL0vZ9KU08mZl6LbSChkmnRUQeCzwWTA9mL_pW_KXUtto1dJeLQ9VJmdI8pb6vmh1Z0q6Mrp0x_TDxHEuIKm1_azfD-bKTbmX8BL2_gb2X4WnA5jvw9NX4eM9ON_-9yMAAP__uiqW3w==
 
 statement ok
 SET vectorize=on
