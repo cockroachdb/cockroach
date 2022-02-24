@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -811,7 +812,7 @@ func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
 		var txn *kv.Txn
 		var expectedStepping kv.SteppingMode
 		if stepping {
-			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0)
+			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0, sessiondatapb.Normal)
 			expectedStepping = kv.SteppingEnabled
 		} else {
 			txn = kv.NewTxn(ctx, db, 0)
