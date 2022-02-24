@@ -23,34 +23,47 @@ type backfillTrackerDeps interface {
 	Codec() keys.SQLCodec
 }
 
-type testBackfillTracker struct {
+type testBackfillerTracker struct {
 	deps backfillTrackerDeps
 }
 
 // BackfillProgressTracker implements the scexec.Dependencies interface.
-func (s *TestState) BackfillProgressTracker() scexec.BackfillTracker {
+func (s *TestState) BackfillProgressTracker() scexec.BackfillerTracker {
 	return s.backfillTracker
 }
 
-var _ scexec.BackfillTracker = (*testBackfillTracker)(nil)
+var _ scexec.BackfillerTracker = (*testBackfillerTracker)(nil)
 
-func (s *testBackfillTracker) GetBackfillProgress(
+func (s *testBackfillerTracker) GetBackfillProgress(
 	ctx context.Context, b scexec.Backfill,
 ) (scexec.BackfillProgress, error) {
 	return scexec.BackfillProgress{Backfill: b}, nil
 }
 
-func (s *testBackfillTracker) SetBackfillProgress(
+func (s *testBackfillerTracker) GetMergeProgress(
+	ctx context.Context, m scexec.Merge,
+) (scexec.MergeProgress, error) {
+	return scexec.MergeProgress{Merge: m}, nil
+
+}
+
+func (s *testBackfillerTracker) SetBackfillProgress(
 	ctx context.Context, progress scexec.BackfillProgress,
 ) error {
 	return nil
 }
 
-func (s *testBackfillTracker) FlushCheckpoint(ctx context.Context) error {
+func (s *testBackfillerTracker) SetMergeProgress(
+	ctx context.Context, progress scexec.MergeProgress,
+) error {
 	return nil
 }
 
-func (s *testBackfillTracker) FlushFractionCompleted(ctx context.Context) error {
+func (s *testBackfillerTracker) FlushCheckpoint(ctx context.Context) error {
+	return nil
+}
+
+func (s *testBackfillerTracker) FlushFractionCompleted(ctx context.Context) error {
 	return nil
 }
 
@@ -67,11 +80,11 @@ type testBackfiller struct {
 
 var _ scexec.Backfiller = (*testBackfiller)(nil)
 
-// BackfillIndex implements the scexec.Backfiller interface.
-func (s *testBackfiller) BackfillIndex(
+// BackfillIndexes implements the scexec.Backfiller interface.
+func (s *testBackfiller) BackfillIndexes(
 	_ context.Context,
 	progress scexec.BackfillProgress,
-	_ scexec.BackfillProgressWriter,
+	_ scexec.BackfillerProgressWriter,
 	tbl catalog.TableDescriptor,
 ) error {
 	s.s.LogSideEffectf(
@@ -86,6 +99,22 @@ func (s *testBackfiller) MaybePrepareDestIndexesForBackfill(
 	ctx context.Context, progress scexec.BackfillProgress, descriptor catalog.TableDescriptor,
 ) (scexec.BackfillProgress, error) {
 	return progress, nil
+}
+
+var _ scexec.Merger = (*testBackfiller)(nil)
+
+// MergeIndexes implements the scexec.Merger interface.
+func (s *testBackfiller) MergeIndexes(
+	_ context.Context,
+	progress scexec.MergeProgress,
+	_ scexec.BackfillerProgressWriter,
+	tbl catalog.TableDescriptor,
+) error {
+	s.s.LogSideEffectf(
+		"merge temporary indexes %v into backfilled indexes %v in table #%d",
+		progress.SourceIndexIDs, progress.DestIndexIDs, tbl.GetID(),
+	)
+	return nil
 }
 
 var _ scexec.IndexSpanSplitter = (*indexSpanSplitter)(nil)
