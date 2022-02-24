@@ -1258,6 +1258,7 @@ unreserved_keyword ::=
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
 	| 'UNLOGGED'
+	| 'UNSET'
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
@@ -2473,6 +2474,8 @@ alter_default_privileges_target_object ::=
 alter_changefeed_cmd ::=
 	'ADD' changefeed_targets
 	| 'DROP' changefeed_targets
+	| 'SET' kv_option_list
+	| 'UNSET' name_list
 
 alter_backup_cmd ::=
 	'ADD' backup_kms
