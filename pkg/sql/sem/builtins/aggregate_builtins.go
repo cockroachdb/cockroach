@@ -2337,7 +2337,7 @@ func (a *regressionAccumulatorDecimalBase) regressionSlopeLastStage() (tree.Datu
 
 type finalRegressionAccumulatorDecimalBase struct {
 	regressionAccumulatorDecimalBase
-	otherTransitionValues [regrFieldsTotal]*apd.Decimal
+	otherTransitionValues [regrFieldsTotal]apd.Decimal
 }
 
 // Add combines two regression aggregate base values. It should only be used
@@ -2362,7 +2362,7 @@ func (a *finalRegressionAccumulatorDecimalBase) Add(
 			return nil
 		}
 		v := tree.MustBeDDecimal(d)
-		a.otherTransitionValues[i] = &v.Decimal
+		a.otherTransitionValues[i].Set(&v.Decimal)
 	}
 
 	return a.combine(ctx)
@@ -2373,23 +2373,23 @@ func (a *finalRegressionAccumulatorDecimalBase) Add(
 // See https://github.com/postgres/postgres/blob/49407dc32a2931550e4ff1dea314b6a25afdfc35/src/backend/utils/adt/float.c#L3401.
 func (a *finalRegressionAccumulatorDecimalBase) combine(ctx context.Context) error {
 	if a.n.Cmp(decimalZero) == 0 {
-		a.n = *a.otherTransitionValues[0]
-		a.sx = *a.otherTransitionValues[1]
-		a.sxx = *a.otherTransitionValues[2]
-		a.sy = *a.otherTransitionValues[3]
-		a.syy = *a.otherTransitionValues[4]
-		a.sxy = *a.otherTransitionValues[5]
+		a.n.Set(&a.otherTransitionValues[0])
+		a.sx.Set(&a.otherTransitionValues[1])
+		a.sxx.Set(&a.otherTransitionValues[2])
+		a.sy.Set(&a.otherTransitionValues[3])
+		a.syy.Set(&a.otherTransitionValues[4])
+		a.sxy.Set(&a.otherTransitionValues[5])
 		return nil
 	} else if a.otherTransitionValues[0].Cmp(decimalZero) == 0 {
 		return nil
 	}
 
-	n2 := a.otherTransitionValues[0]
-	sx2 := a.otherTransitionValues[1]
-	sxx2 := a.otherTransitionValues[2]
-	sy2 := a.otherTransitionValues[3]
-	syy2 := a.otherTransitionValues[4]
-	sxy2 := a.otherTransitionValues[5]
+	n2 := &a.otherTransitionValues[0]
+	sx2 := &a.otherTransitionValues[1]
+	sxx2 := &a.otherTransitionValues[2]
+	sy2 := &a.otherTransitionValues[3]
+	syy2 := &a.otherTransitionValues[4]
+	sxy2 := &a.otherTransitionValues[5]
 
 	fmt.Printf("combine BEFORE n1=%s sx1=%s sxx1=%s sy1=%s syy1=%s sxy1=%s\n", str(a.n), str(a.sx), str(a.sxx), str(a.sy), str(a.syy), str(a.sxy))
 	fmt.Printf("combine BEFORE n2=%s sx2=%s sxx2=%s sy2=%s syy2=%s sxy2=%s\n", str(*n2), str(*sx2), str(*sxx2), str(*sy2), str(*syy2), str(*sxy2))
@@ -2584,8 +2584,6 @@ func (a *finalRegressionAccumulatorDecimalBase) Reset(ctx context.Context) {
 		singleDatumAggregateBase: a.singleDatumAggregateBase,
 		ed:                       a.ed,
 	}
-	a.otherTransitionValues = [regrFieldsTotal]*apd.Decimal{}
-
 	a.reset(ctx)
 }
 
