@@ -4274,7 +4274,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 66 MutationType ops
-create job #2: "GC for dropping descriptors 114 115 116 117 118 119 120 121 122 125 and parent database 111"
+create job #2: "GC for dropping descriptors 111 114 115 116 117 118 119 120 121 122 125"
   descriptor IDs: [114 115 119 120 121 122 125 117 118 116]
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
 update progress of schema change job #1
