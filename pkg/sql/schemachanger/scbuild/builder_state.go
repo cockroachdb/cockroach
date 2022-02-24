@@ -397,7 +397,9 @@ func (b *builderState) ComputedColumnExpression(
 		b.semaCtx,
 	)
 	if err != nil {
-		panic(err)
+		// This may be referencing newly added columns, so cheat and return
+		// a not implemented error.
+		panic(scerrors.NotImplementedErrorf(d, "computed column error %v", err))
 	}
 	parsedExpr, err := parser.ParseExpr(expr)
 	if err != nil {
