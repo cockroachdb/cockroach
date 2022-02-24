@@ -310,7 +310,7 @@ generate_ssh_key() {
 maybe_require_release_justification() {
     # Set this to 1 to require a "release justification" note in the commit message
     # or the PR description.
-    require_justification=0
+    require_justification=1
     if [ "$require_justification" = 1 ]; then
         tc_start_block "Ensure commit message contains a release justification"
         # Ensure master branch commits have a release justification.
