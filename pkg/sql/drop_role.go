@@ -144,7 +144,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 					break
 				}
 			}
-			return accumulateDependentDefaultPrivileges(db.GetDefaultPrivilegeDescriptor(), userNames)
+			return accumulateDependentDefaultPrivileges(db.GetDefaultPrivilegeDescriptor(), userNames, db.GetName(), "" /* schemaName */)
 		}); err != nil {
 		return err
 	}
@@ -208,7 +208,12 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				})
 		}
 
-		if err := accumulateDependentDefaultPrivileges(schemaDesc.GetDefaultPrivilegeDescriptor(), userNames); err != nil {
+		dbDesc, err := lCtx.getDatabaseByID(schemaDesc.GetParentID())
+		if err != nil {
+			return err
+		}
+
+		if err := accumulateDependentDefaultPrivileges(schemaDesc.GetDefaultPrivilegeDescriptor(), userNames, dbDesc.GetName(), schemaDesc.GetName()); err != nil {
 			return err
 		}
 	}
@@ -251,6 +256,19 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	for _, name := range n.roleNames {
 		// Did the user own any objects?
 		dependentObjects := userNames[name]
+
+		// Sort the slice so we're guaranteed the same ordering on errors.
+		sort.SliceStable(dependentObjects, func(i int, j int) bool {
+			if dependentObjects[i].ObjectType != dependentObjects[j].ObjectType {
+				return dependentObjects[i].ObjectType < dependentObjects[j].ObjectType
+			}
+
+			if dependentObjects[i].ObjectName != dependentObjects[j].ObjectName {
+				return dependentObjects[i].ObjectName < dependentObjects[j].ObjectName
+			}
+
+			return dependentObjects[i].ErrorMessage.Error() < dependentObjects[j].ErrorMessage.Error()
+		})
 		if len(dependentObjects) > 0 {
 			objectsMsg := tree.NewFmtCtx(tree.FmtSimple)
 			for _, obj := range dependentObjects {
@@ -422,6 +440,8 @@ func (*DropRoleNode) Close(context.Context) {}
 func accumulateDependentDefaultPrivileges(
 	defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
 	userNames map[security.SQLUsername][]objectAndType,
+	dbName string,
+	schemaName string,
 ) error {
 	// The func we pass into ForEachDefaultPrivilegeForRole will never
 	// err so no err will be returned.
@@ -434,7 +454,7 @@ func accumulateDependentDefaultPrivileges(
 			role.ForAllRoles = true
 		}
 		for object, defaultPrivs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
-			addDependentPrivileges(object, defaultPrivs, role, userNames)
+			addDependentPrivileges(object, defaultPrivs, role, userNames, dbName, schemaName)
 		}
 		return nil
 	})
@@ -445,6 +465,8 @@ func addDependentPrivileges(
 	defaultPrivs catpb.PrivilegeDescriptor,
 	role catpb.DefaultPrivilegesRole,
 	userNames map[security.SQLUsername][]objectAndType,
+	dbName string,
+	schemaName string,
 ) {
 	var objectType string
 	switch object {
@@ -458,6 +480,14 @@ func addDependentPrivileges(
 		objectType = "schemas"
 	}
 
+	wrapErrorMsgWithSchemaName := func(errorMsg string) string {
+		if schemaName != "" {
+			return errorMsg + fmt.Sprintf(" in schema %s", schemaName)
+		}
+
+		return errorMsg
+	}
+
 	for _, privs := range defaultPrivs.Users {
 		if !role.ForAllRoles {
 			if _, ok := userNames[role.Role]; ok {
@@ -465,8 +495,8 @@ func addDependentPrivileges(
 					objectAndType{
 						ObjectType: defaultPrivilege,
 						ErrorMessage: errors.Newf(
-							"owner of default privileges on new %s belonging to role %s",
-							objectType, role.Role,
+							wrapErrorMsgWithSchemaName("owner of default privileges on new %s belonging to role %s in database %s"),
+							objectType, role.Role, dbName,
 						),
 					})
 			}
@@ -476,13 +506,13 @@ func addDependentPrivileges(
 			var err error
 			if role.ForAllRoles {
 				err = errors.Newf(
-					"privileges for default privileges on new %s for all roles",
-					objectType,
+					wrapErrorMsgWithSchemaName("privileges for default privileges on new %s for all roles in database %s"),
+					objectType, dbName,
 				)
 			} else {
 				err = errors.Newf(
-					"privileges for default privileges on new %s belonging to role %s",
-					objectType, role.Role,
+					wrapErrorMsgWithSchemaName("privileges for default privileges on new %s belonging to role %s in database %s"),
+					objectType, role.Role, dbName,
 				)
 			}
 			userNames[grantee] = append(userNames[grantee],
