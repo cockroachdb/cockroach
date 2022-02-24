@@ -212,13 +212,14 @@ func TestChangefeedSendError(t *testing.T) {
 			Changefeed.(*TestingKnobs)
 
 		// Allow triggering a single sendError
-		var sendError int32 = 0
+		sendErrorCh := make(chan error, 1)
 		knobs.FeedKnobs.OnRangeFeedValue = func(_ roachpb.KeyValue) error {
-			if sendError != 0 {
-				atomic.StoreInt32(&sendError, 0)
-				return kvcoord.TestNewSendError("test sendError")
+			select {
+			case err := <-sendErrorCh:
+				return err
+			default:
+				return nil
 			}
-			return nil
 		}
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -226,7 +227,7 @@ func TestChangefeedSendError(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
-		atomic.StoreInt32(&sendError, 1)
+		sendErrorCh <- kvcoord.TestNewSendError("test sendError")
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
 
