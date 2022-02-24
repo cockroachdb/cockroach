@@ -532,8 +532,8 @@ ON CONFLICT (a) DO
 UPDATE SET b=2
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_a_key
+ ├── columns: <none>
  ├── canary column: a:15(int)
  ├── fetch columns: a:15(int) b:16(int) c:17(int) rowid:18(int)
  ├── insert-mapping:
