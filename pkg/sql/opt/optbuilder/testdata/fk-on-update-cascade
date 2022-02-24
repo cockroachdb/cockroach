@@ -227,8 +227,8 @@ UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 ----
 root
  ├── upsert parent_multi
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_multi_pkey
+ │    ├── columns: <none>
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -310,8 +310,8 @@ UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
 ----
 root
  ├── upsert parent_multi
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_multi_pkey
+ │    ├── columns: <none>
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -400,8 +400,8 @@ INSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20) ON CONFLICT (p,q) DO UP
 ----
 root
  ├── upsert parent_multi
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_multi_p_q_key
+ │    ├── columns: <none>
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -612,8 +612,8 @@ UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 ----
 root
  ├── upsert parent_multi
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_multi_pkey
+ │    ├── columns: <none>
  │    ├── canary column: pk:9
  │    ├── fetch columns: pk:9 p:10 q:11
  │    ├── insert-mapping:
@@ -823,8 +823,8 @@ UPSERT INTO parent_assn_cast (p, p2) VALUES (1.23, 4.56)
 ----
 root
  ├── upsert parent_assn_cast
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_assn_cast_pkey
+ │    ├── columns: <none>
  │    ├── canary column: p:9
  │    ├── fetch columns: p:9 p2:10
  │    ├── insert-mapping:
@@ -906,8 +906,8 @@ INSERT INTO parent_assn_cast (p, p2) VALUES (1.23, 4.56) ON CONFLICT (p) DO UPDA
 ----
 root
  ├── upsert parent_assn_cast
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_assn_cast_pkey
+ │    ├── columns: <none>
  │    ├── canary column: p:9
  │    ├── fetch columns: p:9 p2:10
  │    ├── insert-mapping:
@@ -1189,8 +1189,8 @@ UPSERT INTO parent_multi_partial VALUES (1), (2)
 ----
 root
  ├── upsert parent_multi_partial
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_multi_partial_pkey
+ │    ├── columns: <none>
  │    ├── canary column: pk:8
  │    ├── fetch columns: pk:8 p:9 q:10
  │    ├── insert-mapping:
@@ -1604,8 +1604,8 @@ INSERT INTO parent_diff_type VALUES (0) ON CONFLICT (p) DO UPDATE SET p = 1
 ----
 root
  ├── upsert parent_diff_type
- │    ├── columns: <none>
  │    ├── arbiter indexes: parent_diff_type_pkey
+ │    ├── columns: <none>
  │    ├── canary column: p:5
  │    ├── fetch columns: p:5
  │    ├── insert-mapping:

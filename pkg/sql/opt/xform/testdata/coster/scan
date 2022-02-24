@@ -471,8 +471,8 @@ opt
 UPSERT INTO t64570 VALUES (10, 10, 10)
 ----
 upsert t64570
- ├── columns: <none>
  ├── arbiter indexes: t64570_pkey
+ ├── columns: <none>
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 v:11
  ├── insert-mapping:
