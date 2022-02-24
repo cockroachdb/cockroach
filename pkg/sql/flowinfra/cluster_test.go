@@ -167,6 +167,13 @@ func TestClusterFlow(t *testing.T) {
 			},
 		}
 
+		var pkSpec descpb.IndexFetchSpec
+		if err := rowenc.InitIndexFetchSpec(
+			&pkSpec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		req3 := &execinfrapb.SetupFlowRequest{
 			Version:           execinfra.Version,
 			LeafTxnInputState: leafInputState,
@@ -197,7 +204,10 @@ func TestClusterFlow(t *testing.T) {
 							},
 							ColumnTypes: types.TwoIntCols,
 						}},
-						Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc(), MaintainOrdering: true}},
+						Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{
+							FetchSpec:        pkSpec,
+							MaintainOrdering: true,
+						}},
 						Post: execinfrapb.PostProcessSpec{
 							Projection:    true,
 							OutputColumns: []uint32{2},
@@ -460,6 +470,13 @@ func TestTenantClusterFlow(t *testing.T) {
 			},
 		}
 
+		var pkSpec descpb.IndexFetchSpec
+		if err := rowenc.InitIndexFetchSpec(
+			&pkSpec, codec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		req3 := &execinfrapb.SetupFlowRequest{
 			Version:           execinfra.Version,
 			LeafTxnInputState: leafInputState,
@@ -490,7 +507,10 @@ func TestTenantClusterFlow(t *testing.T) {
 							},
 							ColumnTypes: types.TwoIntCols,
 						}},
-						Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc(), MaintainOrdering: true}},
+						Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{
+							FetchSpec:        pkSpec,
+							MaintainOrdering: true,
+						}},
 						Post: execinfrapb.PostProcessSpec{
 							Projection:    true,
 							OutputColumns: []uint32{2},

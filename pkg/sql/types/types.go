@@ -2536,7 +2536,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 
 func (t *T) ensureHydratedEnum() {
 	if t.TypeMeta.EnumData == nil {
-		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum"))
+		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum: %v %p", t, t))
 	}
 }
 
