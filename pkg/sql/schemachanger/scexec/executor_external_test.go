@@ -70,7 +70,8 @@ func (ti testInfra) newExecDeps(
 		descsCollection,
 		noopJobRegistry{},
 		noopBackfiller{},
-		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
+		noopMerger{},
+		scdeps.NewNoOpBackfillerTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{},
 		scdeps.NewConstantClock(timeutil.Now()),
@@ -477,16 +478,31 @@ func (n noopBackfiller) MaybePrepareDestIndexesForBackfill(
 	return progress, nil
 }
 
-func (n noopBackfiller) BackfillIndex(
+func (n noopBackfiller) BackfillIndexes(
 	ctx context.Context,
 	progress scexec.BackfillProgress,
-	writer scexec.BackfillProgressWriter,
+	writer scexec.BackfillerProgressWriter,
+	descriptor catalog.TableDescriptor,
+) error {
+	return nil
+}
+
+type noopMerger struct{}
+
+var _ scexec.Merger = (*noopMerger)(nil)
+
+func (n noopMerger) MergeIndexes(
+	ctx context.Context,
+	progress scexec.MergeProgress,
+	writer scexec.BackfillerProgressWriter,
 	descriptor catalog.TableDescriptor,
 ) error {
 	return nil
 }
 
 type noopIndexValidator struct{}
+
+var _ scexec.IndexValidator = noopIndexValidator{}
 
 func (noopIndexValidator) ValidateForwardIndexes(
 	ctx context.Context,
@@ -508,6 +524,8 @@ func (noopIndexValidator) ValidateInvertedIndexes(
 
 type noopEventLogger struct{}
 
+var _ scexec.EventLogger = noopEventLogger{}
+
 func (noopEventLogger) LogEvent(
 	_ context.Context, _ descpb.ID, _ eventpb.CommonSQLEventDetails, _ eventpb.EventPayload,
 ) error {
@@ -523,14 +541,15 @@ func (noopEventLogger) LogEventForSchemaChange(
 type noopStatsReferesher struct{}
 
 func (noopStatsReferesher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
-
 }
 
-type noopMetadataUpdaterFactory struct {
-}
+type noopMetadataUpdaterFactory struct{}
 
-type noopMetadataUpdater struct {
-}
+var _ scexec.DescriptorMetadataUpdaterFactory = noopMetadataUpdaterFactory{}
+
+type noopMetadataUpdater struct{}
+
+var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
 
 // NewMetadataUpdater implements scexec.DescriptorMetadataUpdaterFactory.
 func (noopMetadataUpdaterFactory) NewMetadataUpdater(

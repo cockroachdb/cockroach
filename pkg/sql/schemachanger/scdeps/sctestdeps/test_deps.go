@@ -787,6 +787,11 @@ func (s *TestState) IndexBackfiller() scexec.Backfiller {
 	return s.backfiller
 }
 
+// IndexMerger implements the scexec.Dependencies interface.
+func (s *TestState) IndexMerger() scexec.Merger {
+	return s.merger
+}
+
 // PeriodicProgressFlusher implements the scexec.Dependencies interface.
 func (s *TestState) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 	return scdeps.NewNoopPeriodicProgressFlusher()
