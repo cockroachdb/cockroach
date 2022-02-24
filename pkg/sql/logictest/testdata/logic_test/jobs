@@ -1,8 +1,3 @@
-# LogicTest: !local-declarative-schema
-# 3node-tenant fails due to AUTO STATS being returned in SHOW JOBS. Changing
-# the cluster setting to disable auto stats doesn't work:
-# https://github.com/cockroachdb/cockroach/issues/47918
-
 # Disable declarative schema changer for this test.
 statement ok
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
