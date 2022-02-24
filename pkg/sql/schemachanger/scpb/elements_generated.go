@@ -1173,24 +1173,24 @@ func FindTableComment(b ElementStatusIterator) (currentStatus, targetStatus Stat
 	return currentStatus, targetStatus, element
 }
 
-func (e TableLocality) element() {}
+func (e TableLocalityGlobal) element() {}
 
-// ForEachTableLocality iterates over elements of type TableLocality.
-func ForEachTableLocality(
-	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *TableLocality),
+// ForEachTableLocalityGlobal iterates over elements of type TableLocalityGlobal.
+func ForEachTableLocalityGlobal(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *TableLocalityGlobal),
 ) {
   if b == nil {
     return
   }
 	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
-		if e, ok := elem.(*TableLocality); ok {
+		if e, ok := elem.(*TableLocalityGlobal); ok {
 			elementFunc(status, targetStatus, e)
 		}
 	})
 }
 
-// FindTableLocality finds the first element of type TableLocality.
-func FindTableLocality(b ElementStatusIterator) (currentStatus, targetStatus Status, element *TableLocality) {
+// FindTableLocalityGlobal finds the first element of type TableLocalityGlobal.
+func FindTableLocalityGlobal(b ElementStatusIterator) (currentStatus, targetStatus Status, element *TableLocalityGlobal) {
   if b == nil {
     return currentStatus, targetStatus, element
   }
@@ -1198,7 +1198,109 @@ func FindTableLocality(b ElementStatusIterator) (currentStatus, targetStatus Sta
 		if element != nil {
 			return
 		}
-		if e, ok := elem.(*TableLocality); ok {
+		if e, ok := elem.(*TableLocalityGlobal); ok {
+			element = e
+			currentStatus = cs
+      targetStatus = ts
+		}
+	})
+	return currentStatus, targetStatus, element
+}
+
+func (e TableLocalityPrimaryRegion) element() {}
+
+// ForEachTableLocalityPrimaryRegion iterates over elements of type TableLocalityPrimaryRegion.
+func ForEachTableLocalityPrimaryRegion(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *TableLocalityPrimaryRegion),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*TableLocalityPrimaryRegion); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+// FindTableLocalityPrimaryRegion finds the first element of type TableLocalityPrimaryRegion.
+func FindTableLocalityPrimaryRegion(b ElementStatusIterator) (currentStatus, targetStatus Status, element *TableLocalityPrimaryRegion) {
+  if b == nil {
+    return currentStatus, targetStatus, element
+  }
+	b.ForEachElementStatus(func(cs, ts Status, elem Element) {
+		if element != nil {
+			return
+		}
+		if e, ok := elem.(*TableLocalityPrimaryRegion); ok {
+			element = e
+			currentStatus = cs
+      targetStatus = ts
+		}
+	})
+	return currentStatus, targetStatus, element
+}
+
+func (e TableLocalityRegionalByRow) element() {}
+
+// ForEachTableLocalityRegionalByRow iterates over elements of type TableLocalityRegionalByRow.
+func ForEachTableLocalityRegionalByRow(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *TableLocalityRegionalByRow),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*TableLocalityRegionalByRow); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+// FindTableLocalityRegionalByRow finds the first element of type TableLocalityRegionalByRow.
+func FindTableLocalityRegionalByRow(b ElementStatusIterator) (currentStatus, targetStatus Status, element *TableLocalityRegionalByRow) {
+  if b == nil {
+    return currentStatus, targetStatus, element
+  }
+	b.ForEachElementStatus(func(cs, ts Status, elem Element) {
+		if element != nil {
+			return
+		}
+		if e, ok := elem.(*TableLocalityRegionalByRow); ok {
+			element = e
+			currentStatus = cs
+      targetStatus = ts
+		}
+	})
+	return currentStatus, targetStatus, element
+}
+
+func (e TableLocalitySecondaryRegion) element() {}
+
+// ForEachTableLocalitySecondaryRegion iterates over elements of type TableLocalitySecondaryRegion.
+func ForEachTableLocalitySecondaryRegion(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *TableLocalitySecondaryRegion),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*TableLocalitySecondaryRegion); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+// FindTableLocalitySecondaryRegion finds the first element of type TableLocalitySecondaryRegion.
+func FindTableLocalitySecondaryRegion(b ElementStatusIterator) (currentStatus, targetStatus Status, element *TableLocalitySecondaryRegion) {
+  if b == nil {
+    return currentStatus, targetStatus, element
+  }
+	b.ForEachElementStatus(func(cs, ts Status, elem Element) {
+		if element != nil {
+			return
+		}
+		if e, ok := elem.(*TableLocalitySecondaryRegion); ok {
 			element = e
 			currentStatus = cs
       targetStatus = ts

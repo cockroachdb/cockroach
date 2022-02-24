@@ -184,10 +184,7 @@ upsert descriptor #108
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
-  +        locality:
-  +          Locality:
-  +            regionalByRow: {}
-  +          regionEnumTypeId: 105
+  +        localityRegionalByRow:
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -535,10 +532,7 @@ upsert descriptor #108
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
-  -        locality:
-  -          Locality:
-  -            regionalByRow: {}
-  -          regionEnumTypeId: 105
+  -        localityRegionalByRow:
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -729,7 +723,7 @@ commit transaction #3
 setup
 CREATE TABLE multi_region_test_db.public.table_regional_by_table (
   a INT PRIMARY KEY
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) LOCALITY REGIONAL BY TABLE IN "us-east2";
 ----
 ...
 +object {104 106 table_regional_by_table} -> 109
@@ -744,7 +738,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 9 MutationType ops
+## PreCommitPhase stage 1 of 1 with 10 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [105 109]
 delete comment for descriptor #109 of type TableCommentType
@@ -760,10 +754,14 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 109
      regionConfig:
        primaryRegion: us-east1
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #109
   ...
      createAsOfTime:
@@ -875,10 +873,9 @@ upsert descriptor #109
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
-  +        locality:
-  +          Locality:
-  +            regionalByTable: {}
+  +        localitySecondaryRegion:
   +          regionEnumTypeId: 105
+  +          regionName: us-east2
   +          tableId: 109
   +      metadata:
   +        sourceElementId: 1
@@ -1005,8 +1002,8 @@ upsert descriptor #105
   ...
      regionConfig:
        primaryRegion: us-east1
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
 upsert descriptor #109
   ...
      createAsOfTime:
@@ -1118,10 +1115,9 @@ upsert descriptor #109
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
-  -        locality:
-  -          Locality:
-  -            regionalByTable: {}
+  -        localitySecondaryRegion:
   -          regionEnumTypeId: 105
+  -          regionName: us-east2
   -          tableId: 109
   -      metadata:
   -        sourceElementId: 1
@@ -1453,9 +1449,9 @@ upsert descriptor #105
   ...
      regionConfig:
        primaryRegion: us-east1
-  -  version: "6"
+  -  version: "7"
   +  state: DROP
-  +  version: "7"
+  +  version: "8"
 upsert descriptor #106
    schema:
   +  declarativeSchemaChangerState:
