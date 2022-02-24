@@ -262,6 +262,6 @@ SELECT job_id
 
 		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
 		tdb.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1`)
-		waitForJobDone(t, tdb, "GC for DROP TABLE%t")
+		waitForJobDone(t, tdb, "GC for dropping descriptor %")
 	})
 }

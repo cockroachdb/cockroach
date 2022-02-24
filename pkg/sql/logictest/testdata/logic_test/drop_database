@@ -231,8 +231,8 @@ WITH cte AS (
 ----
 SCHEMA CHANGE     CREATE TABLE constraint_db.public.t2 (t1_id INT8, CONSTRAINT fk FOREIGN KEY (t1_id) REFERENCES constraint_db.public.t1 (a), INDEX (t1_id))  succeeded
 SCHEMA CHANGE     updating referenced FK table t1(125) for table t2(126)                                                                                      succeeded
-SCHEMA CHANGE GC  GC for dropping descriptors 116 119 and parent database 113                                                                                 running
-SCHEMA CHANGE GC  GC for dropping descriptors 125 126 and parent database 123                                                                                 running
+SCHEMA CHANGE GC  GC for dropping descriptors 113 116 119                                                                                                     running
+SCHEMA CHANGE GC  GC for dropping descriptors 123 125 126                                                                                                     running
 
 query TTTTT
 SHOW DATABASES
