@@ -2035,15 +2035,6 @@ func replicaMayNeedSnapshot(raftStatus *raft.Status, replica roachpb.ReplicaDesc
 func excludeReplicasInNeedOfSnapshots(
 	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		log.VEventf(
-			ctx,
-			5,
-			"raft leader not collocated with the leaseholder; will not produce any lease transfer targets",
-		)
-		return []roachpb.ReplicaDescriptor{}
-	}
-
 	filled := 0
 	for _, repl := range replicas {
 		if replicaMayNeedSnapshot(raftStatus, repl) {
