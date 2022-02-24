@@ -4,7 +4,7 @@ go_test(
     name = "schemachangerccl_test",
     srcs = [
         "main_test.go",
-        "schemachanger_end_to_end_test.go",
+        "schemachanger_ccl_test.go",
     ],
     data = glob(["testdata/**"]) + [
         "//pkg/sql/schemachanger:testdata",
