@@ -4,6 +4,7 @@ go_library(
     name = "sctest",
     srcs = [
         "cumulative.go",
+        "decomp.go",
         "end_to_end.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest",
@@ -16,6 +17,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scop",
