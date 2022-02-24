@@ -56,4 +56,5 @@ bindata(
     ],
     metadata = True,
     package = "aws",
+    visibility = ["//pkg/gen:__pkg__"],
 )

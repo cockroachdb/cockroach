@@ -54,6 +54,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/span",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",

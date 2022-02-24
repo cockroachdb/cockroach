@@ -1907,6 +1907,7 @@ TxnInfo represents an in flight user transaction on some Session.
 | read_only | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
 | is_historical | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
 | priority | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
+| quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -2037,6 +2038,7 @@ TxnInfo represents an in flight user transaction on some Session.
 | read_only | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
 | is_historical | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
 | priority | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
+| quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 
 
 

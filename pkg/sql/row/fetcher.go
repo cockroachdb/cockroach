@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -404,6 +405,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
+	qualityOfService sessiondatapb.QoSLevel,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -417,7 +419,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			maxTimestampAge,
 		)
 	}
-	txn := kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
+	txn := kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */, qualityOfService)
 	if err := txn.SetFixedTimestamp(ctx, txnTimestamp); err != nil {
 		return err
 	}
@@ -434,7 +436,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			// Advance the timestamp by the time that passed.
 			txnTimestamp = txnTimestamp.Add(now.Sub(txnStartTime).Nanoseconds(), 0 /* logical */)
 			txnStartTime = now
-			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
+			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */, qualityOfService)
 			if err := txn.SetFixedTimestamp(ctx, txnTimestamp); err != nil {
 				return nil, err
 			}
