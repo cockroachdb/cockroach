@@ -157,8 +157,9 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 		})
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		w.ev(descriptorStatus(typ), &scpb.EnumType{
-			TypeID:      typ.GetID(),
-			ArrayTypeID: typ.GetArrayTypeID(),
+			TypeID:        typ.GetID(),
+			ArrayTypeID:   typ.GetArrayTypeID(),
+			IsMultiRegion: typ.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM,
 		})
 	default:
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
