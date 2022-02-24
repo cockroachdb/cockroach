@@ -36,8 +36,8 @@ build
 INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
 ----
 insert child
- ├── columns: <none>
  ├── arbiter indexes: child_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:5 => c:1
  │    └── column2:6 => child.p:2

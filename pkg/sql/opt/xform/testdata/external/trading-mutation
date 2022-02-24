@@ -1270,8 +1270,8 @@ UPSERT INTO Transactions (dealerid, isbuy, date, accountname, customername, oper
 VALUES (1, FALSE, '2020-03-01', 'the-account', 'the-customer', '70F03EB1-4F58-4C26-B72D-C524A9D537DD')
 ----
 upsert transactions
- ├── columns: <none>
  ├── arbiter indexes: transactionsprimarykey
+ ├── columns: <none>
  ├── canary column: dealerid:22
  ├── fetch columns: dealerid:22 isbuy:23 date:24 accountname:25 customername:26 operationid:27 version:28 olddate:29 extra:30
  ├── insert-mapping:
@@ -1328,8 +1328,8 @@ SELECT
 FROM updates
 ----
 upsert transactiondetails
- ├── columns: <none>
  ├── arbiter indexes: detailsprimarykey
+ ├── columns: <none>
  ├── canary column: transactiondetails.dealerid:25
  ├── fetch columns: transactiondetails.dealerid:25 transactiondetails.isbuy:26 transactiondetails.transactiondate:27 transactiondetails.cardid:28 quantity:29 sellprice:30 buyprice:31 transactiondetails.version:32 discount:33 transactiondetails.extra:34
  ├── insert-mapping:
