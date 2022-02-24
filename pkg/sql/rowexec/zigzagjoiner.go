@@ -290,8 +290,6 @@ func newZigzagJoiner(
 
 	leftColumnTypes := catalog.ColumnTypes(tables[0].PublicColumns())
 	rightColumnTypes := catalog.ColumnTypes(tables[1].PublicColumns())
-	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
-	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
 		z, /* self */
 		flowCtx,
@@ -300,8 +298,6 @@ func newZigzagJoiner(
 		rightColumnTypes,
 		spec.Type,
 		spec.OnExpr,
-		leftEqCols,
-		rightEqCols,
 		false, /* outputContinuationColumn */
 		post,
 		output,

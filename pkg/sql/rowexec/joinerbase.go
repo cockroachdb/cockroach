@@ -30,11 +30,6 @@ type joinerBase struct {
 	emptyLeft   rowenc.EncDatumRow
 	emptyRight  rowenc.EncDatumRow
 	combinedRow rowenc.EncDatumRow
-
-	// EqCols contains the indices of the columns that are constrained to be
-	// equal. Specifically column EqCols[0][i] on the left side must match the
-	// column EqCols[1][i] on the right side.
-	eqCols [2][]uint32
 }
 
 // Init initializes the joinerBase.
@@ -49,8 +44,6 @@ func (jb *joinerBase) init(
 	rightTypes []*types.T,
 	jType descpb.JoinType,
 	onExpr execinfrapb.Expression,
-	leftEqColumns []uint32,
-	rightEqColumns []uint32,
 	outputContinuationColumn bool,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -72,9 +65,6 @@ func (jb *joinerBase) init(
 	for i := range jb.emptyRight {
 		jb.emptyRight[i] = rowenc.DatumToEncDatum(rightTypes[i], tree.DNull)
 	}
-
-	jb.eqCols[leftSide] = leftEqColumns
-	jb.eqCols[rightSide] = rightEqColumns
 
 	rowSize := len(leftTypes) + len(rightTypes)
 	if outputContinuationColumn {
