@@ -187,13 +187,26 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
+	tempIndexMutations := []descpb.DescriptorMutation{}
 	for _, m := range tableDesc.Mutations {
-		if err := tableDesc.MakeMutationComplete(m); err != nil {
-			return err
+		if idx := m.GetIndex(); idx != nil && idx.UseDeletePreservingEncoding {
+			tempIndexMutations = append(tempIndexMutations, m)
+		} else {
+			if err := tableDesc.MakeMutationComplete(m); err != nil {
+				return err
+			}
 		}
 	}
+
 	tableDesc.Mutations = nil
 	tableDesc.GCMutations = nil
+
+	// NB: We temporarily add back the mutations for the temporary
+	// indexes so that they are involved in the ID allocation
+	// below.
+	if len(tempIndexMutations) > 0 {
+		tableDesc.Mutations = tempIndexMutations
+	}
 
 	// Collect all of the old indexes and reset all of the index IDs.
 	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.ActiveIndexes()))
@@ -214,6 +227,9 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		return err
 	}
 
+	// Remove tempIndexMutations now that we've allocated IDs.
+	tableDesc.Mutations = nil
+
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
 	for _, idx := range tableDesc.ActiveIndexes() {
@@ -228,6 +244,15 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
 			IndexID:  idx.ID,
 			DropTime: dropTime,
+		})
+	}
+	// Also add the temporary indexes to the GC job. We set the
+	// drop time to 1 since these can be GC'd immediately.
+	minimumDropTime := int64(1)
+	for _, m := range tempIndexMutations {
+		droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
+			IndexID:  m.GetIndex().ID,
+			DropTime: minimumDropTime,
 		})
 	}
 
@@ -324,9 +349,6 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 	for i, m := range desc.AllMutations() {
 		if idx := m.AsIndex(); idx != nil {
 			// Do not allow dropping indexes.
-			//
-			// TODO(ssd): Are we definitely OK to allow
-			// truncate with these temporary drops?
 			if !m.Adding() && !idx.IsTemporaryIndexForBackfill() {
 				return unimplemented.Newf(
 					"TRUNCATE concurrent with ongoing schema change",
