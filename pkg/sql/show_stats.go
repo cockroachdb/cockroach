@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,9 +42,24 @@ var showTableStatsJSONColumns = colinfo.ResultColumns{
 	{Name: "statistics", Typ: types.Jsonb},
 }
 
+const showTableStatsOptForecast = "forecast"
+
+var showTableStatsOptValidate = map[string]KVStringOptValidate{
+	showTableStatsOptForecast: KVStringOptRequireNoValue,
+}
+
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
+	optsFn, err := p.TypeAsStringOpts(ctx, n.Options, showTableStatsOptValidate)
+	if err != nil {
+		return nil, err
+	}
+	opts, err := optsFn()
+	if err != nil {
+		return nil, err
+	}
+
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
 	desc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.Table, true /*required*/, tree.ResolveRequireTableDesc)
@@ -68,7 +84,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
-			stmt := `SELECT "statisticID",
+			stmt := `SELECT
+							"tableID",
+							"statisticID",
 							name,
 							"columnIDs",
 							"createdAt",
@@ -92,7 +110,8 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			}
 
 			const (
-				statIDIdx = iota
+				tableIDIdx = iota
+				statIDIdx
 				nameIdx
 				columnIDsIdx
 				createdAtIdx
@@ -120,6 +139,34 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					}
 				}
 			}()
+
+			if _, withForecast := opts[showTableStatsOptForecast]; withForecast {
+				observed := make([]*stats.TableStatistic, 0, len(rows))
+				for _, row := range rows {
+					stat, err := stats.NewTableStatisticProto(row)
+					if err != nil {
+						return nil, err
+					}
+					obs := &stats.TableStatistic{TableStatisticProto: *stat}
+					if obs.HistogramData != nil && !obs.HistogramData.ColumnType.UserDefined() {
+						if err := stats.DecodeHistogramBuckets(obs); err != nil {
+							return nil, err
+						}
+					}
+					observed = append(observed, obs)
+				}
+
+				forecasts, err := stats.ForecastTableStatistics(ctx, p.EvalContext(), observed)
+				if err == nil {
+					for _, forecast := range forecasts {
+						forecastRow, err := tableStatisticProtoToRow(&forecast.TableStatisticProto)
+						if err != nil {
+							return nil, err
+						}
+						rows = append(rows, forecastRow)
+					}
+				}
+			}
 
 			v := p.newContainerValuesNode(columns, 0)
 			if n.UsingJSON {
@@ -227,4 +274,38 @@ func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) (colName s
 		return "<unknown>", err
 	}
 	return colDesc.GetName(), nil
+}
+
+func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, error) {
+	name := tree.DNull
+	if stat.Name != "" {
+		name = tree.NewDString(stat.Name)
+	}
+	columnIDs := tree.NewDArray(types.Int)
+	for _, c := range stat.ColumnIDs {
+		if err := columnIDs.Append(tree.NewDInt(tree.DInt(c))); err != nil {
+			return nil, err
+		}
+	}
+	row := tree.Datums{
+		tree.NewDInt(tree.DInt(stat.TableID)),
+		tree.NewDInt(tree.DInt(stat.StatisticID)),
+		name,
+		columnIDs,
+		&tree.DTimestamp{Time: stat.CreatedAt},
+		tree.NewDInt(tree.DInt(stat.RowCount)),
+		tree.NewDInt(tree.DInt(stat.DistinctCount)),
+		tree.NewDInt(tree.DInt(stat.NullCount)),
+		tree.NewDInt(tree.DInt(stat.AvgSize)),
+	}
+	if stat.HistogramData == nil {
+		row = append(row, tree.DNull)
+	} else {
+		histogram, err := protoutil.Marshal(stat.HistogramData)
+		if err != nil {
+			return nil, err
+		}
+		row = append(row, tree.NewDBytes(tree.DBytes(histogram)))
+	}
+	return row, nil
 }

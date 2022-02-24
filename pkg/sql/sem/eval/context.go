@@ -238,6 +238,9 @@ type RangeProber interface {
 
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
 func (ec *Context) UnwrapDatum(d tree.Datum) tree.Datum {
+	if ec == nil {
+		return d
+	}
 	return UnwrapDatum(ec, d)
 }
 

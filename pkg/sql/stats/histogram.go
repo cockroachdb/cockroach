@@ -298,6 +298,10 @@ func (h *histogram) adjustCounts(evalCtx *eval.Context, rowCountTotal, distinctC
 	if distinctCountRange > 0 {
 		adjustmentFactorDistinctRange = (distinctCountTotal - distinctCountEq) / distinctCountRange
 	}
+	// Is this right? We've already adjusted NumRange to account for additional
+	// distinct values... does it make sense to spread the extra rows out? Maybe
+	// it does, I guess... Seems like the adjustment should be before accounting
+	// for distinct values.
 	adjustmentFactorRowCount := rowCountTotal / (rowCountRange + rowCountEq)
 	for i := range h.buckets {
 		h.buckets[i].DistinctRange *= adjustmentFactorDistinctRange
