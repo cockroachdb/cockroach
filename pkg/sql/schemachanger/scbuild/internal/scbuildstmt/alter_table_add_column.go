@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 func alterTableAddColumn(
@@ -48,6 +49,9 @@ func alterTableAddColumn(
 	}
 	if d.IsSerial {
 		panic(scerrors.NotImplementedErrorf(d, "contains serial data type"))
+	}
+	if d.GeneratedIdentity.IsGeneratedAsIdentity {
+		panic(scerrors.NotImplementedErrorf(d, "contains generated identity type"))
 	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
@@ -94,6 +98,13 @@ func alterTableAddColumn(
 		spec.colType.TypeT = typ
 	} else {
 		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
+		switch spec.colType.Type.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+			panic(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"VECTOR column types are unsupported",
+			))
+		}
 	}
 	if d.HasColumnFamily() {
 		elts := b.QueryByID(tbl.TableID)
