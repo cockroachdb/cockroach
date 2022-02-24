@@ -2030,20 +2030,12 @@ func replicaMayNeedSnapshot(raftStatus *raft.Status, replica roachpb.ReplicaDesc
 }
 
 // excludeReplicasInNeedOfSnapshots filters out the `replicas` that may be in
-// need of a raft snapshot. If this function is called with the `raftStatus` of
-// a non-raft leader replica, an empty slice is returned.
+// need of a raft snapshot. VOTER_INCOMING replicas are not filtered out.
+// Other replicas may be filtered out if this function is called with the
+// `raftStatus` of a non-raft leader replica.
 func excludeReplicasInNeedOfSnapshots(
 	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		log.VEventf(
-			ctx,
-			5,
-			"raft leader not collocated with the leaseholder; will not produce any lease transfer targets",
-		)
-		return []roachpb.ReplicaDescriptor{}
-	}
-
 	filled := 0
 	for _, repl := range replicas {
 		if replicaMayNeedSnapshot(raftStatus, repl) {
