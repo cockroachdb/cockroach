@@ -31,6 +31,10 @@ type SchemaChangePolicy string
 // include virtual columns in an event
 type VirtualColumnVisibility string
 
+// AlterNoValueOptionType defines the types of alterations that a user can
+// perform on an option with no value
+type AlterNoValueOptionType string
+
 // Constants for the options.
 const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
@@ -105,6 +109,9 @@ const (
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
+
+	OptUnsetValue AlterNoValueOptionType = `false`
+	OptSetValue   AlterNoValueOptionType = `true`
 
 	DeprecatedOptFormatAvro                   = `experimental_avro`
 	DeprecatedSinkSchemeCloudStorageAzure     = `experimental-azure`
@@ -233,3 +240,7 @@ var NoLongerExperimental = map[string]string{
 	DeprecatedSinkSchemeCloudStorageNodelocal: SinkSchemeCloudStorageNodelocal,
 	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
 }
+
+// AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
+// users to alter
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan)
