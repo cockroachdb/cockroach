@@ -600,6 +600,8 @@ and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
 </span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: anyelement, e1: anyelement, s1: anyelement, e2: anyelement) &rarr; <a href="bool.html">bool</a></code></td><td></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(t1: tuple, t2: tuple) &rarr; <a href="bool.html">bool</a></code></td><td></td></tr>
 <tr><td><a name="statement_timestamp"></a><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
 </span></td></tr>
 <tr><td><a name="statement_timestamp"></a><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
