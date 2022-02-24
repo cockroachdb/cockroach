@@ -316,6 +316,9 @@ func (r *Replica) leasePostApplyLocked(
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
 		}
+		if r.loadStats != nil {
+			r.loadStats.reset()
+		}
 		r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 	}
 
@@ -374,6 +377,9 @@ func (r *Replica) leasePostApplyLocked(
 		}
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
+		}
+		if r.loadStats != nil {
+			r.loadStats.reset()
 		}
 	}
 

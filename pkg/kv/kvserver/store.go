@@ -3075,6 +3075,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		quiescentCount                int64
 		uninitializedCount            int64
 		averageQueriesPerSecond       float64
+		averageRequestsPerSecond      float64
+		averageReadsPerSecond         float64
 		averageWritesPerSecond        float64
 
 		rangeCount                int64
@@ -3143,8 +3145,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if qps, dur := rep.leaseholderStats.averageRatePerSecond(); dur >= MinStatsDuration {
 			averageQueriesPerSecond += qps
 		}
+		if rqps, dur := rep.loadStats.requests.averageRatePerSecond(); dur >= MinStatsDuration {
+			averageRequestsPerSecond += rqps
+		}
 		if wps, dur := rep.writeStats.averageRatePerSecond(); dur >= MinStatsDuration {
 			averageWritesPerSecond += wps
+		}
+		if rps, dur := rep.loadStats.readKeys.averageRatePerSecond(); dur >= MinStatsDuration {
+			averageReadsPerSecond += rps
 		}
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
@@ -3175,7 +3183,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.QuiescentCount.Update(quiescentCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
+	s.metrics.AverageRequestsPerSecond.Update(averageRequestsPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
+	s.metrics.AverageReadsPerSecond.Update(averageReadsPerSecond)
 	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
