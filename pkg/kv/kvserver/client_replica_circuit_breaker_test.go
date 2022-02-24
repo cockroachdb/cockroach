@@ -279,6 +279,7 @@ func TestReplicaCircuitBreaker_Leaseholder_QuorumLoss(t *testing.T) {
 // leases have lots of special casing internally, this is easy to get wrong.
 func TestReplicaCircuitBreaker_Follower_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 76781, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := setupCircuitBreakerTest(t)
 	defer tc.Stopper().Stop(context.Background())
