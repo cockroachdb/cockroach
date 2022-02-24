@@ -828,7 +828,7 @@ func NewColOperator(
 				Input:      inputs[0].Root,
 				InputTypes: inputTypes,
 				Spec:       aggSpec,
-				EvalCtx:    flowCtx.EvalCtx,
+				EvalCtx:    evalCtx,
 			}
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
 				evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, inputTypes,
