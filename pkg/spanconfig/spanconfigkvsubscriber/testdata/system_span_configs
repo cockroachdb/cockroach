@@ -26,7 +26,7 @@ store-reader key=g
 conf=FALLBACK
 
 update
-upsert {entire-keyspace}:+X
+upsert {entire-keyspace}:X
 ----
 
 updates
@@ -49,7 +49,7 @@ conf=FALLBACK+X
 # Update span configs that target system tenant's keyspaces and ensure the
 # handler is invoked correctly.
 update
-upsert {source=1, target=1}:+Y
+upsert {source=1, target=1}:Y
 ----
 
 # [/Min,/Tenant/2] corresponds to the system tenant targeting itself.
@@ -88,7 +88,7 @@ conf=D+Y
 # Update system span config, ensure handlers are correctly invoked, and configs
 # are hydrated correctly.
 update
-upsert {source=1, target=1}:+V
+upsert {source=1, target=1}:V
 ----
 
 updates
