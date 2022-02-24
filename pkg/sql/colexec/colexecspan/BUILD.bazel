@@ -23,7 +23,6 @@ go_library(
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/rowenc/keyside",  # keep
         "//pkg/sql/sem/tree",  # keep
-        "//pkg/sql/span",
         "//pkg/sql/types",  # keep
         "//pkg/util",  # keep
         "//pkg/util/duration",  # keep
