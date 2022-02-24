@@ -226,7 +226,7 @@ func init() {
 			(*scpb.ColumnName)(nil),
 		),
 		element(scpb.Status_PUBLIC,
-			(*scpb.Column)(nil),
+			(*scpb.ColumnType)(nil),
 		),
 		screl.DescID,
 		screl.ColumnID,
