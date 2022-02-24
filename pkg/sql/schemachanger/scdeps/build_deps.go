@@ -332,6 +332,16 @@ func (d *buildDeps) IncrementSchemaChangeDropCounter(counterType string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter(counterType))
 }
 
+// IncrementSchemaChangeAddColumnTypeCounter implements the scbuild.Dependencies
+func (d *buildDeps) IncrementSchemaChangeAddColumnTypeCounter(typeName string) {
+	telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(typeName))
+}
+
+// IncrementSchemaChangeAddColumnQualificationCounter implements the scbuild.Dependencies
+func (d *buildDeps) IncrementSchemaChangeAddColumnQualificationCounter(qualification string) {
+	telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter(qualification))
+}
+
 // IncrementUserDefinedSchemaCounter implements the scbuild.Dependencies
 // interface.
 func (d *buildDeps) IncrementUserDefinedSchemaCounter(

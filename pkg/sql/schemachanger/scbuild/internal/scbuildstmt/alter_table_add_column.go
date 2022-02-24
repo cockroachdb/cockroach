@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -62,7 +64,7 @@ func alterTableAddColumn(
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
 	// Some of the building for the index exists below but end-to-end support is
-	// not complete so we return an error.
+	// not complete, so return an error for new unique columns.
 	if d.Unique.IsUnique {
 		panic(scerrors.NotImplementedErrorf(d, "contains unique constraint"))
 	}
@@ -101,6 +103,12 @@ func alterTableAddColumn(
 		expr, typ := b.ComputedColumnExpression(tbl, d)
 		spec.colType.ComputeExpr = b.WrapExpression(expr)
 		spec.colType.TypeT = typ
+		if desc.Virtual {
+			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
+		} else {
+			b.IncrementSchemaChangeAddColumnQualificationCounter("computed")
+		}
+
 	} else {
 		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
 		// Block unsupported types.
@@ -147,6 +155,7 @@ func alterTableAddColumn(
 			ColumnID:   spec.col.ColumnID,
 			Expression: *expression,
 		}
+		b.IncrementSchemaChangeAddColumnQualificationCounter("default_expr")
 	}
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
 	// non-empty table by scanning the primary index span with a limit of 1 to see if any key exists.
@@ -159,6 +168,7 @@ func alterTableAddColumn(
 			ColumnID:   spec.col.ColumnID,
 			Expression: *b.WrapExpression(cdd.OnUpdateExpr),
 		}
+		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
 	}
 	// Add secondary indexes for this column.
 	if newPrimary := addColumn(b, spec); newPrimary != nil {
@@ -166,6 +176,12 @@ func alterTableAddColumn(
 			idx.ID = b.NextTableIndexID(tbl)
 			addSecondaryIndexTargetsForAddColumn(b, tbl, idx, newPrimary.SourceIndexID)
 		}
+	}
+	switch spec.colType.Type.Family() {
+	case types.EnumFamily:
+		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
+	default:
+		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
 	}
 }
 
