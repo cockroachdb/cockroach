@@ -31,4 +31,4 @@ jobs:
         days-before-issue-stale: 30
         days-before-close: 5
         only-labels: 'T-kv,C-test-failure'
-        exempt-issue-labels: 'skipped-test'
+        exempt-issue-labels: 'skipped-test,X-nostale'
