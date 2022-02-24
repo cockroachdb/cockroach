@@ -1971,8 +1971,12 @@ func (s *statusServer) rangesHelper(
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
 			Stats: serverpb.RangeStatistics{
-				QueriesPerSecond: qps,
-				WritesPerSecond:  rep.WritesPerSecond(),
+				QueriesPerSecond:    qps,
+				RequestsPerSecond:   rep.RequestsPerSecond(),
+				WritesPerSecond:     rep.WritesPerSecond(),
+				ReadsPerSecond:      rep.ReadsPerSecond(),
+				WriteBytesPerSecond: rep.WriteBytesPerSecond(),
+				ReadBytesPerSecond:  rep.ReadBytesPerSecond(),
 			},
 			Problems: serverpb.RangeProblems{
 				Unavailable:            metrics.Unavailable,

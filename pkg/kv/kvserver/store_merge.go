@@ -155,6 +155,8 @@ func (s *Store) MergeRange(
 		leftRepl.writeStats.resetRequestCounts()
 	}
 
+	leftRepl.loadStats.merge(rightRepl.loadStats)
+
 	// Clear the concurrency manager's lock and txn wait-queues to redirect the
 	// queued transactions to the left-hand replica, if necessary.
 	rightRepl.concMgr.OnRangeMerge()

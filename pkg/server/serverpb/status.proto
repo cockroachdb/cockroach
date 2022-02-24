@@ -399,11 +399,18 @@ message RangeProblems {
 message RangeStatistics {
   // Queries per second served by this range.
   //
-  // Note that queries per second will only be known by the leaseholder.
-  // All other replicas will report it as 0.
+  // Batch requests per second served by this range.
   double queries_per_second = 1;
   // Writes per second served by this range.
   double writes_per_second = 2;
+  // Requests per second served by this range.
+  double requests_per_second = 3;
+  // Reads per second served by this range.
+  double reads_per_second = 4;
+  // Writes (bytes) per second served by this range.
+  double write_bytes_per_second = 5;
+  // Reads (bytes) per second served by this range.
+  double read_bytes_per_second = 6;
 }
 
 message PrettySpan {
