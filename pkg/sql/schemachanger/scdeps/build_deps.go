@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -286,4 +288,33 @@ func (d *buildDeps) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCL
 		}
 	}
 	return CreatePartitioningCCL
+}
+
+// IncrementSchemaChangeAlterCounter implements the scbuild.Dependencies
+// interface.
+func (d *buildDeps) IncrementSchemaChangeAlterCounter(counterType string, extra ...string) {
+	var maybeExtra string
+	if len(extra) > 0 {
+		maybeExtra = extra[0]
+	}
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(counterType, maybeExtra))
+}
+
+// IncrementSchemaChangeDropCounter implements the scbuild.Dependencies
+// interface.
+func (d *buildDeps) IncrementSchemaChangeDropCounter(counterType string) {
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter(counterType))
+}
+
+// IncrementUserDefinedSchemaCounter implements the scbuild.Dependencies
+// interface.
+func (d *buildDeps) IncrementUserDefinedSchemaCounter(
+	counterType sqltelemetry.UserDefinedSchemaTelemetryType,
+) {
+	sqltelemetry.IncrementUserDefinedSchemaCounter(counterType)
+}
+
+// IncrementEnumCounter implements the scbuild.Dependencies interface.
+func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType) {
+	sqltelemetry.IncrementEnumCounter(counterType)
 }

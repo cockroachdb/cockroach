@@ -560,6 +560,8 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer t.cleanup()
 
 	sql := `
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY);
 `
@@ -638,6 +640,8 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	stmt := `
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY);
 `

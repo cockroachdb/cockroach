@@ -59,16 +59,21 @@ message ElementProto {
   AliasType alias_type = 7;
 
   // Relation elements.
-  TableLocality locality = 20 [(gogoproto.moretags) = "parent:\"Table\""];
-  ColumnFamily column_family = 21 [(gogoproto.moretags) = "parent:\"Table\""];
-  Column column = 22 [(gogoproto.moretags) = "parent:\"Table, View\""];
-  PrimaryIndex primary_index = 23 [(gogoproto.moretags) = "parent:\"Table, View\""];
-  SecondaryIndex secondary_index = 24 [(gogoproto.moretags) = "parent:\"Table, View\""];
-  UniqueWithoutIndexConstraint unique_without_index_constraint = 25 [(gogoproto.moretags) = "parent:\"Table\""];
-  CheckConstraint check_constraint = 26 [(gogoproto.moretags) = "parent:\"Table\""];
-  ForeignKeyConstraint foreign_key_constraint = 27 [(gogoproto.moretags) = "parent:\"Table\""];
-  TableComment table_comment = 28 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
-  RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
+  ColumnFamily column_family = 20 [(gogoproto.moretags) = "parent:\"Table\""];
+  Column column = 21 [(gogoproto.moretags) = "parent:\"Table, View\""];
+  PrimaryIndex primary_index = 22 [(gogoproto.moretags) = "parent:\"Table, View\""];
+  SecondaryIndex secondary_index = 23 [(gogoproto.moretags) = "parent:\"Table, View\""];
+  UniqueWithoutIndexConstraint unique_without_index_constraint = 24 [(gogoproto.moretags) = "parent:\"Table\""];
+  CheckConstraint check_constraint = 25 [(gogoproto.moretags) = "parent:\"Table\""];
+  ForeignKeyConstraint foreign_key_constraint = 26 [(gogoproto.moretags) = "parent:\"Table\""];
+  TableComment table_comment = 27 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
+  RowLevelTTL row_level_ttl = 28 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
+
+  // Multi-region elements.
+  TableLocalityGlobal locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
+  TableLocalityPrimaryRegion locality_primary_region = 111 [(gogoproto.moretags) = "parent:\"Table\""];
+  TableLocalitySecondaryRegion locality_secondary_region = 112 [(gogoproto.moretags) = "parent:\"Table\""];
+  TableLocalityRegionalByRow locality_regional_by_row = 113 [(gogoproto.moretags) = "parent:\"Table\""];
 
   // Column elements.
   ColumnName column_name = 30 [(gogoproto.moretags) = "parent:\"Column\""];
@@ -341,10 +346,23 @@ message UserPrivileges {
   uint32 privileges = 3;
 }
 
-message TableLocality {
+message TableLocalityGlobal {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message TableLocalityPrimaryRegion {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message TableLocalitySecondaryRegion {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 region_enum_type_id = 2 [(gogoproto.customname) = "RegionEnumTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  cockroach.sql.catalog.catpb.LocalityConfig Locality = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.LocalityConfig"];
+  string region_name = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+}
+
+message TableLocalityRegionalByRow {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string as = 2;
 }
 
 message IndexPartitioning {

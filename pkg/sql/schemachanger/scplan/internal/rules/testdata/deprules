@@ -102,12 +102,12 @@ deprules
     - $to-node[Target] = $to-target
     - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
     - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
-- name: table locality removed before dropping multi-region enum typ
+- name: secondary region locality removed before dropping multi-region enum type
   from: from-node
   kind: Precedence
   to: to-node
   query:
-    - $from[Type] = '*scpb.TableLocality'
+    - $from[Type] = '*scpb.TableLocalitySecondaryRegion'
     - $to[Type] = '*scpb.EnumType'
     - $from-target[TargetStatus] = ABSENT
     - $to-target[TargetStatus] = ABSENT
@@ -291,7 +291,7 @@ deprules
   kind: Precedence
   to: to-node
   query:
-    - $from[Type] IN ['*scpb.TableLocality', '*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment', '*scpb.SequenceOwner', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
+    - $from[Type] IN ['*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment', '*scpb.SequenceOwner', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
     - $to[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
     - $from-target[TargetStatus] = ABSENT
     - $to-target[TargetStatus] = ABSENT
@@ -626,7 +626,7 @@ deprules
     - $to[DescID] = $DescID-join-var
     - $from[ColumnID] = $ColumnID-join-var
     - $to[ColumnID] = $ColumnID-join-var
-- name: column DEFAULT and ON UPDATE removed right before column type
+- name: column type dependents removed right before column type
   from: from-node
   kind: SameStagePrecedence
   to: to-node
@@ -649,7 +649,7 @@ deprules
     - $to[DescID] = $DescID-join-var
     - $from[ColumnID] = $ColumnID-join-var
     - $to[ColumnID] = $ColumnID-join-var
-- name: column dependents removed before column
+- name: dependents removed before column
   from: from-node
   kind: Precedence
   to: to-node

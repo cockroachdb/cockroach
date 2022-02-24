@@ -16,11 +16,11 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.TableLocality)(nil),
+	opRegistry.register((*scpb.TableLocalityPrimaryRegion)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableLocality) scop.Op {
+				emit(func(this *scpb.TableLocalityPrimaryRegion) scop.Op {
 					return notImplemented(this)
 				}),
 			),
@@ -31,9 +31,7 @@ func init() {
 				minPhase(scop.PreCommitPhase),
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
-				emit(func(this *scpb.TableLocality) scop.Op {
-					return notImplemented(this)
-				}),
+				// TODO(postamar): implement table locality update.
 			),
 		),
 	)

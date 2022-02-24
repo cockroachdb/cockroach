@@ -39,12 +39,6 @@ object AliasType
 AliasType :  TypeID
 AliasType :  TypeT
 
-object TableLocality
-
-TableLocality :  TableID
-TableLocality :  RegionEnumTypeID
-TableLocality :  LocalityConfig
-
 object ColumnFamily
 
 ColumnFamily :  TableID
@@ -100,6 +94,25 @@ object RowLevelTTL
 
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
+
+object TableLocalityGlobal
+
+TableLocalityGlobal :  TableID
+
+object TableLocalityPrimaryRegion
+
+TableLocalityPrimaryRegion :  TableID
+
+object TableLocalitySecondaryRegion
+
+TableLocalitySecondaryRegion :  TableID
+TableLocalitySecondaryRegion :  RegionEnumTypeID
+TableLocalitySecondaryRegion :  RegionName
+
+object TableLocalityRegionalByRow
+
+TableLocalityRegionalByRow :  TableID
+TableLocalityRegionalByRow :  As
 
 object ColumnName
 
@@ -227,7 +240,6 @@ object ObjectParent
 ObjectParent :  ObjectID
 ObjectParent :  ParentSchemaID
 
-Table <|-- TableLocality
 Table <|-- ColumnFamily
 Table <|-- Column
 View <|-- Column
@@ -242,6 +254,10 @@ Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
 Table <|-- RowLevelTTL
+Table <|-- TableLocalityGlobal
+Table <|-- TableLocalityPrimaryRegion
+Table <|-- TableLocalitySecondaryRegion
+Table <|-- TableLocalityRegionalByRow
 Column <|-- ColumnName
 Column <|-- ColumnType
 Column <|-- ColumnDefaultExpression

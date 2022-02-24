@@ -64,13 +64,20 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			index.TableID = t.ViewID
 			relation = e
 
-		case *scpb.TableLocality:
+		case *scpb.TableLocalityGlobal, *scpb.TableLocalityPrimaryRegion, *scpb.TableLocalitySecondaryRegion:
 			if n.PartitionByIndex != nil {
 				panic(pgerror.New(pgcode.FeatureNotSupported,
 					"cannot define PARTITION BY on a new INDEX in a multi-region database",
 				))
 			}
-			if n.Sharded != nil && t.LocalityConfig.GetRegionalByRow() != nil {
+
+		case *scpb.TableLocalityRegionalByRow:
+			if n.PartitionByIndex != nil {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"cannot define PARTITION BY on a new INDEX in a multi-region database",
+				))
+			}
+			if n.Sharded != nil {
 				panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
 			}
 
