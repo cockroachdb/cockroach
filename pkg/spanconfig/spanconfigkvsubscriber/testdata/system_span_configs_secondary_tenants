@@ -3,8 +3,8 @@ start
 ----
 
 update
-upsert {source=1,target=20}:+Z
-upsert {source=10, target=10}:+W
+upsert {source=1,target=20}:Z
+upsert {source=10, target=10}:W
 ----
 
 updates
@@ -27,7 +27,7 @@ updates
 # Lastly, update a system span config set on a secondary tenant's keyspace and
 # ensure handlers are invoked correctly.
 update
-upsert {source=10, target=10}:+U
+upsert {source=10, target=10}:U
 ----
 
 updates
