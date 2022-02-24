@@ -141,6 +141,15 @@ func MakeDateFromPGEpoch(days int32) (Date, error) {
 	return Date{days: days}, nil
 }
 
+func MakeDateFromPGEpochWithTruncation(days int32) Date {
+	if days < lowDays {
+		return Date{days: lowDays}
+	} else if days > highDays {
+		return Date{days: highDays}
+	}
+	return Date{days: days}
+}
+
 // ToTime returns d as a time.Time. Non finite dates return an error.
 func (d Date) ToTime() (time.Time, error) {
 	if d.days == math.MinInt32 || d.days == math.MaxInt32 {

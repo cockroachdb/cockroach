@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,9 +55,24 @@ var showTableStatsJSONColumns = colinfo.ResultColumns{
 	{Name: "statistics", Typ: types.Jsonb},
 }
 
+const showTableStatsOptForecast = "forecast"
+
+var showTableStatsOptValidate = map[string]KVStringOptValidate{
+	showTableStatsOptForecast: KVStringOptRequireNoValue,
+}
+
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
+	optsFn, err := p.TypeAsStringOpts(ctx, n.Options, showTableStatsOptValidate)
+	if err != nil {
+		return nil, err
+	}
+	opts, err := optsFn()
+	if err != nil {
+		return nil, err
+	}
+
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
 	desc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.Table, true /*required*/, tree.ResolveRequireTableDesc)
@@ -90,7 +106,8 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				avgSize = `
 					"avgSize",`
 			}
-			stmt := fmt.Sprintf(`SELECT "statisticID",
+			stmt := fmt.Sprintf(`SELECT "tableID",
+																				 "statisticID",
 																				 name,
 																				 "columnIDs",
 																				 "createdAt",
@@ -114,7 +131,8 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			}
 
 			const (
-				statIDIdx = iota
+				tableIDIdx = iota
+				statIDIdx
 				nameIdx
 				columnIDsIdx
 				createdAtIdx
@@ -131,6 +149,31 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			if !avgSizeColVerActive {
 				histIdx = histogramIdx - 1
 				nCols = numCols - 1
+			}
+
+			if _, withForecast := opts[showTableStatsOptForecast]; withForecast {
+				observed := make([]*stats.TableStatisticProto, 0, len(rows))
+				for _, row := range rows {
+					stats, err := stats.NewTableStatisticProto(row, avgSizeColVerActive)
+					if err != nil {
+						return nil, err
+					}
+					observed = append(observed, stats)
+				}
+
+				forecasts, err := stats.ForecastTableStatistics(ctx, observed)
+				if err == nil {
+					for _, forecast := range forecasts {
+						forecastRow, err := tableStatisticProtoToRow(forecast, avgSizeColVerActive)
+						if err != nil {
+							return nil, err
+						}
+						if len(forecastRow) != nCols {
+							return nil, errors.AssertionFailedf("forecast table statistics row was malformed")
+						}
+						rows = append(rows, forecastRow)
+					}
+				}
 			}
 
 			// Guard against crashes in the code below (e.g. #56356).
@@ -251,4 +294,42 @@ func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) string {
 		return "<unknown>"
 	}
 	return colDesc.GetName()
+}
+
+func tableStatisticProtoToRow(
+	stat *stats.TableStatisticProto, avgSizeColVerActive bool,
+) (tree.Datums, error) {
+	name := tree.DNull
+	if stat.Name != "" {
+		name = tree.NewDString(stat.Name)
+	}
+	columnIDs := tree.NewDArray(types.Int)
+	for _, c := range stat.ColumnIDs {
+		if err := columnIDs.Append(tree.NewDInt(tree.DInt(c))); err != nil {
+			return nil, err
+		}
+	}
+	row := tree.Datums{
+		tree.NewDInt(tree.DInt(stat.TableID)),
+		tree.NewDInt(tree.DInt(stat.StatisticID)),
+		name,
+		columnIDs,
+		&tree.DTimestamp{Time: stat.CreatedAt},
+		tree.NewDInt(tree.DInt(stat.RowCount)),
+		tree.NewDInt(tree.DInt(stat.DistinctCount)),
+		tree.NewDInt(tree.DInt(stat.NullCount)),
+	}
+	if avgSizeColVerActive {
+		row = append(row, tree.NewDInt(tree.DInt(stat.AvgSize)))
+	}
+	if stat.HistogramData == nil {
+		row = append(row, tree.DNull)
+	} else {
+		histogram, err := protoutil.Marshal(stat.HistogramData)
+		if err != nil {
+			return nil, err
+		}
+		row = append(row, tree.NewDBytes(tree.DBytes(histogram)))
+	}
+	return row, nil
 }

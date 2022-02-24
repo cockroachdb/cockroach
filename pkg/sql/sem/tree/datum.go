@@ -2434,6 +2434,18 @@ func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 	return ret
 }
 
+// MakeDTimestampWithTruncation creates a DTimestamp with specified precision,
+// truncated to fit within the Timestamp bounds.
+func MakeDTimestampWithTruncation(t time.Time, precision time.Duration) *DTimestamp {
+	if t.After(MaxSupportedTime) {
+		return &DTimestamp{Time: MaxSupportedTime.Round(precision)}
+	}
+	if t.Before(MinSupportedTime) {
+		return &DTimestamp{Time: MinSupportedTime.Round(precision)}
+	}
+	return &DTimestamp{Time: t.Round(precision)}
+}
+
 var dZeroTimestamp = &DTimestamp{}
 
 // time.Time formats.
@@ -2716,6 +2728,18 @@ func MustMakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 		panic(err)
 	}
 	return ret
+}
+
+// MakeDTimestampTZWithTruncation creates a DTimestampTZ with specified
+// precision, truncated to fit within the TimestampTZ bounds.
+func MakeDTimestampTZWithTruncation(t time.Time, precision time.Duration) *DTimestampTZ {
+	if t.After(MaxSupportedTime) {
+		return &DTimestampTZ{Time: MaxSupportedTime.Round(precision)}
+	}
+	if t.Before(MinSupportedTime) {
+		return &DTimestampTZ{Time: MinSupportedTime.Round(precision)}
+	}
+	return &DTimestampTZ{Time: t.Round(precision)}
 }
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
