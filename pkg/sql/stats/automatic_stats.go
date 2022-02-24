@@ -530,28 +530,22 @@ func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 // columns, the default value defaultAverageTimeBetweenRefreshes is returned.
 func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 	var reference *TableStatistic
-	var sum time.Duration
-	var count int
+	var protos []*TableStatisticProto
 	for _, stat := range tableStats {
 		if stat.Name != jobspb.AutoStatsName {
 			continue
 		}
 		if reference == nil {
 			reference = stat
+			protos = append(protos, &stat.TableStatisticProto)
 			continue
 		}
 		if !areEqual(stat.ColumnIDs, reference.ColumnIDs) {
 			continue
 		}
-		// Stats are sorted with the most recent first.
-		sum += reference.CreatedAt.Sub(stat.CreatedAt)
-		count++
-		reference = stat
+		protos = append(protos, &stat.TableStatisticProto)
 	}
-	if count == 0 {
-		return defaultAverageTimeBetweenRefreshes
-	}
-	return sum / time.Duration(count)
+	return avgStatTime(protos)
 }
 
 func areEqual(a, b []descpb.ColumnID) bool {
@@ -564,6 +558,18 @@ func areEqual(a, b []descpb.ColumnID) bool {
 		}
 	}
 	return true
+}
+
+func avgStatTime(stats []*TableStatisticProto) time.Duration {
+	if len(stats) < 2 {
+		return defaultAverageTimeBetweenRefreshes
+	}
+	var sum time.Duration
+	for i := 1; i < len(stats); i++ {
+		// Stats are sorted with the most recent first.
+		sum += stats[i-1].CreatedAt.Sub(stats[i].CreatedAt)
+	}
+	return sum / time.Duration(len(stats)-1)
 }
 
 // autoStatsRand pairs a rand.Rand with a mutex.

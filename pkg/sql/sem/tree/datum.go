@@ -778,17 +778,21 @@ func (d *DInt) IsMin(_ *EvalContext) bool {
 	return *d == math.MinInt64
 }
 
-var dMaxInt = NewDInt(math.MaxInt64)
-var dMinInt = NewDInt(math.MinInt64)
+var (
+	// DMaxInt is the maximum DInt.
+	DMaxInt = NewDInt(math.MaxInt64)
+	// DMinInt is the maximum DInt.
+	DMinInt = NewDInt(math.MinInt64)
+)
 
 // Max implements the Datum interface.
 func (d *DInt) Max(_ *EvalContext) (Datum, bool) {
-	return dMaxInt, true
+	return DMaxInt, true
 }
 
 // Min implements the Datum interface.
 func (d *DInt) Min(_ *EvalContext) (Datum, bool) {
-	return dMinInt, true
+	return DMinInt, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -905,7 +909,7 @@ func (d *DFloat) Prev(_ *EvalContext) (Datum, bool) {
 		return nil, false
 	}
 	if f == math.Inf(-1) {
-		return dNaNFloat, true
+		return DNaNFloat, true
 	}
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(-1)))), true
 }
@@ -914,7 +918,7 @@ func (d *DFloat) Prev(_ *EvalContext) (Datum, bool) {
 func (d *DFloat) Next(_ *EvalContext) (Datum, bool) {
 	f := float64(*d)
 	if math.IsNaN(f) {
-		return dNegInfFloat, true
+		return DNegInfFloat, true
 	}
 	if f == math.Inf(+1) {
 		return nil, false
@@ -922,14 +926,20 @@ func (d *DFloat) Next(_ *EvalContext) (Datum, bool) {
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(+1)))), true
 }
 
-var dZeroFloat = NewDFloat(0.0)
-var dPosInfFloat = NewDFloat(DFloat(math.Inf(+1)))
-var dNegInfFloat = NewDFloat(DFloat(math.Inf(-1)))
-var dNaNFloat = NewDFloat(DFloat(math.NaN()))
+var (
+	// DZeroFloat is the DFloat for zero.
+	DZeroFloat = NewDFloat(0)
+	// DPosInfFloat is the DFloat for positive infinity.
+	DPosInfFloat = NewDFloat(DFloat(math.Inf(+1)))
+	// DNegInfFloat is the DFloat for negative infinity.
+	DNegInfFloat = NewDFloat(DFloat(math.Inf(-1)))
+	// DNaNFloat is the DFloat for NaN.
+	DNaNFloat = NewDFloat(DFloat(math.NaN()))
+)
 
 // IsMax implements the Datum interface.
 func (d *DFloat) IsMax(_ *EvalContext) bool {
-	return *d == *dPosInfFloat
+	return *d == *DPosInfFloat
 }
 
 // IsMin implements the Datum interface.
@@ -939,12 +949,12 @@ func (d *DFloat) IsMin(_ *EvalContext) bool {
 
 // Max implements the Datum interface.
 func (d *DFloat) Max(_ *EvalContext) (Datum, bool) {
-	return dPosInfFloat, true
+	return DPosInfFloat, true
 }
 
 // Min implements the Datum interface.
 func (d *DFloat) Min(_ *EvalContext) (Datum, bool) {
-	return dNaNFloat, true
+	return DNaNFloat, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -1098,9 +1108,16 @@ func (d *DDecimal) Next(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
-var dZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
-var dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
-var dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+var (
+	// DZeroDecimal is the DDecimal for zero.
+	DZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
+	// DPosInfDecimal is the DDecimal for positive infinity.
+	DPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+	// DNegInfDecimal is the DDecimal for negative infinity.
+	DNegInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: true}}
+	// DNaNDecimal is the DDecimal for NaN.
+	DNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+)
 
 // IsMax implements the Datum interface.
 func (d *DDecimal) IsMax(_ *EvalContext) bool {
@@ -1114,12 +1131,12 @@ func (d *DDecimal) IsMin(_ *EvalContext) bool {
 
 // Max implements the Datum interface.
 func (d *DDecimal) Max(_ *EvalContext) (Datum, bool) {
-	return dPosInfDecimal, true
+	return DPosInfDecimal, true
 }
 
 // Min implements the Datum interface.
 func (d *DDecimal) Min(_ *EvalContext) (Datum, bool) {
-	return dNaNDecimal, true
+	return DNaNDecimal, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -2187,27 +2204,31 @@ func (d *DTime) Next(ctx *EvalContext) (Datum, bool) {
 	return &next, true
 }
 
-var dTimeMin = MakeDTime(timeofday.Min)
-var dTimeMax = MakeDTime(timeofday.Max)
+var (
+	// DMinTime is the minimum DTime (00:00).
+	DMinTime = MakeDTime(timeofday.Min)
+	// DMaxTime is the maximum DTime (24:00).
+	DMaxTime = MakeDTime(timeofday.Max)
+)
 
 // IsMax implements the Datum interface.
 func (d *DTime) IsMax(_ *EvalContext) bool {
-	return *d == *dTimeMax
+	return *d == *DMaxTime
 }
 
 // IsMin implements the Datum interface.
 func (d *DTime) IsMin(_ *EvalContext) bool {
-	return *d == *dTimeMin
+	return *d == *DMinTime
 }
 
 // Max implements the Datum interface.
 func (d *DTime) Max(_ *EvalContext) (Datum, bool) {
-	return dTimeMax, true
+	return DMaxTime, true
 }
 
 // Min implements the Datum interface.
 func (d *DTime) Min(_ *EvalContext) (Datum, bool) {
-	return dTimeMin, true
+	return DMinTime, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -2237,10 +2258,11 @@ type DTimeTZ struct {
 }
 
 var (
-	dZeroTimeTZ = NewDTimeTZFromOffset(timeofday.Min, 0)
-	// DMinTimeTZ is the min TimeTZ.
+	// DZeroTimeTZ is the DTimeTZ for 00:00+0.
+	DZeroTimeTZ = NewDTimeTZFromOffset(timeofday.Min, 0)
+	// DMinTimeTZ is the minimum DTimeTZ, which is less than DZeroTimeTZ due to timezone.
 	DMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
-	// DMaxTimeTZ is the max TimeTZ.
+	// DMaxTimeTZ is the maximum DTimeTZ.
 	DMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Max, timetz.MaxTimeTZOffsetSecs)
 )
 
@@ -2434,7 +2456,20 @@ func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 	return ret
 }
 
-var dZeroTimestamp = &DTimestamp{}
+// MakeDTimestampClamp creates a DTimestamp with specified precision, clamping
+// to fit within the Timestamp bounds.
+func MakeDTimestampClamp(t time.Time, precision time.Duration) *DTimestamp {
+	if t.Before(MinSupportedTime) {
+		return &DTimestamp{Time: MinSupportedTime.Round(precision)}
+	}
+	if t.After(MaxSupportedTime) {
+		return &DTimestamp{Time: MaxSupportedTime.Round(precision)}
+	}
+	return &DTimestamp{Time: t.Round(precision)}
+}
+
+// DZeroTimestamp is the DTimestamp for 0001-01-01 00:00:00 UTC.
+var DZeroTimestamp = &DTimestamp{}
 
 // time.Time formats.
 const (
@@ -2718,6 +2753,18 @@ func MustMakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 	return ret
 }
 
+// MakeDTimestampTZClamp creates a DTimestampTZ with specified precision,
+// clamping to fit within the TimestampTZ bounds.
+func MakeDTimestampTZClamp(t time.Time, precision time.Duration) *DTimestampTZ {
+	if t.Before(MinSupportedTime) {
+		return &DTimestampTZ{Time: MinSupportedTime.Round(precision)}
+	}
+	if t.After(MaxSupportedTime) {
+		return &DTimestampTZ{Time: MaxSupportedTime.Round(precision)}
+	}
+	return &DTimestampTZ{Time: t.Round(precision)}
+}
+
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
 // This will be equivalent to the midnight of the given zone.
 func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, error) {
@@ -2749,7 +2796,8 @@ func ParseDTimestampTZ(
 	return d, dependsOnContext, err
 }
 
-var dZeroTimestampTZ = &DTimestampTZ{}
+// DZeroTimestampTZ is the DTimestampTZ for 0001-01-01 00:00:00 UTC.
+var DZeroTimestampTZ = &DTimestampTZ{}
 
 // AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
 // DTimestampTZ and a flag signifying whether the assertion was successful. The
@@ -3036,28 +3084,31 @@ func (d *DInterval) Next(_ *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DInterval) IsMax(_ *EvalContext) bool {
-	return d.Duration == dMaxInterval.Duration
+	return d.Duration == DMaxInterval.Duration
 }
 
 // IsMin implements the Datum interface.
 func (d *DInterval) IsMin(_ *EvalContext) bool {
-	return d.Duration == dMinInterval.Duration
+	return d.Duration == DMinInterval.Duration
 }
 
 var (
-	dZeroInterval = &DInterval{}
-	dMaxInterval  = &DInterval{duration.MakeDuration(math.MaxInt64, math.MaxInt64, math.MaxInt64)}
-	dMinInterval  = &DInterval{duration.MakeDuration(math.MinInt64, math.MinInt64, math.MinInt64)}
+	// DZeroInterval is the DInterval for zero.
+	DZeroInterval = &DInterval{}
+	// DMaxInterval is the maximum DInterval.
+	DMaxInterval = &DInterval{duration.MakeDuration(math.MaxInt64, math.MaxInt64, math.MaxInt64)}
+	// DMinInterval is the minimum DInterval.
+	DMinInterval = &DInterval{duration.MakeDuration(math.MinInt64, math.MinInt64, math.MinInt64)}
 )
 
 // Max implements the Datum interface.
 func (d *DInterval) Max(_ *EvalContext) (Datum, bool) {
-	return dMaxInterval, true
+	return DMaxInterval, true
 }
 
 // Min implements the Datum interface.
 func (d *DInterval) Min(_ *EvalContext) (Datum, bool) {
-	return dMinInterval, true
+	return DMinInterval, true
 }
 
 // ValueAsISO8601String returns the interval as an ISO 8601 Duration string (e.g. "P1Y2MT6S").
@@ -5404,21 +5455,21 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 	case types.IntFamily:
 		return DZero, nil
 	case types.FloatFamily:
-		return dZeroFloat, nil
+		return DZeroFloat, nil
 	case types.DecimalFamily:
-		return dZeroDecimal, nil
+		return DZeroDecimal, nil
 	case types.DateFamily:
 		return dEpochDate, nil
 	case types.TimestampFamily:
-		return dZeroTimestamp, nil
+		return DZeroTimestamp, nil
 	case types.IntervalFamily:
-		return dZeroInterval, nil
+		return DZeroInterval, nil
 	case types.StringFamily:
 		return dEmptyString, nil
 	case types.BytesFamily:
 		return dEmptyBytes, nil
 	case types.TimestampTZFamily:
-		return dZeroTimestampTZ, nil
+		return DZeroTimestampTZ, nil
 	case types.CollatedStringFamily:
 		return NewDCollatedString("", t.Locale(), &evalCtx.CollationEnv)
 	case types.OidFamily:
@@ -5432,11 +5483,11 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 	case types.INetFamily:
 		return DMinIPAddr, nil
 	case types.TimeFamily:
-		return dTimeMin, nil
+		return DMinTime, nil
 	case types.JsonFamily:
 		return dNullJSON, nil
 	case types.TimeTZFamily:
-		return dZeroTimeTZ, nil
+		return DZeroTimeTZ, nil
 	case types.GeometryFamily, types.GeographyFamily, types.Box2DFamily:
 		// TODO(otan): force Geometry/Geography to not allow `NOT NULL` columns to
 		// make this impossible.
