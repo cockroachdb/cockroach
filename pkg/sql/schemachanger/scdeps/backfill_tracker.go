@@ -38,10 +38,10 @@ type RangeCounter interface {
 	) (total, inContainedBy int, _ error)
 }
 
-func newBackfillTrackerConfig(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, rc RangeCounter, job *jobs.Job,
-) backfillTrackerConfig {
-	return backfillTrackerConfig{
+func newBackfillerTrackerConfig(
+	ctx context.Context, codec keys.SQLCodec, rc RangeCounter, job *jobs.Job,
+) backfillerTrackerConfig {
+	return backfillerTrackerConfig{
 		numRangesInSpanContainedBy: rc.NumRangesInSpanContainedBy,
 		writeProgressFraction: func(_ context.Context, fractionProgressed float32) error {
 			if err := job.FractionProgressed(
@@ -51,17 +51,22 @@ func newBackfillTrackerConfig(
 			}
 			return nil
 		},
-		writeCheckpoint: func(ctx context.Context, progresses []scexec.BackfillProgress) error {
+		writeCheckpoint: func(ctx context.Context, bps []scexec.BackfillProgress, mps []scexec.MergeProgress) error {
 			return job.Update(ctx, nil /* txn */, func(
 				txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
 				pl := md.Payload
-				jobProgress, err := convertToJobBackfillProgress(codec, progresses)
+				backfillJobProgress, err := convertToJobBackfillProgress(codec, bps)
+				if err != nil {
+					return err
+				}
+				mergeJobProgress, err := convertToJobMergeProgress(codec, mps)
 				if err != nil {
 					return err
 				}
 				sc := pl.GetNewSchemaChange()
-				sc.BackfillProgress = jobProgress
+				sc.BackfillProgress = backfillJobProgress
+				sc.MergeProgress = mergeJobProgress
 				ju.UpdatePayload(pl)
 				return nil
 			})
@@ -107,6 +112,54 @@ func convertFromJobBackfillProgress(
 	return ret
 }
 
+func convertToJobMergeProgress(
+	codec keys.SQLCodec, progresses []scexec.MergeProgress,
+) ([]jobspb.MergeProgress, error) {
+	ret := make([]jobspb.MergeProgress, len(progresses))
+	for _, mp := range progresses {
+		pairs := make([]jobspb.MergeProgress_MergePair, len(mp.SourceIndexIDs))
+		for i, sourceID := range mp.SourceIndexIDs {
+			strippedSpans, err := removeTenantPrefixFromSpans(codec, mp.CompletedSpans[i])
+			if err != nil {
+				return nil, err
+			}
+			pairs[i] = jobspb.MergeProgress_MergePair{
+				SourceIndexID:  sourceID,
+				DestIndexID:    mp.DestIndexIDs[i],
+				CompletedSpans: strippedSpans,
+			}
+		}
+		ret = append(ret, jobspb.MergeProgress{
+			TableID:    mp.TableID,
+			MergePairs: pairs,
+		})
+	}
+	return ret, nil
+}
+
+func convertFromJobMergeProgress(
+	codec keys.SQLCodec, progresses []jobspb.MergeProgress,
+) []scexec.MergeProgress {
+	ret := make([]scexec.MergeProgress, len(progresses))
+	for _, jmp := range progresses {
+		mp := scexec.MergeProgress{
+			Merge: scexec.Merge{
+				TableID:        jmp.TableID,
+				SourceIndexIDs: make([]descpb.IndexID, len(jmp.MergePairs)),
+				DestIndexIDs:   make([]descpb.IndexID, len(jmp.MergePairs)),
+			},
+			CompletedSpans: make([][]roachpb.Span, len(jmp.MergePairs)),
+		}
+		for i, pair := range jmp.MergePairs {
+			mp.SourceIndexIDs[i] = pair.SourceIndexID
+			mp.DestIndexIDs[i] = pair.DestIndexID
+			mp.CompletedSpans[i] = addTenantPrefixToSpans(codec, pair.CompletedSpans)
+		}
+		ret = append(ret, mp)
+	}
+	return ret
+}
+
 func addTenantPrefixToSpans(codec keys.SQLCodec, spans []roachpb.Span) []roachpb.Span {
 	prefix := codec.TenantPrefix()
 	prefix = prefix[:len(prefix):len(prefix)] // force realloc on append
@@ -137,27 +190,30 @@ func removeTenantPrefixFromSpans(
 	return ret, nil
 }
 
-// backfillTracker is used to receive progress updates on index backfills
-// and periodically write them. The data structure supports receiving updates
-// from multiple concurrent backfills. Additionally, it supports writing two
-// different types of progress updates: a small fraction completed update,
-// which is written at a higher frequency, and a larger checkpoint which
+// backfillerTracker is used to receive backfillProgress updates on index
+// backfills and merges and periodically write them.
+//
+// The data structure supports receiving updates from multiple concurrent
+// backfills and merges. Additionally, it supports writing two different types
+// of backfillProgress and mergeProgress updates: a small fraction completed
+// update, which is written at a higher frequency, and a larger checkpoint which
 // records the remaining spans of the source index to scan.
-type backfillTracker struct {
-	backfillTrackerConfig
+type backfillerTracker struct {
+	backfillerTrackerConfig
 	codec keys.SQLCodec
 
 	mu struct {
 		syncutil.Mutex
 
-		progress map[tableIndexKey]*progress
+		backfillProgress map[backfillKey]*backfillProgress
+		mergeProgress    map[mergeKey]*mergeProgress
 	}
 }
 
-// backfillTrackerConfig represents the underlying dependencies of the
-// backfillTracker. It exists in this abstracted form largely to facilitate
+// backfillerTrackerConfig represents the underlying dependencies of the
+// backfillerTracker. It exists in this abstracted form largely to facilitate
 // testing and to make dependency injection convenient.
-type backfillTrackerConfig struct {
+type backfillerTrackerConfig struct {
 
 	// numRangesInSpanContainedBy returns the total number of ranges in the span
 	// and the number of ranges in that span which are fully covered by the set
@@ -166,32 +222,37 @@ type backfillTrackerConfig struct {
 		context.Context, roachpb.Span, []roachpb.Span,
 	) (total, contained int, _ error)
 
-	// writeProgressFraction writes the progress fraction for presentation.
+	// writeProgressFraction writes the backfillProgress fraction for presentation.
 	writeProgressFraction func(_ context.Context, fractionProgressed float32) error
 
 	// writeCheckpoint write the checkpoint the underlying store.
-	writeCheckpoint func(context.Context, []scexec.BackfillProgress) error
+	writeCheckpoint func(context.Context, []scexec.BackfillProgress, []scexec.MergeProgress) error
 }
 
-var _ scexec.BackfillTracker = (*backfillTracker)(nil)
+var _ scexec.BackfillerTracker = (*backfillerTracker)(nil)
 
-func newBackfillTracker(
-	codec keys.SQLCodec, cfg backfillTrackerConfig, initialProgress []scexec.BackfillProgress,
-) *backfillTracker {
-	bt := &backfillTracker{
-		codec:                 codec,
-		backfillTrackerConfig: cfg,
+func newBackfillerTracker(
+	codec keys.SQLCodec,
+	cfg backfillerTrackerConfig,
+	initialBackfillProgress []scexec.BackfillProgress,
+	initialMergeProgress []scexec.MergeProgress,
+) *backfillerTracker {
+	bt := &backfillerTracker{
+		codec:                   codec,
+		backfillerTrackerConfig: cfg,
 	}
-	bt.mu.progress = make(map[tableIndexKey]*progress)
-	for _, p := range initialProgress {
-		bp := newProgress(codec, p)
-
-		bt.mu.progress[toKey(p.Backfill)] = bp
+	bt.mu.backfillProgress = make(map[backfillKey]*backfillProgress)
+	for _, bp := range initialBackfillProgress {
+		bt.mu.backfillProgress[toBackfillKey(bp.Backfill)] = newBackfillProgress(codec, bp)
+	}
+	bt.mu.mergeProgress = make(map[mergeKey]*mergeProgress)
+	for _, mp := range initialMergeProgress {
+		bt.mu.mergeProgress[toMergeKey(mp.Merge)] = newMergeProgress(codec, mp)
 	}
 	return bt
 }
 
-func (b *backfillTracker) GetBackfillProgress(
+func (b *backfillerTracker) GetBackfillProgress(
 	ctx context.Context, bf scexec.Backfill,
 ) (scexec.BackfillProgress, error) {
 	p, ok := b.getTableIndexBackfillProgress(bf)
@@ -206,7 +267,20 @@ func (b *backfillTracker) GetBackfillProgress(
 	return p.BackfillProgress, nil
 }
 
-func (b *backfillTracker) SetBackfillProgress(
+func (b *backfillerTracker) GetMergeProgress(
+	ctx context.Context, m scexec.Merge,
+) (scexec.MergeProgress, error) {
+	p, ok := b.getTableIndexMergeProgress(m)
+	if !ok {
+		return scexec.MergeProgress{Merge: m}, nil
+	}
+	if err := p.matches(m); err != nil {
+		return scexec.MergeProgress{Merge: m}, err
+	}
+	return p.MergeProgress, nil
+}
+
+func (b *backfillerTracker) SetBackfillProgress(
 	ctx context.Context, progress scexec.BackfillProgress,
 ) error {
 	b.mu.Lock()
@@ -216,8 +290,8 @@ func (b *backfillTracker) SetBackfillProgress(
 		return err
 	}
 	if p == nil {
-		p = newProgress(b.codec, progress)
-		b.mu.progress[toKey(progress.Backfill)] = p
+		p = newBackfillProgress(b.codec, progress)
+		b.mu.backfillProgress[toBackfillKey(progress.Backfill)] = p
 	} else {
 		p.BackfillProgress = progress
 	}
@@ -226,19 +300,51 @@ func (b *backfillTracker) SetBackfillProgress(
 	return nil
 }
 
-func newProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *progress {
+func (b *backfillerTracker) SetMergeProgress(
+	ctx context.Context, progress scexec.MergeProgress,
+) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	p, err := b.getMergeProgressLocked(progress.Merge)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		p = newMergeProgress(b.codec, progress)
+		b.mu.mergeProgress[toMergeKey(progress.Merge)] = p
+	} else {
+		p.MergeProgress = progress
+	}
+	p.needsCheckpointFlush = true
+	p.needsFractionFlush = true
+	return nil
+}
+
+func newBackfillProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *backfillProgress {
 	indexPrefix := codec.IndexPrefix(uint32(bp.TableID), uint32(bp.SourceIndexID))
 	indexSpan := roachpb.Span{
 		Key:    indexPrefix,
 		EndKey: indexPrefix.PrefixEnd(),
 	}
-	return &progress{
+	return &backfillProgress{
 		BackfillProgress: bp,
 		totalSpan:        indexSpan,
 	}
 }
 
-func (b *backfillTracker) FlushFractionCompleted(ctx context.Context) error {
+func newMergeProgress(codec keys.SQLCodec, mp scexec.MergeProgress) *mergeProgress {
+	p := &mergeProgress{
+		MergeProgress: mp,
+		totalSpans:    make([]roachpb.Span, len(mp.SourceIndexIDs)),
+	}
+	for i, sourceID := range mp.SourceIndexIDs {
+		prefix := codec.IndexPrefix(uint32(mp.TableID), uint32(sourceID))
+		p.totalSpans[i] = roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	}
+	return p
+}
+
+func (b *backfillerTracker) FlushFractionCompleted(ctx context.Context) error {
 	updated, fractionRangesFinished, err := b.getFractionRangesFinished(ctx)
 	if err != nil || !updated {
 		return err
@@ -246,34 +352,61 @@ func (b *backfillTracker) FlushFractionCompleted(ctx context.Context) error {
 	return b.writeProgressFraction(ctx, fractionRangesFinished)
 }
 
-func (b *backfillTracker) FlushCheckpoint(ctx context.Context) error {
-	needsFlush, progress := b.collectProgressForCheckpointFlush()
+func (b *backfillerTracker) FlushCheckpoint(ctx context.Context) error {
+	needsFlush, bps, mps := b.collectProgressForCheckpointFlush()
 	if !needsFlush {
 		return nil
 	}
-	sort.Slice(progress, func(i, j int) bool {
-		if progress[i].TableID != progress[j].TableID {
-			return progress[i].TableID < progress[j].TableID
+	sort.Slice(bps, func(i, j int) bool {
+		if bps[i].TableID != bps[j].TableID {
+			return bps[i].TableID < bps[j].TableID
 		}
-		return progress[i].SourceIndexID < progress[j].SourceIndexID
+		return bps[i].SourceIndexID < bps[j].SourceIndexID
 	})
-	return b.writeCheckpoint(ctx, progress)
+	sort.Slice(mps, func(i, j int) bool {
+		if mps[i].TableID != mps[j].TableID {
+			return mps[i].TableID < mps[j].TableID
+		}
+		if len(mps[i].SourceIndexIDs) != len(mps[j].SourceIndexIDs) {
+			return len(mps[i].SourceIndexIDs) < len(mps[j].SourceIndexIDs)
+		}
+		for k, id := range mps[i].SourceIndexIDs {
+			if id != mps[j].SourceIndexIDs[k] {
+				return id < mps[j].SourceIndexIDs[k]
+			}
+		}
+		return false
+	})
+	return b.writeCheckpoint(ctx, bps, mps)
 }
 
-func (b *backfillTracker) getTableIndexBackfillProgress(bf scexec.Backfill) (progress, bool) {
+func (b *backfillerTracker) getTableIndexBackfillProgress(
+	bf scexec.Backfill,
+) (backfillProgress, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if p, ok := b.getTableIndexBackfillProgressLocked(bf); ok {
 		return *p, true
 	}
-	return progress{}, false
+	return backfillProgress{}, false
+}
+
+func (b *backfillerTracker) getTableIndexMergeProgress(m scexec.Merge) (mergeProgress, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if p, ok := b.getTableIndexMergeProgressLocked(m); ok {
+		return *p, true
+	}
+	return mergeProgress{}, false
 }
 
 // getBackfillProgressLocked is used to get a mutable handle to the backfill
-// progress for a given backfill. It will return nil, nil if no such entry
+// backfillProgress for a given backfill. It will return nil, nil if no such entry
 // exists. It will return an error if an entry exists for the source index
 // with a different set of dest indexes.
-func (b *backfillTracker) getBackfillProgressLocked(bf scexec.Backfill) (*progress, error) {
+func (b *backfillerTracker) getBackfillProgressLocked(
+	bf scexec.Backfill,
+) (*backfillProgress, error) {
 	p, ok := b.getTableIndexBackfillProgressLocked(bf)
 	if !ok {
 		return nil, nil
@@ -284,25 +417,50 @@ func (b *backfillTracker) getBackfillProgressLocked(bf scexec.Backfill) (*progre
 	return p, nil
 }
 
-func (b *backfillTracker) getTableIndexBackfillProgressLocked(
+func (b *backfillerTracker) getTableIndexBackfillProgressLocked(
 	bf scexec.Backfill,
-) (*progress, bool) {
-	if p, ok := b.mu.progress[toKey(bf)]; ok {
+) (*backfillProgress, bool) {
+	if p, ok := b.mu.backfillProgress[toBackfillKey(bf)]; ok {
+		return p, true
+	}
+	return nil, false
+}
+
+// getMergeProgressLocked is used to get a mutable handle to the merge
+// mergeProgress for a given merge. It will return nil, nil if no such entry
+// exists. It will return an error if an entry exists for the source indexes
+// with a different set of dest indexes.
+func (b *backfillerTracker) getMergeProgressLocked(m scexec.Merge) (*mergeProgress, error) {
+	p, ok := b.getTableIndexMergeProgressLocked(m)
+	if !ok {
+		return nil, nil
+	}
+	if err := p.matches(m); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (b *backfillerTracker) getTableIndexMergeProgressLocked(
+	m scexec.Merge,
+) (*mergeProgress, bool) {
+	if p, ok := b.mu.mergeProgress[toMergeKey(m)]; ok {
 		return p, true
 	}
 	return nil, false
 }
 
 // getFractionRangesFinished will compute the fraction of ranges finished
-// relative to the set of ranges in each backfill being tracked since the
-// tracker was constructed. It is not adjusted to deal with
+// relative to the set of ranges in each backfill or merge being tracked since
+// the tracker was constructed. It is not adjusted to deal with
 // origFractionCompleted. If updated is false, no usable fraction is
 // returned.
 //
 // The computation of the fraction works by seeing how many ranges remain
-// for each backfill and comparing that to the initial calculation of the
-// number of ranges for the backfill as computed by this function.
-func (b *backfillTracker) getFractionRangesFinished(
+// for each backfill and for each merge  and comparing that to the initial
+// calculation of the number of ranges for the backfill and merges as computed
+// by this function.
+func (b *backfillerTracker) getFractionRangesFinished(
 	ctx context.Context,
 ) (updated bool, _ float32, _ error) {
 	needsFlush, progresses := b.collectFractionProgressSpansForFlush()
@@ -330,73 +488,122 @@ type fractionProgressSpans struct {
 	completed []roachpb.Span
 }
 
-func (b *backfillTracker) collectFractionProgressSpansForFlush() (
+func (b *backfillerTracker) collectFractionProgressSpansForFlush() (
 	needsFlush bool,
 	progress []fractionProgressSpans,
 ) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, p := range b.mu.progress {
+	for _, p := range b.mu.backfillProgress {
+		needsFlush = needsFlush || p.needsFractionFlush
+	}
+	for _, p := range b.mu.mergeProgress {
 		needsFlush = needsFlush || p.needsFractionFlush
 	}
 	if !needsFlush {
 		return false, nil
 	}
-	progress = make([]fractionProgressSpans, 0, len(b.mu.progress))
-	for _, p := range b.mu.progress {
+	progress = make([]fractionProgressSpans, 0, len(b.mu.backfillProgress)+len(b.mu.mergeProgress))
+	for _, p := range b.mu.backfillProgress {
 		p.needsFractionFlush = false
 		progress = append(progress, fractionProgressSpans{
 			total:     p.totalSpan,
 			completed: p.CompletedSpans,
 		})
 	}
+	for _, p := range b.mu.mergeProgress {
+		p.needsFractionFlush = false
+		for i, s := range p.totalSpans {
+			progress = append(progress, fractionProgressSpans{
+				total:     s,
+				completed: p.CompletedSpans[i],
+			})
+		}
+	}
 	return true, progress
 }
 
-func (b *backfillTracker) collectProgressForCheckpointFlush() (
+func (b *backfillerTracker) collectProgressForCheckpointFlush() (
 	needsFlush bool,
-	progress []scexec.BackfillProgress,
+	backfillProgress []scexec.BackfillProgress,
+	mergeProgress []scexec.MergeProgress,
 ) {
-	for _, p := range b.mu.progress {
+	for _, p := range b.mu.backfillProgress {
 		if p.needsCheckpointFlush {
 			needsFlush = true
 			break
 		}
 	}
 	if !needsFlush {
-		return false, nil
+		for _, p := range b.mu.mergeProgress {
+			if p.needsCheckpointFlush {
+				needsFlush = true
+				break
+			}
+		}
 	}
-	for _, p := range b.mu.progress {
+	if !needsFlush {
+		return false, nil, nil
+	}
+	for _, p := range b.mu.backfillProgress {
 		p.needsCheckpointFlush = false
-		progress = append(progress, p.BackfillProgress)
+		backfillProgress = append(backfillProgress, p.BackfillProgress)
 	}
-	return needsFlush, progress
+	for _, p := range b.mu.mergeProgress {
+		p.needsCheckpointFlush = false
+		mergeProgress = append(mergeProgress, p.MergeProgress)
+	}
+	return needsFlush, backfillProgress, mergeProgress
 }
 
-type progress struct {
-	scexec.BackfillProgress
-
-	// needsCheckpointFlush is set when the progress is updated before any
-	// call to FlushCheckpoint has occurred. It is cleared when collecting
-	// the progresses for flushing.
+type progressReportFlags struct {
+	// needsCheckpointFlush is set when the backfillProgress or mergeProgress
+	// is updated before any call to FlushCheckpoint has occurred.
+	// It is cleared when collecting the progresses for flushing.
 	needsCheckpointFlush bool
 	// needsFractionFlush is parallel to needsCheckpointFlush.
 	needsFractionFlush bool
+}
+
+type backfillProgress struct {
+	progressReportFlags
+	scexec.BackfillProgress
 
 	// totalSpan represents the complete span of the source index being
 	// backfilled.
 	totalSpan roachpb.Span
 }
 
-func (p progress) matches(bf scexec.Backfill) error {
+func (p backfillProgress) matches(bf scexec.Backfill) error {
 	if bf.TableID == p.TableID &&
 		bf.SourceIndexID == p.SourceIndexID &&
 		sameIndexIDSet(bf.DestIndexIDs, p.DestIndexIDs) {
 		return nil
 	}
 	return errors.AssertionFailedf(
-		"backfill %v does not match stored progress for %v",
+		"backfill %v does not match stored backfillProgress for %v",
 		bf, p.Backfill,
+	)
+}
+
+type mergeProgress struct {
+	progressReportFlags
+	scexec.MergeProgress
+
+	// totalSpans represents the complete span of each temporary index being
+	// merged.
+	totalSpans []roachpb.Span
+}
+
+func (p mergeProgress) matches(m scexec.Merge) error {
+	if m.TableID == p.TableID &&
+		sameIndexIDSet(m.SourceIndexIDs, p.SourceIndexIDs) &&
+		sameIndexIDSet(m.DestIndexIDs, p.DestIndexIDs) {
+		return nil
+	}
+	return errors.AssertionFailedf(
+		"merge %v does not match stored mergeProgress for %v",
+		m, p.Merge,
 	)
 }
 
@@ -410,14 +617,30 @@ func sameIndexIDSet(ds []descpb.IndexID, ds2 []descpb.IndexID) bool {
 	return toSet(ds).Equals(toSet(ds2))
 }
 
-type tableIndexKey struct {
+type backfillKey struct {
 	tableID       descpb.ID
 	sourceIndexID descpb.IndexID
 }
 
-func toKey(bf scexec.Backfill) tableIndexKey {
-	return tableIndexKey{
+func toBackfillKey(bf scexec.Backfill) backfillKey {
+	return backfillKey{
 		tableID:       bf.TableID,
 		sourceIndexID: bf.SourceIndexID,
+	}
+}
+
+type mergeKey struct {
+	tableID        descpb.ID
+	sourceIndexIDs string
+}
+
+func toMergeKey(m scexec.Merge) mergeKey {
+	var ids util.FastIntSet
+	for _, id := range m.SourceIndexIDs {
+		ids.Add(int(id))
+	}
+	return mergeKey{
+		tableID:        m.TableID,
+		sourceIndexIDs: ids.String(),
 	}
 }

@@ -36,6 +36,7 @@ func NewJobRunDependencies(
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
 	backfiller scexec.Backfiller,
+	merger scexec.Merger,
 	rangeCounter RangeCounter,
 	eventLoggerFactory EventLoggerFactory,
 	jobRegistry *jobs.Registry,
@@ -55,6 +56,7 @@ func NewJobRunDependencies(
 		db:                    db,
 		internalExecutor:      internalExecutor,
 		backfiller:            backfiller,
+		merger:                merger,
 		rangeCounter:          rangeCounter,
 		eventLoggerFactory:    eventLoggerFactory,
 		jobRegistry:           jobRegistry,
@@ -78,6 +80,7 @@ type jobExecutionDeps struct {
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
+	merger                scexec.Merger
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          RangeCounter
 	jobRegistry           *jobs.Registry
@@ -121,10 +124,15 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				kvTrace:            d.kvTrace,
 			},
 			backfiller: d.backfiller,
-			backfillTracker: newBackfillTracker(d.codec,
-				newBackfillTrackerConfig(ctx, d.codec, d.db, d.rangeCounter, d.job),
+			merger:     d.merger,
+			backfillTracker: newBackfillerTracker(
+				d.codec,
+				newBackfillerTrackerConfig(ctx, d.codec, d.rangeCounter, d.job),
 				convertFromJobBackfillProgress(
 					d.codec, pl.GetNewSchemaChange().BackfillProgress,
+				),
+				convertFromJobMergeProgress(
+					d.codec, pl.GetNewSchemaChange().MergeProgress,
 				),
 			),
 			periodicProgressFlusher: newPeriodicProgressFlusherForIndexBackfill(d.settings),

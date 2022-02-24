@@ -28,5 +28,13 @@ type BackfillIndex struct {
 	IndexID       descpb.IndexID
 }
 
+// MergeIndex specifies an index merge operation.
+type MergeIndex struct {
+	backfillOp
+	TableID           descpb.ID
+	TemporaryIndexID  descpb.IndexID
+	BackfilledIndexID descpb.IndexID
+}
+
 // Make sure baseOp is used for linter.
 var _ = backfillOp{baseOp: baseOp{}}
