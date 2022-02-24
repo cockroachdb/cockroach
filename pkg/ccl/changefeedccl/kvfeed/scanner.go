@@ -40,9 +40,10 @@ type kvScanner interface {
 }
 
 type scanRequestScanner struct {
-	settings *cluster.Settings
-	gossip   gossip.OptionalGossip
-	db       *kv.DB
+	settings                *cluster.Settings
+	gossip                  gossip.OptionalGossip
+	db                      *kv.DB
+	onBackfillRangeCallback func(int64) func()
 }
 
 var _ kvScanner = (*scanRequestScanner)(nil)
@@ -64,6 +65,8 @@ func (p *scanRequestScanner) Scan(
 	if err != nil {
 		return err
 	}
+
+	backfillRangeDec := p.onBackfillRangeCallback(int64(len(spans)))
 
 	maxConcurrentScans := maxConcurrentScanRequests(p.gossip, &p.settings.SV)
 	exportLim := limit.MakeConcurrentRequestLimiter("changefeedScanRequestLimiter", maxConcurrentScans)
@@ -95,6 +98,7 @@ func (p *scanRequestScanner) Scan(
 			if log.V(2) {
 				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
+			backfillRangeDec()
 			return err
 		})
 	}
