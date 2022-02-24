@@ -15,6 +15,9 @@ run build/builder.sh make -Otarget c-deps &> artifacts/c-build.log || (cat artif
 rm artifacts/c-build.log
 tc_end_block "Compile C dependencies"
 
+# Expect the timeout to come from the TC environment.
+TESTTIMEOUT=${TESTTIMEOUT:-45m}
+
 tc_start_block "Run Go tests"
-run_json_test build/builder.sh stdbuf -oL -eL make test GOTESTFLAGS=-json TESTFLAGS='-v'
+run_json_test build/builder.sh stdbuf -oL -eL make test TESTTIMEOUT="${TESTTIMEOUT}" GOTESTFLAGS=-json TESTFLAGS='-v'
 tc_end_block "Run Go tests"
