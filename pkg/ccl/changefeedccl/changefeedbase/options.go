@@ -233,3 +233,7 @@ var NoLongerExperimental = map[string]string{
 	DeprecatedSinkSchemeCloudStorageNodelocal: SinkSchemeCloudStorageNodelocal,
 	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
 }
+
+// AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
+// users to alter
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan)
