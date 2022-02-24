@@ -43,6 +43,74 @@ func NewIndexBackfillerMergePlanner(execCfg *ExecutorConfig) *IndexBackfillerMer
 	return &IndexBackfillerMergePlanner{execCfg: execCfg}
 }
 
+// MergeIndexes is part of the scexec.Merger interface.
+func (im *IndexBackfillerMergePlanner) MergeIndexes(
+	ctx context.Context,
+	progress scexec.MergeProgress,
+	tracker scexec.BackfillerProgressWriter,
+	descriptor catalog.TableDescriptor,
+) error {
+	spansToDo := make([][]roachpb.Span, len(progress.SourceIndexIDs))
+	if len(progress.CompletedSpans) != len(progress.SourceIndexIDs) {
+		return errors.AssertionFailedf("invalid MergeProgress, CompletedSpans should " +
+			"be parallel to SourceIndexIDs")
+	}
+	var hasToDo bool
+	for i, sourceID := range progress.SourceIndexIDs {
+		sourceIndexSpan := descriptor.IndexSpan(im.execCfg.Codec, sourceID)
+		var g roachpb.SpanGroup
+		g.Add(sourceIndexSpan)
+		g.Sub(progress.CompletedSpans[i]...)
+		spansToDo[i] = g.Slice()
+		if len(spansToDo) > 0 {
+			hasToDo = true
+		}
+	}
+	if !hasToDo { // already done
+		return nil
+	}
+	completed := struct {
+		syncutil.Mutex
+		g []roachpb.SpanGroup
+	}{
+		g: make([]roachpb.SpanGroup, len(progress.SourceIndexIDs)),
+	}
+	addCompleted := func(idxs []int32, spans []roachpb.Span) (ret [][]roachpb.Span) {
+		completed.Lock()
+		defer completed.Unlock()
+		for i, idx := range idxs {
+			completed.g[idx].Add(spans[i])
+		}
+		for _, g := range completed.g {
+			ret = append(ret, g.Slice())
+		}
+		return ret
+	}
+	updateFunc := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+		if meta.BulkProcessorProgress == nil {
+			return nil
+		}
+		progress.CompletedSpans = addCompleted(
+			meta.BulkProcessorProgress.CompletedSpanIdx,
+			meta.BulkProcessorProgress.CompletedSpans,
+		)
+		return tracker.SetMergeProgress(ctx, progress)
+	}
+	run, err := im.plan(
+		ctx,
+		descriptor,
+		spansToDo,
+		progress.DestIndexIDs,
+		progress.SourceIndexIDs,
+		updateFunc,
+		getMergeTimestamp(im.execCfg.Clock),
+	)
+	if err != nil {
+		return err
+	}
+	return run(ctx)
+}
+
 func (im *IndexBackfillerMergePlanner) plan(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
@@ -164,7 +232,7 @@ type IndexMergeTracker struct {
 	fractionScaler *multiStageFractionScaler
 }
 
-var _ scexec.BackfillProgressFlusher = (*IndexMergeTracker)(nil)
+var _ scexec.BackfillerProgressFlusher = (*IndexMergeTracker)(nil)
 
 type rangeCounter func(ctx context.Context, spans []roachpb.Span) (int, error)
 
