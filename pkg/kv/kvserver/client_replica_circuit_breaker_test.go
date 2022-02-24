@@ -398,6 +398,7 @@ func (s *dummyStream) Send(ev *roachpb.RangeFeedEvent) error {
 // goes as far as actually losing quorum to verify this end-to-end.
 func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 76856, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := setupCircuitBreakerTest(t)
 	ctx := context.Background()
