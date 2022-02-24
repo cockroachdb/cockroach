@@ -192,7 +192,7 @@ func forEachProgressConcurrently(
 ) error {
 	g := ctxgroup.WithContext(ctx)
 	run := func(i int) {
-		g.GoCtx(func(ctx context.Context) (err error) {
+		g.GoCtx("", func(ctx context.Context) (err error) {
 			defer func() {
 				switch r := recover().(type) {
 				case nil:

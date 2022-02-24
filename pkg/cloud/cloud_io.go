@@ -298,7 +298,7 @@ func BackgroundPipe(
 ) io.WriteCloser {
 	pr, pw := io.Pipe()
 	w := &backgroundPipe{w: pw, grp: ctxgroup.WithContext(ctx), ctx: ctx}
-	w.grp.GoCtx(func(ctc context.Context) error {
+	w.grp.GoCtx("", func(ctc context.Context) error {
 		err := fn(ctx, pr)
 		if err != nil {
 			closeErr := pr.CloseWithError(err)

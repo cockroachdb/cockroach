@@ -251,7 +251,7 @@ func backup(
 		)
 	}
 
-	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
+	if err := ctxgroup.GoAndWait(ctx, "", jobProgressLoop, checkpointLoop, runBackup); err != nil {
 		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 

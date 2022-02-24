@@ -784,7 +784,7 @@ func testRandomSyntax(
 			}
 			countsMu.Unlock()
 		}
-	})
+	}, "")
 	timeoutCancel()
 	// cancel the timer printing's ctx
 	cancel()

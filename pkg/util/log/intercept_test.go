@@ -45,7 +45,7 @@ func TestManyInterceptors(t *testing.T) {
 				Infof(ctx, "hello worker %d: %d", worker, i)
 			}
 			return nil
-		}))
+		}, ""))
 }
 
 type captureInterceptor struct {

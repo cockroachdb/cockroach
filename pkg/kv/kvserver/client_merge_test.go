@@ -2350,7 +2350,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	doneCh := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
 	for i := 0; i < numGetWorkers; i++ {
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			for {
 				select {
 				case <-ctx.Done():

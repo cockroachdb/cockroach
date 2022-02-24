@@ -259,7 +259,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 			}
 
 			sp := partialRS.AsRawSpanWithNoLocals()
-			workGroup.GoCtx(func(ctx context.Context) error {
+			workGroup.GoCtx("", func(ctx context.Context) error {
 				defer limAlloc.Release()
 				return dbc.scanSpan(ctx, sp, asOf, rowFn, targetScanBytes, onSpanDone, acc)
 			})

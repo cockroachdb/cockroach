@@ -252,7 +252,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
 		}
-		sip.cg.GoCtx(sub.Subscribe)
+		sip.cg.GoCtx("", sub.Subscribe)
 	}
 	sip.eventCh = sip.merge(ctx, subscriptions)
 }
@@ -409,7 +409,7 @@ func (sip *streamIngestionProcessor) merge(
 	for partition, sub := range subscriptions {
 		partition := partition
 		sub := sub
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			ctxDone := ctx.Done()
 			for {
 				select {

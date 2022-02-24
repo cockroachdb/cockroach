@@ -241,7 +241,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	// stopProgress will be closed when there is no more progress to report.
 	stopProgress := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		tick := time.NewTicker(ib.getProgressReportInterval())
 		defer tick.Stop()
 		done := ctx.Done()
@@ -257,7 +257,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		}
 	})
 
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		defer close(stopProgress)
 
 		for indexBatch := range indexEntryCh {
@@ -325,7 +325,7 @@ func (ib *indexBackfiller) runBackfill(
 	group := ctxgroup.WithContext(ctx)
 
 	// Construct index entries for the spans.
-	group.GoCtx(func(ctx context.Context) error {
+	group.GoCtx("", func(ctx context.Context) error {
 		defer close(indexEntriesCh)
 		ctx, span := tracing.ChildSpan(ctx, "buildIndexEntries")
 		defer span.Finish()
@@ -337,7 +337,7 @@ func (ib *indexBackfiller) runBackfill(
 	})
 
 	// Ingest the index entries that are emitted to the chan.
-	group.GoCtx(func(ctx context.Context) error {
+	group.GoCtx("", func(ctx context.Context) error {
 		err := ib.ingestIndexEntries(ctx, indexEntriesCh, progCh)
 		if err != nil {
 			return errors.Wrap(err, "failed to ingest index entries during backfill")

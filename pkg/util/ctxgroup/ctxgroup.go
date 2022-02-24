@@ -123,6 +123,8 @@ package ctxgroup
 import (
 	"context"
 
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -161,18 +163,30 @@ func (g Group) Go(f func() error) {
 }
 
 // GoCtx calls the given function in a new goroutine.
-func (g Group) GoCtx(f func(ctx context.Context) error) {
-	g.wrapped.Go(func() error {
+func (g Group) GoCtx(op redact.SafeString, f func(ctx context.Context) error) {
+	g.wrapped.Go(func() (err error) {
+		defer func() {
+			switch r := recover().(type) {
+			case nil:
+				return
+			case error:
+				err = errors.Wrapf(r, "failed to %s", op)
+			default:
+				err = errors.AssertionFailedf("failed to %s: %v", op, r)
+			}
+		}()
 		return f(g.ctx)
 	})
 }
 
 // GroupWorkers runs num worker go routines in an errgroup.
-func GroupWorkers(ctx context.Context, num int, f func(context.Context, int) error) error {
+func GroupWorkers(
+	ctx context.Context, num int, f func(context.Context, int) error, op redact.SafeString,
+) error {
 	group := WithContext(ctx)
 	for i := 0; i < num; i++ {
 		workerID := i
-		group.GoCtx(func(ctx context.Context) error { return f(ctx, workerID) })
+		group.GoCtx(op, func(ctx context.Context) error { return f(ctx, workerID) })
 	}
 	return group.Wait()
 }
@@ -180,11 +194,13 @@ func GroupWorkers(ctx context.Context, num int, f func(context.Context, int) err
 // GoAndWait calls the given functions each in a new goroutine. It then Waits
 // for them to finish. This is intended to help prevent bugs caused by returning
 // early after running some goroutines but before Waiting for them to complete.
-func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error {
+func GoAndWait(
+	ctx context.Context, op redact.SafeString, fs ...func(ctx context.Context) error,
+) error {
 	group := WithContext(ctx)
 	for _, f := range fs {
 		if f != nil {
-			group.GoCtx(f)
+			group.GoCtx(op, f)
 		}
 	}
 	return group.Wait()

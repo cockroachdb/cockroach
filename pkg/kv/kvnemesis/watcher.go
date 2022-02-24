@@ -71,7 +71,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 
 	startTs := firstDB.Clock().Now()
 	eventC := make(chan *roachpb.RangeFeedEvent, 128)
-	w.g.GoCtx(func(ctx context.Context) error {
+	w.g.GoCtx("", func(ctx context.Context) error {
 		ts := startTs
 		for i := 0; ; i = (i + 1) % len(dbs) {
 			w.mu.Lock()
@@ -87,7 +87,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 			return err
 		}
 	})
-	w.g.GoCtx(func(ctx context.Context) error {
+	w.g.GoCtx("", func(ctx context.Context) error {
 		return w.processEvents(ctx, eventC)
 	})
 

@@ -145,20 +145,20 @@ func TestLockfreeTrackerRandomStress(t *testing.T) {
 			stop, mu.RLocker(),
 			maxReqDurationMillis, maxReqTrailingMillis, maxConcurrentRequestsPerProducer,
 			tr, &rs)
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			p.run(ctx)
 			return nil
 		})
 	}
 
 	c := makeRequestConsumer(stop, &mu, tr, &rs)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		c.run(ctx)
 		return nil
 	})
 
 	checker := makeTrackerChecker(stop, &mu, tr, &rs)
-	g.GoCtx(checker.run)
+	g.GoCtx("", checker.run)
 
 	<-stop
 	require.NoError(t, g.Wait())

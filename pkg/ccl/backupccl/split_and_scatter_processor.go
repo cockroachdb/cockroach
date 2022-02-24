@@ -343,7 +343,7 @@ func runSplitAndScatter(
 	g := ctxgroup.WithContext(ctx)
 
 	importSpanChunksCh := make(chan scatteredChunk)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		// Chunks' leaseholders should be randomly placed throughout the
 		// cluster.
 		defer close(importSpanChunksCh)
@@ -380,7 +380,7 @@ func runSplitAndScatter(
 	// number of nodes in the cluster. Is it necessary?
 	splitScatterWorkers := 2
 	for worker := 0; worker < splitScatterWorkers; worker++ {
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			for importSpanChunk := range importSpanChunksCh {
 				chunkDestination := importSpanChunk.destination
 				for i, importEntry := range importSpanChunk.entries {

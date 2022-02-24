@@ -246,7 +246,7 @@ func TestHttpGet(t *testing.T) {
 			// Start antagonist function that aggressively closes client connections.
 			ctx, cancelAntagonist := context.WithCancel(context.Background())
 			g := ctxgroup.WithContext(ctx)
-			g.GoCtx(func(ctx context.Context) error {
+			g.GoCtx("", func(ctx context.Context) error {
 				opts := retry.Options{
 					InitialBackoff: 500 * time.Microsecond,
 					MaxBackoff:     5 * time.Millisecond,

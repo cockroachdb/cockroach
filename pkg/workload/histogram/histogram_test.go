@@ -110,7 +110,7 @@ func TestRegistrySameMetricFromMultipleHandlesConcurrently(t *testing.T) {
 		}
 		h.Get("op").Record(time.Minute)
 		return nil
-	}))
+	}, ""))
 	reg.Tick(func(tick Tick) {
 		require.EqualValues(t, num, tick.Cumulative.TotalCount())
 	})

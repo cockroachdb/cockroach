@@ -78,7 +78,7 @@ func RunNemesis(
 		}
 		return nil
 	}
-	if err := ctxgroup.GroupWorkers(ctx, concurrency, workerFn); err != nil {
+	if err := ctxgroup.GroupWorkers(ctx, concurrency, workerFn, ""); err != nil {
 		return nil, err
 	}
 

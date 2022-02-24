@@ -55,7 +55,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 
 			var done int64
 			g := ctxgroup.WithContext(ctx)
-			g.GoCtx(func(ctx context.Context) error {
+			g.GoCtx("", func(ctx context.Context) error {
 				for {
 					if atomic.LoadInt64(&done) > 0 {
 						return nil

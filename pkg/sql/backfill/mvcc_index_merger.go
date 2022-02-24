@@ -98,7 +98,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 	// stopProgress will be closed when there is no more progress to report.
 	stopProgress := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		tick := time.NewTicker(indexBackfillMergeProgressReportInterval)
 		defer tick.Stop()
 		done := ctx.Done()
@@ -114,7 +114,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 		}
 	})
 
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		defer close(stopProgress)
 		// TODO(rui): some room for improvement on single threaded
 		// implementation, e.g. run merge for spec spans in parallel.

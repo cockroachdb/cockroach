@@ -195,7 +195,7 @@ func TestSplitBurstWithSlowFollower(t *testing.T) {
 		doSplit := func(ctx context.Context, i int) error {
 			return sbt.SplitWithDelayE(byte(perm[i]))
 		}
-		require.NoError(t, ctxgroup.GroupWorkers(ctx, numSplits, doSplit))
+		require.NoError(t, ctxgroup.GroupWorkers(ctx, numSplits, doSplit, ""))
 
 		require.Zero(t, sbt.NumRaftSnaps(t))
 	})

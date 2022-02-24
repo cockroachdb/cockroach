@@ -586,7 +586,7 @@ fi'`
 		}
 	}
 	for _, i := range c.All() {
-		g.GoCtx(fetchNode(i))
+		g.GoCtx("", fetchNode(i))
 	}
 	if err := g.Wait(); err != nil {
 		l.PrintfCtx(ctx, "failed to get perf artifacts: %v", err)

@@ -74,7 +74,7 @@ func main() {
 
 	g := ctxgroup.WithContext(ctx)
 	for i := 0; i < *num; i++ {
-		g.GoCtx(setup.work)
+		g.GoCtx("", setup.work)
 	}
 	if err := g.Wait(); err != nil {
 		log.Fatalf("%+v", err)

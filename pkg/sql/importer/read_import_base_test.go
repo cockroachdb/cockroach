@@ -185,16 +185,15 @@ func TestParallelImportProducerHandlesCancellation(t *testing.T) {
 	}
 
 	// Run a hundred imports, which will timeout shortly after they start.
-	require.NoError(t, ctxgroup.GroupWorkers(context.Background(), 100,
-		func(_ context.Context, _ int) error {
-			timeout := time.Millisecond * time.Duration(250+rand.Intn(250))
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
-			defer func(f func()) {
-				f()
-			}(cancel)
-			require.Equal(t, context.DeadlineExceeded,
-				runParallelImport(ctx, importCtx,
-					&importFileContext{}, &nilDataProducer{}, &nilDataConsumer{}))
-			return nil
-		}))
+	require.NoError(t, ctxgroup.GroupWorkers(context.Background(), 100, func(_ context.Context, _ int) error {
+		timeout := time.Millisecond * time.Duration(250+rand.Intn(250))
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer func(f func()) {
+			f()
+		}(cancel)
+		require.Equal(t, context.DeadlineExceeded,
+			runParallelImport(ctx, importCtx,
+				&importFileContext{}, &nilDataProducer{}, &nilDataConsumer{}))
+		return nil
+	}, ""))
 }

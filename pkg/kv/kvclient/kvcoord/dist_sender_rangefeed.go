@@ -80,12 +80,12 @@ func (ds *DistSender) RangeFeed(
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
 	// each.
 	rangeCh := make(chan singleRangeInfo, 16)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		for {
 			select {
 			case sri := <-rangeCh:
 				// Spawn a child goroutine to process this feed.
-				g.GoCtx(func(ctx context.Context) error {
+				g.GoCtx("", func(ctx context.Context) error {
 					return ds.partialRangeFeed(ctx, rr, sri.rs, sri.startFrom, sri.token, withDiff, rangeCh, eventCh)
 				})
 			case <-ctx.Done():
@@ -100,7 +100,7 @@ func (ds *DistSender) RangeFeed(
 		if err != nil {
 			return err
 		}
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			return ds.divideAndSendRangeFeedToRanges(ctx, rs, startFrom, rangeCh)
 		})
 	}

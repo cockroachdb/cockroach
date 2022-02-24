@@ -6274,7 +6274,7 @@ INSERT INTO t.test VALUES (1, 2), (2, 2);
 	require.NoError(t, err)
 
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		// Try to create a unique index which won't be valid and will need a rollback.
 		_, err := sqlDB.Exec(`CREATE UNIQUE INDEX i ON t.test(v);`)
 		assert.Regexp(t, "violates unique constraint", err)
@@ -6711,7 +6711,7 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.t2 (a INT)`)
 
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		_, err := sqlDB.ExecContext(ctx, `ALTER TABLE db.t2 ADD FOREIGN KEY (a) REFERENCES db.t`)
 		require.Regexp(t, "job canceled by user", err)
 		return nil
@@ -6918,7 +6918,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 				sqlDB.Exec(t, tc.setupStmts)
 
 				g := ctxgroup.WithContext(ctx)
-				g.GoCtx(func(ctx context.Context) error {
+				g.GoCtx("", func(ctx context.Context) error {
 					_, err := db.ExecContext(ctx, tc.scStmt)
 					assert.NoError(t, err)
 					return nil

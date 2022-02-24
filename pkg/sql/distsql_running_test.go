@@ -644,7 +644,7 @@ func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		conn := tc.ServerConn(gatewayNodeID)
 		_, err := conn.ExecContext(ctx, "SELECT * FROM test.foo")
 		return err

@@ -138,7 +138,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	// Rate limit splitting to prevent replica imbalance.
 	r := rate.NewLimiter(128, 1)
 	for i := 0; i < concurrency; i++ {
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			var buf bytes.Buffer
 			for {
 				select {
@@ -198,7 +198,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 			}
 		})
 	}
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		finished := 0
 		for finished < len(splitPoints) {
 			select {

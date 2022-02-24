@@ -169,3 +169,9 @@ func IsSQLRetryableError(err error) bool {
 	}
 	return matched
 }
+
+// IsPGError returns true iff the error is an Error.
+func IsPGError(err error) bool {
+	_, ok := err.(*Error)
+	return ok
+}

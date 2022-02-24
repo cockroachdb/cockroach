@@ -70,8 +70,8 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg phys
 		eventC: make(chan *roachpb.RangeFeedEvent, 128),
 	}
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(feed.addEventsToBuffer)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", feed.addEventsToBuffer)
+	g.GoCtx("", func(ctx context.Context) error {
 		return p(ctx, cfg.Spans, cfg.Timestamp, cfg.WithDiff, feed.eventC)
 	})
 	return g.Wait()

@@ -949,7 +949,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	for i := range otherKeys {
 		// This makes the race detector happy.
 		otherKey := otherKeys[i]
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			cCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 			defer cancel()
 			incArgsOther := incrementArgs(otherKey, 1)

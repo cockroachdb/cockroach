@@ -169,7 +169,7 @@ func (h *heartbeatSender) maybeHeartbeat(ctx context.Context, frontier hlc.Times
 
 func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 	h.cg = ctxgroup.WithContext(ctx)
-	h.cg.GoCtx(func(ctx context.Context) error {
+	h.cg.GoCtx("", func(ctx context.Context) error {
 		sendHeartbeats := func() error {
 			// The heartbeat thread send heartbeats when there is a frontier update,
 			// and it has been a while since last time we sent it, or when we need

@@ -49,7 +49,7 @@ func Connect(
 	// are received.
 	g := ctxgroup.WithContext(ctx)
 	// The send chan sends messages to the server.
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		defer close(send)
 		for {
 			select {
@@ -66,7 +66,7 @@ func Connect(
 	// The recv go routine receives messages from the server and puts them on
 	// the recv chan. It makes a copy of them when it does since the next message
 	// received will otherwise use the same pointer.
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		defer close(recv)
 		for {
 			msg, err := fe.Receive()
@@ -90,7 +90,7 @@ func Connect(
 		}
 	})
 	// The main go routine executing the logic.
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		send <- &pgproto3.StartupMessage{
 			ProtocolVersion: 196608, // Version 3.0
 			Parameters: map[string]string{

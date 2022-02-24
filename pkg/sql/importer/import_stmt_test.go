@@ -3158,12 +3158,12 @@ func TestImportIntoCSV(t *testing.T) {
 
 		var jobID int
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			defer close(importBodyFinished)
 			return sqlDB.DB.QueryRowContext(ctx, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`,
 				testFiles.files[1])).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
 		})
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			defer close(delayImportFinish)
 			<-importBodyFinished
 

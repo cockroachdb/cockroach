@@ -99,7 +99,7 @@ func TestCancelQueryOtherNode(t *testing.T) {
 
 	gotSecondConn := false
 	group := ctxgroup.WithContext(ctx)
-	group.GoCtx(func(ctx context.Context) error {
+	group.GoCtx("", func(ctx context.Context) error {
 		// The forwarder only expects to receive two connections: one for the
 		// SQL session, and one for the cancel request. After that, the forwarder
 		// stops serving connections.
@@ -118,9 +118,10 @@ func TestCancelQueryOtherNode(t *testing.T) {
 				gotSecondConn = true
 				crdbConn = node1
 			}
-			group.GoCtx(func(ctx context.Context) error {
+			group.GoCtx("", func(ctx context.Context) error {
 				return ctxgroup.GoAndWait(
 					ctx,
+					"",
 					func(ctx context.Context) error {
 						_, err := io.Copy(crdbConn, clientConn)
 						crdbConn.Close()

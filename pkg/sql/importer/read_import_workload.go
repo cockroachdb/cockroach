@@ -171,7 +171,7 @@ func (w *workloadReader) readFiles(
 		if err := ctxgroup.GroupWorkers(ctx, runtime.GOMAXPROCS(0), func(ctx context.Context, _ int) error {
 			evalCtx := w.evalCtx.Copy()
 			return wc.Worker(ctx, evalCtx, w.semaCtx)
-		}); err != nil {
+		}, ""); err != nil {
 			return err
 		}
 	}

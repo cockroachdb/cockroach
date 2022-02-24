@@ -469,7 +469,7 @@ func ingestKvs(
 	// stopProgress will be closed when there is no more progress to report.
 	stopProgress := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		tick := time.NewTicker(time.Second * 10)
 		defer tick.Stop()
 		done := ctx.Done()
@@ -485,7 +485,7 @@ func ingestKvs(
 		}
 	})
 
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		defer close(stopProgress)
 
 		// We insert splits at every index span of the table above. Since the

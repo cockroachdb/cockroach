@@ -94,7 +94,7 @@ func TestReplicaCircuitBreaker_NoCancelRace(t *testing.T) {
 	const count = 100
 	for i := 0; i < count; i++ {
 		i := i // for goroutine
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			ctx, cancel := context.WithCancel(ctx)
 			tok, sig, err := br.Register(ctx, cancel)
 			if err != nil {

@@ -370,7 +370,7 @@ func TestBreakerRealistic(t *testing.T) {
 	g := ctxgroup.WithContext(ctx)
 	for idx := 0; idx < numWorkers; idx++ {
 		idx := idx // copy for the goroutine
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			return s.RunTaskWithErr(ctx, "worker", func(ctx context.Context) error {
 				return worker(ctx, t, idx)
 			})

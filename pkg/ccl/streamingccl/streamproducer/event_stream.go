@@ -176,7 +176,7 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	streamCtx, sp := tracing.ChildSpan(ctx, "event stream")
 	s.sp = sp
 	s.streamGroup = ctxgroup.WithContext(streamCtx)
-	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
+	s.streamGroup.GoCtx("", withErrCapture(func(ctx context.Context) error {
 		return s.streamLoop(ctx, frontier)
 	}))
 

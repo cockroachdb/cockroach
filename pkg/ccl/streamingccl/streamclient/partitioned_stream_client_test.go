@@ -153,7 +153,7 @@ INSERT INTO d.t2 VALUES (2);
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
-	cg.GoCtx(sub.Subscribe)
+	cg.GoCtx("", sub.Subscribe)
 	// Observe the existing single row in t1.
 	expected := streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42)
 	firstObserved := rf.ObserveKey(ctx, expected.Key)

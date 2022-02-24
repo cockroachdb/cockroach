@@ -125,7 +125,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		// Start job 1: An index schema change, which does not use the new schema
 		// changer.
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			_, err := sqlDB.ExecContext(ctx, `CREATE INDEX idx ON db.t(a)`)
 			assert.NoError(t, err)
 			return nil
@@ -135,7 +135,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		// Start job 3: A column schema change which uses the new schema changer.
 		// The transaction will not actually commit until job 1 has finished.
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			conn, err := sqlDB.Conn(ctx)
 			if err != nil {
 				return err
@@ -151,7 +151,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		// Start job 2: Another index schema change which does not use the new
 		// schema changer.
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			_, err := sqlDB.ExecContext(ctx, `CREATE INDEX idx2 ON db.t(a)`)
 			assert.NoError(t, err)
 			return nil
@@ -259,7 +259,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		g := ctxgroup.WithContext(ctx)
 
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			conn, err := sqlDB.Conn(ctx)
 			if err != nil {
 				return err
@@ -273,7 +273,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		<-job1BackfillNotification
 
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			conn, err := sqlDB.Conn(ctx)
 			if err != nil {
 				return err
@@ -363,7 +363,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 
 	g := ctxgroup.WithContext(ctx)
 
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		conn, err := sqlDB.Conn(ctx)
 		if err != nil {
 			return err
@@ -469,7 +469,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 
 	g := ctxgroup.WithContext(ctx)
 
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		conn, err := sqlDB.Conn(ctx)
 		if err != nil {
 			return err

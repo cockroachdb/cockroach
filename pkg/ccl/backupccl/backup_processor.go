@@ -322,7 +322,7 @@ func runBackupProcessor(
 	// pull spans off of `todo` and send export requests. Any resume spans are put
 	// back on `todo`. Any returned SSTs are put on a  `returnedSSTs` to be routed
 	// to a buffered sink that merges them until they are large enough to flush.
-	grp.GoCtx(func(ctx context.Context) error {
+	grp.GoCtx("", func(ctx context.Context) error {
 		defer close(returnedSSTs)
 		// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
 		//  *2). See #49798.
@@ -553,13 +553,13 @@ func runBackupProcessor(
 					return nil
 				}
 			}
-		})
+		}, "")
 	})
 
 	// Start another goroutine which will read from returnedSSTs ch and push
 	// ssts from it into an sstSink responsible for actually writing their
 	// contents to cloud storage.
-	grp.GoCtx(func(ctx context.Context) error {
+	grp.GoCtx("", func(ctx context.Context) error {
 		sinkConf := sstSinkConf{
 			id:       flowCtx.NodeID.SQLInstanceID(),
 			enc:      spec.Encryption,

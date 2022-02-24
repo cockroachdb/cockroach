@@ -287,7 +287,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 			return f.processEvents(ctx, frontier, eventCh)
 		}
 
-		err := ctxgroup.GoAndWait(ctx, rangeFeedTask, processEventsTask)
+		err := ctxgroup.GoAndWait(ctx, "", rangeFeedTask, processEventsTask)
 		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) ||
 			errors.HasType(err, &roachpb.MVCCHistoryMutationError{}) {
 			if errCallback := f.onUnrecoverableError; errCallback != nil {

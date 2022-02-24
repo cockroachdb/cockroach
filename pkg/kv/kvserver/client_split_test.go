@@ -3140,7 +3140,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// traffic to the learner on the lhs of the split (which is still on the
 	// second node).
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		_, err := tc.Servers[0].DB().AdminChangeReplicas(
 			ctx, k, tc.LookupRangeOrFatal(t, k), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
@@ -3286,7 +3286,7 @@ func TestSplitBlocksReadsToRHS(t *testing.T) {
 
 	// Begin splitting the range.
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		args := adminSplitArgs(keySplit)
 		_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
 		return pErr.GoError()
@@ -3309,7 +3309,7 @@ func TestSplitBlocksReadsToRHS(t *testing.T) {
 			h := roachpb.Header{Timestamp: ts, RangeID: repl.RangeID}
 			args := getArgs(keyAndChan.key)
 			errCh := keyAndChan.errCh
-			g.GoCtx(func(ctx context.Context) error {
+			g.GoCtx("", func(ctx context.Context) error {
 				// Send directly to repl to avoid racing with the
 				// split and routing requests to the post-split RHS.
 				_, pErr := kv.SendWrappedWith(ctx, repl, h, args)

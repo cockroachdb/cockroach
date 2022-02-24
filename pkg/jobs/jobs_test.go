@@ -2227,7 +2227,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 			t.Fatal(err)
 		}
 		group := ctxgroup.WithContext(ctx)
-		group.GoCtx(func(ctx context.Context) error {
+		group.GoCtx("", func(ctx context.Context) error {
 			if err := db.QueryRowContext(
 				ctx,
 				`SELECT job_id, status
@@ -2270,7 +2270,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 			t.Fatal(err)
 		}
 		group := ctxgroup.WithContext(ctx)
-		group.GoCtx(func(ctx context.Context) error {
+		group.GoCtx("", func(ctx context.Context) error {
 			rows, err := db.QueryContext(ctx,
 				`SELECT job_id, status
 				 FROM [SHOW JOBS WHEN COMPLETE (SELECT $1 UNION SELECT $2)]`,

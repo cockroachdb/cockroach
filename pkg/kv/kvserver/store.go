@@ -3416,13 +3416,13 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 
 		alloc, err := qp.Acquire(ctx, 1)
 		if err != nil {
-			g.GoCtx(func(ctx context.Context) error {
+			g.GoCtx("", func(ctx context.Context) error {
 				return err
 			})
 			return false
 		}
 
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			defer alloc.Release()
 
 			processed, err := s.replicaGCQueue.process(ctx, repl, nil)

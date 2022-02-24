@@ -1093,23 +1093,20 @@ func Destroy(
 		}
 	}
 
-	if err := ctxgroup.GroupWorkers(
-		context.TODO(),
-		len(clusterNames),
-		func(ctx context.Context, idx int) error {
-			name := clusterNames[idx]
-			if config.IsLocalClusterName(name) {
-				return destroyLocalCluster(ctx, l, name)
+	if err := ctxgroup.GroupWorkers(context.TODO(), len(clusterNames), func(ctx context.Context, idx int) error {
+		name := clusterNames[idx]
+		if config.IsLocalClusterName(name) {
+			return destroyLocalCluster(ctx, l, name)
+		}
+		if cld == nil {
+			var err error
+			cld, err = cloud.ListCloud(l)
+			if err != nil {
+				return err
 			}
-			if cld == nil {
-				var err error
-				cld, err = cloud.ListCloud(l)
-				if err != nil {
-					return err
-				}
-			}
-			return destroyCluster(cld, l, name)
-		}); err != nil {
+		}
+		return destroyCluster(cld, l, name)
+	}, ""); err != nil {
 		return err
 	}
 	l.Printf("OK")

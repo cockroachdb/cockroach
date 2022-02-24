@@ -389,7 +389,7 @@ func ImportFixture(
 	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			tableBytes, err := importFixtureTable(
 				ctx, sqlDB, dbName, table, paths, `` /* output */, injectStats)
 			atomic.AddInt64(&bytesAtomic, tableBytes)
@@ -579,7 +579,7 @@ func RestoreFixture(
 	}
 	for _, table := range fixture.Tables {
 		table := table
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			start := timeutil.Now()
 			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
 			log.Infof(ctx, "Restoring from %s", table.BackupURI)

@@ -431,14 +431,14 @@ func (s *webhookSink) setupWorkers() {
 	// flushDone notified when flush completes.
 	s.flushDone = make(chan struct{})
 
-	s.workerGroup.GoCtx(func(ctx context.Context) error {
+	s.workerGroup.GoCtx("", func(ctx context.Context) error {
 		s.batchWorker()
 		return nil
 	})
 	for i := 0; i < s.parallelism; i++ {
 		s.eventsChans[i] = make(chan []messagePayload)
 		j := i
-		s.workerGroup.GoCtx(func(ctx context.Context) error {
+		s.workerGroup.GoCtx("", func(ctx context.Context) error {
 			s.workerLoop(j)
 			return nil
 		})

@@ -85,7 +85,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 
 		kvCh := make(chan row.KVBatch)
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx(func(ctx context.Context) error {
+		g.GoCtx("", func(ctx context.Context) error {
 			defer close(kvCh)
 			wc := importer.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)

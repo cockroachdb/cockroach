@@ -102,8 +102,8 @@ func Run(ctx context.Context, cfg Config) error {
 	f.onBackfillCallback = cfg.OnBackfillCallback
 
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(cfg.SchemaFeed.Run)
-	g.GoCtx(f.run)
+	g.GoCtx("", cfg.SchemaFeed.Run)
+	g.GoCtx("", f.run)
 	err := g.Wait()
 
 	// NB: The higher layers of the changefeed should detect the boundary and the
@@ -368,10 +368,10 @@ func (f *kvFeed) runUntilTableEvent(
 		WithDiff:  f.withDiff,
 		Knobs:     f.knobs,
 	}
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed)
 	})
-	g.GoCtx(func(ctx context.Context) error {
+	g.GoCtx("", func(ctx context.Context) error {
 		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
 	})
 
