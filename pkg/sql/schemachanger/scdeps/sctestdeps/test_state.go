@@ -54,8 +54,9 @@ type TestState struct {
 	// different testing contexts, providing a sane default implementation of
 	// dependencies with optional overrides.
 	backfiller        scexec.Backfiller
+	merger            scexec.Merger
 	indexSpanSplitter scexec.IndexSpanSplitter
-	backfillTracker   scexec.BackfillTracker
+	backfillTracker   scexec.BackfillerTracker
 
 	// approximateTimestamp is used to populate approximate timestamps in
 	// descriptors.

@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scdeps",
     srcs = [
-        "backfill_tracker.go",
+        "backfiller_tracker.go",
         "build_deps.go",
         "exec_deps.go",
         "index_validator.go",
@@ -57,7 +57,7 @@ go_library(
 go_test(
     name = "scdeps_test",
     srcs = [
-        "backfill_tracker_test.go",
+        "backfiller_tracker_test.go",
         "periodic_progress_flusher_test.go",
     ],
     embed = [":scdeps"],

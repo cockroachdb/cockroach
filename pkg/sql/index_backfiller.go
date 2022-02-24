@@ -64,11 +64,11 @@ func (ib *IndexBackfillPlanner) MaybePrepareDestIndexesForBackfill(
 	}, nil
 }
 
-// BackfillIndex is part of the scexec.Backfiller interface.
-func (ib *IndexBackfillPlanner) BackfillIndex(
+// BackfillIndexes is part of the scexec.Backfiller interface.
+func (ib *IndexBackfillPlanner) BackfillIndexes(
 	ctx context.Context,
 	progress scexec.BackfillProgress,
-	tracker scexec.BackfillProgressWriter,
+	tracker scexec.BackfillerProgressWriter,
 	descriptor catalog.TableDescriptor,
 ) error {
 	var completed = struct {
