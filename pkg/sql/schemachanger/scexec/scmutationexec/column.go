@@ -75,6 +75,9 @@ func (m *visitor) SetAddedColumnType(ctx context.Context, op scop.SetAddedColumn
 			}
 		}
 	}
+	// Empty names are allowed for families, in which case AllocateIDs will assign
+	// one.
+	tbl.AllocateIDsWithoutValidation(ctx)
 	return nil
 }
 
