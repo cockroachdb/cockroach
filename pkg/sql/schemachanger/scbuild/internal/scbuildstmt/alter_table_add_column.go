@@ -98,6 +98,7 @@ func alterTableAddColumn(
 		spec.colType.TypeT = typ
 	} else {
 		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
+		// Block unsupported types.
 		switch spec.colType.Type.Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
 			panic(pgerror.Newf(
@@ -130,10 +131,16 @@ func alterTableAddColumn(
 		}
 	}
 	if desc.HasDefault() {
+		expression := b.WrapExpression(cdd.DefaultExpr)
+		// Sequence references inside expressions are unsupported, since these will
+		// hit errors during backfill.
+		if len(expression.UsesSequenceIDs) > 0 {
+			panic(scerrors.NotImplementedErrorf(t, "sequence default expression %s", cdd.DefaultExpr))
+		}
 		spec.def = &scpb.ColumnDefaultExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
-			Expression: *b.WrapExpression(cdd.DefaultExpr),
+			Expression: *expression,
 		}
 	}
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
