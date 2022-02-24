@@ -401,6 +401,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
+
 			if err := s.sink.output(extraFlush, bufs.b[i].Bytes()); err != nil {
 				if !s.criticality {
 					// An error on this sink is not critical. Just report
