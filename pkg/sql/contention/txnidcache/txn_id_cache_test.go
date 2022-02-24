@@ -209,7 +209,7 @@ func TestTransactionIDCache(t *testing.T) {
 	})
 
 	t.Run("provisional_txn_id_cache_record", func(t *testing.T) {
-		testConn.Exec(t, "RESET CLUSTER SETTING sql.contention.txn_id_cache.max_size")
+		testConn.Exec(t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '10MB'")
 		callCaptured := uint32(0)
 
 		injector.setHook(func(
