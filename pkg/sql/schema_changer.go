@@ -2343,7 +2343,7 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeDescTxn runs at the start of every call to
 	// (*schemaChanger).txn.
-	RunBeforeDescTxn func() error
+	RunBeforeDescTxn func(jobID jobspb.JobID) error
 
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old
@@ -2392,7 +2392,7 @@ func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
-		if err := fn(); err != nil {
+		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
