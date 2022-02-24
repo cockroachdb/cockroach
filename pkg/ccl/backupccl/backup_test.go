@@ -7253,11 +7253,11 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 	})
 }
 
-// TestBackupRestoreInsideMultiPodTenant verifies that backup and restore work inside
-// tenants with multiple SQL pods. Currently, verification
-// that restore is distributed to all pods in the multi-pod tests must be done
+// TestBackupRestoreInsideMultiPodTenant verifies that backup and restore work
+// inside tenants with multiple SQL pods. Currently, verification that restore
+// and backup are distributed to all pods in the multi-pod tests must be done
 // manually and by enabling logging and checking the log for messages containing
-// "starting restore data" for nsql1 and nsql2.
+// "starting restore data" or "starting backup data" for nsql1 and nsql2.
 // TODO(harding): Verify that backup and restore are distributed in test.
 func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
