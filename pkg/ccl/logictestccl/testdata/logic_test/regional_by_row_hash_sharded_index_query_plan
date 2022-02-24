@@ -214,8 +214,6 @@ vectorized: true
               row 0, expr 1: gen_random_uuid()
               row 0, expr 2: 'ap-southeast-2'
 
-# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
-# using the original hash sharded index as an arbiter is not necessary.
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard
 # number calculated instead of looking at all possible shards.
@@ -230,7 +228,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_gen_random_uuid(crdb_internal_user_id_shard_16, user_id, val, crdb_region)
 │ auto commit
-│ arbiter indexes: t_gen_random_uuid_pkey
 │ arbiter constraints: t_gen_random_uuid_pkey
 │
 └── • render
@@ -249,50 +246,35 @@ vectorized: true
         │ distinct on: user_id_default
         │ nulls are distinct
         │
-        └── • distinct
+        └── • lookup join (anti)
             │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
             │ estimated row count: 0 (missing stats)
-            │ distinct on: crdb_internal_user_id_shard_16_cast, user_id_default
-            │ nulls are distinct
+            │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
+            │ equality cols are key
+            │ lookup condition: ((user_id_default = user_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                │ equality: (crdb_region_default, crdb_internal_user_id_shard_16_cast, user_id_default) = (crdb_region,crdb_internal_user_id_shard_16,user_id)
                 │ equality cols are key
+                │ lookup condition: ((user_id_default = user_id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
                 │
-                └── • lookup join (anti)
+                └── • render
                     │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                    │ estimated row count: 0 (missing stats)
-                    │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                    │ equality cols are key
-                    │ lookup condition: ((user_id_default = user_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+                    │ estimated row count: 1
+                    │ render crdb_internal_user_id_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16), NULL::INT4)
+                    │ render val_cast: val_cast
+                    │ render user_id_default: user_id_default
+                    │ render crdb_region_default: crdb_region_default
                     │
-                    └── • lookup join (anti)
-                        │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                        │ estimated row count: 1 (missing stats)
-                        │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                        │ equality cols are key
-                        │ lookup condition: ((user_id_default = user_id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                        │
-                        └── • render
-                            │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                            │ estimated row count: 1
-                            │ render crdb_internal_user_id_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16), NULL::INT4)
-                            │ render val_cast: val_cast
-                            │ render user_id_default: user_id_default
-                            │ render crdb_region_default: crdb_region_default
-                            │
-                            └── • values
-                                  columns: (val_cast, user_id_default, crdb_region_default)
-                                  size: 3 columns, 1 row
-                                  row 0, expr 0: '4321'
-                                  row 0, expr 1: gen_random_uuid()
-                                  row 0, expr 2: 'ap-southeast-2'
+                    └── • values
+                          columns: (val_cast, user_id_default, crdb_region_default)
+                          size: 3 columns, 1 row
+                          row 0, expr 0: '4321'
+                          row 0, expr 1: gen_random_uuid()
+                          row 0, expr 2: 'ap-southeast-2'
 
-# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
-# using the original hash sharded index as an arbiter is not necessary.
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard
 # number calculated instead of looking at all possible shards.
@@ -307,7 +289,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_gen_random_uuid(crdb_internal_user_id_shard_16, user_id, val, crdb_region)
 │ auto commit
-│ arbiter indexes: t_gen_random_uuid_pkey
 │ arbiter constraints: t_gen_random_uuid_pkey
 │
 └── • render
@@ -326,53 +307,40 @@ vectorized: true
         │ distinct on: user_id_default
         │ nulls are distinct
         │
-        └── • distinct
+        └── • lookup join (anti)
             │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
             │ estimated row count: 0 (missing stats)
-            │ distinct on: crdb_internal_user_id_shard_16_cast, user_id_default
-            │ nulls are distinct
+            │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
+            │ equality cols are key
+            │ lookup condition: ((user_id_default = user_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 2 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                │ equality: (crdb_region_default, crdb_internal_user_id_shard_16_cast, user_id_default) = (crdb_region,crdb_internal_user_id_shard_16,user_id)
                 │ equality cols are key
+                │ lookup condition: ((user_id_default = user_id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
                 │
-                └── • lookup join (anti)
+                └── • render
                     │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                    │ estimated row count: 0 (missing stats)
-                    │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                    │ equality cols are key
-                    │ lookup condition: ((user_id_default = user_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+                    │ estimated row count: 2
+                    │ render crdb_internal_user_id_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16), NULL::INT4)
+                    │ render val_cast: val_cast
+                    │ render user_id_default: user_id_default
+                    │ render crdb_region_default: crdb_region_default
                     │
-                    └── • lookup join (anti)
-                        │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                        │ estimated row count: 2 (missing stats)
-                        │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-                        │ equality cols are key
-                        │ lookup condition: ((user_id_default = user_id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_user_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+                    └── • render
+                        │ columns: (user_id_default, crdb_region_default, val_cast)
+                        │ estimated row count: 2
+                        │ render user_id_default: gen_random_uuid()
+                        │ render crdb_region_default: 'ap-southeast-2'
+                        │ render val_cast: val_cast
                         │
-                        └── • render
-                            │ columns: (crdb_internal_user_id_shard_16_cast, val_cast, user_id_default, crdb_region_default)
-                            │ estimated row count: 2
-                            │ render crdb_internal_user_id_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16), NULL::INT4)
-                            │ render val_cast: val_cast
-                            │ render user_id_default: user_id_default
-                            │ render crdb_region_default: crdb_region_default
-                            │
-                            └── • render
-                                │ columns: (user_id_default, crdb_region_default, val_cast)
-                                │ estimated row count: 2
-                                │ render user_id_default: gen_random_uuid()
-                                │ render crdb_region_default: 'ap-southeast-2'
-                                │ render val_cast: val_cast
-                                │
-                                └── • values
-                                      columns: (val_cast)
-                                      size: 1 column, 2 rows
-                                      row 0, expr 0: '4321'
-                                      row 1, expr 0: '8765'
+                        └── • values
+                              columns: (val_cast)
+                              size: 1 column, 2 rows
+                              row 0, expr 0: '4321'
+                              row 1, expr 0: '8765'
 
 subtest test_uniqueness_check_pk
 
@@ -435,11 +403,6 @@ vectorized: true
                           columns: (crdb_internal_id_shard_16_cast, column1, crdb_region_default, check1, check2)
                           label: buffer 1
 
-# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
-# using the original hash sharded index as an arbiter is not necessary.
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT DO NOTHING;
 ----
@@ -451,7 +414,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, crdb_region)
 │ auto commit
-│ arbiter indexes: t_unique_hash_pk_pkey
 │ arbiter constraints: t_unique_hash_pk_pkey
 │
 └── • render
@@ -463,32 +425,35 @@ vectorized: true
     │ render crdb_region_default: crdb_region_default
     │ render crdb_internal_id_shard_16_cast: crdb_internal_id_shard_16_cast
     │
-    └── • lookup join (anti)
+    └── • cross join (anti)
         │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_cast)
         │ estimated row count: 0 (missing stats)
-        │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-        │ equality cols are key
-        │ lookup condition: ((column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
         │
-        └── • cross join (anti)
-            │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_cast)
-            │ estimated row count: 0 (missing stats)
+        ├── • values
+        │     columns: (column1, crdb_region_default, crdb_internal_id_shard_16_cast)
+        │     size: 3 columns, 1 row
+        │     row 0, expr 0: 4321
+        │     row 0, expr 1: 'ap-southeast-2'
+        │     row 0, expr 2: 9
+        │
+        └── • union all
+            │ columns: (id)
+            │ estimated row count: 1 (missing stats)
+            │ limit: 1
             │
-            ├── • values
-            │     columns: (column1, crdb_region_default, crdb_internal_id_shard_16_cast)
-            │     size: 3 columns, 1 row
-            │     row 0, expr 0: 4321
-            │     row 0, expr 1: 'ap-southeast-2'
-            │     row 0, expr 2: 9
+            ├── • scan
+            │     columns: (id)
+            │     estimated row count: 1 (missing stats)
+            │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
+            │     spans: /"@"/9/4321/0
             │
             └── • scan
-                  columns: (crdb_internal_id_shard_16, id, crdb_region)
+                  columns: (id)
                   estimated row count: 1 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                  spans: /"@"/9/4321/0
+                  spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+                  parallel
 
-# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
-# using the original hash sharded index as an arbiter is not necessary.
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard
 # number calculated instead of looking at all possible shards.
@@ -503,7 +468,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, crdb_region)
 │ auto commit
-│ arbiter indexes: t_unique_hash_pk_pkey
 │ arbiter constraints: t_unique_hash_pk_pkey
 │
 └── • render
@@ -515,56 +479,32 @@ vectorized: true
     │ render crdb_region_default: crdb_region_default
     │ render crdb_internal_id_shard_16_cast: crdb_internal_id_shard_16_cast
     │
-    └── • distinct
-        │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_cast)
+    └── • lookup join (anti)
+        │ columns: (crdb_internal_id_shard_16_cast, crdb_region_default, column1)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: column1, crdb_internal_id_shard_16_cast
-        │ nulls are distinct
+        │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
+        │ equality cols are key
+        │ lookup condition: ((column1 = id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
         │
-        └── • project
-            │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_cast)
-            │ estimated row count: 0 (missing stats)
+        └── • lookup join (anti)
+            │ columns: (crdb_internal_id_shard_16_cast, crdb_region_default, column1)
+            │ estimated row count: 2 (missing stats)
+            │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
+            │ equality cols are key
+            │ lookup condition: ((column1 = id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
             │
-            └── • lookup join (anti)
-                │ columns: ("lookup_join_const_col_@12", column1, crdb_region_default, crdb_internal_id_shard_16_cast)
-                │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                │ equality: (lookup_join_const_col_@12, crdb_internal_id_shard_16_cast, column1) = (crdb_region,crdb_internal_id_shard_16,id)
-                │ equality cols are key
+            └── • render
+                │ columns: (crdb_internal_id_shard_16_cast, crdb_region_default, column1)
+                │ estimated row count: 2
+                │ render crdb_internal_id_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16), NULL::INT4)
+                │ render crdb_region_default: 'ap-southeast-2'
+                │ render column1: column1
                 │
-                └── • render
-                    │ columns: ("lookup_join_const_col_@12", column1, crdb_region_default, crdb_internal_id_shard_16_cast)
-                    │ estimated row count: 0 (missing stats)
-                    │ render lookup_join_const_col_@12: 'ap-southeast-2'
-                    │ render column1: column1
-                    │ render crdb_region_default: crdb_region_default
-                    │ render crdb_internal_id_shard_16_cast: crdb_internal_id_shard_16_cast
-                    │
-                    └── • lookup join (anti)
-                        │ columns: (crdb_internal_id_shard_16_cast, crdb_region_default, column1)
-                        │ estimated row count: 0 (missing stats)
-                        │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                        │ equality cols are key
-                        │ lookup condition: ((column1 = id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                        │
-                        └── • lookup join (anti)
-                            │ columns: (crdb_internal_id_shard_16_cast, crdb_region_default, column1)
-                            │ estimated row count: 2 (missing stats)
-                            │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                            │ equality cols are key
-                            │ lookup condition: ((column1 = id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                            │
-                            └── • render
-                                │ columns: (crdb_internal_id_shard_16_cast, crdb_region_default, column1)
-                                │ estimated row count: 2
-                                │ render crdb_internal_id_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16), NULL::INT4)
-                                │ render crdb_region_default: 'ap-southeast-2'
-                                │ render column1: column1
-                                │
-                                └── • values
-                                      columns: (column1)
-                                      size: 1 column, 2 rows
-                                      row 0, expr 0: 4321
-                                      row 1, expr 0: 8765
+                └── • values
+                      columns: (column1)
+                      size: 1 column, 2 rows
+                      row 0, expr 0: 4321
+                      row 1, expr 0: 8765
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT (id) DO NOTHING;
@@ -1131,11 +1071,6 @@ vectorized: true
                           columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_cast, check1, check2)
                           label: buffer 1
 
-# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
-# using the original hash sharded index as an arbiter is not necessary.
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT DO NOTHING;
 ----
@@ -1147,7 +1082,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_unique_hash_sec_key(id, email, crdb_region, crdb_internal_email_shard_16)
 │ auto commit
-│ arbiter indexes: t_unique_hash_sec_key_pkey, idx_uniq_hash_email
 │ arbiter constraints: t_unique_hash_sec_key_pkey, idx_uniq_hash_email
 │
 └── • render
@@ -1167,44 +1101,40 @@ vectorized: true
         │ equality cols are key
         │ lookup condition: ((column2 = email) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
         │
-        └── • lookup join (anti)
+        └── • cross join (anti)
             │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_cast)
             │ estimated row count: 0 (missing stats)
-            │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-            │ equality cols are key
-            │ lookup condition: (column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │
-            └── • lookup join (anti)
-                │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_cast)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@idx_uniq_hash_email
-                │ equality: (crdb_region_default, crdb_internal_email_shard_16_cast, column2) = (crdb_region,crdb_internal_email_shard_16,email)
-                │ equality cols are key
+            ├── • values
+            │     columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_cast)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 4321
+            │     row 0, expr 1: 'some_email'
+            │     row 0, expr 2: 'ap-southeast-2'
+            │     row 0, expr 3: 13
+            │
+            └── • project
+                │ columns: ()
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • cross join (anti)
-                    │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_cast)
-                    │ estimated row count: 0 (missing stats)
+                └── • union all
+                    │ columns: (id)
+                    │ estimated row count: 1 (missing stats)
+                    │ limit: 1
                     │
-                    ├── • values
-                    │     columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_cast)
-                    │     size: 4 columns, 1 row
-                    │     row 0, expr 0: 4321
-                    │     row 0, expr 1: 'some_email'
-                    │     row 0, expr 2: 'ap-southeast-2'
-                    │     row 0, expr 3: 13
+                    ├── • scan
+                    │     columns: (id)
+                    │     estimated row count: 1 (missing stats)
+                    │     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+                    │     spans: /"@"/4321/0
                     │
-                    └── • project
-                        │ columns: ()
-                        │ estimated row count: 1 (missing stats)
-                        │
-                        └── • scan
-                              columns: (id, crdb_region)
-                              estimated row count: 1 (missing stats)
-                              table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-                              spans: /"@"/4321/0
+                    └── • scan
+                          columns: (id)
+                          estimated row count: 1 (missing stats)
+                          table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+                          spans: /"\x80"/4321/0 /"\xc0"/4321/0
+                          parallel
 
-# TODO (issue #75498): we're using unique without index on (a) as an arbiter and
-# using the original hash sharded index as an arbiter is not necessary.
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard
 # number calculated instead of looking at all possible shards.
@@ -1219,7 +1149,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: t_unique_hash_sec_key(id, email, crdb_region, crdb_internal_email_shard_16)
 │ auto commit
-│ arbiter indexes: t_unique_hash_sec_key_pkey, idx_uniq_hash_email
 │ arbiter constraints: t_unique_hash_sec_key_pkey, idx_uniq_hash_email
 │
 └── • render
@@ -1232,64 +1161,42 @@ vectorized: true
     │ render crdb_region_default: crdb_region_default
     │ render crdb_internal_email_shard_16_cast: crdb_internal_email_shard_16_cast
     │
-    └── • distinct
+    └── • lookup join (anti)
         │ columns: (crdb_internal_email_shard_16_cast, crdb_region_default, column1, column2)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: crdb_internal_email_shard_16_cast, column2
-        │ nulls are distinct
+        │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+        │ equality cols are key
+        │ lookup condition: (column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_cast, crdb_region_default, column1, column2)
             │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_sec_key@idx_uniq_hash_email
             │ equality cols are key
-            │ lookup condition: ((column2 = email) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+            │ lookup condition: ((column2 = email) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_email_shard_16_cast, crdb_region_default, column1, column2)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+                │ estimated row count: 2 (missing stats)
+                │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                 │ equality cols are key
-                │ lookup condition: (column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+                │ lookup condition: ((column2 = email) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
                 │
-                └── • lookup join (anti)
+                └── • render
                     │ columns: (crdb_internal_email_shard_16_cast, crdb_region_default, column1, column2)
-                    │ estimated row count: 0 (missing stats)
-                    │ table: t_unique_hash_sec_key@idx_uniq_hash_email
-                    │ equality: (crdb_region_default, crdb_internal_email_shard_16_cast, column2) = (crdb_region,crdb_internal_email_shard_16,email)
-                    │ equality cols are key
+                    │ estimated row count: 2
+                    │ render crdb_internal_email_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16), NULL::INT4)
+                    │ render crdb_region_default: 'ap-southeast-2'
+                    │ render column1: column1
+                    │ render column2: column2
                     │
-                    └── • hash join (right anti)
-                        │ columns: (crdb_internal_email_shard_16_cast, crdb_region_default, column1, column2)
-                        │ estimated row count: 0 (missing stats)
-                        │ equality: (id) = (column1)
-                        │ left cols are key
-                        │
-                        ├── • project
-                        │   │ columns: (id)
-                        │   │ estimated row count: 333 (missing stats)
-                        │   │
-                        │   └── • scan
-                        │         columns: (id, crdb_region)
-                        │         estimated row count: 333 (missing stats)
-                        │         table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-                        │         spans: /"@"-/"@"/PrefixEnd
-                        │
-                        └── • render
-                            │ columns: (crdb_internal_email_shard_16_cast, crdb_region_default, column1, column2)
-                            │ estimated row count: 2
-                            │ render crdb_internal_email_shard_16_cast: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16), NULL::INT4)
-                            │ render crdb_region_default: 'ap-southeast-2'
-                            │ render column1: column1
-                            │ render column2: column2
-                            │
-                            └── • values
-                                  columns: (column1, column2)
-                                  size: 2 columns, 2 rows
-                                  row 0, expr 0: 4321
-                                  row 0, expr 1: 'some_email'
-                                  row 1, expr 0: 8765
-                                  row 1, expr 1: 'another_email'
+                    └── • values
+                          columns: (column1, column2)
+                          size: 2 columns, 2 rows
+                          row 0, expr 0: 4321
+                          row 0, expr 1: 'some_email'
+                          row 1, expr 0: 8765
+                          row 1, expr 1: 'another_email'
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT (email) DO NOTHING;
