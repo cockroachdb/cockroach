@@ -87,6 +87,7 @@ func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 		Name:    name,
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(b.Nodes),
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/56230",
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
