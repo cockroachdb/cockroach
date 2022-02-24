@@ -48,11 +48,6 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
-	desc := &descpb.TableDescriptor{
-		Name:         "Table",
-		PrimaryIndex: descpb.IndexDescriptor{Name: "primary"},
-		Indexes:      []descpb.IndexDescriptor{{Name: "SomeIndex"}},
-	}
 	tr := TableReaderSpec{
 		FetchSpec: descpb.IndexFetchSpec{
 			TableName: "Table",
@@ -117,7 +112,16 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 						{StreamID: 2},
 					},
 				}},
-				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
+				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{
+					FetchSpec: descpb.IndexFetchSpec{
+						TableName: "Table",
+						IndexName: "primary",
+						FetchedColumns: []descpb.IndexFetchSpec_Column{
+							{Name: "x"},
+							{Name: "y"},
+						},
+					},
+				}},
 				Post: PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{2},
@@ -148,7 +152,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
         {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["Table@SomeIndex","Columns: a, b"]},"outputs":[],"stage":1},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["Table@SomeIndex","Columns: a, b"]},"outputs":[],"stage":1},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/2","details":["Table@SomeIndex","Columns: a, b"]},"outputs":[],"stage":1},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader/3","details":["Table@primary","Out: @3"]},"outputs":[],"stage":2},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader/3","details":["Table@primary","Columns: x, y","Out: @3"]},"outputs":[],"stage":2},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}
 		  ],
 		  "edges":[
@@ -162,7 +166,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	compareDiagrams(t, json, expected)
 
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kkFLw0AQhe_-ivCuLphsPO2pIAUrarX1Jjlss0MJJDtxdwOVkv8u3QhtoJVK6XHm5b3vZdgt_FcNheX8ZZos35-Tx-liCgHLhl51Qx7qExkEJARyFAKt45K8Z7eTtvHDmdlApQKVbbuwWxcCJTuC2iJUoSYofOhVTQvShtxdCgFDQVd1jI_SZMkNzayhDQQeuO4a61WiRbJC0QtwF_bZPug1QWW9OOBn5_Oza_Dl-Xx5bf4ey86QIzMGTuQtiv5IySeu7G_H_FjH1lWNdt8QmHdBJZP8ZDf5n9ssyLdsPY2Qp5LTXXEyaxp-1HPnSnpzXMYnOIzz6IsLQz4Maj4MMxuleLxDc3aJWV5izv8034_MaV_0Nz8BAAD___CkNwI="
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kkFLw0AQhe_-ivCuLphsPO2pIAUrarX1Jjlss0MJJDtxdwOVkv8u2QhtoZVK6XHm7ZvvzbBb-K8aCsv5yzRZvj8nj9PFFAKWDb3qhjzUJzIISAjkKARaxyV5z26QtvHhzGygUoHKtl0Y2oVAyY6gtghVqAkKH3pV04K0IXeXQsBQ0FUdx0dpsuSGZtbQBgIPXHeN9SrRIlmh6AW4C7vZPug1QWW92ONn5_Oza_Dl-Xx5bf4Oy86QI3MInMhbFP2RkE9c2d-M-bGMrasa7b73E25EMtTzLqhkkp_MKv9zqwX5lq2ngwinJqfDImTWNC7uuXMlvTku45ccy3n0xYYhH0Y1H4uZjVI85r45u8QsLzHnf5rvD8xpX_Q3PwEAAP__4nU76g=="
 	if url.String() != expectedURL {
 		t.Errorf("expected `%s` got `%s`", expectedURL, url.String())
 	}

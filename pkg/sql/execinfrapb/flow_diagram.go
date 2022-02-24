@@ -143,18 +143,15 @@ func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
 	return fmt.Sprintf("%s@%s", desc.Name, index)
 }
 
-// summary implements the diagramCellType interface.
-func (tr *TableReaderSpec) summary() (string, []string) {
-	details := make([]string, 0, 3)
-	details = append(details, fmt.Sprintf("%s@%s", tr.FetchSpec.TableName, tr.FetchSpec.IndexName))
+func appendColumns(details []string, columns []descpb.IndexFetchSpec_Column) []string {
 	var b strings.Builder
 	b.WriteString("Columns:")
 	const wrapAt = 100
-	for i := range tr.FetchSpec.FetchedColumns {
+	for i := range columns {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		name := tr.FetchSpec.FetchedColumns[i].Name
+		name := columns[i].Name
 		if b.Len()+len(name)+1 > wrapAt {
 			details = append(details, b.String())
 			b.Reset()
@@ -163,6 +160,14 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		b.WriteString(name)
 	}
 	details = append(details, b.String())
+	return details
+}
+
+// summary implements the diagramCellType interface.
+func (tr *TableReaderSpec) summary() (string, []string) {
+	details := make([]string, 0, 3)
+	details = append(details, fmt.Sprintf("%s@%s", tr.FetchSpec.TableName, tr.FetchSpec.IndexName))
+	details = appendColumns(details, tr.FetchSpec.FetchedColumns)
 
 	if len(tr.Spans) > 0 {
 		// only show the first span
@@ -198,7 +203,7 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
-	details = append(details, indexDetail(&jr.Table, jr.IndexIdx))
+	details = append(details, fmt.Sprintf("%s@%s", jr.FetchSpec.TableName, jr.FetchSpec.IndexName))
 	if len(jr.LookupColumns) > 0 {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
 	}
@@ -217,6 +222,7 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.OutputGroupContinuationForLeftRow {
 		details = append(details, "first join in paired-join")
 	}
+	details = appendColumns(details, jr.FetchSpec.FetchedColumns)
 	return "JoinReader", details
 }
 
