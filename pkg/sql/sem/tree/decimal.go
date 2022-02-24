@@ -13,6 +13,7 @@ package tree
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -89,4 +90,44 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 		return pgerror.Newf(pgcode.NumericValueOutOfRange, "value with precision %d, scale %d must round to an absolute value less than %s", precision, scale, lt)
 	}
 	return nil
+}
+
+// MinDecimalForWidth returns the minimum decimal that fits within the given
+// precision and scale. If precision is zero it returns negative infinite.
+func MinDecimalForWidth(precision, scale int) (*apd.Decimal, error) {
+	if precision <= 0 {
+		return &apd.Decimal{Form: apd.Infinite, Negative: true}, nil
+	}
+	// Use +1 here because it is inverted later.
+	if scale < math.MinInt32+1 || scale > math.MaxInt32 {
+		return nil, errScaleOutOfRange
+	}
+	if scale > precision {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"scale (%d) must be between 0 and precision (%d)", scale, precision,
+		)
+	}
+	s := "-" + strings.Repeat("9", precision-scale) + "." + strings.Repeat("9", scale)
+	d, _, err := apd.NewFromString(s)
+	return d, err
+}
+
+// MaxDecimalForWidth returns the maximum decimal that fits within the given
+// precision and scale. If precision is zero it returns positive infinite.
+func MaxDecimalForWidth(precision, scale int) (*apd.Decimal, error) {
+	if precision <= 0 {
+		return &apd.Decimal{Form: apd.Infinite}, nil
+	}
+	// Use +1 here because it is inverted later.
+	if scale < math.MinInt32+1 || scale > math.MaxInt32 {
+		return nil, errScaleOutOfRange
+	}
+	if scale > precision {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"scale (%d) must be between 0 and precision (%d)", scale, precision,
+		)
+	}
+	s := strings.Repeat("9", precision-scale) + "." + strings.Repeat("9", scale)
+	d, _, err := apd.NewFromString(s)
+	return d, err
 }
