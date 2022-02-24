@@ -100,6 +100,12 @@ func (s *TestState) IncrementSchemaChangeDropCounter(counterType string) {
 	s.LogSideEffectf("increment telemetry for sql.schema.drop_%s", counterType)
 }
 
+// IncrementSchemaChangeAddColumnTypeCounter  implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementSchemaChangeAddColumnTypeCounter(typeName string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.new_column_type.%s", typeName)
+}
+
 // IncrementUserDefinedSchemaCounter implements the scbuild.Dependencies
 // interface.
 func (s *TestState) IncrementUserDefinedSchemaCounter(
@@ -983,5 +989,17 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,
 ) scexec.DescriptorMetadataUpdater {
+	return s
+}
+
+// IsTableEmpty implement scbuild.TableReader.
+func (s *TestState) IsTableEmpty(
+	ctx context.Context, id descpb.ID, primaryIndexID descpb.IndexID,
+) bool {
+	return true
+}
+
+// TableReader implement scexec.Dependencies.
+func (s *TestState) TableReader() scbuild.TableReader {
 	return s
 }
