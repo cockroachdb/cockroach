@@ -404,6 +404,14 @@ message RangeStatistics {
   double queries_per_second = 1;
   // Writes per second served by this range.
   double writes_per_second = 2;
+  // Requests per second served by this range.
+  double requests_per_second = 3;
+  // Reads per second served by this range.
+  double reads_per_second = 4;
+  // Writes (bytes) per second served by this range.
+  double write_bytes_per_second = 5;
+  // Reads (bytes) per second served by this range.
+  double read_bytes_per_second = 6;
 }
 
 message PrettySpan {

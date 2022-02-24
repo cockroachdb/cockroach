@@ -111,6 +111,8 @@ func newUnloadedReplica(
 	}
 	if store.cfg.StorePool != nil {
 		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+		r.loadStats = newReplicaLoad(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+
 	}
 	// Pass nil for the localityOracle because we intentionally don't track the
 	// origin locality of write load.
@@ -383,5 +385,6 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	// Ranges to ensure that liveness never sees high Raft scheduler latency.
 	if bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix) {
 		r.store.scheduler.SetPriorityID(desc.RangeID)
+
 	}
 }

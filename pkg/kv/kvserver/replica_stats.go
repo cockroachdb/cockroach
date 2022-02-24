@@ -96,6 +96,17 @@ func newReplicaStatsRecord() *replicaStatsRecord {
 	}
 }
 
+func (rsr *replicaStatsRecord) merge(other *replicaStatsRecord) {
+	rsr.max = math.Max(rsr.max, other.max)
+	rsr.min = math.Min(rsr.min, other.min)
+	rsr.sum += other.sum
+	rsr.count += other.count
+
+	for locality, count := range other.localityCounts {
+		rsr.localityCounts[locality] += count
+	}
+}
+
 func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
 	other.max = rsr.max
 	other.min = rsr.min
@@ -145,6 +156,46 @@ func (rs *replicaStats) splitRequestCounts(other *replicaStats) {
 		}
 		other.mu.records[i] = newReplicaStatsRecord()
 		rs.mu.records[i].split(other.mu.records[i])
+	}
+}
+
+// mergeRequestCounts joins the current replicaStats object with other, for the
+// purposes of merging a range.
+func (rs *replicaStats) mergeRequestCounts(other *replicaStats) {
+	other.mu.Lock()
+	defer other.mu.Unlock()
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	// Sanity check that the request lengths are correct, if not we cannot
+	// merge them so reset both.
+	if len(rs.mu.records) != len(other.mu.records) {
+		rs.resetRequestCounts()
+		other.resetRequestCounts()
+		return
+	}
+
+	n := len(rs.mu.records)
+
+	for i := range other.mu.records {
+
+		rsIdx := (rs.mu.idx + n - i) % n
+		otherIdx := (other.mu.idx + n - i) % n
+
+		if other.mu.records[otherIdx] == nil {
+			continue
+		}
+
+		rs.mu.records[rsIdx].merge(other.mu.records[otherIdx])
+
+		// Reset the stats on other.
+		other.mu.records[otherIdx] = newReplicaStatsRecord()
+	}
+
+	// Update the last rotate time to be the lesser of the two, so that a
+	// rotation occurs as early as possible.
+	if rs.mu.lastRotate.After(other.mu.lastRotate) {
+		rs.mu.lastRotate = other.mu.lastRotate
 	}
 }
 

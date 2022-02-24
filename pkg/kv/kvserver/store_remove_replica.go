@@ -210,6 +210,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		if opts.InsertPlaceholder {
 			return ph
 		}
+
 		// If placeholder not desired, remove it now, otherwise, that's the caller's
 		// job. We could elide the placeholder altogether but wish to instead
 		// minimize the divergence between the two code paths.

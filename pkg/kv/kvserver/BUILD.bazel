@@ -50,6 +50,7 @@ go_library(
         "replica_gc_queue.go",
         "replica_gossip.go",
         "replica_init.go",
+        "replica_load.go",
         "replica_metrics.go",
         "replica_placeholder.go",
         "replica_proposal.go",

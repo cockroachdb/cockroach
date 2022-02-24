@@ -75,12 +75,14 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		t.Fatal("config not set")
 	}
 	for i, test := range testCases {
+
 		// Create a replica for testing that is not hooked up to the store. This
 		// ensures that the store won't be mucking with our replica concurrently
 		// during testing (e.g. via the system config gossip update).
 		cpy := *tc.repl.Desc()
 		cpy.StartKey = test.start
 		cpy.EndKey = test.end
+
 		repl, err := newReplica(ctx, &cpy, tc.store, cpy.Replicas().VoterDescriptors()[0].ReplicaID)
 		if err != nil {
 			t.Fatal(err)
