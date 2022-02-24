@@ -42,7 +42,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	var relation scpb.Element
 	var source *scpb.PrimaryIndex
-	relationElements.ForEachElementStatus(func(status, targetStatus scpb.Status, e scpb.Element) {
+	relationElements.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Table:
 			n.Table.ObjectNamePrefix = b.NamePrefix(t)
@@ -82,7 +82,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 
 		case *scpb.PrimaryIndex:
-			if targetStatus == scpb.Status_PUBLIC {
+			if target == scpb.ToPublic {
 				source = t
 			}
 		}
@@ -97,11 +97,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			IsExistenceOptional: true,
 			RequiredPrivilege:   privilege.CREATE,
 		})
-		if _, targetStatus, sec := scpb.FindSecondaryIndex(indexElements); sec != nil {
+		if _, target, sec := scpb.FindSecondaryIndex(indexElements); sec != nil {
 			if n.IfNotExists {
 				return
 			}
-			if targetStatus == scpb.Status_ABSENT {
+			if target == scpb.ToAbsent {
 				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"index %q being dropped, try again later", n.Name.String()))
 			}
@@ -140,8 +140,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			relationElements = b.QueryByID(index.TableID)
 		}
 		var columnID catid.ColumnID
-		scpb.ForEachColumnName(relationElements, func(_, targetStatus scpb.Status, e *scpb.ColumnName) {
-			if targetStatus == scpb.Status_PUBLIC && e.Name == colName {
+		scpb.ForEachColumnName(relationElements, func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ColumnName) {
+			if target == scpb.ToPublic && e.Name == colName {
 				columnID = e.ColumnID
 			}
 		})
@@ -166,8 +166,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Set the storing column IDs.
 	for _, storingNode := range n.Storing {
 		var columnID catid.ColumnID
-		scpb.ForEachColumnName(relationElements, func(_, targetStatus scpb.Status, e *scpb.ColumnName) {
-			if targetStatus == scpb.Status_PUBLIC && tree.Name(e.Name) == storingNode {
+		scpb.ForEachColumnName(relationElements, func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ColumnName) {
+			if target == scpb.ToPublic && tree.Name(e.Name) == storingNode {
 				columnID = e.ColumnID
 			}
 		})
@@ -227,12 +227,12 @@ func maybeCreateAndAddShardCol(
 	//  existingShardColID allowed to differ from the newly made shard column?
 	//  Should there be some validation of the existing shard column?
 	var existingShardColID catid.ColumnID
-	scpb.ForEachColumnName(elts, func(status, targetStatus scpb.Status, name *scpb.ColumnName) {
-		if targetStatus == scpb.Status_PUBLIC && name.Name == shardColName {
+	scpb.ForEachColumnName(elts, func(_ scpb.Status, target scpb.TargetStatus, name *scpb.ColumnName) {
+		if target == scpb.ToPublic && name.Name == shardColName {
 			existingShardColID = name.ColumnID
 		}
 	})
-	scpb.ForEachColumn(elts, func(_, targetStatus scpb.Status, col *scpb.Column) {
+	scpb.ForEachColumn(elts, func(_ scpb.Status, _ scpb.TargetStatus, col *scpb.Column) {
 		if col.ColumnID == existingShardColID && !col.IsHidden {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
@@ -277,8 +277,8 @@ func createVirtualColumnForIndex(
 ) string {
 	elts := b.QueryByID(tbl.TableID)
 	colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) (found bool) {
-		scpb.ForEachColumnName(elts, func(_, targetStatus scpb.Status, cn *scpb.ColumnName) {
-			if targetStatus == scpb.Status_PUBLIC && cn.Name == name {
+		scpb.ForEachColumnName(elts, func(_ scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
+			if target == scpb.ToPublic && cn.Name == name {
 				found = true
 			}
 		})
@@ -296,22 +296,22 @@ func createVirtualColumnForIndex(
 	// Infer column type from expression.
 	{
 		colLookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-			scpb.ForEachColumnName(elts, func(_, targetStatus scpb.Status, cn *scpb.ColumnName) {
-				if targetStatus == scpb.Status_PUBLIC && tree.Name(cn.Name) == columnName {
+			scpb.ForEachColumnName(elts, func(_ scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
+				if target == scpb.ToPublic && tree.Name(cn.Name) == columnName {
 					id = cn.ColumnID
 				}
 			})
 			if id == 0 {
 				return false, false, 0, nil
 			}
-			scpb.ForEachColumn(elts, func(_, targetStatus scpb.Status, col *scpb.Column) {
-				if targetStatus == scpb.Status_PUBLIC && col.ColumnID == id {
+			scpb.ForEachColumn(elts, func(_ scpb.Status, target scpb.TargetStatus, col *scpb.Column) {
+				if target == scpb.ToPublic && col.ColumnID == id {
 					exists = true
 					accessible = !col.IsInaccessible
 				}
 			})
-			scpb.ForEachColumnType(elts, func(_, targetStatus scpb.Status, col *scpb.ColumnType) {
-				if targetStatus == scpb.Status_PUBLIC && col.ColumnID == id {
+			scpb.ForEachColumnType(elts, func(_ scpb.Status, target scpb.TargetStatus, col *scpb.ColumnType) {
+				if target == scpb.ToPublic && col.ColumnID == id {
 					typ = col.Type
 				}
 			})

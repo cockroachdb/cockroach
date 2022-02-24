@@ -51,11 +51,14 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		} else {
 			// Handle special case of owned sequences
 			var ownedIDs catalog.DescriptorIDSet
-			scpb.ForEachSequenceOwner(b.QueryByID(tbl.TableID), func(_, targetStatus scpb.Status, so *scpb.SequenceOwner) {
-				if targetStatus == scpb.Status_PUBLIC {
-					ownedIDs.Add(so.SequenceID)
-				}
-			})
+			scpb.ForEachSequenceOwner(
+				b.QueryByID(tbl.TableID),
+				func(_ scpb.Status, target scpb.TargetStatus, so *scpb.SequenceOwner) {
+					if target == scpb.ToPublic {
+						ownedIDs.Add(so.SequenceID)
+					}
+				},
+			)
 			if dropRestrictDescriptor(b, tbl.TableID) {
 				toCheckBackrefs = append(toCheckBackrefs, tbl.TableID)
 				ownedIDs.ForEach(func(ownedSequenceID descpb.ID) {

@@ -24,12 +24,12 @@ func init() {
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeAddedIndexDeleteOnly{
-						Index:          *protoutil.Clone(&this.Index).(*scpb.Index),
-						SecondaryIndex: true,
+						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
+						IsSecondaryIndex: true,
 					}
 				}),
 			),
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeAddedIndexDeleteAndWriteOnly{
@@ -38,7 +38,7 @@ func init() {
 					}
 				}),
 			),
-			to(scpb.Status_BACKFILLED,
+			to(scpb.Status_DEPRECATED_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.BackfillIndex{
 						TableID:       this.TableID,
@@ -76,11 +76,11 @@ func init() {
 					}
 				}),
 			),
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				revertible(false),
 			),
-			equiv(scpb.Status_BACKFILLED),
+			equiv(scpb.Status_DEPRECATED_BACKFILLED),
 			to(scpb.Status_DELETE_ONLY,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeDroppedIndexDeleteOnly{

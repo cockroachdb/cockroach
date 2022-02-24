@@ -64,6 +64,13 @@ object SecondaryIndex
 SecondaryIndex :  Index
 SecondaryIndex :  PartialPredicate
 
+object TemporaryIndex
+
+TemporaryIndex :  Index
+TemporaryIndex :  PartialPredicate
+TemporaryIndex :  IsUsingSecondaryEncoding
+TemporaryIndex :  TargetIndexID
+
 object UniqueWithoutIndexConstraint
 
 UniqueWithoutIndexConstraint :  TableID
@@ -247,6 +254,8 @@ Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
+Table <|-- TemporaryIndex
+View <|-- TemporaryIndex
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- CheckConstraint
 Table <|-- ForeignKeyConstraint

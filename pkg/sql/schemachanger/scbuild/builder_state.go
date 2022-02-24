@@ -55,55 +55,55 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 
 // Ensure implements the scbuildstmt.BuilderState interface.
 func (b *builderState) Ensure(
-	currentStatus, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata,
+	current scpb.Status, target scpb.TargetStatus, e scpb.Element, meta scpb.TargetMetadata,
 ) {
-	if elem == nil {
+	if e == nil {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
-	id := screl.GetDescID(elem)
+	id := screl.GetDescID(e)
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	var found bool
 	for _, i := range c.ers.indexes {
 		es := &b.output[i]
-		if !screl.EqualElements(es.element, elem) {
+		if !screl.EqualElements(es.element, e) {
 			continue
 		}
 		if found {
 			panic(errors.AssertionFailedf("element is not unique: %s", screl.ElementString(es.element)))
 		}
-		if currentStatus != scpb.Status_UNKNOWN {
-			es.currentStatus = currentStatus
+		if current != scpb.Status_UNKNOWN {
+			es.current = current
 		}
-		es.targetStatus = targetStatus
-		es.element = elem
+		es.target = target
+		es.element = e
 		es.metadata = meta
 		found = true
 	}
 	if found {
 		return
 	}
-	if currentStatus == scpb.Status_UNKNOWN {
-		if targetStatus == scpb.Status_ABSENT {
-			panic(errors.AssertionFailedf("element not found: %s", screl.ElementString(elem)))
+	if current == scpb.Status_UNKNOWN {
+		if target == scpb.ToAbsent {
+			panic(errors.AssertionFailedf("element not found: %s", screl.ElementString(e)))
 		}
-		currentStatus = scpb.Status_ABSENT
+		current = scpb.Status_ABSENT
 	}
 	c.ers.indexes = append(c.ers.indexes, len(b.output))
 	b.output = append(b.output, elementState{
-		element:       elem,
-		targetStatus:  targetStatus,
-		currentStatus: currentStatus,
-		metadata:      meta,
+		element:  e,
+		target:   target,
+		current:  current,
+		metadata: meta,
 	})
 }
 
 // ForEachElementStatus implements the scpb.ElementStatusIterator interface.
 func (b *builderState) ForEachElementStatus(
-	fn func(status, targetStatus scpb.Status, elem scpb.Element),
+	fn func(current scpb.Status, target scpb.TargetStatus, e scpb.Element),
 ) {
 	for _, es := range b.output {
-		fn(es.currentStatus, es.targetStatus, es.element)
+		fn(es.current, es.target, es.element)
 	}
 }
 
@@ -165,7 +165,7 @@ func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID)
 		}
 		ret = tbl.GetNextColumnID()
 	}
-	scpb.ForEachColumn(b, func(_, _ scpb.Status, column *scpb.Column) {
+	scpb.ForEachColumn(b, func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
 		if column.TableID == table.TableID && column.ColumnID >= ret {
 			ret = column.ColumnID + 1
 		}
@@ -185,7 +185,7 @@ func (b *builderState) NextColumnFamilyID(table *scpb.Table) (ret catid.FamilyID
 		}
 		ret = tbl.GetNextFamilyID()
 	}
-	scpb.ForEachColumnFamily(b, func(_, _ scpb.Status, cf *scpb.ColumnFamily) {
+	scpb.ForEachColumnFamily(b, func(_ scpb.Status, _ scpb.TargetStatus, cf *scpb.ColumnFamily) {
 		if cf.TableID == table.TableID && cf.FamilyID >= ret {
 			ret = cf.FamilyID + 1
 		}
@@ -217,12 +217,12 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 		}
 		ret = tbl.GetNextIndexID()
 	}
-	scpb.ForEachPrimaryIndex(b, func(_, _ scpb.Status, index *scpb.PrimaryIndex) {
+	scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.PrimaryIndex) {
 		if index.TableID == id && index.IndexID >= ret {
 			ret = index.IndexID + 1
 		}
 	})
-	scpb.ForEachSecondaryIndex(b, func(_, _ scpb.Status, index *scpb.SecondaryIndex) {
+	scpb.ForEachSecondaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
 		if index.TableID == id && index.IndexID >= ret {
 			ret = index.IndexID + 1
 		}
@@ -243,7 +243,7 @@ func (b *builderState) SecondaryIndexPartitioningDescriptor(
 			desc.GetID(), desc.DescriptorType()))
 	}
 	var oldNumImplicitColumns int
-	scpb.ForEachIndexPartitioning(b, func(_, _ scpb.Status, p *scpb.IndexPartitioning) {
+	scpb.ForEachIndexPartitioning(b, func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
 		if p.TableID != index.TableID || p.IndexID != index.IndexID {
 			return
 		}
@@ -251,7 +251,7 @@ func (b *builderState) SecondaryIndexPartitioningDescriptor(
 	})
 	oldKeyColumnNames := make([]string, len(index.KeyColumnIDs))
 	for i, colID := range index.KeyColumnIDs {
-		scpb.ForEachColumnName(b, func(_, _ scpb.Status, cn *scpb.ColumnName) {
+		scpb.ForEachColumnName(b, func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
 			if cn.TableID != index.TableID && cn.ColumnID != colID {
 				return
 			}
@@ -259,8 +259,8 @@ func (b *builderState) SecondaryIndexPartitioningDescriptor(
 		})
 	}
 	var allowedNewColumnNames []tree.Name
-	scpb.ForEachColumnName(b, func(status, targetStatus scpb.Status, cn *scpb.ColumnName) {
-		if cn.TableID != index.TableID && status != scpb.Status_PUBLIC && targetStatus == scpb.Status_PUBLIC {
+	scpb.ForEachColumnName(b, func(current scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
+		if cn.TableID != index.TableID && current != scpb.Status_PUBLIC && target == scpb.ToPublic {
 			allowedNewColumnNames = append(allowedNewColumnNames, tree.Name(cn.Name))
 		}
 	})
@@ -449,7 +449,7 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 		c.backrefs.ForEach(b.ensureDescriptor)
 		for i := range b.output {
 			es := &b.output[i]
-			if es.currentStatus == scpb.Status_PUBLIC || es.targetStatus != scpb.Status_PUBLIC {
+			if es.current == scpb.Status_PUBLIC || es.target != scpb.ToPublic {
 				continue
 			}
 			descID := screl.GetDescID(es.element)
@@ -678,7 +678,7 @@ func (b *builderState) ResolveIndex(
 	}
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
 	var indexID catid.IndexID
-	scpb.ForEachIndexName(c.ers, func(status, targetStatus scpb.Status, e *scpb.IndexName) {
+	scpb.ForEachIndexName(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
 		if e.TableID == relationID && tree.Name(e.Name) == indexName {
 			indexID = e.IndexID
 		}
@@ -693,7 +693,7 @@ func (b *builderState) ResolveIndex(
 		panic(pgerror.Newf(pgcode.UndefinedObject,
 			"index %q not found in relation %q", indexName, rel.GetName()))
 	}
-	return c.ers.Filter(func(_, _ scpb.Status, element scpb.Element) bool {
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, element scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.IndexID, element)
 		return idI != nil && idI.(catid.IndexID) == indexID
 	})
@@ -708,7 +708,7 @@ func (b *builderState) ResolveColumn(
 	rel := c.desc.(catalog.TableDescriptor)
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
 	var columnID catid.ColumnID
-	scpb.ForEachColumnName(c.ers, func(status, targetStatus scpb.Status, e *scpb.ColumnName) {
+	scpb.ForEachColumnName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
 		if e.TableID == relationID && tree.Name(e.Name) == columnName {
 			columnID = e.ColumnID
 		}
@@ -720,8 +720,8 @@ func (b *builderState) ResolveColumn(
 		panic(pgerror.Newf(pgcode.UndefinedColumn,
 			"column %q not found in relation %q", columnName, rel.GetName()))
 	}
-	return c.ers.Filter(func(_, _ scpb.Status, element scpb.Element) bool {
-		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, element)
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
 		return idI != nil && idI.(catid.ColumnID) == columnID
 	})
 }
@@ -752,10 +752,9 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	visitorFn := func(status scpb.Status, e scpb.Element) {
 		c.ers.indexes = append(c.ers.indexes, len(b.output))
 		b.output = append(b.output, elementState{
-			element:       e,
-			targetStatus:  status,
-			currentStatus: status,
-			metadata:      scpb.TargetMetadata{},
+			element: e,
+			target:  scpb.AsTargetStatus(status),
+			current: status,
 		})
 	}
 	c.backrefs = scdecomp.WalkDescriptor(c.desc, crossRefLookupFn, visitorFn)
@@ -820,14 +819,14 @@ var _ scbuildstmt.ElementResultSet = &elementResultSet{}
 
 // ForEachElementStatus implements the scpb.ElementStatusIterator interface.
 func (ers *elementResultSet) ForEachElementStatus(
-	fn func(status, targetStatus scpb.Status, element scpb.Element),
+	fn func(current scpb.Status, target scpb.TargetStatus, element scpb.Element),
 ) {
 	if ers.IsEmpty() {
 		return
 	}
 	for _, i := range ers.indexes {
 		es := &ers.b.output[i]
-		fn(es.currentStatus, es.targetStatus, es.element)
+		fn(es.current, es.target, es.element)
 	}
 }
 
@@ -838,13 +837,13 @@ func (ers *elementResultSet) IsEmpty() bool {
 
 // Filter implements the scbuildstmt.ElementResultSet interface.
 func (ers *elementResultSet) Filter(
-	predicate func(status, targetStatus scpb.Status, element scpb.Element) bool,
+	predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool,
 ) scbuildstmt.ElementResultSet {
 	return ers.filter(predicate)
 }
 
 func (ers *elementResultSet) filter(
-	predicate func(status, targetStatus scpb.Status, element scpb.Element) bool,
+	predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool,
 ) *elementResultSet {
 	if ers.IsEmpty() {
 		return nil
@@ -852,7 +851,7 @@ func (ers *elementResultSet) filter(
 	ret := elementResultSet{b: ers.b}
 	for _, i := range ers.indexes {
 		es := &ers.b.output[i]
-		if predicate(es.currentStatus, es.targetStatus, es.element) {
+		if predicate(es.current, es.target, es.element) {
 			ret.indexes = append(ret.indexes, i)
 		}
 	}
