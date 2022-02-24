@@ -539,10 +539,10 @@ func (b *builderState) ResolveEnumType(
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"%q is an implicit array type and cannot be modified", typ.GetName()))
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		typeName := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), typ.GetName())
 		// Multi-region enums are not directly modifiable.
-		panic(errors.WithHintf(
-			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"%q is a multi-region enum and cannot be modified directly", typ.GetName()),
+		panic(errors.WithHintf(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"%q is a multi-region enum and cannot be modified directly", typeName.FQString()),
 			"try ALTER DATABASE %s DROP REGION %s", prefix.Database.GetName(), typ.GetName()))
 	case descpb.TypeDescriptor_ENUM:
 		b.ensureDescriptor(typ.GetID())
@@ -571,7 +571,7 @@ func (b *builderState) ResolveRelation(
 func (b *builderState) resolveRelation(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) *cachedDesc {
-	_, rel := b.cr.MayResolveTable(b.ctx, *name)
+	prefix, rel := b.cr.MayResolveTable(b.ctx, *name)
 	if rel == nil {
 		if p.IsExistenceOptional {
 			return nil
@@ -579,6 +579,10 @@ func (b *builderState) resolveRelation(
 		panic(sqlerrors.NewUndefinedRelationError(name))
 	}
 	if rel.IsVirtualTable() {
+		if prefix.Schema.GetName() == catconstants.PgCatalogName {
+			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+				"%s is a system catalog", tree.ErrNameString(rel.GetName())))
+		}
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
 	}

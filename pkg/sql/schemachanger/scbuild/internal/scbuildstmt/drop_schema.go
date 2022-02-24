@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
@@ -49,6 +50,8 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 			toCheckBackrefs = append(toCheckBackrefs, sc.SchemaID)
 		}
 		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("schema")
+		b.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaDrop)
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, schemaID := range toCheckBackrefs {

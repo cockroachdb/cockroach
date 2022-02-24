@@ -79,6 +79,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 		execCtx.SessionData(),
+		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 
 	return scrun.RunSchemaChangesInJob(

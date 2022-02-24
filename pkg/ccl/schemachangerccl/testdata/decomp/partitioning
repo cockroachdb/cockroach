@@ -1,0 +1,355 @@
+setup
+SET experimental_enable_implicit_column_partitioning = true;
+CREATE TABLE table_implicit (
+  pk INT PRIMARY KEY,
+  a INT,
+  j JSON,
+  INVERTED INDEX (j) PARTITION BY LIST(a) (
+    PARTITION j_implicit VALUES IN (5)
+  ),
+  FAMILY (pk, a, j)
+) PARTITION BY LIST(a) (
+  PARTITION pk_implicit VALUES IN (1)
+);
+CREATE TABLE table_partitioned_index (
+    a INT PRIMARY KEY,
+    b INT,
+    UNIQUE (b) PARTITION BY LIST (b) (
+        PARTITION p1 VALUES IN (1)
+    ),
+    FAMILY "primary" (a, b)
+);
+----
+
+decompose
+table_implicit
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 104
+  Status: PUBLIC
+- ColumnFamily:
+    name: fam_0_pk_a_j
+    tableId: 104
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 104
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    tableId: 104
+  Status: PUBLIC
+- Column:
+    columnId: 3
+    tableId: 104
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 2
+      - 1
+      storingColumnIds:
+      - 3
+      tableId: 104
+  Status: PUBLIC
+- SecondaryIndex:
+    embeddedIndex:
+      indexId: 2
+      isInverted: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 2
+      - 3
+      keySuffixColumnIds:
+      - 1
+      tableId: 104
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 104
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: pk
+    tableId: 104
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: a
+    tableId: 104
+  Status: PUBLIC
+- ColumnName:
+    columnId: 3
+    name: j
+    tableId: 104
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 104
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 104
+  Status: PUBLIC
+- ColumnType:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: JsonFamily
+        oid: 3802
+    isNullable: true
+    tableId: 104
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 104
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 104
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 3
+    comment: __placeholder_comment__
+    tableId: 104
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_implicit_pkey
+    tableId: 104
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: table_implicit_j_idx
+    tableId: 104
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 1
+    partitioning:
+      list:
+      - name: pk_implicit
+        subpartitioning: {}
+        values:
+        - AwI=
+      numColumns: 1
+      numImplicitColumns: 1
+    tableId: 104
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 2
+    partitioning:
+      list:
+      - name: j_implicit
+        subpartitioning: {}
+        values:
+        - Awo=
+      numColumns: 1
+      numImplicitColumns: 1
+    tableId: 104
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 104
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 2
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: table_implicit
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+table_partitioned_index
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 105
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    tableId: 105
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 105
+  Status: PUBLIC
+- SecondaryIndex:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keySuffixColumnIds:
+      - 1
+      tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: a
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: b
+    tableId: 105
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 105
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_partitioned_index_pkey
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: table_partitioned_index_b_key
+    tableId: 105
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 2
+    partitioning:
+      list:
+      - name: p1
+        subpartitioning: {}
+        values:
+        - AwI=
+      numColumns: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 2
+    tableId: 105
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 105
+    name: table_partitioned_index
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 105
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 105
+    parentSchemaId: 101
+  Status: PUBLIC

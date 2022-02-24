@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",

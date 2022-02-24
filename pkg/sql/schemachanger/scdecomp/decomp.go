@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -157,8 +156,9 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 		})
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		w.ev(descriptorStatus(typ), &scpb.EnumType{
-			TypeID:      typ.GetID(),
-			ArrayTypeID: typ.GetArrayTypeID(),
+			TypeID:        typ.GetID(),
+			ArrayTypeID:   typ.GetArrayTypeID(),
+			IsMultiRegion: typ.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM,
 		})
 	default:
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
@@ -202,20 +202,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		ParentSchemaID: tbl.GetParentSchemaID(),
 	})
 	if l := tbl.GetLocalityConfig(); l != nil {
-		parent := w.lookupFn(tbl.GetParentID())
-		db, err := catalog.AsDatabaseDescriptor(parent)
-		if err != nil {
-			panic(err)
-		}
-		id, err := db.MultiRegionEnumID()
-		if err != nil {
-			panic(err)
-		}
-		w.ev(scpb.Status_PUBLIC, &scpb.TableLocality{
-			TableID:          tbl.GetID(),
-			LocalityConfig:   *protoutil.Clone(l).(*catpb.LocalityConfig),
-			RegionEnumTypeID: id,
-		})
+		w.walkLocality(tbl, l)
 	}
 	{
 		// TODO(postamar): proper handling of comment
@@ -269,6 +256,43 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.backRefs.Add(fk.OriginTableID)
 		return nil
 	})
+}
+
+func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {
+	if g := l.GetGlobal(); g != nil {
+		w.ev(scpb.Status_PUBLIC, &scpb.TableLocalityGlobal{
+			TableID: tbl.GetID(),
+		})
+		return
+	} else if rbr := l.GetRegionalByRow(); rbr != nil {
+		var as string
+		if rbr.As != nil {
+			as = *rbr.As
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.TableLocalityRegionalByRow{
+			TableID: tbl.GetID(),
+			As:      as,
+		})
+	} else if rbt := l.GetRegionalByTable(); rbt != nil {
+		if rgn := rbt.Region; rgn != nil {
+			parent := w.lookupFn(tbl.GetParentID())
+			db, err := catalog.AsDatabaseDescriptor(parent)
+			if err != nil {
+				panic(err)
+			}
+			id, err := db.MultiRegionEnumID()
+			if err != nil {
+				panic(err)
+			}
+			w.ev(scpb.Status_PUBLIC, &scpb.TableLocalitySecondaryRegion{
+				TableID:          tbl.GetID(),
+				RegionName:       *rgn,
+				RegionEnumTypeID: id,
+			})
+		} else {
+			w.ev(scpb.Status_PUBLIC, &scpb.TableLocalityPrimaryRegion{TableID: tbl.GetID()})
+		}
+	}
 }
 
 func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {

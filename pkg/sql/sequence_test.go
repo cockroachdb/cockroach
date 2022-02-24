@@ -368,7 +368,13 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 			s, sqlConn, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(sqlConn)
-			sqlDB.Exec(t, `CREATE DATABASE t;
+			// While these scenarios are interesting, for declarative schema changer
+			// from a correctness view point it's okay for them to fail. It's better to
+			// have these explicitly fail and require descriptor surgery or the legacy
+			// schema changer, rather than not being able to trust descriptor content.
+			sqlDB.Exec(t, `
+SET use_declarative_schema_changer = 'off';
+CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
 CREATE SEQUENCE t.seq OWNED BY t.test.a;
 CREATE SEQUENCE t.useq OWNED BY t.test.a;

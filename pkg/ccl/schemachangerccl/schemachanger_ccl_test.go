@@ -45,17 +45,21 @@ func sharedTestdata(t *testing.T) string {
 	return testdataDir
 }
 
+func endToEndPath(t *testing.T) string {
+	return testutils.TestDataPath(t, "end_to_end")
+}
+
 func TestSchemaChangerSideEffects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, testutils.TestDataPath(t), newCluster)
+	sctest.EndToEndSideEffects(t, endToEndPath(t), newCluster)
 }
 
 func TestBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	t.Run("ccl", func(t *testing.T) {
-		sctest.Backup(t, testutils.TestDataPath(t), newCluster)
+		sctest.Backup(t, endToEndPath(t), newCluster)
 	})
 	t.Run("non-ccl", func(t *testing.T) {
 		sctest.Backup(t, sharedTestdata(t), sctest.SingleNodeCluster)
@@ -66,12 +70,19 @@ func TestRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.Rollback(t, testutils.TestDataPath(t), newCluster)
+	sctest.Rollback(t, endToEndPath(t), newCluster)
 }
 
 func TestPause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.Pause(t, testutils.TestDataPath(t), newCluster)
+	sctest.Pause(t, endToEndPath(t), newCluster)
+}
+
+func TestDecomposeToElements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sctest.DecomposeToElements(t, testutils.TestDataPath(t, "decomp"), newCluster)
 }

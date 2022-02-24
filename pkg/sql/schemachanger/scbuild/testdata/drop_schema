@@ -496,66 +496,66 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     indexId: 1
     name: t1_pkey
     tableId: 107
-- [[Namespace:{DescID: 104, ReferencedDescID: 100, Name: sc1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 104
     name: sc1
-- [[Namespace:{DescID: 106, ReferencedDescID: 100, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 106, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 106
     name: sq1
     schemaId: 104
-- [[Namespace:{DescID: 107, ReferencedDescID: 100, Name: t1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 107, Name: t1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 107
     name: t1
     schemaId: 104
-- [[Namespace:{DescID: 108, ReferencedDescID: 100, Name: v1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 108, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 108
     name: v1
     schemaId: 104
-- [[Namespace:{DescID: 109, ReferencedDescID: 100, Name: v2}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 109, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 109
     name: v2
     schemaId: 104
-- [[Namespace:{DescID: 110, ReferencedDescID: 100, Name: v3}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 110, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 110
     name: v3
     schemaId: 104
-- [[Namespace:{DescID: 111, ReferencedDescID: 100, Name: v4}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 111
     name: v4
     schemaId: 104
-- [[Namespace:{DescID: 112, ReferencedDescID: 100, Name: typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 112, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 112
     name: typ
     schemaId: 104
-- [[Namespace:{DescID: 113, ReferencedDescID: 100, Name: _typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 113, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 113
     name: _typ
     schemaId: 104
-- [[Namespace:{DescID: 114, ReferencedDescID: 100, Name: v5}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 114, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 114
     name: v5
     schemaId: 104
-- [[Namespace:{DescID: 115, ReferencedDescID: 100, Name: v6}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 115, Name: v6, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 115

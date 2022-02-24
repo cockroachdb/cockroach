@@ -39,7 +39,7 @@ func TestGetAttribute(t *testing.T) {
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
 	so := &scpb.SequenceOwner{TableID: 1, ColumnID: 2, SequenceID: 3}
-	expectedStr = `SequenceOwner:{DescID: 1, ReferencedDescID: 3, ColumnID: 2}`
+	expectedStr = `SequenceOwner:{DescID: 1, ColumnID: 2, ReferencedDescID: 3}`
 	require.Equal(t, expectedStr, ElementString(so), "Attribute string conversion is broken.")
 	require.False(t, EqualElements(so, cn))
 	require.False(t, EqualElements(so, cnDiff))

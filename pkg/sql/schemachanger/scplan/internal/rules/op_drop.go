@@ -238,7 +238,6 @@ func init() {
 				(*scpb.EnumType)(nil),
 			),
 			dep.Type(
-				(*scpb.TableLocality)(nil),
 				(*scpb.ColumnFamily)(nil),
 				(*scpb.Owner)(nil),
 				(*scpb.UserPrivileges)(nil),

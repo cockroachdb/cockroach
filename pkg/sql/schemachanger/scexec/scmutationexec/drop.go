@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,6 +69,10 @@ func (m *visitor) MarkDescriptorAsDropped(
 		return err
 	}
 	desc.SetDropped()
+	// After marking a table as dropped we will populate the drop time.
+	if tableDesc, ok := desc.(*tabledesc.Mutable); ok && tableDesc.IsTable() {
+		tableDesc.DropTime = timeutil.Now().UnixNano()
+	}
 	return nil
 }
 

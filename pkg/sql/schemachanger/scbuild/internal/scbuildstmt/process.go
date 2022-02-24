@@ -41,7 +41,7 @@ func (s supportedStatement) IsFullySupported(mode sessiondatapb.NewSchemaChanger
 
 // Tracks operations which are fully supported when the declarative schema
 // changer is enabled. Operations marked as non-fully supported can only be
-// with the experimental_use_new_schema_changer session variable.
+// with the use_declarative_schema_changer session variable.
 var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported

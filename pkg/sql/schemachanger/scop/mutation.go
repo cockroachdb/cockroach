@@ -315,12 +315,13 @@ type UpdateTableBackReferencesInTypes struct {
 	BackReferencedTableID descpb.ID
 }
 
-// RemoveViewBackReferencesInTypes removes back references to a view in
-// the specified types. It is a special case of UpdateBackReferencesInTypes
-// for views, which hold type references themselves.
-type RemoveViewBackReferencesInTypes struct {
+// RemoveBackReferenceInTypes removes back references to a descriptor in the
+// specified types. It is a special case of the previous op for use with views
+// and multi-region elements, where a forward reference to the type is being
+// removed and is known to be unique to the descriptor.
+type RemoveBackReferenceInTypes struct {
 	mutationOp
-	BackReferencedViewID descpb.ID
+	BackReferencedDescID descpb.ID
 	TypeIDs              []descpb.ID
 }
 

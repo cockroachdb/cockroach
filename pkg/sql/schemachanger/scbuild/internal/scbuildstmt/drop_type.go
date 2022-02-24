@@ -56,12 +56,10 @@ func DropType(b BuildCtx, n *tree.DropType) {
 			}
 		}
 		b.IncrementSubWorkID()
+		b.IncrementEnumCounter(sqltelemetry.EnumDrop)
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, typeID := range toCheckBackrefs {
-		if _, _, enum := scpb.FindEnumType(b.QueryByID(typeID)); enum != nil && !enum.IsMultiRegion {
-			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
-		}
 		dependentNames := dependentTypeNames(b, typeID)
 		if arrayTypeID, found := arrayTypesToAlsoCheck[typeID]; len(dependentNames) == 0 && found {
 			dependentNames = dependentTypeNames(b, arrayTypeID)
@@ -69,7 +67,7 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		if len(dependentNames) > 0 {
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"cannot drop type %q because other objects (%v) still depend on it.",
+				"cannot drop type %q because other objects (%v) still depend on it",
 				simpleName(b, typeID), dependentNames,
 			))
 		}

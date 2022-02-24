@@ -225,10 +225,10 @@ func (m *visitor) UpdateTableBackReferencesInTypes(
 	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTableID, forwardRefs)
 }
 
-func (m *visitor) RemoveViewBackReferencesInTypes(
-	ctx context.Context, op scop.RemoveViewBackReferencesInTypes,
+func (m *visitor) RemoveBackReferenceInTypes(
+	ctx context.Context, op scop.RemoveBackReferenceInTypes,
 ) error {
-	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedViewID, catalog.DescriptorIDSet{})
+	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedDescID, catalog.DescriptorIDSet{})
 }
 
 func updateBackReferencesInTypes(

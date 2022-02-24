@@ -148,7 +148,15 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.SessionData(), p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
+		p.SessionData(),
+		p.User(),
+		p.ExecCfg(),
+		p.Txn(),
+		p.Descriptors(),
+		p.EvalContext(),
+		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		scs.jobID,
+		scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
 		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
@@ -168,6 +176,7 @@ func newSchemaChangerTxnRunDependencies(
 	txn *kv.Txn,
 	descriptors *descs.Collection,
 	evalContext *tree.EvalContext,
+	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	stmts []string,
 ) scexec.Dependencies {
@@ -188,6 +197,7 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
+		kvTrace,
 		schemaChangerJobID,
 		stmts,
 	)

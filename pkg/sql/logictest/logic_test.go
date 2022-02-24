@@ -11,6 +11,7 @@
 package logictest
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -29,6 +30,7 @@ import (
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t, "times out and/or hangs")
+	runtime.GOMAXPROCS(16)
 	RunLogicTest(t, TestServerArgs{}, testutils.TestDataPath(t, "logic_test", "[^.]*"))
 }
 

@@ -337,6 +337,8 @@ func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB.Exec(t, `
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT);
 `)

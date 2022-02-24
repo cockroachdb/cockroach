@@ -25,13 +25,13 @@ DROP TYPE defaultdb.typ
   details:
     arrayTypeId: 105
     typeId: 104
-- [[Namespace:{DescID: 104, ReferencedDescID: 100, Name: typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 104
     name: typ
     schemaId: 101
-- [[Namespace:{DescID: 105, ReferencedDescID: 100, Name: _typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 105

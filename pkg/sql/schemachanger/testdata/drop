@@ -11,6 +11,8 @@ test
 DROP SCHEMA db.sc;
 ----
 checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
@@ -179,6 +181,7 @@ test
 DROP TABLE db.sc.t;
 ----
 checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
@@ -500,6 +503,7 @@ upsert descriptor #108
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -828,8 +832,8 @@ upsert descriptor #108
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 107
@@ -842,6 +846,8 @@ test
 DROP SCHEMA db.sc CASCADE;
 ----
 checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 3 MutationType ops
@@ -866,8 +872,8 @@ upsert descriptor #104
          id: 105
   -    sc:
   -      id: 107
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #107
    schema:
   +  declarativeSchemaChangerState:
@@ -1198,8 +1204,8 @@ upsert descriptor #104
   ...
        public:
          id: 105
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
 delete descriptor #107
 delete descriptor #109
 delete descriptor #110
@@ -1210,6 +1216,7 @@ test
 DROP DATABASE db CASCADE;
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
@@ -1323,9 +1330,9 @@ upsert descriptor #104
   ...
        public:
          id: 105
-  -  version: "5"
+  -  version: "7"
   +  state: DROP
-  +  version: "6"
+  +  version: "8"
 upsert descriptor #105
    schema:
   +  declarativeSchemaChangerState:
@@ -1437,115 +1444,13 @@ commit transaction #1
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
-create job #2: "GC for dropping descriptors and parent database 104"
-  descriptor IDs: []
+## PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹db› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-upsert descriptor #104
-   database:
-  -  declarativeSchemaChangerState:
-  -    authorization: {}
-  -    currentStatuses:
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - DROPPED
-  -    - ABSENT
-  -    - ABSENT
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: DROP DATABASE ‹db› CASCADE
-  -        statement: DROP DATABASE db CASCADE
-  -        statementTag: DROP DATABASE
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    - 7
-  -    targets:
-  -    - elementProto:
-  -        namespace:
-  -          descriptorId: 104
-  -          name: db
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        owner:
-  -          descriptorId: 104
-  -          owner: root
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 104
-  -          privileges: 2
-  -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 104
-  -          privileges: 2048
-  -          userName: public
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 104
-  -          privileges: 2
-  -          userName: root
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        database:
-  -          databaseId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseRoleSetting:
-  -          databaseId: 104
-  -          roleName: __placeholder_role_name__
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseComment:
-  -          comment: __placeholder_comment__
-  -          databaseId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-     id: 104
-     modificationTime: {}
-  ...
-         id: 105
-     state: DROP
-  -  version: "6"
-  +  version: "7"
+delete descriptor #104
 delete descriptor #105
+deleting zone config for #104
 commit transaction #3
 # end PostCommitPhase
 
@@ -1585,6 +1490,7 @@ test
 DROP DATABASE db1 CASCADE
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 15 MutationType ops
@@ -2480,6 +2386,11 @@ upsert descriptor #116
   +      targetStatus: ABSENT
      dependedOnBy:
      - columnIds:
+       - 2
+       id: 119
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -2797,6 +2708,7 @@ upsert descriptor #117
   +        sourceElementId: 3
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -3086,6 +2998,7 @@ upsert descriptor #118
   +        sourceElementId: 3
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -4360,115 +4273,13 @@ commit transaction #1
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 65 MutationType ops
-create job #2: "GC for dropping descriptors 114 115 119 120 121 122 125 117 118 116 and parent database 111"
+## PostCommitNonRevertiblePhase stage 1 of 1 with 66 MutationType ops
+create job #2: "GC for dropping descriptors 111 114 115 116 117 118 119 120 121 122 125"
   descriptor IDs: [114 115 119 120 121 122 125 117 118 116]
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
 delete scheduleId: <redacted>
-upsert descriptor #111
-   database:
-  -  declarativeSchemaChangerState:
-  -    authorization: {}
-  -    currentStatuses:
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - DROPPED
-  -    - ABSENT
-  -    - ABSENT
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
-  -        statement: DROP DATABASE db1 CASCADE
-  -        statementTag: DROP DATABASE
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    - 7
-  -    targets:
-  -    - elementProto:
-  -        namespace:
-  -          descriptorId: 111
-  -          name: db1
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        owner:
-  -          descriptorId: 111
-  -          owner: root
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 111
-  -          privileges: 2
-  -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 111
-  -          privileges: 2048
-  -          userName: public
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 111
-  -          privileges: 2
-  -          userName: root
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        database:
-  -          databaseId: 111
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseRoleSetting:
-  -          databaseId: 111
-  -          roleName: __placeholder_role_name__
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseComment:
-  -          comment: __placeholder_comment__
-  -          databaseId: 111
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-     id: 111
-     modificationTime: {}
-  ...
-         id: 113
-     state: DROP
-  -  version: "3"
-  +  version: "4"
 upsert descriptor #114
   ...
      createAsOfTime:
@@ -5306,8 +5117,8 @@ upsert descriptor #117
   -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 112
@@ -5593,8 +5404,8 @@ upsert descriptor #118
   -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 112
@@ -6642,6 +6453,7 @@ upsert descriptor #125
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
+delete descriptor #111
 delete descriptor #112
 delete descriptor #113
 delete descriptor #123
