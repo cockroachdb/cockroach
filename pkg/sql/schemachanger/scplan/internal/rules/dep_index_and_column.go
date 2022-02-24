@@ -453,5 +453,37 @@ func init() {
 		),
 		screl.DescID,
 	).withFilter("column-featured-in-index", columnInIndex).register()
+}
 
+// This rule ensures that columns depend on each other in increasing order.
+func init() {
+	laterCol, laterColTarget, laterColNode := targetNodeVars("laterColumn")
+	earlierCol, earlierColTarget, earlierColNode := targetNodeVars("earlierColumn")
+	var tableID, status, targetStatus rel.Var = "table-id", "status", "target-status"
+	isLaterColumn := func(from *scpb.Column, to *scpb.Column) bool {
+		return from.ColumnID < to.ColumnID
+	}
+
+	registerDepRule(
+		"ensure columns are in increasing order",
+		scgraph.SameStagePrecedence,
+		laterColNode, earlierColNode,
+		screl.MustQuery(
+			status.In(scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_PUBLIC),
+			targetStatus.Eq(scpb.Status_PUBLIC),
+
+			laterCol.Type((*scpb.Column)(nil)),
+			earlierCol.Type((*scpb.Column)(nil)),
+
+			tableID.Entities(screl.DescID, laterCol, earlierCol),
+
+			rel.Filter("column-later-column-is-greater", laterCol, earlierCol)(isLaterColumn),
+
+			targetStatus.Entities(screl.TargetStatus, laterColTarget, earlierColTarget),
+			status.Entities(screl.CurrentStatus, laterColNode, earlierColNode),
+
+			screl.JoinTargetNode(laterCol, laterColTarget, laterColNode),
+			screl.JoinTargetNode(earlierCol, earlierColTarget, earlierColNode),
+		),
+	)
 }
