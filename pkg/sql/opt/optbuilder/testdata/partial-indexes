@@ -1755,7 +1755,7 @@ error (0A000): unimplemented: there are multiple unique or exclusion constraints
 build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT ON CONSTRAINT u1 DO UPDATE SET b = 10
 ----
-error (42809): unique constraint "u1" for table "comp" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
+error (42809): unique constraint "u1" for table "comp" is partial, so it cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE d = 'foo' DO UPDATE SET b = 10

@@ -914,7 +914,6 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq_enum(r, s, i, j)
 │ auto commit
-│ arbiter indexes: uniq_enum_pkey, uniq_enum_r_s_j_key
 │ arbiter constraints: unique_i, unique_s_j
 │
 └── • render
@@ -929,42 +928,28 @@ vectorized: true
     └── • lookup join (anti)
         │ columns: (column1, column2, column3, column4)
         │ estimated row count: 0 (missing stats)
-        │ table: uniq_enum@uniq_enum_r_s_j_key
+        │ table: uniq_enum@uniq_enum_pkey
         │ equality cols are key
-        │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+        │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
             │ estimated row count: 0 (missing stats)
-            │ table: uniq_enum@uniq_enum_pkey
+            │ table: uniq_enum@uniq_enum_r_s_j_key
             │ equality cols are key
-            │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+            │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
             │
-            └── • lookup join (anti)
-                │ columns: (column1, column2, column3, column4)
-                │ estimated row count: 0 (missing stats)
-                │ table: uniq_enum@uniq_enum_pkey
-                │ equality: (column1, column3) = (r,i)
-                │ equality cols are key
-                │
-                └── • lookup join (anti)
-                    │ columns: (column1, column2, column3, column4)
-                    │ estimated row count: 0 (missing stats)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (column1, column2, column4) = (r,s,j)
-                    │ equality cols are key
-                    │
-                    └── • values
-                          columns: (column1, column2, column3, column4)
-                          size: 4 columns, 2 rows
-                          row 0, expr 0: 'us-west'
-                          row 0, expr 1: 'foo'
-                          row 0, expr 2: 1
-                          row 0, expr 3: 1
-                          row 1, expr 0: 'us-east'
-                          row 1, expr 1: 'bar'
-                          row 1, expr 2: 2
-                          row 1, expr 3: 2
+            └── • values
+                  columns: (column1, column2, column3, column4)
+                  size: 4 columns, 2 rows
+                  row 0, expr 0: 'us-west'
+                  row 0, expr 1: 'foo'
+                  row 0, expr 2: 1
+                  row 0, expr 3: 1
+                  row 1, expr 0: 'us-east'
+                  row 1, expr 1: 'bar'
+                  row 1, expr 2: 2
+                  row 1, expr 3: 2
 
 # None of the inserted values have nulls.
 query T

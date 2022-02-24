@@ -3623,3 +3623,521 @@ ON CONFLICT ON CONSTRAINT no_such_constraint DO
 UPDATE SET x=5
 ----
 error (42704): constraint "no_such_constraint" for table "xyz" does not exist
+
+exec-ddl
+CREATE TABLE min_arbiters (
+  a INT,
+  b INT,
+  c INT,
+  UNIQUE WITHOUT INDEX (b),
+  UNIQUE WITHOUT INDEX (c) WHERE a > 0
+)
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (a, b)
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      └── upsert-distinct-on
+           ├── project
+           │    ├── upsert-distinct-on
+           │    │    ├── upsert-distinct-on
+           │    │    │    ├── anti-join (hash)
+           │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    └── (1,)
+           │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │         ├── NULL::INT8
+           │    │    │    │    │    │    │         └── unique_rowid()
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── rowid_default = rowid
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── b_default = b
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── a > 0
+           │    │    │    │    └── filters
+           │    │    │    │         ├── b_default = c
+           │    │    │    │         └── column1 > 0
+           │    │    │    └── aggregations
+           │    │    │         ├── first-agg
+           │    │    │         │    └── column1
+           │    │    │         └── first-agg
+           │    │    │              └── b_default
+           │    │    └── aggregations
+           │    │         ├── first-agg
+           │    │         │    └── column1
+           │    │         └── first-agg
+           │    │              └── rowid_default
+           │    └── projections
+           │         └── (column1 > 0) OR NULL::BOOL
+           └── aggregations
+                ├── first-agg
+                │    └── column1
+                └── first-agg
+                     └── rowid_default
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (a, b, c)
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      └── upsert-distinct-on
+           ├── project
+           │    ├── upsert-distinct-on
+           │    │    ├── upsert-distinct-on
+           │    │    │    ├── anti-join (hash)
+           │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    └── (1,)
+           │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │         ├── NULL::INT8
+           │    │    │    │    │    │    │         └── unique_rowid()
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── rowid_default = rowid
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── b_default = b
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── a > 0
+           │    │    │    │    └── filters
+           │    │    │    │         ├── b_default = c
+           │    │    │    │         └── column1 > 0
+           │    │    │    └── aggregations
+           │    │    │         ├── first-agg
+           │    │    │         │    └── column1
+           │    │    │         └── first-agg
+           │    │    │              └── b_default
+           │    │    └── aggregations
+           │    │         ├── first-agg
+           │    │         │    └── column1
+           │    │         └── first-agg
+           │    │              └── rowid_default
+           │    └── projections
+           │         └── (column1 > 0) OR NULL::BOOL
+           └── aggregations
+                ├── first-agg
+                │    └── column1
+                └── first-agg
+                     └── rowid_default
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (b, c) WHERE a > 0
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── upsert-distinct-on
+      │         │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    │    ├── project
+      │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── b_default = b
+      │         │    │    │    │    ├── select
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── a > 0
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         ├── b_default = c
+      │         │    │    │    │         └── column1 > 0
+      │         │    │    │    └── aggregations
+      │         │    │    │         ├── first-agg
+      │         │    │    │         │    └── column1
+      │         │    │    │         └── first-agg
+      │         │    │    │              └── b_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── column1 > 0
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (b, c) WHERE a > 0
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── upsert-distinct-on
+      │         │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    │    ├── project
+      │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── b_default = b
+      │         │    │    │    │    ├── select
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── a > 0
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         ├── b_default = c
+      │         │    │    │    │         └── column1 > 0
+      │         │    │    │    └── aggregations
+      │         │    │    │         ├── first-agg
+      │         │    │    │         │    └── column1
+      │         │    │    │         └── first-agg
+      │         │    │    │              └── b_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── column1 > 0
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX not_redundant ON min_arbiters (b, c) WHERE a > 10
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey not_redundant
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── project
+      │         │    │    │    └── upsert-distinct-on
+      │         │    │    │         ├── project
+      │         │    │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    │    ├── project
+      │         │    │    │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │         │    │    │    │    │    ├── select
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── a > 10
+      │         │    │    │         │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │         ├── b_default = b
+      │         │    │    │         │    │    │    │    │         ├── b_default = c
+      │         │    │    │         │    │    │    │    │         └── column1 > 10
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── b_default = b
+      │         │    │    │         │    │    │    ├── select
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── a > 0
+      │         │    │    │         │    │    │    └── filters
+      │         │    │    │         │    │    │         ├── b_default = c
+      │         │    │    │         │    │    │         └── column1 > 0
+      │         │    │    │         │    │    └── aggregations
+      │         │    │    │         │    │         ├── first-agg
+      │         │    │    │         │    │         │    └── column1
+      │         │    │    │         │    │         └── first-agg
+      │         │    │    │         │    │              └── b_default
+      │         │    │    │         │    └── projections
+      │         │    │    │         │         └── (column1 > 10) OR NULL::BOOL
+      │         │    │    │         └── aggregations
+      │         │    │    │              ├── first-agg
+      │         │    │    │              │    └── column1
+      │         │    │    │              └── first-agg
+      │         │    │    │                   └── rowid_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── column1 > 10
+
+exec-ddl
+DROP INDEX not_redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX not_redundant ON min_arbiters (a, b) WHERE c > 0
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey not_redundant
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── project
+      │         │    │    │    └── upsert-distinct-on
+      │         │    │    │         ├── project
+      │         │    │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    │    ├── project
+      │         │    │    │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │         │    │    │    │    │    ├── select
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── c > 0
+      │         │    │    │         │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │         ├── column1 = a
+      │         │    │    │         │    │    │    │    │         ├── b_default = b
+      │         │    │    │         │    │    │    │    │         └── b_default > 0
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── b_default = b
+      │         │    │    │         │    │    │    ├── select
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── a > 0
+      │         │    │    │         │    │    │    └── filters
+      │         │    │    │         │    │    │         ├── b_default = c
+      │         │    │    │         │    │    │         └── column1 > 0
+      │         │    │    │         │    │    └── aggregations
+      │         │    │    │         │    │         ├── first-agg
+      │         │    │    │         │    │         │    └── column1
+      │         │    │    │         │    │         └── first-agg
+      │         │    │    │         │    │              └── b_default
+      │         │    │    │         │    └── projections
+      │         │    │    │         │         └── (b_default > 0) OR NULL::BOOL
+      │         │    │    │         └── aggregations
+      │         │    │    │              └── first-agg
+      │         │    │    │                   └── rowid_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── b_default > 0
+
+exec-ddl
+DROP INDEX not_redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX not_redundant ON min_arbiters (a, c)
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey not_redundant
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      └── upsert-distinct-on
+           ├── project
+           │    ├── upsert-distinct-on
+           │    │    ├── upsert-distinct-on
+           │    │    │    ├── upsert-distinct-on
+           │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    │    │    └── (1,)
+           │    │    │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │    │    │         ├── NULL::INT8
+           │    │    │    │    │    │    │    │    │         └── unique_rowid()
+           │    │    │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │    │    │         └── rowid_default = rowid
+           │    │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │    │         ├── column1 = a
+           │    │    │    │    │    │    │         └── b_default = c
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── b_default = b
+           │    │    │    │    │    ├── select
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── a > 0
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         ├── b_default = c
+           │    │    │    │    │         └── column1 > 0
+           │    │    │    │    └── aggregations
+           │    │    │    │         ├── first-agg
+           │    │    │    │         │    └── column1
+           │    │    │    │         └── first-agg
+           │    │    │    │              └── b_default
+           │    │    │    └── aggregations
+           │    │    │         └── first-agg
+           │    │    │              └── rowid_default
+           │    │    └── aggregations
+           │    │         ├── first-agg
+           │    │         │    └── column1
+           │    │         └── first-agg
+           │    │              └── rowid_default
+           │    └── projections
+           │         └── (column1 > 0) OR NULL::BOOL
+           └── aggregations
+                ├── first-agg
+                │    └── column1
+                └── first-agg
+                     └── rowid_default
