@@ -1,10 +1,6 @@
-# Test binding calls which reference names via either types or oid casts work
-# after a bizarre turn of events whereby we used to set the planner txn to nil.
-# The long and the short of it is that we totally abuse the planner when
-# performing BIND and the fact that it continues to carry a transaction that
-# does not correspond to the connExecutor's transaction is, generally, a big
-# problem. Before the changes made in the commit adding this test, this test
-# would result in a nil pointer panic.
+# Test binding calls which reference names via either types or oid casts work.
+# Before the changes made in the commit adding this test, this test would result
+# in a nil pointer panic, since the txn was not initialized correctly.
 
 # TODO(richardjcai): Support let command similar to logic tests to
 # programmatically get the table id.
