@@ -329,6 +329,56 @@ ORDER BY pk LIMIT 5] OFFSET 2
           spans: /"\xc0"-/"\xc0"/PrefixEnd
           limit: 5
 
+# Test that the synthesized UNIQUE WITHOUT INDEX constraints do not cause
+# lookups into redundant arbiters.
+query T
+SELECT * FROM [
+  EXPLAIN INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+  VALUES ('ca-central-1', 7, 7, 8, 9) ON CONFLICT DO NOTHING
+] OFFSET 2
+----
+·
+• insert
+│ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│ auto commit
+│ arbiter constraints: regional_by_row_table_pkey, regional_by_row_table_b_key, uniq_idx
+│
+└── • render
+    │
+    └── • distinct
+        │ distinct on: arbiter_uniq_idx_distinct
+        │ nulls are distinct
+        │
+        └── • render
+            │
+            └── • lookup join (anti)
+                │ table: regional_by_row_table@uniq_idx (partial index)
+                │ lookup condition: (column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+                │ pred: column5 > 0
+                │
+                └── • lookup join (anti)
+                    │ table: regional_by_row_table@regional_by_row_table_b_key
+                    │ equality cols are key
+                    │ lookup condition: (column5 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+                    │
+                    └── • cross join (anti)
+                        │
+                        ├── • values
+                        │     size: 6 columns, 1 row
+                        │
+                        └── • union all
+                            │ limit: 1
+                            │
+                            ├── • scan
+                            │     missing stats
+                            │     table: regional_by_row_table@regional_by_row_table_pkey
+                            │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
+                            │
+                            └── • scan
+                                  missing stats
+                                  table: regional_by_row_table@regional_by_row_table_pkey
+                                  spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
+
 # Tests for locality optimized search.
 
 # Split the table into 3 regions and change the leaseholders to be "local"
@@ -2417,7 +2467,7 @@ FROM
                         regional_by_row_table_as4@a_idx
                     WHERE
                         a
-                        IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                        IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18,
                             18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
                     LIMIT
                         5
@@ -2479,7 +2529,7 @@ FROM
             regional_by_row_table_as4@a_idx
         WHERE
             a
-            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18,
                 18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
         LIMIT
             5
@@ -2522,7 +2572,7 @@ FROM
             regional_by_row_table_as4@a_idx
         WHERE
             a
-            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18,
                 18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
         LIMIT
             5
