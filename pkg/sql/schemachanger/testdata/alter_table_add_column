@@ -219,12 +219,12 @@ upsert descriptor #106
        - PUBLIC
        - PUBLIC
   -    - DELETE_ONLY
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
        - ABSENT
        - PUBLIC
        - PUBLIC
   -    - DELETE_ONLY
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
        - ABSENT
        jobId: "1"
   ...
@@ -278,11 +278,11 @@ upsert descriptor #106
   +    - ABSENT
        - PUBLIC
        - PUBLIC
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
        - PUBLIC
        - PUBLIC
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   +    - PUBLIC
   +    - PUBLIC

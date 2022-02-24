@@ -37,8 +37,9 @@ type NotImplemented struct {
 // table.
 type MakeAddedIndexDeleteOnly struct {
 	mutationOp
-	Index          scpb.Index
-	SecondaryIndex bool
+	Index              scpb.Index
+	IsSecondaryIndex   bool
+	IsDeletePreserving bool
 }
 
 // SetAddedIndexPartialPredicate sets a partial predicate expression in an added

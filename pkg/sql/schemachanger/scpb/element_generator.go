@@ -64,7 +64,7 @@ func run(in, out string) error {
 package scpb
 
 type ElementStatusIterator interface {
-	ForEachElementStatus(fn func(status, targetStatus Status, elem Element))
+	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
 }
 {{ range . }}
 
@@ -72,34 +72,31 @@ func (e {{ . }}) element() {}
 
 // ForEach{{ . }} iterates over elements of type {{ . }}.
 func ForEach{{ . }}(
-	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *{{ . }}),
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *{{ . }}),
 ) {
   if b == nil {
     return
   }
-	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
-		if e, ok := elem.(*{{ . }}); ok {
-			elementFunc(status, targetStatus, e)
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*{{ . }}); ok {
+			fn(current, target, elt)
 		}
 	})
 }
 
 // Find{{ . }} finds the first element of type {{ . }}.
-func Find{{ . }}(b ElementStatusIterator) (currentStatus, targetStatus Status, element *{{ . }}) {
+func Find{{ . }}(b ElementStatusIterator) (current Status, target TargetStatus, element *{{ . }}) {
   if b == nil {
-    return currentStatus, targetStatus, element
+    return current, target, element
   }
-	b.ForEachElementStatus(func(cs, ts Status, elem Element) {
-		if element != nil {
-			return
-		}
-		if e, ok := elem.(*{{ . }}); ok {
-			element = e
-			currentStatus = cs
-      targetStatus = ts
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*{{ . }}); ok {
+			element = elt
+			current = c
+			target = t
 		}
 	})
-	return currentStatus, targetStatus, element
+	return current, target, element
 }
 
 {{- end -}}

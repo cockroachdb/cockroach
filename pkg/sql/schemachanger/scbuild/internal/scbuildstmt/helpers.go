@@ -40,8 +40,8 @@ func simpleName(b BuildCtx, id catid.DescID) string {
 // dropRestrictDescriptor contains the common logic for dropping something with
 // RESTRICT.
 func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
-	b.QueryByID(id).ForEachElementStatus(func(_, targetStatus scpb.Status, e scpb.Element) {
-		if targetStatus == scpb.Status_ABSENT {
+	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if target == scpb.ToAbsent {
 			return
 		}
 		b.CheckPrivilege(e, privilege.DROP)
@@ -65,8 +65,8 @@ func dropElement(b BuildCtx, e scpb.Element) {
 // dropCascadeDescriptor contains the common logic for dropping something with
 // CASCADE.
 func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
-	undropped := b.QueryByID(id).Filter(func(_, targetStatus scpb.Status, _ scpb.Element) bool {
-		return targetStatus == scpb.Status_PUBLIC
+	undropped := b.QueryByID(id).Filter(func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+		return target == scpb.ToPublic
 	})
 	// Exit early if all elements already have ABSENT targets.
 	if undropped.IsEmpty() {
@@ -74,7 +74,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 	}
 	// Check privileges and decide which actions to take or not.
 	var isVirtualSchema bool
-	undropped.ForEachElementStatus(func(_, _ scpb.Status, e scpb.Element) {
+	undropped.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Database:
 			break
@@ -107,7 +107,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 	})
 	// Mark element targets as ABSENT.
 	next := b.WithNewSourceElementID()
-	undropped.ForEachElementStatus(func(_, targetStatus scpb.Status, e scpb.Element) {
+	undropped.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if isVirtualSchema {
 			// Don't actually drop any elements of virtual schemas.
 			return
@@ -121,7 +121,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		}
 	})
 	// Recurse on back-referenced elements.
-	undroppedBackrefs(b, id).ForEachElementStatus(func(status, _ scpb.Status, e scpb.Element) {
+	ub := undroppedBackrefs(b, id)
+	ub.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.SchemaParent:
 			dropCascadeDescriptor(next, t.SchemaID)
@@ -151,13 +152,13 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 }
 
 func undroppedBackrefs(b BuildCtx, id catid.DescID) ElementResultSet {
-	return b.BackReferences(id).Filter(func(_, targetStatus scpb.Status, e scpb.Element) bool {
-		return targetStatus != scpb.Status_ABSENT && screl.AllDescIDs(e).Contains(id)
+	return b.BackReferences(id).Filter(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
+		return target != scpb.ToAbsent && screl.AllDescIDs(e).Contains(id)
 	})
 }
 
 func descIDs(input ElementResultSet) (ids catalog.DescriptorIDSet) {
-	input.ForEachElementStatus(func(_, _ scpb.Status, e scpb.Element) {
+	input.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		ids.Add(screl.GetDescID(e))
 	})
 	return ids
