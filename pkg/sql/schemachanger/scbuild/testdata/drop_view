@@ -35,7 +35,7 @@ DROP VIEW defaultdb.v1
     isNullable: true
     isRelationBeingDropped: true
     tableId: 105
-- [[Namespace:{DescID: 105, ReferencedDescID: 100, Name: v1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 105
@@ -354,31 +354,31 @@ DROP VIEW defaultdb.v1 CASCADE
     isNullable: true
     isRelationBeingDropped: true
     tableId: 111
-- [[Namespace:{DescID: 105, ReferencedDescID: 100, Name: v1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 105
     name: v1
     schemaId: 101
-- [[Namespace:{DescID: 106, ReferencedDescID: 100, Name: v2}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 106
     name: v2
     schemaId: 101
-- [[Namespace:{DescID: 107, ReferencedDescID: 100, Name: v3}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 107
     name: v3
     schemaId: 101
-- [[Namespace:{DescID: 108, ReferencedDescID: 100, Name: v4}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 108
     name: v4
     schemaId: 101
-- [[Namespace:{DescID: 111, ReferencedDescID: 100, Name: v5}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 111
