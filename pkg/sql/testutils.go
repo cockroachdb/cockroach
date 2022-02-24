@@ -63,7 +63,6 @@ func CreateTestTableDescriptor(
 			&sessiondata.SessionData{
 				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 					EnableUniqueWithoutIndexConstraints: true,
-					HashShardedIndexesEnabled:           true,
 				},
 			}, /* sessionData */
 			tree.PersistencePermanent,
