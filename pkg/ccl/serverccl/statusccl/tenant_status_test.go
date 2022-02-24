@@ -56,6 +56,15 @@ func TestTenantStatusAPI(t *testing.T) {
 	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
 	defer testHelper.cleanup(ctx, t)
 
+	for _, conn := range []*sqlutils.SQLRunner{
+		sqlutils.MakeSQLRunner(testHelper.hostCluster.ServerConn(0)),
+		testHelper.testCluster().tenantConn(0),
+	} {
+		conn.Exec(
+			t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '10MB'",
+		)
+	}
+
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
 	})

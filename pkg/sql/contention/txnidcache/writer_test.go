@@ -172,6 +172,8 @@ func TestTxnIDCacheCanBeDisabledViaClusterSetting(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 
+	MaxSize.Override(ctx, &st.SV, 1<<10)
+
 	sink := &counterSink{}
 	w := newWriter(st, sink)
 	w.Record(contentionpb.ResolvedTxnID{
@@ -191,7 +193,7 @@ func TestTxnIDCacheCanBeDisabledViaClusterSetting(t *testing.T) {
 	require.Equal(t, 1, sink.numOfRecord)
 
 	// This should re-enable txn id cache.
-	MaxSize.Override(ctx, &st.SV, MaxSize.Default())
+	MaxSize.Override(ctx, &st.SV, 1<<10)
 
 	w.Record(contentionpb.ResolvedTxnID{
 		TxnID: uuid.FastMakeV4(),
