@@ -31,7 +31,7 @@ func init() {
 					return newLogEventOp(this, ts)
 				}),
 			),
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeAddedColumnDeleteAndWriteOnly{
@@ -51,7 +51,7 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteAndWriteOnly{

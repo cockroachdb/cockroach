@@ -59,7 +59,7 @@ func init() {
 	depRule(
 		"index existence precedes index dependents",
 		scgraph.Precedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.PrimaryIndex)(nil),
 			(*scpb.SecondaryIndex)(nil),
@@ -76,7 +76,7 @@ func init() {
 	depRule(
 		"partial predicate set right after secondary index existence",
 		scgraph.SameStagePrecedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.SecondaryIndex)(nil),
 		),
@@ -90,12 +90,12 @@ func init() {
 	depRule(
 		"dependents existence precedes writes to index",
 		scgraph.Precedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_PUBLIC,
 			(*scpb.IndexPartitioning)(nil),
 			(*scpb.IndexComment)(nil),
 		),
-		element(scpb.Status_DELETE_AND_WRITE_ONLY,
+		element(scpb.Status_WRITE_ONLY,
 			(*scpb.PrimaryIndex)(nil),
 			(*scpb.SecondaryIndex)(nil),
 		),
@@ -106,7 +106,7 @@ func init() {
 	depRule(
 		"index named right before index becomes public",
 		scgraph.SameStagePrecedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_PUBLIC,
 			(*scpb.IndexName)(nil),
 		),
@@ -121,7 +121,7 @@ func init() {
 	depRule(
 		"dependents removed after index no longer public",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_VALIDATED,
 			(*scpb.PrimaryIndex)(nil),
 			(*scpb.SecondaryIndex)(nil),
@@ -139,7 +139,7 @@ func init() {
 	depRule(
 		"dependents removed before index",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.IndexName)(nil),
 			(*scpb.IndexPartitioning)(nil),
@@ -162,7 +162,7 @@ func init() {
 	depRule(
 		"column type set right after column existence",
 		scgraph.SameStagePrecedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.Column)(nil),
 		),
@@ -176,7 +176,7 @@ func init() {
 	depRule(
 		"column existence precedes column dependents",
 		scgraph.Precedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.Column)(nil),
 		),
@@ -193,12 +193,12 @@ func init() {
 	depRule(
 		"DEFAULT or ON UPDATE existence precedes writes to column",
 		scgraph.Precedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_PUBLIC,
 			(*scpb.ColumnDefaultExpression)(nil),
 			(*scpb.ColumnOnUpdateExpression)(nil),
 		),
-		element(scpb.Status_DELETE_AND_WRITE_ONLY,
+		element(scpb.Status_WRITE_ONLY,
 			(*scpb.Column)(nil),
 		),
 		screl.DescID,
@@ -208,7 +208,7 @@ func init() {
 	depRule(
 		"column named right before column becomes public",
 		scgraph.SameStagePrecedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_PUBLIC,
 			(*scpb.ColumnName)(nil),
 		),
@@ -222,7 +222,7 @@ func init() {
 	depRule(
 		"column dependents exist before column becomes public",
 		scgraph.Precedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_PUBLIC,
 			// These are all remaining column dependents now that the name and the
 			// DEFAULT and ON UPDATE expressions have already been dealt with.
@@ -238,8 +238,8 @@ func init() {
 	depRule(
 		"column dependents removed after column no longer public",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
-		element(scpb.Status_DELETE_AND_WRITE_ONLY,
+		scpb.ToAbsent,
+		element(scpb.Status_WRITE_ONLY,
 			(*scpb.Column)(nil),
 		),
 		element(scpb.Status_ABSENT,
@@ -254,7 +254,7 @@ func init() {
 	depRule(
 		"column type dependents removed right before column type",
 		scgraph.SameStagePrecedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.SequenceOwner)(nil),
 			(*scpb.ColumnDefaultExpression)(nil),
@@ -270,7 +270,7 @@ func init() {
 	depRule(
 		"dependents removed before column",
 		scgraph.Precedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnName)(nil),
 			(*scpb.ColumnComment)(nil),
@@ -308,7 +308,7 @@ func init() {
 	depRule(
 		"column type removed right before column when not dropping relation",
 		scgraph.SameStagePrecedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnType)(nil),
 		),
@@ -324,7 +324,7 @@ func init() {
 	depRule(
 		"partial predicate removed right before secondary index when not dropping relation",
 		scgraph.SameStagePrecedence,
-		scpb.Status_ABSENT,
+		scpb.ToAbsent,
 		element(scpb.Status_ABSENT,
 			(*scpb.SecondaryIndexPartial)(nil),
 		),
@@ -383,7 +383,7 @@ func init() {
 		scgraph.Precedence,
 		indexNode, columnNode,
 		screl.MustQuery(
-			status.In(scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_PUBLIC),
+			status.In(scpb.Status_WRITE_ONLY, scpb.Status_PUBLIC),
 			targetStatus.Eq(scpb.Status_PUBLIC),
 
 			column.Type((*scpb.Column)(nil)),
@@ -404,7 +404,7 @@ func init() {
 	depRule(
 		"column existence precedes index existence",
 		scgraph.Precedence,
-		scpb.Status_PUBLIC,
+		scpb.ToPublic,
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.Column)(nil),
 		),

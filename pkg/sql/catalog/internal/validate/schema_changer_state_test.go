@@ -65,7 +65,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			ds: ds{
 				JobID: 1,
 				Targets: []scpb.Target{
-					scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Namespace{
+					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,
@@ -89,7 +89,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			ds: ds{
 				JobID: 1,
 				Targets: []scpb.Target{
-					scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Namespace{
+					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,
@@ -122,7 +122,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			ds: ds{
 				JobID: 1,
 				Targets: []scpb.Target{
-					scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Namespace{
+					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,
@@ -132,7 +132,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 						SourceElementID: 1,
 						StatementID:     0,
 					}),
-					scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Namespace{
+					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,
@@ -170,7 +170,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			ds: ds{
 				JobID: 1,
 				Targets: []scpb.Target{
-					scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Namespace{
+					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,
@@ -180,7 +180,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 						SourceElementID: 1,
 						StatementID:     1,
 					}),
-					scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Namespace{
+					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,

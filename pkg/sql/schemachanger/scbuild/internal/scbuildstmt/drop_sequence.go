@@ -45,9 +45,12 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 			dropCascadeDescriptor(b, seq.SequenceID)
 		} else if dropRestrictDescriptor(b, seq.SequenceID) {
 			// Drop sequence owner even for RESTRICT.
-			scpb.ForEachSequenceOwner(undroppedBackrefs(b, seq.SequenceID), func(_, _ scpb.Status, so *scpb.SequenceOwner) {
-				dropElement(b, so)
-			})
+			scpb.ForEachSequenceOwner(
+				undroppedBackrefs(b, seq.SequenceID),
+				func(_ scpb.Status, _ scpb.TargetStatus, so *scpb.SequenceOwner) {
+					dropElement(b, so)
+				},
+			)
 			toCheckBackrefs = append(toCheckBackrefs, seq.SequenceID)
 		}
 		b.IncrementSubWorkID()

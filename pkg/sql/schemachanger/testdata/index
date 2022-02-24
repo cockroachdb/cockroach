@@ -115,7 +115,7 @@ upsert descriptor #104
        authorization: {}
        currentStatuses:
   -    - DELETE_ONLY
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
        - ABSENT
        jobId: "1"
   ...
@@ -149,7 +149,7 @@ upsert descriptor #104
   -  declarativeSchemaChangerState:
   -    authorization: {}
   -    currentStatuses:
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    jobId: "1"
   -    relevantStatements:
