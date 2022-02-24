@@ -66,7 +66,6 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",

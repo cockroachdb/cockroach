@@ -887,7 +887,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
-%token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
+%token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
 %token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE VOTERS
@@ -4376,7 +4376,7 @@ explain_option_list:
 // %Help: ALTER CHANGEFEED - alter an existing changefeed
 // %Category: CCL
 // %Text:
-// ALTER CHANGEFEED <job_id> {{ADD|DROP} <targets...>}...
+// ALTER CHANGEFEED <job_id> {{ADD|DROP <targets...>} | SET <options...>}...
 alter_changefeed_stmt:
   ALTER CHANGEFEED a_expr alter_changefeed_cmds
   {
@@ -4410,6 +4410,18 @@ alter_changefeed_cmd:
   {
     $$.val = &tree.AlterChangefeedDropTarget{
       Targets: $2.targetList(),
+    }
+  }
+| SET kv_option_list
+  {
+    $$.val = &tree.AlterChangefeedSetOptions{
+      Options: $2.kvOptions(),
+    }
+  }
+| UNSET name_list
+  {
+    $$.val = &tree.AlterChangefeedUnsetOptions{
+      Options: $2.nameList(),
     }
   }
 
@@ -14110,6 +14122,7 @@ unreserved_keyword:
 | UNCOMMITTED
 | UNKNOWN
 | UNLOGGED
+| UNSET
 | UNSPLIT
 | UNTIL
 | UPDATE
