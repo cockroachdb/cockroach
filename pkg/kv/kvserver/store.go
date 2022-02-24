@@ -3287,8 +3287,13 @@ func (s *Store) ClusterNodeCount() int {
 
 // HotReplicaInfo contains a range descriptor and its QPS.
 type HotReplicaInfo struct {
-	Desc *roachpb.RangeDescriptor
-	QPS  float64
+	Desc                *roachpb.RangeDescriptor
+	QPS                 float64
+	RequestsPerSecond   float64
+	ReadKeysPerSecond   float64
+	WriteKeysPerSecond  float64
+	WriteBytesPerSecond float64
+	ReadBytesPerSecond  float64
 }
 
 // HottestReplicas returns the hottest replicas on a store, sorted by their
@@ -3302,6 +3307,11 @@ func (s *Store) HottestReplicas() []HotReplicaInfo {
 	for i := range topQPS {
 		hotRepls[i].Desc = topQPS[i].repl.Desc()
 		hotRepls[i].QPS = topQPS[i].qps
+		hotRepls[i].RequestsPerSecond = topQPS[i].repl.RequestsPerSecond()
+		hotRepls[i].WriteKeysPerSecond = topQPS[i].repl.WritesPerSecond()
+		hotRepls[i].ReadKeysPerSecond = topQPS[i].repl.ReadsPerSecond()
+		hotRepls[i].WriteBytesPerSecond = topQPS[i].repl.WriteBytesPerSecond()
+		hotRepls[i].ReadBytesPerSecond = topQPS[i].repl.ReadBytesPerSecond()
 	}
 	return hotRepls
 }
