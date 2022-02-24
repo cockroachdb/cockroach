@@ -233,18 +233,39 @@ func (b *Builder) buildScalar(
 			input = memo.TrueSingleton
 		}
 
+		// validateCastToValType panics if tree.ReType with the given source
+		// type would create an invalid cast to valType.
+		validateCastToValType := func(src *types.T) {
+			if valType.Family() == types.AnyFamily || src.Identical(valType) {
+				// If valType's family is AnyFamily or src is identical to
+				// valType, then tree.Retype will not create a cast expression.
+				return
+			}
+			if _, ok := tree.LookupCastVolatility(src, valType, nil /* sessionData */); ok {
+				return
+			}
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"CASE types %s and %s cannot be matched", src, valType,
+			))
+		}
+
 		whens := make(memo.ScalarListExpr, 0, len(t.Whens)+1)
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr := tree.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			valExpr := t.Whens[i].Val.(tree.TypedExpr)
+			validateCastToValType(valExpr.ResolvedType())
+			valExpr = tree.ReType(valExpr, valType)
 			val := b.buildScalar(valExpr, inScope, nil, nil, colRefs)
 			whens = append(whens, b.factory.ConstructWhen(cond, val))
 		}
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr := tree.ReType(t.Else.(tree.TypedExpr), valType)
+			elseExpr := t.Else.(tree.TypedExpr)
+			validateCastToValType(elseExpr.ResolvedType())
+			elseExpr = tree.ReType(elseExpr, valType)
 			orElse = b.buildScalar(elseExpr, inScope, nil, nil, colRefs)
 		} else {
 			orElse = b.factory.ConstructNull(valType)
