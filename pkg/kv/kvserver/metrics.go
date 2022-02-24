@@ -299,6 +299,18 @@ var (
 		Measurement: "Storage",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAverageRequestsPerSecond = metric.Metadata{
+		Name:        "rebalancing.requestspersecond",
+		Help:        "Average number of requests received recently per second.",
+		Measurement: "Requests/Sec",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAverageReadsPerSecond = metric.Metadata{
+		Name:        "rebalancing.readspersecond",
+		Help:        "Average number of keys read recently per second.",
+		Measurement: "Keys/Sec",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Metric for tracking follower reads.
 	metaFollowerReadsCount = metric.Metadata{
@@ -1367,9 +1379,11 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 
 	// Rebalancing metrics.
-	AverageQueriesPerSecond *metric.GaugeFloat64
-	AverageWritesPerSecond  *metric.GaugeFloat64
-	L0SubLevelsHistogram    *metric.Histogram
+	L0SubLevelsHistogram     *metric.Histogram
+	AverageQueriesPerSecond  *metric.GaugeFloat64
+	AverageWritesPerSecond   *metric.GaugeFloat64
+	AverageReadsPerSecond    *metric.GaugeFloat64
+	AverageRequestsPerSecond *metric.GaugeFloat64
 
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
@@ -1822,6 +1836,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			l0SublevelMaxSampled,
 			1, /* sig figures (integer) */
 		),
+		AverageRequestsPerSecond: metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
+		AverageReadsPerSecond:    metric.NewGaugeFloat64(metaAverageReadsPerSecond),
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),

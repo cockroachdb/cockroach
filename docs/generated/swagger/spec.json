@@ -1079,13 +1079,37 @@
       "type": "object",
       "properties": {
         "queries_per_second": {
-          "description": "Queries per second served by this range.\n\nNote that queries per second will only be known by the leaseholder.\nAll other replicas will report it as 0.",
+          "description": "Queries per second (batch requests) served by this range per second,\naveraged over the last 30 minute period.",
           "type": "number",
           "format": "double",
           "x-go-name": "QueriesPerSecond"
         },
+        "read_bytes_per_second": {
+          "description": "Reads (bytes) per second is the number of bytes read from this range per\nsecond, averaged over the last 30 minute period.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "ReadBytesPerSecond"
+        },
+        "reads_per_second": {
+          "description": "Reads per second served is the number of keys read from this range per\nsecond, averaged over the last 30 minute period.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "ReadsPerSecond"
+        },
+        "requests_per_second": {
+          "description": "Requests per second is the number of requests served by this range per\nsecond, averaged over the last 30 minute period.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "RequestsPerSecond"
+        },
+        "write_bytes_per_second": {
+          "description": "Writes (bytes) per second is the number of bytes written to this range per\nsecond, averaged over the last 30 minute period.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "WriteBytesPerSecond"
+        },
         "writes_per_second": {
-          "description": "Writes per second served by this range.",
+          "description": "Writes per second served is the number of keys written to this range per\nsecond, averaged over the last 30 minute period.",
           "type": "number",
           "format": "double",
           "x-go-name": "WritesPerSecond"

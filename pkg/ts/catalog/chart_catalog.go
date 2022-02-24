@@ -646,6 +646,14 @@ var charts = []sectionDescription{
 				Title:   "QPS",
 				Metrics: []string{"rebalancing.queriespersecond"},
 			},
+			{
+				Title:   "Requests Per Second",
+				Metrics: []string{"rebalancing.requestspersecond"},
+			},
+			{
+				Title:   "Keys Read Per Second",
+				Metrics: []string{"rebalancing.readspersecond"},
+			},
 		},
 	},
 	{

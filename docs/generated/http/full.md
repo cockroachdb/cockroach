@@ -1323,8 +1323,12 @@ only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Queries per second (batch requests) served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Writes per second served is the number of keys written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| requests_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Requests per second is the number of requests served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| reads_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| write_bytes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| read_bytes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
@@ -1564,8 +1568,12 @@ only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Queries per second (batch requests) served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Writes per second served is the number of keys written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| requests_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Requests per second is the number of requests served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| reads_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| write_bytes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| read_bytes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
@@ -1769,8 +1777,12 @@ only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Queries per second (batch requests) served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Writes per second served is the number of keys written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| requests_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Requests per second is the number of requests served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| reads_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| write_bytes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| read_bytes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
@@ -3739,8 +3751,12 @@ only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Queries per second (batch requests) served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Writes per second served is the number of keys written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| requests_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Requests per second is the number of requests served by this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| reads_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| write_bytes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| read_bytes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
