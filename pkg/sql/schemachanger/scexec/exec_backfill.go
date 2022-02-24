@@ -29,19 +29,19 @@ import (
 // be confusing than valuable. Not much is being done transactionally.
 
 func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.Op) (err error) {
-	backfillsToExecute := extractBackfillsFromOps(execute)
+	backfillsToExecute, mergesToExecute := extractBackfillsAndMergesFromOps(execute)
 	tables, err := getTableDescriptorsForBackfills(ctx, deps.Catalog(), backfillsToExecute)
 	if err != nil {
 		return err
 	}
 	tracker := deps.BackfillProgressTracker()
-	progresses, err := loadProgressesAndMaybePerformInitialScan(
-		ctx, deps, backfillsToExecute, tracker, tables,
+	backfillProgresses, mergeProgresses, err := loadProgressesAndMaybePerformInitialScan(
+		ctx, deps, backfillsToExecute, mergesToExecute, tracker, tables,
 	)
 	if err != nil {
 		return err
 	}
-	return runBackfills(ctx, deps, tracker, progresses, tables)
+	return runBackfiller(ctx, deps, tracker, backfillProgresses, mergeProgresses, tables)
 }
 
 func getTableDescriptorsForBackfills(
@@ -66,21 +66,28 @@ func getTableDescriptorsForBackfills(
 	return tables, nil
 }
 
-func extractBackfillsFromOps(execute []scop.Op) []Backfill {
-	var backfillsToExecute []Backfill
+func extractBackfillsAndMergesFromOps(execute []scop.Op) ([]Backfill, []Merge) {
+	var bfs []Backfill
+	var ms []Merge
 	for _, op := range execute {
 		switch op := op.(type) {
 		case *scop.BackfillIndex:
-			backfillsToExecute = append(backfillsToExecute, Backfill{
+			bfs = append(bfs, Backfill{
 				TableID:       op.TableID,
 				SourceIndexID: op.SourceIndexID,
 				DestIndexIDs:  []descpb.IndexID{op.IndexID},
+			})
+		case *scop.MergeIndex:
+			ms = append(ms, Merge{
+				TableID:        op.TableID,
+				SourceIndexIDs: []descpb.IndexID{op.TemporaryIndexID},
+				DestIndexIDs:   []descpb.IndexID{op.BackfilledIndexID},
 			})
 		default:
 			panic("unimplemented")
 		}
 	}
-	return mergeBackfillsFromSameSource(backfillsToExecute)
+	return mergeBackfillsFromSameSource(bfs), mergeMergesFromSameTable(ms)
 }
 
 // mergeBackfillsFromSameSource will take a slice of backfills which
@@ -118,29 +125,66 @@ func mergeBackfillsFromSameSource(toExecute []Backfill) []Backfill {
 	return toExecute
 }
 
+// mergeMergesFromSameTable is like mergeBackfillsFromSameSource but for merges.
+func mergeMergesFromSameTable(toExecute []Merge) []Merge {
+	sort.Slice(toExecute, func(i, j int) bool {
+		return toExecute[i].TableID < toExecute[j].TableID
+	})
+	truncated := toExecute[:0]
+	for _, m := range toExecute {
+		if len(truncated) == 0 || truncated[len(truncated)-1].TableID != m.TableID {
+			truncated = append(truncated, m)
+		} else {
+			ord := len(truncated) - 1
+			srcIDs := truncated[ord].SourceIndexIDs
+			srcIDs = srcIDs[:len(srcIDs):len(srcIDs)]
+			truncated[ord].SourceIndexIDs = append(srcIDs, m.SourceIndexIDs...)
+			destIDs := truncated[ord].DestIndexIDs
+			destIDs = destIDs[:len(destIDs):len(destIDs)]
+			truncated[ord].DestIndexIDs = append(destIDs, m.DestIndexIDs...)
+		}
+	}
+	toExecute = truncated
+
+	// Make sure all the SourceIndexIDs are sorted.
+	for i := range toExecute {
+		m := &toExecute[i]
+		srcToDest := make(map[descpb.IndexID]descpb.IndexID, len(m.SourceIndexIDs))
+		for j, sourceID := range m.SourceIndexIDs {
+			srcToDest[sourceID] = m.DestIndexIDs[j]
+		}
+		sort.Slice(m.SourceIndexIDs, func(i, j int) bool { return m.SourceIndexIDs[i] < m.SourceIndexIDs[j] })
+		for j, sourceID := range m.SourceIndexIDs {
+			m.DestIndexIDs[j] = srcToDest[sourceID]
+		}
+	}
+	return toExecute
+}
+
 func loadProgressesAndMaybePerformInitialScan(
 	ctx context.Context,
 	deps Dependencies,
 	backfillsToExecute []Backfill,
-	tracker BackfillTracker,
+	mergesToExecute []Merge,
+	tracker BackfillerTracker,
 	tables map[descpb.ID]catalog.TableDescriptor,
-) ([]BackfillProgress, error) {
-	progresses, err := loadProgresses(ctx, backfillsToExecute, tracker)
+) ([]BackfillProgress, []MergeProgress, error) {
+	backfillProgresses, mergeProgresses, err := loadProgresses(ctx, backfillsToExecute, mergesToExecute, tracker)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	{
-		didScan, err := maybeScanDestinationIndexes(ctx, deps, progresses, tables, tracker)
+		didScan, err := maybeScanDestinationIndexes(ctx, deps, backfillProgresses, tables, tracker)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if didScan {
 			if err := tracker.FlushCheckpoint(ctx); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
-	return progresses, nil
+	return backfillProgresses, mergeProgresses, nil
 }
 
 // maybeScanDestinationIndexes runs a scan on any backfills in progresses
@@ -151,12 +195,12 @@ func loadProgressesAndMaybePerformInitialScan(
 func maybeScanDestinationIndexes(
 	ctx context.Context,
 	deps Dependencies,
-	progresses []BackfillProgress,
+	bs []BackfillProgress,
 	tables map[descpb.ID]catalog.TableDescriptor,
-	tracker BackfillProgressWriter,
+	tracker BackfillerProgressWriter,
 ) (didScan bool, _ error) {
-	for i := range progresses {
-		if didScan = didScan || progresses[i].MinimumWriteTimestamp.IsEmpty(); didScan {
+	for i := range bs {
+		if didScan = didScan || bs[i].MinimumWriteTimestamp.IsEmpty(); didScan {
 			break
 		}
 	}
@@ -164,9 +208,7 @@ func maybeScanDestinationIndexes(
 		return false, nil
 	}
 	const op = "scan destination indexes"
-	if err := forEachProgressConcurrently(ctx, op, progresses, func(
-		ctx context.Context, p *BackfillProgress,
-	) error {
+	fn := func(ctx context.Context, p *BackfillProgress) error {
 		if !p.MinimumWriteTimestamp.IsEmpty() {
 			return nil
 		}
@@ -178,7 +220,8 @@ func maybeScanDestinationIndexes(
 		}
 		*p = updated
 		return tracker.SetBackfillProgress(ctx, updated)
-	}); err != nil {
+	}
+	if err := forEachProgressConcurrently(ctx, op, bs, nil /* ms */, fn, nil /* mf */); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -187,11 +230,13 @@ func maybeScanDestinationIndexes(
 func forEachProgressConcurrently(
 	ctx context.Context,
 	op redact.SafeString,
-	progresses []BackfillProgress,
-	f func(context.Context, *BackfillProgress) error,
+	bs []BackfillProgress,
+	ms []MergeProgress,
+	bf func(context.Context, *BackfillProgress) error,
+	mf func(context.Context, *MergeProgress) error,
 ) error {
 	g := ctxgroup.WithContext(ctx)
-	run := func(i int) {
+	br := func(i int) {
 		g.GoCtx(func(ctx context.Context) (err error) {
 			defer func() {
 				switch r := recover().(type) {
@@ -203,48 +248,76 @@ func forEachProgressConcurrently(
 					err = errors.AssertionFailedf("failed to %s: %v", op, r)
 				}
 			}()
-			return f(ctx, &progresses[i])
+			return bf(ctx, &bs[i])
 		})
 	}
-	for i := range progresses {
-		run(i)
+	mr := func(j int) {
+		g.GoCtx(func(ctx context.Context) (err error) {
+			defer func() {
+				switch r := recover().(type) {
+				case nil:
+					return
+				case error:
+					err = errors.Wrapf(r, "failed to %s", op)
+				default:
+					err = errors.AssertionFailedf("failed to %s: %v", op, r)
+				}
+			}()
+			return mf(ctx, &ms[j])
+		})
+	}
+	for i := range bs {
+		br(i)
+	}
+	for j := range ms {
+		mr(j)
 	}
 	return g.Wait()
 }
 
 func loadProgresses(
-	ctx context.Context, backfillsToExecute []Backfill, tracker BackfillProgressReader,
-) ([]BackfillProgress, error) {
-	var progresses []BackfillProgress
-	for _, bf := range backfillsToExecute {
-		progress, err := tracker.GetBackfillProgress(ctx, bf)
+	ctx context.Context,
+	backfillsToExecute []Backfill,
+	mergesToExecute []Merge,
+	tracker BackfillerProgressReader,
+) (bs []BackfillProgress, ms []MergeProgress, _ error) {
+	for _, b := range backfillsToExecute {
+		progress, err := tracker.GetBackfillProgress(ctx, b)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		progresses = append(progresses, progress)
+		bs = append(bs, progress)
 	}
-	return progresses, nil
+	for _, m := range mergesToExecute {
+		progress, err := tracker.GetMergeProgress(ctx, m)
+		if err != nil {
+			return nil, nil, err
+		}
+		ms = append(ms, progress)
+	}
+	return bs, ms, nil
 }
 
-func runBackfills(
+func runBackfiller(
 	ctx context.Context,
 	deps Dependencies,
-	tracker BackfillTracker,
-	progresses []BackfillProgress,
+	tracker BackfillerTracker,
+	backfillProgresses []BackfillProgress,
+	mergeProgresses []MergeProgress,
 	tables map[descpb.ID]catalog.TableDescriptor,
 ) error {
-
 	stop := deps.PeriodicProgressFlusher().StartPeriodicUpdates(ctx, tracker)
 	defer func() { _ = stop() }()
-	bf := deps.IndexBackfiller()
-	const op = "run backfills"
-	if err := forEachProgressConcurrently(ctx, op, progresses, func(
-		ctx context.Context, p *BackfillProgress,
-	) error {
-		return runBackfill(
-			ctx, deps.IndexSpanSplitter(), bf, *p, tracker, tables[p.TableID],
-		)
-	}); err != nil {
+	ib := deps.IndexBackfiller()
+	im := deps.IndexMerger()
+	const op = "run backfills and merges"
+	bf := func(ctx context.Context, p *BackfillProgress) error {
+		return runBackfill(ctx, deps.IndexSpanSplitter(), ib, *p, tracker, tables[p.TableID])
+	}
+	mf := func(ctx context.Context, p *MergeProgress) error {
+		return im.MergeIndexes(ctx, *p, tracker, tables[p.TableID])
+	}
+	if err := forEachProgressConcurrently(ctx, op, backfillProgresses, mergeProgresses, bf, mf); err != nil {
 		return err
 	}
 	if err := stop(); err != nil {
@@ -261,7 +334,7 @@ func runBackfill(
 	splitter IndexSpanSplitter,
 	backfiller Backfiller,
 	progress BackfillProgress,
-	tracker BackfillProgressWriter,
+	tracker BackfillerProgressWriter,
 	table catalog.TableDescriptor,
 ) error {
 	// Split off the index span prior to backfilling.
@@ -280,5 +353,5 @@ func runBackfill(
 		}
 	}
 
-	return backfiller.BackfillIndex(ctx, progress, tracker, table)
+	return backfiller.BackfillIndexes(ctx, progress, tracker, table)
 }

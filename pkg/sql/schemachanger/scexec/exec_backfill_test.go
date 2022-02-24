@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:generate mockgen -package scexec_test -destination=mocks_generated_test.go --self_package scexec . Catalog,Dependencies,Backfiller,BackfillTracker,IndexSpanSplitter,PeriodicProgressFlusher
+//go:generate mockgen -package scexec_test -destination=mocks_generated_test.go --self_package scexec . Catalog,Dependencies,Backfiller,Merger,BackfillerTracker,IndexSpanSplitter,PeriodicProgressFlusher
 
 // TestExecBackfill uses generated mocks to ensure that the exec logic for
 // backfills deals with state appropriately.
@@ -45,14 +45,14 @@ func TestExecBackfill(t *testing.T) {
 
 	setupTestDeps := func(
 		t *testing.T, tdb *sqlutils.SQLRunner, descs nstree.Catalog,
-	) (*gomock.Controller, *MockBackfillTracker, *MockBackfiller, *sctestdeps.TestState) {
+	) (*gomock.Controller, *MockBackfillerTracker, *MockBackfiller, *sctestdeps.TestState) {
 		mc := gomock.NewController(t)
-		bt := NewMockBackfillTracker(mc)
+		bt := NewMockBackfillerTracker(mc)
 		bf := NewMockBackfiller(mc)
 		deps := sctestdeps.NewTestDependencies(
 			sctestdeps.WithDescriptors(descs),
 			sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
-			sctestdeps.WithBackfillTracker(bt),
+			sctestdeps.WithBackfillerTracker(bt),
 			sctestdeps.WithBackfiller(bf),
 		)
 		return mc, bt, bf, deps
@@ -157,7 +157,7 @@ func TestExecBackfill(t *testing.T) {
 				FlushCheckpoint(gomock.Any()).
 				After(setProgress)
 			backfillCall := bf.EXPECT().
-				BackfillIndex(gomock.Any(), scanned, bt, desc).
+				BackfillIndexes(gomock.Any(), scanned, bt, desc).
 				After(flushAfterScan)
 			bt.EXPECT().
 				FlushCheckpoint(gomock.Any()).
@@ -242,10 +242,10 @@ func TestExecBackfill(t *testing.T) {
 					FlushCheckpoint(gomock.Any()).
 					After(setProgress)
 				backfillBarCall := bf.EXPECT().
-					BackfillIndex(gomock.Any(), scannedBar, bt, bar).
+					BackfillIndexes(gomock.Any(), scannedBar, bt, bar).
 					After(flushAfterScan)
 				backfillFooCall := bf.EXPECT().
-					BackfillIndex(gomock.Any(), progressFoo, bt, foo).
+					BackfillIndexes(gomock.Any(), progressFoo, bt, foo).
 					After(flushAfterScan)
 				bt.EXPECT().
 					FlushCheckpoint(gomock.Any()).

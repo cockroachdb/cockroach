@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBackfillTracker exercises the logic of the backfillTracker
+// TestBackfillTracker exercises the logic of the backfillerTracker
 // by using an in-memory implementation of the underlying store and
 // the set of ranges.
 //
@@ -94,7 +94,7 @@ func TestBackfillTracker(t *testing.T) {
 		ctx := context.Background()
 		var bts backfillTrackerTestState
 		bts.mu.rangeSpans = tc.rangeSpans
-		tr := newBackfillTracker(keys.SystemSQLCodec, bts.cfg(), tc.progress)
+		tr := newBackfillerTracker(keys.SystemSQLCodec, bts.cfg(), tc.progress, nil /* mergeProgress */)
 
 		t.Run("retrieving initial state", func(t *testing.T) {
 			{
@@ -118,7 +118,7 @@ func TestBackfillTracker(t *testing.T) {
 			}
 
 		})
-		t.Run("zero value progress for unknown backfill", func(t *testing.T) {
+		t.Run("zero value backfillProgress for unknown backfill", func(t *testing.T) {
 			bf := mkBackfill(42, 1, 3)
 			pr, err := tr.GetBackfillProgress(ctx, bf)
 			require.NoError(t, err)
@@ -130,13 +130,13 @@ func TestBackfillTracker(t *testing.T) {
 			_, err := tr.GetBackfillProgress(ctx,
 				mkBackfill(2, 1, 2, 3))
 			require.EqualError(t, err,
-				"backfill {2 1 [2 3]} does not match stored progress for {2 1 [2]}",
+				"backfill {2 1 [2 3]} does not match stored backfillProgress for {2 1 [2]}",
 			)
 		})
 		t.Run("FlushCheckpoint initial does not write", func(t *testing.T) {
-			require.Nil(t, bts.getCheckpoint())
+			require.Nil(t, bts.getBackfillCheckpoint())
 			require.NoError(t, tr.FlushCheckpoint(ctx))
-			require.EqualValues(t, []scexec.BackfillProgress(nil), bts.getCheckpoint())
+			require.EqualValues(t, []scexec.BackfillProgress(nil), bts.getBackfillCheckpoint())
 			require.EqualValues(t, 0, bts.getCheckpointUpdatedCalls())
 		})
 		t.Run("WriteFraction initial", func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestBackfillTracker(t *testing.T) {
 				CompletedSpans:        nil,
 			}))
 		})
-		t.Run("Observe that there has been a progress update", func(t *testing.T) {
+		t.Run("Observe that there has been a backfillProgress update", func(t *testing.T) {
 			require.NoError(t, tr.FlushFractionCompleted(ctx))
 			// No we see that the denominator has changed to 3/15
 			require.EqualValues(t, float32(.2), bts.getFraction())
@@ -168,7 +168,7 @@ func TestBackfillTracker(t *testing.T) {
 		t.Run("SetBackfillProgress to finish a range", func(t *testing.T) {
 			require.NoError(t, tr.SetBackfillProgress(ctx, updatedProgress2))
 		})
-		t.Run("Observe that has been a progress update", func(t *testing.T) {
+		t.Run("Observe that has been a backfillProgress update", func(t *testing.T) {
 			require.NoError(t, tr.FlushFractionCompleted(ctx))
 
 			require.EqualValues(t, float32(.4), bts.getFraction())
@@ -176,7 +176,7 @@ func TestBackfillTracker(t *testing.T) {
 		})
 		t.Run("Observe that FlushCheckpoint works", func(t *testing.T) {
 			require.Nil(t, tr.FlushCheckpoint(ctx))
-			require.EqualValues(t, bts.getCheckpoint(), []scexec.BackfillProgress{
+			require.EqualValues(t, bts.getBackfillCheckpoint(), []scexec.BackfillProgress{
 				tc.progress[0],
 				tc.progress[1],
 				updatedProgress2,
@@ -200,13 +200,14 @@ type backfillTrackerTestState struct {
 		rangeSpans             []roachpb.Span
 		fraction               float32
 		fractionUpdatedCalls   int
-		checkpoint             []scexec.BackfillProgress
+		backfillCheckpoint     []scexec.BackfillProgress
+		mergeCheckpoint        []scexec.MergeProgress
 		checkpointUpdatedCalls int
 	}
 }
 
-func (bts *backfillTrackerTestState) cfg() backfillTrackerConfig {
-	return backfillTrackerConfig{
+func (bts *backfillTrackerTestState) cfg() backfillerTrackerConfig {
+	return backfillerTrackerConfig{
 		numRangesInSpanContainedBy: bts.numRangesInSpans,
 		writeProgressFraction:      bts.writeProgressFraction,
 		writeCheckpoint:            bts.writeCheckpoint,
@@ -242,19 +243,20 @@ func (bts *backfillTrackerTestState) writeProgressFraction(
 }
 
 func (bts *backfillTrackerTestState) writeCheckpoint(
-	_ context.Context, progresses []scexec.BackfillProgress,
+	_ context.Context, bps []scexec.BackfillProgress, mps []scexec.MergeProgress,
 ) error {
 	bts.mu.Lock()
 	defer bts.mu.Unlock()
-	bts.mu.checkpoint = progresses
+	bts.mu.backfillCheckpoint = bps
+	bts.mu.mergeCheckpoint = mps
 	bts.mu.checkpointUpdatedCalls++
 	return nil
 }
 
-func (bts *backfillTrackerTestState) getCheckpoint() []scexec.BackfillProgress {
+func (bts *backfillTrackerTestState) getBackfillCheckpoint() []scexec.BackfillProgress {
 	bts.mu.Lock()
 	defer bts.mu.Unlock()
-	return bts.mu.checkpoint
+	return bts.mu.backfillCheckpoint
 }
 
 func (bts *backfillTrackerTestState) getFraction() float32 {
