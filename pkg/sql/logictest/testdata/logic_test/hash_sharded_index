@@ -11,13 +11,13 @@ sharded_primary  CREATE TABLE public.sharded_primary (
                  CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
 )
 
-statement error pgcode 22023 BUCKET_COUNT must be a 32-bit integer greater than 1, got -1
+statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got -1
 CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=-1))
 
-statement error pgcode 22023 BUCKET_COUNT must be a 32-bit integer greater than 1, got 1099511627776
-CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=1099511627776))
+statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got 999999999
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=999999999))
 
-statement error pgcode 22023 BUCKET_COUNT must be a 32-bit integer greater than 1, got 1
+statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got 1
 CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=1))
 
 statement error expected BUCKET_COUNT expression to have type int, but '2.32' has type decimal

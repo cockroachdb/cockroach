@@ -13,7 +13,6 @@ package tabledesc
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
@@ -239,7 +238,8 @@ func EvalShardBucketCount(
 	}
 
 	var buckets int64
-	const invalidBucketCountMsg = `BUCKET_COUNT must be a 32-bit integer greater than 1, got %v`
+	const maxBucketAllowed = 2048
+	const invalidBucketCountMsg = `hash sharded index bucket count must be in range [2, 2048], got %v`
 	// If shardBuckets is not specified, use default bucket count from cluster setting.
 	if legacyBucketNotGiven && paramVal == nil {
 		buckets = catconstants.DefaultHashShardedIndexBucketCount.Get(&evalCtx.Settings.SV)
@@ -262,7 +262,7 @@ func EvalShardBucketCount(
 	if buckets < 2 {
 		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
-	if buckets > math.MaxInt32 {
+	if buckets > maxBucketAllowed {
 		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
 	return int32(buckets), nil
