@@ -115,7 +115,7 @@ oprules
   from: dep-node
   query:
     - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
-    - $dep[Type] IN ['*scpb.TableLocality', '*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges']
+    - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges']
     - $desc[DescID] = $desc-id
     - $dep[DescID] = $desc-id
     - $desc-target[Type] = '*scpb.Target'

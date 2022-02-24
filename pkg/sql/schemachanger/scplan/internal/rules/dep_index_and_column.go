@@ -252,7 +252,7 @@ func init() {
 	).register()
 
 	depRule(
-		"column DEFAULT and ON UPDATE removed right before column type",
+		"column type dependents removed right before column type",
 		scgraph.SameStagePrecedence,
 		scpb.Status_ABSENT,
 		element(scpb.Status_ABSENT,
@@ -268,7 +268,7 @@ func init() {
 	).register()
 
 	depRule(
-		"column dependents removed before column",
+		"dependents removed before column",
 		scgraph.Precedence,
 		scpb.Status_ABSENT,
 		element(scpb.Status_ABSENT,

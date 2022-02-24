@@ -100,11 +100,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.Table)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
-	// Table elements.
-	rel.EntityMapping(t((*scpb.TableLocality)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ReferencedDescID, "RegionEnumTypeID"),
-	),
+	// Relation elements.
 	rel.EntityMapping(t((*scpb.ColumnFamily)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnFamilyID, "FamilyID"),
@@ -136,6 +132,20 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
 	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	// Multi-region elements.
+	rel.EntityMapping(t((*scpb.TableLocalityGlobal)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	rel.EntityMapping(t((*scpb.TableLocalityPrimaryRegion)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	rel.EntityMapping(t((*scpb.TableLocalitySecondaryRegion)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ReferencedDescID, "RegionEnumTypeID"),
+	),
+	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRow)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
 	// Column elements.
