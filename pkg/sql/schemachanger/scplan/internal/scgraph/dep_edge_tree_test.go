@@ -134,8 +134,8 @@ func TestGraphCompareNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := scpb.TargetState{
 		Targets: []scpb.Target{
-			scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: 1}, nil),
-			scpb.MakeTarget(scpb.Status_ABSENT, &scpb.Table{TableID: 2}, nil),
+			scpb.MakeTarget(scpb.ToPublic, &scpb.Table{TableID: 1}, nil),
+			scpb.MakeTarget(scpb.ToAbsent, &scpb.Table{TableID: 2}, nil),
 		},
 	}
 	t1 := &ts.Targets[0]
