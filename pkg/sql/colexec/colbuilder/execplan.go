@@ -763,8 +763,8 @@ func NewColOperator(
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
 				ctx, getStreamingAllocator(ctx, args),
 				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
-				kvFetcherMemAcc, streamerBudgetAcc, flowCtx, args.ExprHelper,
-				inputs[0].Root, core.JoinReader, post, inputTypes,
+				kvFetcherMemAcc, streamerBudgetAcc, flowCtx,
+				inputs[0].Root, core.JoinReader, inputTypes,
 			)
 			if err != nil {
 				return r, err
