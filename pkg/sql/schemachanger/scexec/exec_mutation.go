@@ -80,22 +80,22 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			job.ParentID = dbID
 		}
 		jobName := func() string {
-			var tableIDs catalog.DescriptorIDSet
+			var ids catalog.DescriptorIDSet
+			if job.ParentID != descpb.InvalidID {
+				ids.Add(job.ParentID)
+			}
 			for _, table := range mvs.descriptorGCJobs[dbID] {
-				tableIDs.Add(table.ID)
+				ids.Add(table.ID)
 			}
 			var sb strings.Builder
-			if tableIDs.Len() == 1 {
+			if ids.Len() == 1 {
 				sb.WriteString("dropping descriptor")
 			} else {
 				sb.WriteString("dropping descriptors")
 			}
-			tableIDs.ForEach(func(tableID descpb.ID) {
-				sb.WriteString(fmt.Sprintf(" %d", tableID))
+			ids.ForEach(func(id descpb.ID) {
+				sb.WriteString(fmt.Sprintf(" %d", id))
 			})
-			if job.ParentID != descpb.InvalidID {
-				sb.WriteString(fmt.Sprintf(" and parent database %d", job.ParentID))
-			}
 			return sb.String()
 		}
 
