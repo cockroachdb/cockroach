@@ -56,7 +56,7 @@ type periodicProgressFlusher struct {
 }
 
 func (p *periodicProgressFlusher) StartPeriodicUpdates(
-	ctx context.Context, tracker scexec.BackfillProgressFlusher,
+	ctx context.Context, tracker scexec.BackfillerProgressFlusher,
 ) (stop func() error) {
 	stopCh := make(chan struct{})
 	runPeriodicWrite := func(
