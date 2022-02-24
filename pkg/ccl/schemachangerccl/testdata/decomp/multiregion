@@ -6,7 +6,7 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_row (
 ) LOCALITY REGIONAL BY ROW;
 CREATE TABLE multi_region_test_db.public.table_regional_by_table (
   a INT
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) LOCALITY REGIONAL BY TABLE IN "us-east2";
 CREATE TABLE multi_region_test_db.public.table_global (b INT) LOCALITY GLOBAL;
 ----
 
@@ -63,12 +63,6 @@ ElementState:
 - Table:
     tableId: 110
   Status: PUBLIC
-- TableLocality:
-    Locality:
-      global: {}
-    regionEnumTypeId: 105
-    tableId: 110
-  Status: PUBLIC
 - ColumnFamily:
     name: primary
     tableId: 110
@@ -96,6 +90,9 @@ ElementState:
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
+    tableId: 110
+  Status: PUBLIC
+- TableLocalityGlobal:
     tableId: 110
   Status: PUBLIC
 - ColumnName:
@@ -190,12 +187,6 @@ ElementState:
 - Table:
     tableId: 109
   Status: PUBLIC
-- TableLocality:
-    Locality:
-      regionalByTable: {}
-    regionEnumTypeId: 105
-    tableId: 109
-  Status: PUBLIC
 - ColumnFamily:
     name: primary
     tableId: 109
@@ -223,6 +214,11 @@ ElementState:
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
+    tableId: 109
+  Status: PUBLIC
+- TableLocalitySecondaryRegion:
+    regionEnumTypeId: 105
+    regionName: us-east2
     tableId: 109
   Status: PUBLIC
 - ColumnName:
@@ -317,12 +313,6 @@ ElementState:
 - Table:
     tableId: 108
   Status: PUBLIC
-- TableLocality:
-    Locality:
-      regionalByRow: {}
-    regionEnumTypeId: 105
-    tableId: 108
-  Status: PUBLIC
 - ColumnFamily:
     name: primary
     tableId: 108
@@ -356,6 +346,9 @@ ElementState:
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- TableLocalityRegionalByRow:
     tableId: 108
   Status: PUBLIC
 - ColumnName:
@@ -492,6 +485,7 @@ crdb_internal_region
 ----
 BackReferencedIDs:
   - 108
+  - 109
 ElementState:
 - EnumType:
     arrayTypeId: 107

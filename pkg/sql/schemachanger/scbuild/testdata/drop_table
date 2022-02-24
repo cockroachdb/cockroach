@@ -285,7 +285,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     constraintId: 3
     name: fk_orders
     tableId: 109
-- [[ForeignKeyConstraint:{DescID: 109, ReferencedDescID: 104, ConstraintID: 2}, ABSENT], PUBLIC]
+- [[ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
     columnIds:
     - 4
@@ -294,7 +294,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     - 1
     referencedTableId: 104
     tableId: 109
-- [[ForeignKeyConstraint:{DescID: 109, ReferencedDescID: 105, ConstraintID: 3}, ABSENT], PUBLIC]
+- [[ForeignKeyConstraint:{DescID: 109, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC]
   details:
     columnIds:
     - 4
@@ -313,19 +313,19 @@ DROP TABLE defaultdb.shipments CASCADE;
     indexId: 1
     name: shipments_pkey
     tableId: 109
-- [[Namespace:{DescID: 109, ReferencedDescID: 100, Name: shipments}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 109
     name: shipments
     schemaId: 101
-- [[Namespace:{DescID: 110, ReferencedDescID: 100, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 110
     name: sq1
     schemaId: 101
-- [[Namespace:{DescID: 111, ReferencedDescID: 100, Name: v1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 111
@@ -374,7 +374,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - [[Sequence:{DescID: 110}, ABSENT], PUBLIC]
   details:
     sequenceId: 110
-- [[SequenceOwner:{DescID: 109, ReferencedDescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
+- [[SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT], PUBLIC]
   details:
     columnId: 2
     sequenceId: 110
