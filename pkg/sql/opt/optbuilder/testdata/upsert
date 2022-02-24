@@ -3623,3 +3623,341 @@ ON CONFLICT ON CONSTRAINT no_such_constraint DO
 UPDATE SET x=5
 ----
 error (42704): constraint "no_such_constraint" for table "xyz" does not exist
+
+# Test that redundant arbiter indexes are not used when there are no ON CONFLICT
+# columns or constraints.
+exec-ddl
+CREATE TABLE min_arbiters (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f INT,
+  g INT,
+  h INT,
+  i INT,
+  j INT,
+  k INT,
+  l INT,
+  m INT,
+  n INT,
+  UNIQUE INDEX redundant_a_b_key (a, b),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE INDEX redundant_c_d_e_key (c, d, e),
+  UNIQUE WITHOUT INDEX (d),
+  UNIQUE INDEX redundant_partial_f_g_key (f, g) WHERE h > 0,
+  UNIQUE WITHOUT INDEX (g) WHERE h > 0,
+  UNIQUE INDEX partial_i_h_key (i, h) WHERE k > 0,
+  UNIQUE WITHOUT INDEX (h) WHERE k > 10,
+  UNIQUE INDEX partial_l_m_key (l, m) WHERE n > 0,
+  UNIQUE WITHOUT INDEX (m),
+  UNIQUE INDEX l_n_key (l, n),
+  UNIQUE WITHOUT INDEX (l) WHERE n > 10
+)
+----
+
+build
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── columns: <none>
+ ├── arbiter indexes: min_arbiters_pkey partial_i_h_key partial_l_m_key l_n_key
+ ├── arbiter constraints: unique_a unique_d unique_g unique_h unique_m unique_l
+ ├── insert-mapping:
+ │    ├── column1:18 => a:1
+ │    ├── b_default:19 => b:2
+ │    ├── b_default:19 => c:3
+ │    ├── b_default:19 => d:4
+ │    ├── b_default:19 => e:5
+ │    ├── b_default:19 => f:6
+ │    ├── b_default:19 => g:7
+ │    ├── b_default:19 => h:8
+ │    ├── b_default:19 => i:9
+ │    ├── b_default:19 => j:10
+ │    ├── b_default:19 => k:11
+ │    ├── b_default:19 => l:12
+ │    ├── b_default:19 => m:13
+ │    ├── b_default:19 => n:14
+ │    └── rowid_default:20 => rowid:15
+ ├── partial index put columns: partial_index_put1:196 partial_index_put1:196 partial_index_put1:196
+ └── project
+      ├── columns: partial_index_put1:196 column1:18!null b_default:19 rowid_default:20
+      ├── project
+      │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │    └── upsert-distinct-on
+      │         ├── columns: column1:18!null b_default:19 rowid_default:20 arbiter_unique_l_distinct:195
+      │         ├── grouping columns: b_default:19 arbiter_unique_l_distinct:195
+      │         ├── project
+      │         │    ├── columns: arbiter_unique_l_distinct:195 column1:18!null b_default:19 rowid_default:20
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    ├── grouping columns: b_default:19
+      │         │    │    ├── project
+      │         │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │    └── upsert-distinct-on
+      │         │    │    │         ├── columns: column1:18!null b_default:19 rowid_default:20 arbiter_unique_h_distinct:194
+      │         │    │    │         ├── grouping columns: b_default:19 arbiter_unique_h_distinct:194
+      │         │    │    │         ├── project
+      │         │    │    │         │    ├── columns: arbiter_unique_h_distinct:194 column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    ├── project
+      │         │    │    │         │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │    └── upsert-distinct-on
+      │         │    │    │         │    │         ├── columns: column1:18!null b_default:19 rowid_default:20 arbiter_unique_g_distinct:193
+      │         │    │    │         │    │         ├── grouping columns: b_default:19 arbiter_unique_g_distinct:193
+      │         │    │    │         │    │         ├── project
+      │         │    │    │         │    │         │    ├── columns: arbiter_unique_g_distinct:193 column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │         │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    ├── grouping columns: b_default:19
+      │         │    │    │         │    │         │    │    ├── upsert-distinct-on
+      │         │    │    │         │    │         │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    ├── grouping columns: column1:18!null
+      │         │    │    │         │    │         │    │    │    ├── upsert-distinct-on
+      │         │    │    │         │    │         │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    ├── grouping columns: b_default:19
+      │         │    │    │         │    │         │    │    │    │    ├── project
+      │         │    │    │         │    │         │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │    └── upsert-distinct-on
+      │         │    │    │         │    │         │    │    │    │    │         ├── columns: column1:18!null b_default:19 rowid_default:20 arbiter_partial_l_m_key_distinct:192
+      │         │    │    │         │    │         │    │    │    │    │         ├── grouping columns: b_default:19 arbiter_partial_l_m_key_distinct:192
+      │         │    │    │         │    │         │    │    │    │    │         ├── project
+      │         │    │    │         │    │         │    │    │    │    │         │    ├── columns: arbiter_partial_l_m_key_distinct:192 column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    ├── project
+      │         │    │    │         │    │         │    │    │    │    │         │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │    └── upsert-distinct-on
+      │         │    │    │         │    │         │    │    │    │    │         │    │         ├── columns: column1:18!null b_default:19 rowid_default:20 arbiter_partial_i_h_key_distinct:191
+      │         │    │    │         │    │         │    │    │    │    │         │    │         ├── grouping columns: b_default:19 arbiter_partial_i_h_key_distinct:191
+      │         │    │    │         │    │         │    │    │    │    │         │    │         ├── project
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    ├── columns: arbiter_partial_i_h_key_distinct:191 column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    ├── grouping columns: rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:18!null b_default:19 rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    ├── project
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: b_default:19 rowid_default:20 column1:18!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    ├── values
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:18!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    └── projections
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         ├── NULL::INT8 [as=b_default:19]
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:20]
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: a:21 b:22 c:23 d:24 e:25 f:26 g:27 h:28 i:29 j:30 k:31 l:32 m:33 n:34 rowid:35!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         │    └── h:28 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         │    └── k:31 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │              └── n:34 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         └── rowid_default:20 = rowid:35
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    ├── select
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: a:38 b:39 c:40 d:41 e:42 f:43 g:44 h:45 i:46 j:47 k:48!null l:49 m:50 n:51 rowid:52!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: a:38 b:39 c:40 d:41 e:42 f:43 g:44 h:45 i:46 j:47 k:48 l:49 m:50 n:51 rowid:52!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         │    └── h:45 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         │    └── k:48 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    │              └── n:51 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         └── k:48 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │         ├── b_default:19 = h:45
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │         ├── b_default:19 = i:46
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │         └── b_default:19 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    ├── select
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    ├── columns: a:55 b:56 c:57 d:58 e:59 f:60 g:61 h:62 i:63 j:64 k:65 l:66 m:67 n:68!null rowid:69!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: a:55 b:56 c:57 d:58 e:59 f:60 g:61 h:62 i:63 j:64 k:65 l:66 m:67 n:68 rowid:69!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         │    └── h:62 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         │    └── k:65 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    │              └── n:68 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    │         └── n:68 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         ├── b_default:19 = l:66
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         ├── b_default:19 = m:67
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         └── b_default:19 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    ├── columns: a:72 b:73 c:74 d:75 e:76 f:77 g:78 h:79 i:80 j:81 k:82 l:83 m:84 n:85 rowid:86!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         │    └── h:79 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         │    └── k:82 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    │              └── n:85 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         ├── b_default:19 = l:83
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         └── b_default:19 = n:85
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    ├── columns: a:89 b:90 c:91 d:92 e:93 f:94 g:95 h:96 i:97 j:98 k:99 l:100 m:101 n:102 rowid:103!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         │    └── h:96 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         │    └── k:99 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    │              └── n:102 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         └── column1:18 = a:89
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    ├── columns: a:106 b:107 c:108 d:109 e:110 f:111 g:112 h:113 i:114 j:115 k:116 l:117 m:118 n:119 rowid:120!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         │    └── h:113 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         │    └── k:116 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │              └── n:119 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         └── b_default:19 = d:109
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    ├── select
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    ├── columns: a:123 b:124 c:125 d:126 e:127 f:128 g:129 h:130!null i:131 j:132 k:133 l:134 m:135 n:136 rowid:137!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    ├── columns: a:123 b:124 c:125 d:126 e:127 f:128 g:129 h:130 i:131 j:132 k:133 l:134 m:135 n:136 rowid:137!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         │    └── h:130 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         │    └── k:133 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    │              └── n:136 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         └── h:130 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │         ├── b_default:19 = g:129
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │         └── b_default:19 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    ├── select
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    ├── columns: a:140 b:141 c:142 d:143 e:144 f:145 g:146 h:147 i:148 j:149 k:150!null l:151 m:152 n:153 rowid:154!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    ├── columns: a:140 b:141 c:142 d:143 e:144 f:145 g:146 h:147 i:148 j:149 k:150 l:151 m:152 n:153 rowid:154!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         │    └── h:147 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         │    └── k:150 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    │              └── n:153 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    │         └── k:150 > 10
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         ├── b_default:19 = h:147
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         └── b_default:19 > 10
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    ├── columns: a:157 b:158 c:159 d:160 e:161 f:162 g:163 h:164 i:165 j:166 k:167 l:168 m:169 n:170 rowid:171!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         │    └── h:164 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         │    └── k:167 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │              └── n:170 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │         └── b_default:19 = m:169
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    ├── select
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    ├── columns: a:174 b:175 c:176 d:177 e:178 f:179 g:180 h:181 i:182 j:183 k:184 l:185 m:186 n:187!null rowid:188!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    ├── columns: a:174 b:175 c:176 d:177 e:178 f:179 g:180 h:181 i:182 j:183 k:184 l:185 m:186 n:187 rowid:188!null
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         ├── redundant_partial_f_g_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         │    └── h:181 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         ├── partial_i_h_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         │    └── k:184 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │         └── partial_l_m_key: filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    │              └── n:187 > 0
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    │         └── n:187 > 10
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │    └── filters
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │         ├── b_default:19 = l:185
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    │         └── b_default:19 > 10
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │    └── aggregations
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │         ├── first-agg [as=column1:18]
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │         │    └── column1:18
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │         └── first-agg [as=b_default:19]
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    │              └── b_default:19
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │    └── projections
+      │         │    │    │         │    │         │    │    │    │    │         │    │         │         └── (b_default:19 > 0) OR NULL::BOOL [as=arbiter_partial_i_h_key_distinct:191]
+      │         │    │    │         │    │         │    │    │    │    │         │    │         └── aggregations
+      │         │    │    │         │    │         │    │    │    │    │         │    │              ├── first-agg [as=column1:18]
+      │         │    │    │         │    │         │    │    │    │    │         │    │              │    └── column1:18
+      │         │    │    │         │    │         │    │    │    │    │         │    │              └── first-agg [as=rowid_default:20]
+      │         │    │    │         │    │         │    │    │    │    │         │    │                   └── rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    │         │    └── projections
+      │         │    │    │         │    │         │    │    │    │    │         │         └── (b_default:19 > 0) OR NULL::BOOL [as=arbiter_partial_l_m_key_distinct:192]
+      │         │    │    │         │    │         │    │    │    │    │         └── aggregations
+      │         │    │    │         │    │         │    │    │    │    │              ├── first-agg [as=column1:18]
+      │         │    │    │         │    │         │    │    │    │    │              │    └── column1:18
+      │         │    │    │         │    │         │    │    │    │    │              └── first-agg [as=rowid_default:20]
+      │         │    │    │         │    │         │    │    │    │    │                   └── rowid_default:20
+      │         │    │    │         │    │         │    │    │    │    └── aggregations
+      │         │    │    │         │    │         │    │    │    │         ├── first-agg [as=column1:18]
+      │         │    │    │         │    │         │    │    │    │         │    └── column1:18
+      │         │    │    │         │    │         │    │    │    │         └── first-agg [as=rowid_default:20]
+      │         │    │    │         │    │         │    │    │    │              └── rowid_default:20
+      │         │    │    │         │    │         │    │    │    └── aggregations
+      │         │    │    │         │    │         │    │    │         ├── first-agg [as=b_default:19]
+      │         │    │    │         │    │         │    │    │         │    └── b_default:19
+      │         │    │    │         │    │         │    │    │         └── first-agg [as=rowid_default:20]
+      │         │    │    │         │    │         │    │    │              └── rowid_default:20
+      │         │    │    │         │    │         │    │    └── aggregations
+      │         │    │    │         │    │         │    │         ├── first-agg [as=column1:18]
+      │         │    │    │         │    │         │    │         │    └── column1:18
+      │         │    │    │         │    │         │    │         └── first-agg [as=rowid_default:20]
+      │         │    │    │         │    │         │    │              └── rowid_default:20
+      │         │    │    │         │    │         │    └── projections
+      │         │    │    │         │    │         │         └── (b_default:19 > 0) OR NULL::BOOL [as=arbiter_unique_g_distinct:193]
+      │         │    │    │         │    │         └── aggregations
+      │         │    │    │         │    │              ├── first-agg [as=column1:18]
+      │         │    │    │         │    │              │    └── column1:18
+      │         │    │    │         │    │              └── first-agg [as=rowid_default:20]
+      │         │    │    │         │    │                   └── rowid_default:20
+      │         │    │    │         │    └── projections
+      │         │    │    │         │         └── (b_default:19 > 10) OR NULL::BOOL [as=arbiter_unique_h_distinct:194]
+      │         │    │    │         └── aggregations
+      │         │    │    │              ├── first-agg [as=column1:18]
+      │         │    │    │              │    └── column1:18
+      │         │    │    │              └── first-agg [as=rowid_default:20]
+      │         │    │    │                   └── rowid_default:20
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg [as=column1:18]
+      │         │    │         │    └── column1:18
+      │         │    │         └── first-agg [as=rowid_default:20]
+      │         │    │              └── rowid_default:20
+      │         │    └── projections
+      │         │         └── (b_default:19 > 10) OR NULL::BOOL [as=arbiter_unique_l_distinct:195]
+      │         └── aggregations
+      │              ├── first-agg [as=column1:18]
+      │              │    └── column1:18
+      │              └── first-agg [as=rowid_default:20]
+      │                   └── rowid_default:20
+      └── projections
+           └── b_default:19 > 0 [as=partial_index_put1:196]

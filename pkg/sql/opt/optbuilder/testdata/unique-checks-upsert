@@ -1859,7 +1859,7 @@ error (42P10): there is no unique or exclusion constraint matching the ON CONFLI
 build
 INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT ON CONSTRAINT unique_a DO UPDATE SET a = 2
 ----
-error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
+error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so it cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 exec-ddl
 CREATE TABLE uniq_partial_constraint_and_index (
