@@ -537,9 +537,9 @@ func AddSSTable(
 				if writeAtBatchTs {
 					var writeTs hlc.Timestamp
 					// This will fail if the range has split but we'll check for that below.
-					writeTs, err = db.AddSSTableAtBatchTimestamp(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
-						!item.disallowShadowingBelow.IsEmpty(), item.disallowShadowingBelow, &item.stats,
-						ingestAsWriteBatch, batchTs)
+					writeTs, err = db.AddSSTableAtBatchTimestamp(ctx, item.start, item.end, item.sstBytes,
+						false /* disallowConflicts */, !item.disallowShadowingBelow.IsEmpty(),
+						item.disallowShadowingBelow, &item.stats, ingestAsWriteBatch, batchTs)
 					if err == nil {
 						maxTs.Forward(writeTs)
 					}

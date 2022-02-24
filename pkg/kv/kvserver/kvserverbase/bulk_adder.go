@@ -68,9 +68,11 @@ type BulkAdderOptions struct {
 	// actually applied to each key).
 	BatchTimestamp hlc.Timestamp
 
-	// WriteAtRequestTime is used to set the corresponding field when sending
-	// constructed SSTables to AddSSTable. See roachpb.AddSSTableRequest.
-	WriteAtRequestTime bool
+	// WriteAtBatchTimestamp will rewrite the SST to use the batch timestamp, even
+	// if it gets pushed to a different timestamp on the server side. All SST MVCC
+	// timestamps must equal BatchTimestamp. See
+	// roachpb.AddSSTableRequest.SSTTimestampToRequestTimestamp.
+	WriteAtBatchTimestamp bool
 
 	// InitialSplitsIfUnordered specifies a number of splits to make before the
 	// first flush of the buffer if the contents of that buffer were unsorted.
