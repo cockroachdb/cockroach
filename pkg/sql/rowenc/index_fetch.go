@@ -36,8 +36,9 @@ func InitIndexFetchSpec(
 	oldFetchedCols := s.FetchedColumns
 	*s = descpb.IndexFetchSpec{
 		Version:             descpb.IndexFetchSpecVersionInitial,
-		TableName:           table.GetName(),
 		TableID:             table.GetID(),
+		TableName:           table.GetName(),
+		IndexID:             index.GetID(),
 		IndexName:           index.GetName(),
 		IsSecondaryIndex:    !index.Primary(),
 		IsUniqueIndex:       index.IsUnique(),
