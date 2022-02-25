@@ -316,6 +316,7 @@ func init() {
 			(*scpb.Column)(nil),
 			(*scpb.PrimaryIndex)(nil),
 			(*scpb.SecondaryIndex)(nil),
+			(*scpb.TemporaryIndex)(nil),
 			(*scpb.RowLevelTTL)(nil),
 		),
 		screl.DescID,

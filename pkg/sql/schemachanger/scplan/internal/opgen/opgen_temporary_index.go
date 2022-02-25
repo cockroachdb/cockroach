@@ -17,13 +17,16 @@ import (
 )
 
 func init() {
+	// TODO(postamar): rework these awful state transition paths
+	//   DROPPED and PUBLIC are used as placeholders here because we can't reuse
+	//   DELETE_ONLY and ABSENT in the same path.
 	opRegistry.register((*scpb.TemporaryIndex)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.TemporaryIndex) scop.Op {
-					return &scop.MakeAddedIndexDeleteOnly{
+					return &scop.MakeAddedIndex{
 						Index:              *protoutil.Clone(&this.Index).(*scpb.Index),
 						IsSecondaryIndex:   this.IsUsingSecondaryEncoding,
 						IsDeletePreserving: true,
@@ -39,7 +42,31 @@ func init() {
 					}
 				}),
 			),
-			to(scpb.Status_PUBLIC),
+			to(scpb.Status_DROPPED,
+				// TODO(postamar): this really should be DELETE_ONLY
+				revertible(false),
+				emit(func(this *scpb.TemporaryIndex) scop.Op {
+					return &scop.MakeDroppedIndexDeleteOnly{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
+			),
+			to(scpb.Status_PUBLIC,
+				// TODO(postamar): this really should be ABSENT or TRANSIENT.
+				emit(func(this *scpb.TemporaryIndex) scop.Op {
+					return &scop.CreateGcJobForIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
+				emit(func(this *scpb.TemporaryIndex) scop.Op {
+					return &scop.MakeIndexAbsent{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
+			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
@@ -53,6 +80,9 @@ func init() {
 					}
 				}),
 			),
+			// TODO(postamar): remove this as soon as we're no longer using it in
+			//   the ABSENT -> PUBLIC path.
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.TemporaryIndex) scop.Op {
 					return &scop.CreateGcJobForIndex{

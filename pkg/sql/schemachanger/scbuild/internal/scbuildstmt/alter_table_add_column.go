@@ -134,7 +134,6 @@ func alterTableAddColumn(
 	// Add secondary indexes for this column.
 	if newPrimary := addColumn(b, spec); newPrimary != nil {
 		if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
-			idx.ID = b.NextTableIndexID(tbl)
 			addSecondaryIndexTargetsForAddColumn(b, tbl, idx, newPrimary.SourceIndexID)
 		}
 	}
@@ -222,10 +221,17 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 		b.Drop(existingName)
 	}
 	// Create the new primary index element and its dependents.
-	replacement := protoutil.Clone(existing).(*scpb.PrimaryIndex)
+	idx := *protoutil.Clone(&existing.Index).(*scpb.Index)
+	idx.StoringColumnIDs = append(idx.StoringColumnIDs, spec.col.ColumnID)
+	tmp := &scpb.TemporaryIndex{
+		Index: *protoutil.Clone(&idx).(*scpb.Index),
+	}
+	tmp.IndexID = b.NextTableIndexID(spec.tbl)
+	b.Add(tmp)
+	replacement := &scpb.PrimaryIndex{Index: idx}
 	replacement.IndexID = b.NextTableIndexID(spec.tbl)
 	replacement.SourceIndexID = existing.IndexID
-	replacement.StoringColumnIDs = append(replacement.StoringColumnIDs, spec.col.ColumnID)
+	replacement.TemporaryIndexID = tmp.IndexID
 	b.Add(replacement)
 	if existingName != nil {
 		updatedName := protoutil.Clone(existingName).(*scpb.IndexName)
@@ -245,7 +251,6 @@ func addSecondaryIndexTargetsForAddColumn(
 ) {
 	index := scpb.Index{
 		TableID:             tbl.TableID,
-		IndexID:             desc.ID,
 		KeyColumnIDs:        desc.KeyColumnIDs,
 		KeyColumnDirections: make([]scpb.Index_Direction, len(desc.KeyColumnIDs)),
 		KeySuffixColumnIDs:  desc.KeySuffixColumnIDs,
@@ -263,6 +268,17 @@ func addSecondaryIndexTargetsForAddColumn(
 	if desc.Sharded.IsSharded {
 		index.Sharding = &desc.Sharded
 	}
+	// Add temporary index.
+	tmp := &scpb.TemporaryIndex{
+		Index:                    *protoutil.Clone(&index).(*scpb.Index),
+		IsUsingSecondaryEncoding: true,
+	}
+	tmp.IndexID = b.NextTableIndexID(tbl)
+	b.Add(tmp)
+	// Add secondary index and dependents.
+	index.IndexID = b.NextTableIndexID(tbl)
+	index.SourceIndexID = sourceID
+	index.TemporaryIndexID = tmp.IndexID
 	b.Add(&scpb.SecondaryIndex{Index: index})
 	b.Add(&scpb.IndexName{
 		TableID: tbl.TableID,

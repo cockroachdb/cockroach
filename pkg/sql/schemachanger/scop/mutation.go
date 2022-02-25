@@ -33,13 +33,20 @@ type NotImplemented struct {
 	ElementType string
 }
 
-// MakeAddedIndexDeleteOnly adds a non-existent primary index to the
-// table.
-type MakeAddedIndexDeleteOnly struct {
+// MakeAddedIndex adds a new index mutation to the table descriptor.
+type MakeAddedIndex struct {
 	mutationOp
 	Index              scpb.Index
 	IsSecondaryIndex   bool
 	IsDeletePreserving bool
+}
+
+// MakeAddedIndexDeleteOnly transitions an index addition mutation from
+// BACKFILLING to DELETE_ONLY.
+type MakeAddedIndexDeleteOnly struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
 }
 
 // SetAddedIndexPartialPredicate sets a partial predicate expression in an added

@@ -350,6 +350,94 @@ deprules
     - $old-index-node[Target] = $old-index-target
     - $old-index-target[TargetStatus] = ABSENT
     - $old-index-node[CurrentStatus] = VALIDATED
+- name: writable temporary index precedes primary index backfill
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.TemporaryIndex'
+    - $to[Type] = '*scpb.PrimaryIndex'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = WRITE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - join-temp-index(*scpb.TemporaryIndex, *scpb.PrimaryIndex)($from, $to)
+- name: writable temporary index precedes secondary index backfill
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.TemporaryIndex'
+    - $to[Type] = '*scpb.SecondaryIndex'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = WRITE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - join-temp-index(*scpb.TemporaryIndex, *scpb.SecondaryIndex)($from, $to)
+- name: merged primary index precedes dropping temporary index
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.PrimaryIndex'
+    - $to[Type] = '*scpb.TemporaryIndex'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - join-temp-index(*scpb.PrimaryIndex, *scpb.TemporaryIndex)($from, $to)
+- name: merged seconday index precedes dropping temporary index
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.SecondaryIndex'
+    - $to[Type] = '*scpb.TemporaryIndex'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - join-temp-index(*scpb.SecondaryIndex, *scpb.TemporaryIndex)($from, $to)
 - name: index existence precedes index dependents
   from: from-node
   kind: Precedence

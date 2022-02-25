@@ -5,11 +5,26 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 ops
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-PreCommitPhase stage 1 of 1 with 3 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> BACKFILL_ONLY
   ops:
-    *scop.MakeAddedIndexDeleteOnly
+    *scop.MakeAddedIndex
+      Index:
+        IndexID: 2
+        KeyColumnDirections:
+        - 0
+        - 0
+        KeyColumnIDs:
+        - 1
+        - 2
+        StoringColumnIDs:
+        - 3
+        TableID: 104
+      IsDeletePreserving: true
+      IsSecondaryIndex: true
+    *scop.MakeAddedIndex
       Index:
         IndexID: 2
         KeyColumnDirections:
@@ -22,6 +37,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         StoringColumnIDs:
         - 3
         TableID: 104
+        TemporaryIndexID: 2
       IsSecondaryIndex: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -37,9 +53,40 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         redactedstatement: CREATE INDEX ‹id1› ON ‹defaultdb›.public.‹t1› (‹id›, ‹name›)
           STORING (‹money›)
         statementtag: CREATE INDEX
-PostCommitPhase stage 1 of 4 with 3 MutationType ops
+PostCommitPhase stage 1 of 6 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      SourceIndexID: 1
+      TableID: 104
+PostCommitPhase stage 2 of 6 with 4 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitPhase stage 3 of 6 with 1 BackfillType ops
+  transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> MERGED
+  ops:
+    *scop.MergeIndex
+      BackfilledIndexID: 2
+      TableID: 104
+      TemporaryIndexID: 2
+PostCommitPhase stage 4 of 6 with 3 MutationType ops
+  transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -48,22 +95,14 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 5 of 6 with 1 ValidationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> DEPRECATED_BACKFILLED
-  ops:
-    *scop.BackfillIndex
-      IndexID: 2
-      SourceIndexID: 1
-      TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
-  transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DEPRECATED_BACKFILLED] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 4 of 4 with 4 MutationType ops
+PostCommitPhase stage 6 of 6 with 4 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -75,10 +114,37 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> DROPPED
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DROPPED] -> PUBLIC
+  ops:
+    *scop.CreateGcJobForIndex
+      IndexID: 2
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 2
+      TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 
 deps
@@ -92,15 +158,40 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 2}, DROPPED]
+  kind: Precedence
+  rule: merged seconday index precedes dropping temporary index
+- from: [TemporaryIndex:{DescID: 104, IndexID: 2}, WRITE_ONLY]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
+  kind: Precedence
+  rule: writable temporary index precedes secondary index backfill
 
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-PreCommitPhase stage 1 of 1 with 3 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> BACKFILL_ONLY
   ops:
-    *scop.MakeAddedIndexDeleteOnly
+    *scop.MakeAddedIndex
+      Index:
+        IndexID: 2
+        IsConcurrently: true
+        IsInverted: true
+        KeyColumnDirections:
+        - 0
+        - 0
+        KeyColumnIDs:
+        - 1
+        - 2
+        StoringColumnIDs:
+        - 3
+        TableID: 104
+      IsDeletePreserving: true
+      IsSecondaryIndex: true
+    *scop.MakeAddedIndex
       Index:
         IndexID: 2
         IsConcurrently: true
@@ -115,6 +206,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         StoringColumnIDs:
         - 3
         TableID: 104
+        TemporaryIndexID: 2
       IsSecondaryIndex: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -131,9 +223,40 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         redactedstatement: CREATE INVERTED INDEX CONCURRENTLY ‹id1› ON ‹defaultdb›.public.‹t1›
           (‹id›, ‹name›) STORING (‹money›)
         statementtag: CREATE INDEX
-PostCommitPhase stage 1 of 4 with 3 MutationType ops
+PostCommitPhase stage 1 of 6 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      SourceIndexID: 1
+      TableID: 104
+PostCommitPhase stage 2 of 6 with 4 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitPhase stage 3 of 6 with 1 BackfillType ops
+  transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> MERGED
+  ops:
+    *scop.MergeIndex
+      BackfilledIndexID: 2
+      TableID: 104
+      TemporaryIndexID: 2
+PostCommitPhase stage 4 of 6 with 3 MutationType ops
+  transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -142,22 +265,14 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 5 of 6 with 1 ValidationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> DEPRECATED_BACKFILLED
-  ops:
-    *scop.BackfillIndex
-      IndexID: 2
-      SourceIndexID: 1
-      TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
-  transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DEPRECATED_BACKFILLED] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 4 of 4 with 4 MutationType ops
+PostCommitPhase stage 6 of 6 with 4 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -169,10 +284,37 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> DROPPED
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DROPPED] -> PUBLIC
+  ops:
+    *scop.CreateGcJobForIndex
+      IndexID: 2
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 2
+      TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 
 deps
@@ -186,3 +328,11 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 2}, DROPPED]
+  kind: Precedence
+  rule: merged seconday index precedes dropping temporary index
+- from: [TemporaryIndex:{DescID: 104, IndexID: 2}, WRITE_ONLY]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
+  kind: Precedence
+  rule: writable temporary index precedes secondary index backfill

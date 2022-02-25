@@ -48,8 +48,6 @@ func maybeMutationStatus(mm catalog.TableElementMaybeMutation) scpb.Status {
 		return scpb.Status_DELETE_ONLY
 	case mm.WriteAndDeleteOnly():
 		return scpb.Status_WRITE_ONLY
-	case mm.Merging():
-		return scpb.Status_MERGING
 	case mm.Backfilling():
 		return scpb.Status_BACKFILL_ONLY
 	default:

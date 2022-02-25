@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // CreateIndex implements CREATE INDEX.
@@ -190,9 +191,21 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			ColumnNames:  keyColNames,
 		}
 	}
-	// Assign the ID here, since we may have added columns
-	// and made a new primary key above.
+	// Add the temporary index.
+	tmp := &scpb.TemporaryIndex{
+		Index:                    *protoutil.Clone(&index).(*scpb.Index),
+		IsUsingSecondaryEncoding: true,
+	}
+	switch t := relation.(type) {
+	case *scpb.Table:
+		tmp.IndexID = b.NextTableIndexID(t)
+	case *scpb.View:
+		tmp.IndexID = b.NextViewIndexID(t)
+	}
+	b.Add(tmp)
+	// Add the secondary index and its dependents.
 	index.SourceIndexID = source.IndexID
+	index.TemporaryIndexID = tmp.IndexID
 	switch t := relation.(type) {
 	case *scpb.Table:
 		index.IndexID = b.NextTableIndexID(t)

@@ -30,25 +30,25 @@ enum Status {
   // These are the desired final end states of a schema change.
   //
   ABSENT = 1;
-  PUBLIC = 8;
+  PUBLIC = 2;
   // TRANSIENT is like PUBLIC except the element is not expected to
   // persist once the schema change involving it is complete.
-  TRANSIENT = 9;
+  TRANSIENT = 3;
 
   // Intermediate states on the descriptor dropping path.
-  TXN_DROPPED = 7;
-  DROPPED = 2;
+  TXN_DROPPED = 4;
+  DROPPED = 5;
 
   // Intermediate states on the column and temporary index dropping and adding
   // paths.
-  WRITE_ONLY = 4;
-  DELETE_ONLY = 3;
+  WRITE_ONLY = 6;
+  DELETE_ONLY = 7;
 
   // Intermediate states on the primary and secondary index dropping and adding
   // paths.
-  DEPRECATED_BACKFILLED = 5;
-  VALIDATED = 6;
-  MERGING = 10;
+  VALIDATED = 8;
+  MERGED = 9;
+  BACKFILLED = 10;
   BACKFILL_ONLY = 11;
 }
 

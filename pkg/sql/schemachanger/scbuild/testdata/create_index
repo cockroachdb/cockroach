@@ -24,6 +24,21 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true
 
 build
 CREATE INVERTED INDEX CONCURRENTLY id2
@@ -50,6 +65,23 @@ CREATE INVERTED INDEX CONCURRENTLY id2
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isConcurrently: true
+      isInverted: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true
 
 build skip=sql_dependencies
 CREATE INDEX id3
@@ -82,6 +114,21 @@ CREATE INDEX id3
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true
 
 build
 CREATE INDEX id4
@@ -151,6 +198,7 @@ CREATE INDEX id4
       - 3
       - 4
       tableId: 104
+      temporaryIndexId: 2
 - [[SecondaryIndex:{DescID: 104, IndexID: 3}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
@@ -172,3 +220,39 @@ CREATE INDEX id4
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 3
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      - 3
+      - 4
+      tableId: 104
+- [[TemporaryIndex:{DescID: 104, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 3
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sharding:
+        columnNames:
+        - id
+        - name
+        isSharded: true
+        name: crdb_internal_id_name_shard_8
+        shardBuckets: 8
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true

@@ -57,6 +57,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       storingColumnIds:
       - 2
       tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -116,6 +129,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       keyColumnIds:
       - 1
       sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
       storingColumnIds:
       - 2
       tableId: 104
@@ -208,6 +234,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       - 2
       - 3
       tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
@@ -263,6 +302,19 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       keyColumnIds:
       - 1
       sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
       storingColumnIds:
       - 2
       tableId: 104
@@ -356,6 +408,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       storingColumnIds:
       - 2
       tableId: 104
+      temporaryIndexId: 2
 - [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
@@ -378,6 +431,32 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       keyColumnIds:
       - 2
       sourceIndexId: 1
+      storingColumnIds:
+      - 1
+      - 3
+      tableId: 105
+      temporaryIndexId: 2
+- [[TemporaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 104
+- [[TemporaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
       storingColumnIds:
       - 1
       - 3

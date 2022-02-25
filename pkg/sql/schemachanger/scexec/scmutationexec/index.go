@@ -20,9 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) MakeAddedIndexDeleteOnly(
-	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
-) error {
+func (m *visitor) MakeAddedIndex(ctx context.Context, op scop.MakeAddedIndex) error {
 	tbl, err := m.checkOutTable(ctx, op.Index.TableID)
 	if err != nil {
 		return err
@@ -59,7 +57,7 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 		encodingType = descpb.SecondaryIndexEncoding
 	}
 	// Create an index descriptor from the operation.
-	idx := &descpb.IndexDescriptor{
+	desc := &descpb.IndexDescriptor{
 		ID:                          op.Index.IndexID,
 		Name:                        tabledesc.IndexNamePlaceholder(op.Index.IndexID),
 		Unique:                      op.Index.IsUnique,
@@ -78,10 +76,35 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 		UseDeletePreservingEncoding: op.IsDeletePreserving,
 	}
 	if op.Index.Sharding != nil {
-		idx.Sharded = *op.Index.Sharding
+		desc.Sharded = *op.Index.Sharding
 	}
 	tbl.NextConstraintID++
-	return enqueueAddIndexMutation(tbl, idx)
+	if err := enqueueAddIndexMutation(tbl, desc); err != nil {
+		return err
+	}
+	mut, err := FindMutation(tbl, MakeIndexIDMutationSelector(op.Index.IndexID))
+	if err != nil {
+		return err
+	}
+	if !op.IsDeletePreserving {
+		tbl.Mutations[mut.MutationOrdinal()].State = descpb.DescriptorMutation_BACKFILLING
+	}
+	return nil
+}
+
+func (m *visitor) MakeAddedIndexDeleteOnly(
+	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return mutationStateChange(
+		tbl,
+		MakeIndexIDMutationSelector(op.IndexID),
+		descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+	)
 }
 
 func (m *visitor) SetAddedIndexPartialPredicate(

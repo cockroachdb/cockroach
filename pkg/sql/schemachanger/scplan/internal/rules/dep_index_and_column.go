@@ -52,6 +52,70 @@ func init() {
 	)
 }
 
+// These rules ensure that temporary indexes and other indexes maintain
+// compatible states.
+func init() {
+	depRule(
+		"writable temporary index precedes primary index backfill",
+		scgraph.Precedence,
+		scpb.ToPublic,
+		element(scpb.Status_WRITE_ONLY,
+			(*scpb.TemporaryIndex)(nil),
+		),
+		element(scpb.Status_PUBLIC,
+			(*scpb.PrimaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("join-temp-index", func(tmp *scpb.TemporaryIndex, prim *scpb.PrimaryIndex) bool {
+		return tmp.TableID == prim.TableID && tmp.IndexID == prim.TemporaryIndexID
+	}).register()
+
+	depRule(
+		"writable temporary index precedes secondary index backfill",
+		scgraph.Precedence,
+		scpb.ToPublic,
+		element(scpb.Status_WRITE_ONLY,
+			(*scpb.TemporaryIndex)(nil),
+		),
+		element(scpb.Status_PUBLIC,
+			(*scpb.SecondaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("join-temp-index", func(tmp *scpb.TemporaryIndex, sec *scpb.SecondaryIndex) bool {
+		return tmp.TableID == sec.TableID && tmp.IndexID == sec.TemporaryIndexID
+	}).register()
+
+	depRule(
+		"merged primary index precedes dropping temporary index",
+		scgraph.Precedence,
+		scpb.ToPublic,
+		element(scpb.Status_PUBLIC,
+			(*scpb.PrimaryIndex)(nil),
+		),
+		element(scpb.Status_DROPPED,
+			(*scpb.TemporaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("join-temp-index", func(prim *scpb.PrimaryIndex, tmp *scpb.TemporaryIndex) bool {
+		return tmp.TableID == prim.TableID && tmp.IndexID == prim.TemporaryIndexID
+	}).register()
+
+	depRule(
+		"merged secondary index precedes dropping temporary index",
+		scgraph.Precedence,
+		scpb.ToPublic,
+		element(scpb.Status_PUBLIC,
+			(*scpb.SecondaryIndex)(nil),
+		),
+		element(scpb.Status_DROPPED,
+			(*scpb.TemporaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("join-temp-index", func(sec *scpb.SecondaryIndex, tmp *scpb.TemporaryIndex) bool {
+		return tmp.TableID == sec.TableID && tmp.IndexID == sec.TemporaryIndexID
+	}).register()
+}
+
 // These rules ensure that index-dependent elements, like an index's name, its
 // partitioning, etc. appear once the index reaches a suitable state.
 // Vice-versa for index removal.
@@ -60,7 +124,7 @@ func init() {
 		"index existence precedes index dependents",
 		scgraph.Precedence,
 		scpb.ToPublic,
-		element(scpb.Status_DELETE_ONLY,
+		element(scpb.Status_BACKFILL_ONLY,
 			(*scpb.PrimaryIndex)(nil),
 			(*scpb.SecondaryIndex)(nil),
 		),
@@ -77,7 +141,7 @@ func init() {
 		"partial predicate set right after secondary index existence",
 		scgraph.SameStagePrecedence,
 		scpb.ToPublic,
-		element(scpb.Status_DELETE_ONLY,
+		element(scpb.Status_BACKFILL_ONLY,
 			(*scpb.SecondaryIndex)(nil),
 		),
 		element(scpb.Status_PUBLIC,
@@ -333,7 +397,7 @@ func init() {
 		),
 		screl.DescID,
 		screl.IndexID,
-	).withFilter("parent-relation-is-not-dropped", func(ip *scpb.SecondaryIndexPartial, _ *scpb.SecondaryIndex) bool {
+	).withFilter("parent-relation-is-not-dropped", func(ip *scpb.SecondaryIndexPartial, _ scpb.Element) bool {
 		return !ip.IsRelationBeingDropped
 	}).register()
 }
@@ -408,9 +472,22 @@ func init() {
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.Column)(nil),
 		),
-		element(scpb.Status_DELETE_ONLY,
+		element(scpb.Status_BACKFILL_ONLY,
 			(*scpb.PrimaryIndex)(nil),
 			(*scpb.SecondaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("column-featured-in-index", columnInIndex).register()
+
+	depRule(
+		"column existence precedes temporary index existence",
+		scgraph.Precedence,
+		scpb.ToPublic,
+		element(scpb.Status_DELETE_ONLY,
+			(*scpb.Column)(nil),
+		),
+		element(scpb.Status_DELETE_ONLY,
+			(*scpb.TemporaryIndex)(nil),
 		),
 		screl.DescID,
 	).withFilter("column-featured-in-index", columnInIndex).register()

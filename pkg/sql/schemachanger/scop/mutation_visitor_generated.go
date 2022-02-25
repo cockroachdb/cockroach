@@ -23,6 +23,7 @@ type MutationOp interface {
 // MutationVisitor is a visitor for MutationOp operations.
 type MutationVisitor interface {
 	NotImplemented(context.Context, NotImplemented) error
+	MakeAddedIndex(context.Context, MakeAddedIndex) error
 	MakeAddedIndexDeleteOnly(context.Context, MakeAddedIndexDeleteOnly) error
 	SetAddedIndexPartialPredicate(context.Context, SetAddedIndexPartialPredicate) error
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
@@ -84,6 +85,11 @@ type MutationVisitor interface {
 // Visit is part of the MutationOp interface.
 func (op NotImplemented) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.NotImplemented(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAddedIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAddedIndex(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
