@@ -49,14 +49,14 @@ func (s *Store) TestingSpanConfigStoreForEachOverlapping(
 // 		apply
 // 		delete [a,c)
 // 		set [c,h):X
-// 		set {entire-keyspace}:_ENTIRE
-// 		set {source=1,target=1}:_TENANT
+// 		set {entire-keyspace}:X
+// 		set {source=1,target=1}:Y
 // 		----
 // 		deleted [b,d)
 // 		deleted [e,g)
 // 		added [c,h):X
-// 		added {entire-keyspace}:_ENTIRE
-// 		added {source=1,target=1}:_TENANT
+// 		added {entire-keyspace}:X
+// 		added {source=1,target=1}:Y
 //
 // 		get key=b
 // 		----

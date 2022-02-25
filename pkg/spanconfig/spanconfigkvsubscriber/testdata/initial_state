@@ -16,7 +16,7 @@ start
 
 updates
 ----
-/M{in-ax}
+[/Min,/Max)
 
 store-reader key=a
 ----
@@ -24,4 +24,4 @@ conf=B
 
 store-reader key=d
 ----
-conf=MISSING
+conf=FALLBACK

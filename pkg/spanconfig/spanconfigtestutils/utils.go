@@ -39,9 +39,9 @@ var systemTargetRe = regexp.MustCompile(
 	`^{(entire-keyspace)|(source=(\d*),\s??((target=(\d*))|all-tenant-keyspace-targets-set))}$`,
 )
 
-// configRe matches a single word. It's a shorthand for declaring a unique
-// config.
-var configRe = regexp.MustCompile(`^(\w+)$`)
+// configRe matches either FALLBACK (for readability) or a single letter. It's a
+// shorthand for declaring a unique tagged config.
+var configRe = regexp.MustCompile(`^(FALLBACK)|(^\w)$`)
 
 // ParseSpan is helper function that constructs a roachpb.Span from a string of
 // the form "[start, end)".
@@ -105,17 +105,23 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 	if !configRe.MatchString(conf) {
 		t.Fatalf("expected %s to match config regex", conf)
 	}
-	protectionPolicies := make([]roachpb.ProtectionPolicy, 0, len(conf))
-	for _, c := range conf {
-		protectionPolicies = append(protectionPolicies, roachpb.ProtectionPolicy{
-			ProtectedTimestamp: hlc.Timestamp{
-				WallTime: int64(c),
-			},
-		})
+	matches := configRe.FindStringSubmatch(conf)
+
+	var ts int64
+	if matches[1] == "FALLBACK" {
+		ts = -1
+	} else {
+		ts = int64(matches[2][0])
 	}
 	return roachpb.SpanConfig{
 		GCPolicy: roachpb.GCPolicy{
-			ProtectionPolicies: protectionPolicies,
+			ProtectionPolicies: []roachpb.ProtectionPolicy{
+				{
+					ProtectedTimestamp: hlc.Timestamp{
+						WallTime: ts,
+					},
+				},
+			},
 		},
 	}
 }
@@ -244,10 +250,25 @@ func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.
 }
 
 // PrintSpan is a helper function that transforms roachpb.Span into a string of
-// the form "[start,end)". The span is assumed to have been constructed by the
-// ParseSpan helper above.
+// the form "[start,end)". Spans constructed by the ParseSpan helper above
+// roundtrip; spans containing special keys that translate to pretty-printed
+// keys are printed as such.
 func PrintSpan(sp roachpb.Span) string {
-	return fmt.Sprintf("[%s,%s)", string(sp.Key), string(sp.EndKey))
+	s := []string{
+		sp.Key.String(),
+		sp.EndKey.String(),
+	}
+	for i := range s {
+		// Raw keys are quoted, so we unquote them.
+		if strings.Contains(s[i], "\"") {
+			var err error
+			s[i], err = strconv.Unquote(s[i])
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	return fmt.Sprintf("[%s,%s)", s[0], s[1])
 }
 
 // PrintTarget is a helper function that prints a spanconfig.Target.
@@ -268,9 +289,17 @@ func PrintTarget(t *testing.T, target spanconfig.Target) string {
 // ParseSpanConfig helper above.
 func PrintSpanConfig(config roachpb.SpanConfig) string {
 	// See ParseConfig for what a "tagged" roachpb.SpanConfig translates to.
-	conf := make([]string, 0, len(config.GCPolicy.ProtectionPolicies))
-	for _, policy := range config.GCPolicy.ProtectionPolicies {
-		conf = append(conf, fmt.Sprintf("%c", policy.ProtectedTimestamp.WallTime))
+	conf := make([]string, 0, len(config.GCPolicy.ProtectionPolicies)*2)
+	for i, policy := range config.GCPolicy.ProtectionPolicies {
+		if i > 0 {
+			conf = append(conf, "+")
+		}
+		// Special case handling for "FALLBACK" config for readability.
+		if policy.ProtectedTimestamp.WallTime == -1 {
+			conf = append(conf, "FALLBACK")
+		} else {
+			conf = append(conf, fmt.Sprintf("%c", policy.ProtectedTimestamp.WallTime))
+		}
 	}
 	return strings.Join(conf, "")
 }
