@@ -52,7 +52,7 @@ cluster
 
 translate system-span-configurations
 ----
-{source=10,target=10}                      pts=[3 3]
+{source=10,target=10}                      protection_policies=[{ts: 3} {ts: 3}]
 
 translate database=db
 ----
@@ -65,7 +65,7 @@ release record-id=1
 
 translate system-span-configurations
 ----
-{source=10,target=10}                      pts=[3 3]
+{source=10,target=10}                      protection_policies=[{ts: 3} {ts: 3}]
 
 translate database=db
 ----
@@ -78,7 +78,7 @@ release record-id=2
 
 translate system-span-configurations
 ----
-{source=10,target=10}                      pts=[3 3]
+{source=10,target=10}                      protection_policies=[{ts: 3} {ts: 3}]
 
 translate database=db
 ----
@@ -101,7 +101,7 @@ release record-id=3
 
 translate system-span-configurations
 ----
-{source=10,target=10}                      pts=[3]
+{source=10,target=10}                      protection_policies=[{ts: 3}]
 
 translate database=db
 ----

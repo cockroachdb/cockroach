@@ -64,7 +64,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 63
+const Version execinfrapb.DistSQLVersion = 64
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -75,6 +75,14 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 63
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 64 (MinAcceptedVersion: 63)
+  - final_covar_samp, final_corr, and final_sqrdiff aggregate functions were
+    introduced to support local and final aggregation of the corresponding
+    builtin functions. It would be unrecognized by a server running older
+    versions, hence the version bump.
+    However, a server running v64 can still process all plans from servers
+    running v63, thus the MinAcceptedVersion is kept at 63.
 
 - Version: 63 (MinAcceptedVersion: 63):
  - Changed JoinReaderSpec to use a descpb.IndexFetchSpec and a list of family

@@ -180,7 +180,7 @@ func (s *authenticationServer) UserLogin(
 // It is only available for demo and test clusters.
 func (s *authenticationServer) demoLogin(w http.ResponseWriter, req *http.Request) {
 	ctx := context.Background()
-	ctx = logtags.AddTag(ctx, "client", req.RemoteAddr)
+	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(req.RemoteAddr))
 	ctx = logtags.AddTag(ctx, "demologin", nil)
 
 	fail := func(err error) {

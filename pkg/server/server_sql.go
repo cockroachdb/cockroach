@@ -121,6 +121,7 @@ type SQLServer struct {
 	pgServer         *pgwire.Server
 	distSQLServer    *distsql.ServerImpl
 	execCfg          *sql.ExecutorConfig
+	cfg              *BaseConfig
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *lease.Manager
 	blobService      *blobs.Service
@@ -1021,6 +1022,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		settingsWatcher:         settingsWatcher,
 		systemConfigWatcher:     cfg.systemConfigWatcher,
 		isMeta1Leaseholder:      cfg.isMeta1Leaseholder,
+		cfg:                     cfg.BaseConfig,
 	}, nil
 }
 
