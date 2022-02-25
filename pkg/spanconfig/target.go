@@ -113,6 +113,18 @@ func (t Target) Encode() roachpb.Span {
 	}
 }
 
+// KeyspaceTargeted returns the keyspan the target applies to.
+func (t Target) KeyspaceTargeted() roachpb.Span {
+	switch {
+	case t.IsSpanTarget():
+		return t.span
+	case t.IsSystemTarget():
+		return t.systemTarget.keyspaceTargeted()
+	default:
+		panic("cannot handle any other type of target")
+	}
+}
+
 // Less returns true if the receiver is considered less than the supplied
 // target.
 func (t Target) Less(o Target) bool {

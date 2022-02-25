@@ -53,7 +53,7 @@ func TestRandomized(t *testing.T) {
 	}
 
 	getRandomConf := func() roachpb.SpanConfig {
-		confStr := fmt.Sprintf("conf_%s", string(configs[rand.Intn(len(configs))]))
+		confStr := string(configs[rand.Intn(len(configs))])
 		return spanconfigtestutils.ParseConfig(t, confStr)
 	}
 

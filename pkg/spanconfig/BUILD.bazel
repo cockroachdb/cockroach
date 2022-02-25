@@ -32,6 +32,7 @@ go_test(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/testutils",
+        "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
 )
