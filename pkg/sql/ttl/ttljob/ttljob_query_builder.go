@@ -17,10 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -153,13 +156,17 @@ func (b *selectQueryBuilder) run(
 	ctx context.Context, ie *sql.InternalExecutor,
 ) ([]tree.Datums, error) {
 	q, args := b.nextQuery()
+
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
 	// the internal executor will treat a passed-in txn as an explicit txn, so
 	// the AOST clause on the SELECT query would not be interpreted correctly.
-	ret, err := ie.QueryBuffered(
+	ret, err := ie.QueryBufferedEx(
 		ctx,
 		"ttl_scanner",
 		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
+		},
 		q,
 		args...,
 	)
@@ -265,10 +272,15 @@ func (b *deleteQueryBuilder) run(
 	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, rows []tree.Datums,
 ) error {
 	q, deleteArgs := b.buildQueryAndArgs(rows)
-	_, err := ie.Exec(
+	qosLevel := sessiondatapb.TTLLow
+	_, err := ie.ExecEx(
 		ctx,
 		"ttl_delete",
 		txn,
+		sessiondata.InternalExecutorOverride{
+			User:             security.RootUserName(),
+			QualityOfService: &qosLevel,
+		},
 		q,
 		deleteArgs...,
 	)
