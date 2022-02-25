@@ -25,3 +25,10 @@ if grep TODO DEPS.bzl; then
     exit 1
 fi
 check_workspace_clean "Run \`./dev generate bazel\` to automatically regenerate these."
+
+# Run go mod tidy and ensure nothing changes.
+# NB: If files are missing from any packages then `go mod tidy` will
+# fail. So we need to make sure that `.pb.go` sources are populated.
+bazel run //pkg/gen:go_proto
+bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
+check_workspace_clean "Run \`go mod tidy\` to automatically regenerate these."

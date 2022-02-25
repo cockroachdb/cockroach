@@ -68,13 +68,15 @@ func TestOutbox(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
+	dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
-			Settings:   st,
-			Stopper:    stopper,
-			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+			Settings:      st,
+			Stopper:       stopper,
+			NodeDialer:    dialer,
+			PodNodeDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -231,13 +233,15 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
+	dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
-			Settings:   st,
-			Stopper:    stopper,
-			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+			Settings:      st,
+			Stopper:       stopper,
+			NodeDialer:    dialer,
+			PodNodeDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -302,13 +306,15 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			defer evalCtx.Stop(ctx)
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
+			dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
-					Settings:   st,
-					Stopper:    stopper,
-					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+					Settings:      st,
+					Stopper:       stopper,
+					NodeDialer:    dialer,
+					PodNodeDialer: dialer,
 				},
 				NodeID: base.TestingIDContainer,
 			}
@@ -378,13 +384,15 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
+	dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
-			Settings:   st,
-			Stopper:    stopper,
-			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+			Settings:      st,
+			Stopper:       stopper,
+			NodeDialer:    dialer,
+			PodNodeDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -440,7 +448,8 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 			Settings: st,
 			Stopper:  stopper,
 			// a nil nodeDialer will always fail to connect.
-			NodeDialer: nil,
+			NodeDialer:    nil,
+			PodNodeDialer: nil,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -507,13 +516,15 @@ func BenchmarkOutbox(b *testing.B) {
 			defer evalCtx.Stop(bgCtx)
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(bgCtx, clock, stopper, clusterID)
+			dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
-					Settings:   st,
-					Stopper:    stopper,
-					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+					Settings:      st,
+					Stopper:       stopper,
+					NodeDialer:    dialer,
+					PodNodeDialer: dialer,
 				},
 				NodeID: base.TestingIDContainer,
 			}
