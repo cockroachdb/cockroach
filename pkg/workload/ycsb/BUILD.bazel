@@ -34,6 +34,7 @@ go_test(
         "zipfgenerator_test.go",
     ],
     embed = [":ycsb"],
+    shard_count = 16,
     deps = [
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",

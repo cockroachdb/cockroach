@@ -35,6 +35,7 @@ go_test(
         ":latch_interval_btree_test.go",  # keep
     ],
     embed = [":spanlatch"],
+    shard_count = 16,
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/spanset",

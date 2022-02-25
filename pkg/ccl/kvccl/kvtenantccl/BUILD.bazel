@@ -48,6 +48,7 @@ go_test(
         "tenant_upgrade_test.go",
     ],
     embed = [":kvtenantccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl",

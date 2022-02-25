@@ -7,6 +7,7 @@ go_test(
         "telemetry_test.go",
     ],
     data = glob(["testdata/**"]),
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/ccl",
