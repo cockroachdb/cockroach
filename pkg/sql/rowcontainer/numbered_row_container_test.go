@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,6 +33,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
+
+func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+	diskMonitor := mon.NewMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	return diskMonitor
+}
 
 // Tests the de-duping functionality of DiskBackedNumberedRowContainer.
 func TestNumberedRowContainerDeDuping(t *testing.T) {
@@ -62,7 +75,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	memoryBudget := math.MaxInt64
@@ -148,7 +161,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -237,7 +250,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -546,7 +559,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	// Each row is 10 string columns. Each string has a mean length of 5, and the
