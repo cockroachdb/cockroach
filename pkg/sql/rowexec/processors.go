@@ -371,7 +371,7 @@ func NewProcessor(
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		return backfill.NewIndexBackfillMerger(flowCtx, *core.IndexBackfillMerger, outputs[0])
+		return backfill.NewIndexBackfillMerger(ctx, flowCtx, *core.IndexBackfillMerger, outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }

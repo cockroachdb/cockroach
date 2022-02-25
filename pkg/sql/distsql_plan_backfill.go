@@ -55,14 +55,10 @@ func initIndexBackfillerSpec(
 }
 
 func initIndexBackfillMergerSpec(
-	desc descpb.TableDescriptor,
-	chunkSize int64,
-	addedIndexes []descpb.IndexID,
-	temporaryIndexes []descpb.IndexID,
+	desc descpb.TableDescriptor, addedIndexes []descpb.IndexID, temporaryIndexes []descpb.IndexID,
 ) (execinfrapb.IndexBackfillMergerSpec, error) {
 	return execinfrapb.IndexBackfillMergerSpec{
 		Table:            desc,
-		ChunkSize:        chunkSize,
 		AddedIndexes:     addedIndexes,
 		TemporaryIndexes: temporaryIndexes,
 	}, nil

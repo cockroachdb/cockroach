@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"sync"
 	"testing"
@@ -597,13 +598,16 @@ func TestMergeProcessor(t *testing.T) {
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
 		evalCtx := tree.EvalContext{Settings: settings}
+		//mm := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, settings)
+		mm := mon.NewUnlimitedMonitor(ctx, "MemoryMonitor", mon.MemoryResource, nil, nil, math.MaxInt64, settings)
 		flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
-			Settings: settings,
-			Codec:    codec,
+			Settings:          settings,
+			Codec:             codec,
+			BackfillerMonitor: mm,
 		},
 			EvalCtx: &evalCtx}
 
-		im, err := backfill.NewIndexBackfillMerger(&flowCtx, execinfrapb.IndexBackfillMergerSpec{}, nil)
+		im, err := backfill.NewIndexBackfillMerger(ctx, &flowCtx, execinfrapb.IndexBackfillMergerSpec{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -671,7 +675,7 @@ func TestMergeProcessor(t *testing.T) {
 		}))
 
 		sp := tableDesc.IndexSpan(codec, srcIndex.GetID())
-		_, err = im.Merge(context.Background(), codec, tableDesc, srcIndex.GetID(), dstIndex.GetID(), sp.Key, sp.EndKey, 1000)
+		_, err = im.Merge(context.Background(), codec, tableDesc, srcIndex.GetID(), dstIndex.GetID(), sp.Key, sp.EndKey)
 		if err != nil {
 			t.Fatal(err)
 		}

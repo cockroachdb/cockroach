@@ -63,9 +63,8 @@ func (im *IndexBackfillerMergePlanner) plan(
 		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, txn.ReadTimestamp(), descriptors)
 		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			DistributionTypeSystemTenantOnly)
-		chunkSize := indexBackfillMergeBatchSize.Get(&im.execCfg.Settings.SV)
 
-		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), chunkSize, addedIndexes, temporaryIndexes)
+		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes)
 		if err != nil {
 			return err
 		}
