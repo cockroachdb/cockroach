@@ -272,10 +272,9 @@ func (ex *connExecutor) populatePrepared(
 	// only allows SELECT, INSERT, UPDATE, DELETE and VALUES statements to be
 	// prepared.
 	// See: https://www.postgresql.org/docs/current/static/sql-prepare.html
-	// However, we allow a large number of additional statements.
-	// As of right now, the optimizer only works on SELECT statements and will
-	// fallback for all others, so this should be safe for the foreseeable
-	// future.
+	// However, we must be able to handle every type of statement below because
+	// the Postgres extended protocol requires running statements via the prepare
+	// and execute paths.
 	flags, err := p.prepareUsingOptimizer(ctx)
 	if err != nil {
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
@@ -553,7 +552,20 @@ func (ex *connExecutor) execDescribe(
 
 		res.SetInferredTypes(ps.InferredTypes)
 
-		if stmtHasNoData(ps.AST) {
+		ast := ps.AST
+		if execute, ok := ast.(*tree.Execute); ok {
+			// If we're describing an EXECUTE, we need to look up the statement type
+			// of the prepared statement that the EXECUTE refers to, or else we'll
+			// return the wrong information for describe.
+			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(execute.Name)]
+			if !found {
+				return retErr(pgerror.Newf(
+					pgcode.InvalidSQLStatementName,
+					"unknown prepared statement %q", descCmd.Name))
+			}
+			ast = innerPs.AST
+		}
+		if stmtHasNoData(ast) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPrepStmtOutput(ctx, ps.Columns)
