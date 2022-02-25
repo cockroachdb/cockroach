@@ -77,7 +77,7 @@ func TestStreamerLimitations(t *testing.T) {
 
 	t.Run("invalid enqueueKeys", func(t *testing.T) {
 		streamer := getStreamer()
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
 		// Use a single request but two keys which is invalid.
 		reqs := []roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{}}}
@@ -87,7 +87,7 @@ func TestStreamerLimitations(t *testing.T) {
 
 	t.Run("pipelining unsupported", func(t *testing.T) {
 		streamer := getStreamer()
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
 		get := roachpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
 		reqs := []roachpb.RequestUnion{{
@@ -182,7 +182,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	t.Run("single key exceeds limit", func(t *testing.T) {
 		const limitBytes = 10
 		streamer := getStreamer(limitBytes)
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 
 		// A single request that exceeds the limit should be allowed.
 		reqs := make([]roachpb.RequestUnion, 1)
@@ -193,7 +193,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	t.Run("single key exceeds root pool size", func(t *testing.T) {
 		const limitBytes = 10
 		streamer := getStreamer(limitBytes)
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 
 		// A single request that exceeds the limit as well as the root SQL pool
 		// should be denied.
@@ -205,7 +205,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	t.Run("multiple keys exceed limit", func(t *testing.T) {
 		const limitBytes = 10
 		streamer := getStreamer(limitBytes)
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 
 		// Create two requests which exceed the limit when combined.
 		reqs := make([]roachpb.RequestUnion, 2)
@@ -417,7 +417,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 
 	t.Run("scan single range", func(t *testing.T) {
 		streamer := getStreamer()
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 
 		// Scan the row with pk=0.
 		reqs := make([]roachpb.RequestUnion, 1)
@@ -431,7 +431,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 
 	t.Run("scan multiple ranges", func(t *testing.T) {
 		streamer := getStreamer()
-		defer streamer.Close()
+		defer streamer.Close(ctx)
 
 		// Scan the rows with pk in range [1, 4).
 		reqs := make([]roachpb.RequestUnion, 1)

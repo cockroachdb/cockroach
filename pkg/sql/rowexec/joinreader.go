@@ -1001,7 +1001,7 @@ func (jr *joinReader) close() {
 			// the latter might release some memory tracked by the budget of the
 			// streamer.
 			if jr.streamerInfo.Streamer != nil {
-				jr.streamerInfo.Streamer.Close()
+				jr.streamerInfo.Streamer.Close(jr.Ctx)
 			}
 			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
 			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
