@@ -287,10 +287,9 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	fetchScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: false,
+			includeSystem:    false,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -373,10 +372,9 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	mb.fetchScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       true,
-			includeSystem:          true,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: true,
+			includeSystem:    true,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -581,10 +579,9 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 	if h.tableScopeLazy == nil {
 		h.tableScopeLazy = h.mb.b.buildScan(
 			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
-				includeMutations:       false,
-				includeSystem:          false,
-				includeInverted:        false,
-				includeVirtualComputed: true,
+				includeMutations: false,
+				includeSystem:    false,
+				includeInverted:  false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
