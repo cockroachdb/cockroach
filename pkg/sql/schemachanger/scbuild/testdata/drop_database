@@ -10,7 +10,6 @@ create-sequence
 CREATE SEQUENCE db1.public.SQ1
 ----
 
-
 create-sequence
 CREATE SEQUENCE db1.sc1.SQ1
 ----

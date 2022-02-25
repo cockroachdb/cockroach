@@ -415,7 +415,11 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			if idx.IsPartial() {
 				pp, err := w.newExpression(idx.GetPredicate())
 				onErrPanic(err)
-				sec.PartialPredicate = pp
+				w.ev(scpb.Status_PUBLIC, &scpb.SecondaryIndexPartial{
+					TableID:    index.TableID,
+					IndexID:    index.IndexID,
+					Expression: *pp,
+				})
 			}
 			w.ev(idxStatus, sec)
 		}

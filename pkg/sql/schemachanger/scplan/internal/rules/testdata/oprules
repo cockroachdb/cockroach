@@ -15,7 +15,7 @@ oprules
     - $column-node[Type] = '*screl.Node'
     - $column-node[Target] = $column-target
     - $column-target[TargetStatus] = ABSENT
-    - $column-node[CurrentStatus] IN [PUBLIC, DELETE_AND_WRITE_ONLY]
+    - $column-node[CurrentStatus] IN [PUBLIC, WRITE_ONLY]
 - name: skip column dependents removal ops on relation drop
   from: column-dep-node
   query:

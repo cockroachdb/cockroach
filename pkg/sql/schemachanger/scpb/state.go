@@ -51,10 +51,10 @@ func (s *CurrentState) Rollback() {
 	for i := range s.Targets {
 		t := &s.Targets[i]
 		switch t.TargetStatus {
-		case Status_PUBLIC:
-			t.TargetStatus = Status_ABSENT
 		case Status_ABSENT:
 			t.TargetStatus = Status_PUBLIC
+		default:
+			t.TargetStatus = Status_ABSENT
 		}
 	}
 	s.InRollback = true
@@ -83,9 +83,9 @@ func (e *ElementProto) Element() Element {
 
 // MakeTarget constructs a new Target. The passed elem must be one of the oneOf
 // members of Element. If not, this call will panic.
-func MakeTarget(status Status, elem Element, metadata *TargetMetadata) Target {
+func MakeTarget(status TargetStatus, elem Element, metadata *TargetMetadata) Target {
 	t := Target{
-		TargetStatus: status,
+		TargetStatus: status.Status(),
 	}
 	if metadata != nil {
 		t.Metadata = *protoutil.Clone(metadata).(*TargetMetadata)
@@ -113,7 +113,6 @@ func (m *DescriptorState) Clone() *DescriptorState {
 // slice of DescriptorState object from which the current state has been
 // decomposed.
 func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (CurrentState, error) {
-
 	var s CurrentState
 	var targetRanks []uint32
 	var rollback bool

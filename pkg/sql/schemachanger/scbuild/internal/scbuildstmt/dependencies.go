@@ -74,7 +74,7 @@ type BuilderState interface {
 
 	// Ensure ensures the presence of the given element in the BuilderState with
 	// the given statuses and metadata.
-	Ensure(currentStatus, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata)
+	Ensure(current scpb.Status, target scpb.TargetStatus, elem scpb.Element, meta scpb.TargetMetadata)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -205,7 +205,7 @@ type ElementResultSet interface {
 	IsEmpty() bool
 
 	// Filter returns a subset of this result set according to the predicate.
-	Filter(predicate func(status, targetStatus scpb.Status, element scpb.Element) bool) ElementResultSet
+	Filter(predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool) ElementResultSet
 }
 
 // ElementReferences looks up an element's forward and backward references.

@@ -4,7 +4,7 @@ CREATE TABLE tbl (
   id INT PRIMARY KEY,
   name STRING NOT NULL,
   price DECIMAL(8,2),
-  INDEX sec (name) STORING (price),
+  INDEX sec (name) STORING (price) WHERE (id > 0),
   CONSTRAINT myfk FOREIGN KEY (id) REFERENCES parent (id)
 );
 ----
@@ -227,6 +227,12 @@ ElementState:
 - IndexName:
     indexId: 2
     name: sec
+    tableId: 105
+  Status: PUBLIC
+- SecondaryIndexPartial:
+    embeddedExpr:
+      expr: id > 0:::INT8
+    indexId: 2
     tableId: 105
   Status: PUBLIC
 - IndexComment:

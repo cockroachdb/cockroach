@@ -97,8 +97,8 @@ func alterTableAddColumn(
 	if d.HasColumnFamily() {
 		elts := b.QueryByID(tbl.TableID)
 		var found bool
-		scpb.ForEachColumnFamily(elts, func(_, targetStatus scpb.Status, cf *scpb.ColumnFamily) {
-			if targetStatus == scpb.Status_PUBLIC && cf.Name == string(d.Family.Name) {
+		scpb.ForEachColumnFamily(elts, func(_ scpb.Status, target scpb.TargetStatus, cf *scpb.ColumnFamily) {
+			if target == scpb.ToPublic && cf.Name == string(d.Family.Name) {
 				spec.colType.FamilyID = cf.FamilyID
 				found = true
 			}
@@ -177,11 +177,11 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 	// simply add the new column to its storing columns.
 	var existing, freshlyAdded *scpb.PrimaryIndex
 	publicTargets := b.QueryByID(spec.tbl.TableID).Filter(
-		func(_, targetStatus scpb.Status, _ scpb.Element) bool {
-			return targetStatus == scpb.Status_PUBLIC
+		func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+			return target == scpb.ToPublic
 		},
 	)
-	scpb.ForEachPrimaryIndex(publicTargets, func(status, _ scpb.Status, idx *scpb.PrimaryIndex) {
+	scpb.ForEachPrimaryIndex(publicTargets, func(status scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) {
 		existing = idx
 		if status == scpb.Status_ABSENT {
 			// TODO(postamar): does it matter that there could be more than one?
@@ -205,12 +205,12 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 	b.Drop(existing)
 	var existingName *scpb.IndexName
 	var existingPartitioning *scpb.IndexPartitioning
-	scpb.ForEachIndexName(publicTargets, func(_, _ scpb.Status, name *scpb.IndexName) {
+	scpb.ForEachIndexName(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, name *scpb.IndexName) {
 		if name.IndexID == existing.IndexID {
 			existingName = name
 		}
 	})
-	scpb.ForEachIndexPartitioning(publicTargets, func(_, _ scpb.Status, part *scpb.IndexPartitioning) {
+	scpb.ForEachIndexPartitioning(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, part *scpb.IndexPartitioning) {
 		if part.IndexID == existing.IndexID {
 			existingPartitioning = part
 		}

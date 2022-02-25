@@ -212,7 +212,7 @@ CREATE TABLE db.t (
 							KeyColumnIDs:        []catid.ColumnID{1},
 							KeyColumnDirections: []scpb.Index_Direction{scpb.Index_ASC},
 						},
-						SecondaryIndex: true,
+						IsSecondaryIndex: true,
 					},
 				}
 			},
@@ -271,7 +271,7 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			targets := []scpb.Target{
 				scpb.MakeTarget(
-					scpb.Status_PUBLIC,
+					scpb.ToPublic,
 					&scpb.PrimaryIndex{
 						Index: scpb.Index{
 							TableID:             fooTable.GetID(),
@@ -286,7 +286,7 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 				scpb.MakeTarget(
-					scpb.Status_PUBLIC,
+					scpb.ToPublic,
 					&scpb.IndexName{
 						TableID: fooTable.GetID(),
 						IndexID: 2,
@@ -295,7 +295,7 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 				scpb.MakeTarget(
-					scpb.Status_PUBLIC,
+					scpb.ToPublic,
 					&scpb.ColumnName{
 						TableID:  fooTable.GetID(),
 						ColumnID: 2,
@@ -304,7 +304,7 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 				scpb.MakeTarget(
-					scpb.Status_PUBLIC,
+					scpb.ToPublic,
 					&scpb.ColumnType{
 						TableID:    fooTable.GetID(),
 						ColumnID:   2,
@@ -314,7 +314,7 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 				scpb.MakeTarget(
-					scpb.Status_PUBLIC,
+					scpb.ToPublic,
 					&scpb.Column{
 						TableID:        fooTable.GetID(),
 						ColumnID:       2,
@@ -323,7 +323,7 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 				scpb.MakeTarget(
-					scpb.Status_ABSENT,
+					scpb.ToAbsent,
 					&scpb.PrimaryIndex{
 						Index: scpb.Index{
 							TableID:             fooTable.GetID(),
@@ -336,7 +336,7 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 				scpb.MakeTarget(
-					scpb.Status_ABSENT,
+					scpb.ToAbsent,
 					&scpb.IndexName{
 						TableID: fooTable.GetID(),
 						IndexID: 1,
