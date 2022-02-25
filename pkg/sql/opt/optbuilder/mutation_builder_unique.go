@@ -399,10 +399,9 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	tabMeta := h.mb.b.addTable(h.mb.tab, tree.NewUnqualifiedTableName(h.mb.tab.Name()))
 	ordinals = tableOrdinals(tabMeta.Table, columnKinds{
-		includeMutations:       false,
-		includeSystem:          false,
-		includeInverted:        false,
-		includeVirtualComputed: true,
+		includeMutations: false,
+		includeSystem:    false,
+		includeInverted:  false,
 	})
 	return h.mb.b.buildScan(
 		tabMeta,

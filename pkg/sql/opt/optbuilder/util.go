@@ -708,9 +708,6 @@ type columnKinds struct {
 
 	// If true, include inverted index columns.
 	includeInverted bool
-
-	// If true, include virtual computed columns.
-	includeVirtualComputed bool
 }
 
 // tableOrdinals returns a slice of ordinals that correspond to table columns of
@@ -727,7 +724,7 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {
 		col := tab.Column(i)
-		if shouldInclude[col.Kind()] && (k.includeVirtualComputed || !col.IsVirtualComputed()) {
+		if shouldInclude[col.Kind()] {
 			ordinals = append(ordinals, i)
 		}
 	}

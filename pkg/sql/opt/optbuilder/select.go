@@ -115,10 +115,9 @@ func (b *Builder) buildDataSource(
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
-					includeMutations:       false,
-					includeSystem:          true,
-					includeInverted:        false,
-					includeVirtualComputed: true,
+					includeMutations: false,
+					includeSystem:    true,
+					includeInverted:  false,
 				}),
 				indexFlags, locking, inScope,
 			)
@@ -399,10 +398,9 @@ func (b *Builder) buildScanFromTableRef(
 		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
 	} else {
 		ordinals = tableOrdinals(tab, columnKinds{
-			includeMutations:       false,
-			includeSystem:          true,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: false,
+			includeSystem:    true,
+			includeInverted:  false,
 		})
 	}
 
