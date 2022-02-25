@@ -62,6 +62,7 @@ import {
 import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -373,6 +374,12 @@ export class TransactionsPage extends React.Component<
       data?.transactions || [],
       internal_app_name_prefix,
     );
+    const longLoadingMessage = !this.props?.data && (
+      <InlineAlert
+        intent="info"
+        title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+      />
+    );
 
     return (
       <div className={cx("table-area")}>
@@ -521,6 +528,7 @@ export class TransactionsPage extends React.Component<
             })
           }
         />
+        {longLoadingMessage}
       </div>
     );
   }
