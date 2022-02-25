@@ -46,11 +46,15 @@ type AlterChangefeedCmd interface {
 	alterChangefeedCmd()
 }
 
-func (*AlterChangefeedAddTarget) alterChangefeedCmd()  {}
-func (*AlterChangefeedDropTarget) alterChangefeedCmd() {}
+func (*AlterChangefeedAddTarget) alterChangefeedCmd()    {}
+func (*AlterChangefeedDropTarget) alterChangefeedCmd()   {}
+func (*AlterChangefeedSetOptions) alterChangefeedCmd()   {}
+func (*AlterChangefeedUnsetOptions) alterChangefeedCmd() {}
 
 var _ AlterChangefeedCmd = &AlterChangefeedAddTarget{}
 var _ AlterChangefeedCmd = &AlterChangefeedDropTarget{}
+var _ AlterChangefeedCmd = &AlterChangefeedSetOptions{}
+var _ AlterChangefeedCmd = &AlterChangefeedUnsetOptions{}
 
 // AlterChangefeedAddTarget represents an ADD <targets> command
 type AlterChangefeedAddTarget struct {
@@ -72,4 +76,26 @@ type AlterChangefeedDropTarget struct {
 func (node *AlterChangefeedDropTarget) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP ")
 	ctx.FormatNode(&node.Targets.Tables)
+}
+
+// AlterChangefeedSetOptions represents an SET <options> command
+type AlterChangefeedSetOptions struct {
+	Options KVOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterChangefeedSetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET ")
+	ctx.FormatNode(&node.Options)
+}
+
+// AlterChangefeedUnsetOptions represents an UNSET <options> command
+type AlterChangefeedUnsetOptions struct {
+	Options NameList
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterChangefeedUnsetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString(" UNSET ")
+	ctx.FormatNode(&node.Options)
 }
