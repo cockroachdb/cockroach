@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Make sure that running a wire-protocol-level PREPARE of a SQL-level PREPARE
-// doesn't cause any problems.
-func TestPreparePrepare(t *testing.T) {
+// and SQL-level EXECUTE doesn't cause any problems.
+func TestPreparePrepareExecute(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -31,24 +31,32 @@ func TestPreparePrepare(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	defer db.Close()
 
-	foo, err := db.Prepare("PREPARE x AS SELECT $1::int")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = foo.Exec()
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Test that preparing an invalid EXECUTE fails at prepare-time.
+	_, err := db.Prepare("EXECUTE x(3)")
+	require.Contains(t, err.Error(), "no such prepared statement")
 
-	foo, err = db.Prepare("EXECUTE x(4)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := foo.QueryRow()
+	// Test that we can prepare and execute a PREPARE.
+	s, err := db.Prepare("PREPARE x AS SELECT $1::int")
+	require.NoError(t, err)
+
+	_, err = s.Exec()
+	require.NoError(t, err)
+
+	// Make sure we can't send arguments to the PREPARE even though it has a
+	// placeholder inside (that placeholder is for the "inner" PREPARE).
+	_, err = s.Exec(3)
+	require.Contains(t, err.Error(), "expected 0 arguments, got 1")
+
+	// Test that we can prepare and execute the corresponding EXECUTE.
+	s, err = db.Prepare("EXECUTE x(3)")
+	require.NoError(t, err)
+
 	var output int
-	if err := r.Scan(&output); err != nil {
-		t.Fatal(err)
-	}
+	err = s.QueryRow().Scan(&output)
+	require.NoError(t, err)
+	require.Equal(t, 3, output)
 
-	assert.Equal(t, 4, output)
+	// Make sure we can't send arguments to the prepared EXECUTE.
+	_, err = s.Exec(3)
+	require.Contains(t, err.Error(), "expected 0 arguments, got 1")
 }

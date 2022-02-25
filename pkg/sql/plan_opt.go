@@ -53,7 +53,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	opc := &p.optPlanningCtx
 	opc.reset()
 
-	switch stmt.AST.(type) {
+	switch t := stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
 		*tree.Analyze,
 		*tree.BeginTransaction,
@@ -64,7 +64,6 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		*tree.CreateStats,
 		*tree.Deallocate, *tree.Discard, *tree.DropDatabase, *tree.DropIndex,
 		*tree.DropTable, *tree.DropView, *tree.DropSequence, *tree.DropType,
-		*tree.Execute,
 		*tree.Grant, *tree.GrantRole,
 		*tree.Prepare,
 		*tree.ReleaseSavepoint, *tree.RenameColumn, *tree.RenameDatabase,
@@ -79,6 +78,23 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		// optbuilder so they would error out. Others (like CreateIndex) have planning
 		// code that can introduce unnecessary txn retries (because of looking up
 		// descriptors and such).
+		return opc.flags, nil
+
+	case *tree.Execute:
+		// This statement is going to execute a prepared statement. To prepare it,
+		// we need to set the expected output columns to the output columns of the
+		// prepared statement that the user is trying to execute.
+		name := string(t.Name)
+		prepared, ok := p.preparedStatements.Get(name)
+		if !ok {
+			// We're trying to prepare an EXECUTE of a statement that doesn't exist.
+			// Let's just give up at this point.
+			// Postgres doesn't fail here, instead it produces an EXECUTE that returns
+			// no columns. This seems like dubious behavior at best.
+			return opc.flags, pgerror.Newf(pgcode.UndefinedPreparedStatement,
+				"no such prepared statement %s", name)
+		}
+		stmt.Prepared.Columns = prepared.Columns
 		return opc.flags, nil
 
 	case *tree.ExplainAnalyze:
