@@ -10,35 +10,36 @@
 
 import { assert } from "chai";
 import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
-import * as timewindow from "./timewindow";
+import * as timeScale from "./timeScale";
 import moment from "moment";
 
-describe("time window reducer", function() {
+describe("time scale reducer", function() {
   describe("actions", function() {
-    it("should create the correct action to set the current time window", function() {
+    it("should create the correct SET_METRICS_MOVING_WINDOW action to set the current time window", function() {
       const start = moment();
       const end = start.add(10, "s");
       const expectedSetting = {
-        type: timewindow.SET_WINDOW,
+        type: timeScale.SET_METRICS_MOVING_WINDOW,
         payload: {
           start,
           end,
         },
       };
       assert.deepEqual(
-        timewindow.setTimeWindow({ start, end }),
+        timeScale.setMetricsMovingWindow({ start, end }),
         expectedSetting,
       );
     });
 
-    it("should create the correct action to set time window settings", function() {
-      const payload: timewindow.TimeScale = {
+    it("should create the correct SET_SCALE action to set time window settings", function() {
+      const payload: timeScale.TimeScale = {
         windowSize: moment.duration(10, "s"),
         windowValid: moment.duration(10, "s"),
         sampleSize: moment.duration(10, "s"),
+        fixedWindowEnd: false,
       };
-      assert.deepEqual(timewindow.setTimeScale(payload), {
-        type: timewindow.SET_SCALE,
+      assert.deepEqual(timeScale.setTimeScale(payload), {
+        type: timeScale.SET_SCALE,
         payload,
       });
     });
@@ -47,54 +48,57 @@ describe("time window reducer", function() {
   describe("reducer", () => {
     it("should have the correct default value.", () => {
       assert.deepEqual(
-        timewindow.timeWindowReducer(undefined, { type: "unknown" }),
-        new timewindow.TimeWindowState(),
+        timeScale.timeScaleReducer(undefined, { type: "unknown" }),
+        new timeScale.TimeScaleState(),
       );
-      assert.deepEqual(
-        new timewindow.TimeWindowState().scale,
-        defaultTimeScaleOptions["Past 10 Minutes"],
-      );
+      assert.deepEqual(new timeScale.TimeScaleState().scale, {
+        ...defaultTimeScaleOptions["Past 10 Minutes"],
+        key: "Past 10 Minutes",
+        fixedWindowEnd: false,
+      });
     });
 
-    describe("setTimeWindow", () => {
+    describe("setMetricsMovingWindow", () => {
       const start = moment();
       const end = start.add(10, "s");
       it("should correctly overwrite previous value", () => {
-        const expected = new timewindow.TimeWindowState();
-        expected.currentWindow = {
+        const expected = new timeScale.TimeScaleState();
+        expected.metricsTime.currentWindow = {
           start,
           end,
         };
-        expected.scaleChanged = false;
+        expected.metricsTime.shouldUpdateMetricsWindowFromScale = false;
         assert.deepEqual(
-          timewindow.timeWindowReducer(
+          timeScale.timeScaleReducer(
             undefined,
-            timewindow.setTimeWindow({ start, end }),
+            timeScale.setMetricsMovingWindow({ start, end }),
           ),
           expected,
         );
       });
     });
 
-    describe("setTimeWindowSettings", () => {
+    describe("setTimeScale", () => {
       const newSize = moment.duration(1, "h");
       const newValid = moment.duration(1, "m");
       const newSample = moment.duration(1, "m");
       it("should correctly overwrite previous value", () => {
-        const expected = new timewindow.TimeWindowState();
+        const expected = new timeScale.TimeScaleState();
         expected.scale = {
           windowSize: newSize,
           windowValid: newValid,
           sampleSize: newSample,
+          fixedWindowEnd: false,
         };
-        expected.scaleChanged = true;
+        expected.metricsTime.shouldUpdateMetricsWindowFromScale = true;
         assert.deepEqual(
-          timewindow.timeWindowReducer(
+          timeScale.timeScaleReducer(
             undefined,
-            timewindow.setTimeScale({
+            timeScale.setTimeScale({
               windowSize: newSize,
               windowValid: newValid,
               sampleSize: newSample,
+              fixedWindowEnd: false,
             }),
           ),
           expected,

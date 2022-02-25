@@ -146,7 +146,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
-    windowEnd: moment.utc("2021.12.12"),
+    fixedWindowEnd: moment.utc("2021.12.12"),
     key: "Custom",
   },
   statement: {

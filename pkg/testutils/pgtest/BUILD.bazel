@@ -13,5 +13,6 @@ go_library(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
+        "@com_github_stretchr_testify//require",
     ],
 )

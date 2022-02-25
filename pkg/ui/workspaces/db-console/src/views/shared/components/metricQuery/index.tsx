@@ -37,7 +37,7 @@ import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggre
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 import Long from "long";
 import { History } from "history";
-import { TimeWindow, TimeScale } from "src/redux/timewindow";
+import { TimeWindow, TimeScale } from "src/redux/timeScale";
 import { PayloadAction } from "src/interfaces/action";
 
 /**
@@ -160,7 +160,7 @@ export interface MetricsDataComponentProps {
   // convenient syntax for a common use case where all metrics on a graph are
   // are from the same source set.
   sources?: string[];
-  setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
   adjustTimeScaleOnChange?: (

@@ -12,7 +12,7 @@ import React, { useEffect } from "react";
 import { useHistory } from "react-router-dom";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
-import * as timewindow from "src/redux/timewindow";
+import * as timewindow from "src/redux/timeScale";
 import {
   defaultTimeScaleOptions,
   TimeScaleDropdown,
@@ -34,25 +34,42 @@ const TimeScaleDropdownWithSearchParams = (
   useEffect(() => {
     const setDatesByQueryParams = (dates: Partial<TimeWindow>) => {
       const now = moment.utc();
+      // `currentWindow` is derived from `scale`, and does not have to do with the `currentWindow` for the metrics page.
       const currentWindow: TimeWindow = {
         start: moment(now).subtract(props.currentScale.windowSize),
         end: now,
       };
+      /**
+       * Prioritize an end defined in the query params.
+       * Else, use window end.
+       * Else, a seemingly unreachable option says otherwise use now, but that should never happen since it is set in
+       *  the line above (and is the same value anyway, always now).
+       */
       const end = dates.end?.utc() || currentWindow.end?.utc() || now;
+      /**
+       * Prioritize start as defined in the query params.
+       * Else, use now minus the window size.
+       * Else, a final seemingly unreachable option (since start is always set above) is to do ten minutes before now.
+       */
       const start =
         dates.start?.utc() ||
         currentWindow.start?.utc() ||
         moment(now).subtract(10, "minutes");
       const seconds = end.diff(start, "seconds");
-      const timeScale = findClosestTimeScale(defaultTimeScaleOptions, seconds);
-      if (
-        moment.duration(now.diff(end)).asMinutes() >
-        timeScale.sampleSize.asMinutes()
-      ) {
+
+      // Find the closest time scale just by window size.
+      // And temporarily assume the end is "now" with fixedWindowEnd=false.
+      const timeScale: TimeScale = {
+        ...findClosestTimeScale(defaultTimeScaleOptions, seconds),
+        windowSize: moment.duration(end.diff(start)),
+        fixedWindowEnd: false,
+      };
+      // Check if the end is close to now, with "close" defined as being no more than `sampleSize` behind.
+      if (now > end.subtract(timeScale.sampleSize)) {
+        // The end is far enough away from now, thus this is a custom selection.
         timeScale.key = "Custom";
+        timeScale.fixedWindowEnd = end;
       }
-      timeScale.windowEnd = null;
-      timeScale.windowSize = moment.duration(end.diff(start));
       props.setTimeScale(timeScale);
     };
 
@@ -92,7 +109,7 @@ const TimeScaleDropdownWithSearchParams = (
     props.setTimeScale(timeScale);
     setQueryParamsByDates(
       timeScale.windowSize,
-      timeScale.windowEnd || moment.utc(),
+      timeScale.fixedWindowEnd || moment.utc(),
     );
   };
 
@@ -100,7 +117,7 @@ const TimeScaleDropdownWithSearchParams = (
 };
 
 const scaleSelector = createSelector(
-  (state: AdminUIState) => state?.timewindow,
+  (state: AdminUIState) => state?.timeScale,
   tw => tw?.scale,
 );
 

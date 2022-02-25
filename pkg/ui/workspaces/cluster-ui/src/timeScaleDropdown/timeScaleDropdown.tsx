@@ -16,7 +16,7 @@ import {
   TimeScale,
   TimeWindow,
   ArrowDirection,
-  TimeScaleCollection,
+  TimeScaleOptions,
 } from "./timeScaleTypes";
 import TimeFrameControls from "./timeFrameControls";
 import RangeSelect, { RangeOption } from "./rangeSelect";
@@ -31,7 +31,7 @@ export const timeFormat = "h:mmA";
 
 export interface TimeScaleDropdownProps {
   currentScale: TimeScale;
-  options?: TimeScaleCollection;
+  options?: TimeScaleOptions;
   setTimeScale: (tw: TimeScale) => void;
   adjustTimeScaleOnChange?: (
     curTimeScale: TimeScale,
@@ -124,8 +124,8 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   setTimeScale,
   adjustTimeScaleOnChange,
 }): React.ReactElement => {
-  const end = currentScale.windowEnd
-    ? moment.utc(currentScale.windowEnd)
+  const end = currentScale.fixedWindowEnd
+    ? moment.utc(currentScale.fixedWindowEnd)
     : moment().utc();
   const currentWindow: TimeWindow = {
     start: moment.utc(end).subtract(currentScale.windowSize),
@@ -136,7 +136,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     let timeScale: TimeScale = {
       ...options[rangeOption.label],
       key: rangeOption.label,
-      windowEnd: null,
+      fixedWindowEnd: false,
     };
     if (adjustTimeScaleOnChange) {
       const timeWindow: TimeWindow = {
@@ -156,37 +156,43 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     const seconds = windowSize.asSeconds();
     let selected = {};
     let key = currentScale.key;
-    let windowEnd = moment.utc(currentWindow.end);
+    let endTime = moment.utc(currentWindow.end);
 
     switch (direction) {
       case ArrowDirection.RIGHT:
-        if (windowEnd) {
-          windowEnd = windowEnd.add(seconds, "seconds");
-        }
+        endTime = endTime.add(seconds, "seconds");
         break;
       case ArrowDirection.LEFT:
-        windowEnd = windowEnd.subtract(seconds, "seconds");
+        endTime = endTime.subtract(seconds, "seconds");
         break;
       case ArrowDirection.CENTER:
         // CENTER is used to set the time window to the current time.
-        windowEnd = moment.utc();
+        endTime = moment.utc();
         break;
       default:
         console.error("Unknown direction: ", direction);
     }
+
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
-    if (
-      !windowEnd ||
-      windowEnd > moment.utc().subtract(currentScale.windowValid)
-    ) {
+    // The first `!endTime` part of the if clause seems unnecessary since endTime is always a specific time.
+    // If endTime + windowValid > now. Unclear why this uses windowValid instead of windowSize.
+    if (!endTime || endTime > moment.utc().subtract(currentScale.windowValid)) {
       const foundTimeScale = Object.entries(options).find(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         ([_, value]) => value.windowSize.asSeconds() === windowSize.asSeconds(),
       );
       if (foundTimeScale) {
+        /**
+         * This code can be hit by:
+         *  - Select a default option, then click the left arrow, then click the right arrow.
+         * This (or the parent if block) is *not* hit by:
+         *  - Select a default time, click left, select a custom time of the same range, then click right. The arrow is
+         *    not disabled, but the clause doesn't seem to be true.
+         */
         selected = { key: foundTimeScale[0], ...foundTimeScale[1] };
       } else {
+        // This code might not be possible to hit, due to the right arrow being disabled
         key = "Custom";
       }
     } else {
@@ -195,7 +201,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
     let timeScale: TimeScale = {
       ...currentScale,
-      windowEnd,
+      fixedWindowEnd: endTime,
       windowSize,
       key,
       ...selected,
@@ -225,7 +231,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     let timeScale: TimeScale = {
       ...findClosestTimeScale(options, seconds),
       windowSize: moment.duration(end.diff(start)),
-      windowEnd: end,
+      fixedWindowEnd: end,
       key: "Custom",
     };
     if (adjustTimeScaleOnChange) {

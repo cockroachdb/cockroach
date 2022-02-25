@@ -20,7 +20,7 @@ import {
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { util } from "@cockroachlabs/cluster-ui";
+import { toDateRange, util } from "@cockroachlabs/cluster-ui";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -97,7 +97,7 @@ interface MetricsDataProviderConnectProps {
   timeInfo: QueryTimeInfo;
   requestMetrics: typeof requestMetricsAction;
   refreshNodeSettings: typeof refreshSettings;
-  setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
 }
@@ -234,7 +234,7 @@ class MetricsDataProvider extends React.Component<
     const dataProps: MetricsDataComponentProps = {
       data: this.getData(),
       timeInfo: this.props.timeInfo,
-      setTimeRange: this.props.setTimeRange,
+      setMetricsFixedWindow: this.props.setMetricsFixedWindow,
       setTimeScale: this.props.setTimeScale,
       history: this.props.history,
       adjustTimeScaleOnChange,
@@ -249,18 +249,15 @@ class MetricsDataProvider extends React.Component<
 // timeInfoSelector converts the current global time window into a set of Long
 // timestamps, which can be sent with requests to the server.
 const timeInfoSelector = createSelector(
-  (state: AdminUIState) => state.timewindow,
+  (state: AdminUIState) => state.timeScale,
   tw => {
-    if (!_.isObject(tw.currentWindow)) {
+    if (!_.isObject(tw.scale)) {
       return null;
     }
 
-    // It is possible for the currentWindow and scale to be out of sync due to
-    // the flow of some events such as drag-to-zoom. Thus, the source of truth for
-    // scale here should be based on the currentWindow.
-    const { currentWindow } = tw;
-    const start = currentWindow.start.valueOf();
-    const end = currentWindow.end.valueOf();
+    const [startMoment, endMoment] = toDateRange(tw.scale);
+    const start = startMoment.valueOf();
+    const end = endMoment.valueOf();
     const syncedScale = findClosestTimeScale(
       defaultTimeScaleOptions,
       util.MilliToSeconds(end - start),

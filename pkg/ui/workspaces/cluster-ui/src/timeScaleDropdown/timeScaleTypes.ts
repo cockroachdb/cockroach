@@ -21,43 +21,45 @@ export interface TimeWindow {
 }
 
 /**
- * TimeScale describes the requested dimensions of TimeWindows; it
- * prescribes a length for the window, along with a period of time that a
- * newly created TimeWindow will remain valid.
+ * TimeScale describes the requested dimensions, from which one can derive concrete TimeWindows using toDateRange.
  */
 export interface TimeScale {
-  // The key used to index in to the availableTimeScales collection.
+  /**
+   * The key used to index in to the defaultTimeScaleOptions collection.
+   * The key is "Custom" when specifying a custom time that is not one of the default options
+   */
   key?: string;
   // The size of a global time window. Default is ten minutes.
   windowSize: moment.Duration;
-  // The length of time the global time window is valid. The current time window
-  // is invalid if now > (currentWindow.end + windowValid). Default is ten
-  // seconds. If windowEnd is set this is ignored.
+  // The length of time the global time window is valid. Default is ten seconds.
   windowValid?: moment.Duration;
   // The expected duration of individual samples for queries at this time scale.
   sampleSize: moment.Duration;
-  // The end time of the window if it isn't the present
-  windowEnd?: moment.Moment;
+  /**
+   * The fixed end time of the window, or false if it should be a dynamically moving "now".
+   * Typically, when the `key` property is a default option, `fixedWindowEnd` should be false.
+   * And when the `key` property is "Custom" `fixedWindowEnd` should be a specific Moment.
+   * It is unclear if there are legitimate reasons for the two being out of sync.
+   */
+  fixedWindowEnd: moment.Moment | false;
 }
 
-export class TimeWindowState {
+export class TimeScaleState {
   // Currently selected scale.
   scale: TimeScale;
-  // Currently established time window.
-  currentWindow: TimeWindow;
-  // True if scale has changed since currentWindow was generated.
-  scaleChanged: boolean;
-  useTimeRange: boolean;
   constructor() {
-    this.scale = defaultTimeScaleOptions["Past 10 Minutes"];
-    this.scale.key = "Past 10 Minutes";
-    this.useTimeRange = false;
-    this.scaleChanged = false;
+    this.scale = {
+      ...defaultTimeScaleOptions["Past 10 Minutes"],
+      fixedWindowEnd: false,
+      key: "Past 10 Minutes",
+    };
   }
 }
 
-export interface TimeScaleCollection {
-  [key: string]: TimeScale;
+export type TimeScaleOption = Omit<TimeScale, "fixedWindowEnd">;
+
+export interface TimeScaleOptions {
+  [key: string]: TimeScaleOption;
 }
 
 export type TimeRangeTitle =
