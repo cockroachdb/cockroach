@@ -1436,11 +1436,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	}
 
-	// NB: This needs to come after `startListenRPCAndSQL`, which determines
-	// what the advertised addr is going to be if nothing is explicitly
-	// provided.
-	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
-
 	if s.cfg.DelayedBootstrapFn != nil {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
@@ -1598,6 +1593,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	onSuccessfulReturnFn()
 
+	// NB: This needs to come after `startListenRPCAndSQL`, which determines
+	// what the advertised addr is going to be if nothing is explicitly
+	// provided.
+	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
+
 	// We're going to need to start gossip before we spin up Node below.
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1606,10 +1606,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+
+	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
+
 	if err := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
+		advHTTPAddrU,
 		*state,
 		initialStart,
 		s.cfg.ClusterName,
@@ -2648,11 +2652,7 @@ func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
 }
 
-// ServeHTTP is necessary to implement the http.Handler interface.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Disable caching of responses.
-	w.Header().Set("Cache-control", "no-cache")
-
+func (s *Server) gzipHandler(w http.ResponseWriter, r *http.Request) {
 	ae := r.Header.Get(httputil.AcceptEncodingHeader)
 	switch {
 	case strings.Contains(ae, httputil.GzipEncoding):
@@ -2676,6 +2676,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w = gzw
 	}
 
+	s.mux.ServeHTTP(w, r)
+}
+
+// ServeHTTP is necessary to implement the http.Handler interface.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Disable caching of responses.
+	w.Header().Set("Cache-control", "no-cache")
+
 	// This is our base handler.
 	// Intercept all panics, log them, and return an internal server error as a response.
 	defer func() {
@@ -2687,7 +2695,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	s.mux.ServeHTTP(w, r)
+	// These callbacks help us avoid a dependency on gossip in httpServer.
+	parseNodeIDFn := func(str string) (roachpb.NodeID, bool, error) {
+		return parseNodeID(s.gossip, str)
+	}
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
+		return s.gossip.GetNodeIDHTTPAddress(id)
+	}
+	nodeProxy := &nodeProxy{
+		scheme:               s.cfg.HTTPRequestScheme(),
+		rpcContext:           s.rpcContext,
+		parseNodeID:          parseNodeIDFn,
+		getNodeIDHTTPAddress: getNodeIDHTTPAddressFn,
+	}
+
+	nodeProxy.nodeProxyHandler(w, r, s.gzipHandler)
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
