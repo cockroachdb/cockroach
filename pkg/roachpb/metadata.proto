@@ -330,6 +330,8 @@ message StoreCapacity {
   // by ranges in the store. The stat is tracked over the time period defined
   // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
+  // read_amplification tracks the current read amplification in the store.
+  optional int64 read_amplification = 11 [(gogoproto.nullable) = false];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
