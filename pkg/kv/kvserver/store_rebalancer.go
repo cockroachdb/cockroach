@@ -253,12 +253,7 @@ func (sr *StoreRebalancer) scorerOptions() *qpsScorerOptions {
 func (sr *StoreRebalancer) rebalanceStore(
 	ctx context.Context, mode LBRebalancingMode, allStoresList StoreList,
 ) {
-	// First check if we should transfer leases away to better balance QPS.
 	options := sr.scorerOptions()
-	// We only bother rebalancing stores that are fielding more than the
-	// cluster-level overfull threshold of QPS.
-	qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
-
 	var localDesc *roachpb.StoreDescriptor
 	for i := range allStoresList.stores {
 		if allStoresList.stores[i].StoreID == sr.rq.store.StoreID() {
@@ -271,8 +266,11 @@ func (sr *StoreRebalancer) rebalanceStore(
 		return
 	}
 
+	// We only bother rebalancing stores that are fielding more than the
+	// cluster-level overfull threshold of QPS.
+	qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
 	if !(localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold) {
-		log.VEventf(ctx, 1, "local QPS %.2f is below max threshold %.2f (mean=%.2f); no rebalancing needed",
+		log.Infof(ctx, "local QPS %.2f is below max threshold %.2f (mean=%.2f); no rebalancing needed",
 			localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold, allStoresList.candidateQueriesPerSecond.mean)
 		return
 	}
@@ -280,10 +278,10 @@ func (sr *StoreRebalancer) rebalanceStore(
 	var replicasToMaybeRebalance []replicaWithStats
 	storeMap := storeListToMap(allStoresList)
 
+	// First check if we should transfer leases away to better balance QPS.
 	log.Infof(ctx,
 		"considering load-based lease transfers for s%d with %.2f qps (mean=%.2f, upperThreshold=%.2f)",
 		localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.candidateQueriesPerSecond.mean, qpsMaxThreshold)
-
 	hottestRanges := sr.replRankings.topQPS()
 	for localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold {
 		replWithStats, target, considerForRebalance := sr.chooseLeaseToTransfer(
