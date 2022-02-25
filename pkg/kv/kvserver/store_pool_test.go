@@ -513,26 +513,28 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 			StoreID: 1,
 			Node:    roachpb.NodeDescriptor{NodeID: 1},
 			Capacity: roachpb.StoreCapacity{
-				Capacity:         100,
-				Available:        50,
-				RangeCount:       5,
-				LeaseCount:       1,
-				LogicalBytes:     30,
-				QueriesPerSecond: 100,
-				WritesPerSecond:  30,
+				Capacity:          100,
+				Available:         50,
+				RangeCount:        5,
+				LeaseCount:        1,
+				LogicalBytes:      30,
+				QueriesPerSecond:  100,
+				WritesPerSecond:   30,
+				ReadAmplification: 5,
 			},
 		},
 		{
 			StoreID: 2,
 			Node:    roachpb.NodeDescriptor{NodeID: 2},
 			Capacity: roachpb.StoreCapacity{
-				Capacity:         100,
-				Available:        55,
-				RangeCount:       4,
-				LeaseCount:       2,
-				LogicalBytes:     25,
-				QueriesPerSecond: 50,
-				WritesPerSecond:  25,
+				Capacity:          100,
+				Available:         55,
+				RangeCount:        4,
+				LeaseCount:        2,
+				LogicalBytes:      25,
+				QueriesPerSecond:  50,
+				WritesPerSecond:   25,
+				ReadAmplification: 10,
 			},
 		},
 	}
@@ -574,6 +576,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedWPS := 30 + WPS; desc.Capacity.WritesPerSecond != expectedWPS {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
+	if expectedReadAmp := int64(5); desc.Capacity.ReadAmplification != expectedReadAmp {
+		t.Errorf("expected ReadAmplification %d, but got %d", expectedReadAmp, desc.Capacity.ReadAmplification)
+	}
 
 	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeUsageInfo, roachpb.REMOVE_VOTER)
 	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
@@ -591,6 +596,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	if expectedWPS := 25 - WPS; desc.Capacity.WritesPerSecond != expectedWPS {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
+	}
+	if expectedReadAmp := int64(10); desc.Capacity.ReadAmplification != expectedReadAmp {
+		t.Errorf("expected ReadAmplification %d, but got %d", expectedReadAmp, desc.Capacity.ReadAmplification)
 	}
 
 	sp.updateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
