@@ -58,16 +58,6 @@ func newMergeJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*mergeJoiner, error) {
-	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
-	rightEqCols := make([]uint32, 0, len(spec.RightOrdering.Columns))
-	for i, c := range spec.LeftOrdering.Columns {
-		if spec.RightOrdering.Columns[i].Direction != c.Direction {
-			return nil, errors.New("unmatched column orderings")
-		}
-		leftEqCols = append(leftEqCols, c.ColIdx)
-		rightEqCols = append(rightEqCols, spec.RightOrdering.Columns[i].ColIdx)
-	}
-
 	m := &mergeJoiner{
 		leftSource:        leftSource,
 		rightSource:       rightSource,
@@ -82,7 +72,7 @@ func newMergeJoiner(
 
 	if err := m.joinerBase.init(
 		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
-		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, false, /* outputContinuationColumn */
+		spec.Type, spec.OnExpr, false, /* outputContinuationColumn */
 		post, output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{leftSource, rightSource},

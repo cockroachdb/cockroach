@@ -257,9 +257,9 @@ build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_v_key
  ├── arbiter constraints: unique_w unique_x_y
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => k:1
  │    ├── column2:9 => v:2
@@ -346,8 +346,8 @@ build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w) DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter constraints: unique_w
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => uniq.k:1
  │    ├── column2:9 => uniq.v:2
@@ -402,8 +402,8 @@ build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT ON CONSTRAINT unique_w DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter constraints: unique_w
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => uniq.k:1
  │    ├── column2:9 => uniq.v:2
@@ -950,9 +950,9 @@ build
 INSERT INTO uniq_partial VALUES (1, 2, 3), (2, 2, 3) ON CONFLICT DO NOTHING
 ----
 insert uniq_partial
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_pkey
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -1013,15 +1013,15 @@ error (42P10): there is no unique or exclusion constraint matching the ON CONFLI
 build
 INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT ON CONSTRAINT unique_a DO NOTHING
 ----
-error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
+error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so it cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 # On conflict clause references unique without index constraint.
 build
 INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT (a) WHERE b > 0 DO NOTHING
 ----
 insert uniq_partial
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -1373,8 +1373,8 @@ INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO NOTHING
 ----
 insert uniq_partial_constraint_and_index
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => uniq_partial_constraint_and_index.k:1
  │    ├── column2:7 => uniq_partial_constraint_and_index.a:2
@@ -1445,8 +1445,8 @@ INSERT INTO uniq_constraint_and_partial_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 0 DO NOTHING
 ----
 insert uniq_constraint_and_partial_index
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -1489,9 +1489,9 @@ INSERT INTO uniq_partial_constraint_and_partial_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO NOTHING
 ----
 insert uniq_partial_constraint_and_partial_index
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_constraint_and_partial_index_a_key
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2

@@ -2731,8 +2731,8 @@ opt expect=SplitGroupByScanIntoUnionScans
 INSERT INTO xyz SELECT a, b, c FROM regional ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:15
  ├── fetch columns: x:15 y:16 z:17
  ├── insert-mapping:
@@ -2797,8 +2797,8 @@ INSERT INTO xyz SELECT a, b, c FROM regional WHERE b > 5
 ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:15
  ├── fetch columns: x:15 y:16 z:17
  ├── insert-mapping:
@@ -3056,8 +3056,8 @@ opt expect=EliminateIndexJoinOrProjectInsideGroupBy
 INSERT INTO xyz SELECT a, a, b FROM abcd WHERE c > 0 ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:13
  ├── fetch columns: x:13 y:14 z:15
  ├── insert-mapping:
@@ -3107,8 +3107,8 @@ opt expect=EliminateIndexJoinOrProjectInsideGroupBy
 INSERT INTO xyz SELECT c, c, b FROM abcd WHERE d = 1 ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:13
  ├── fetch columns: x:13 y:14 z:15
  ├── insert-mapping:
