@@ -831,6 +831,20 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	}
 }
 
+func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstIndex uint64) {
+	testutils.SucceedsSoon(t, func() error {
+		// Flush the engine to advance durability, which triggers truncation.
+		require.NoError(t, r.Engine().Flush())
+		// FirstIndex has changed.
+		firstIndex, err := r.GetFirstIndex()
+		require.NoError(t, err)
+		if firstIndex != newFirstIndex {
+			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
+		}
+		return nil
+	})
+}
+
 // TestSnapshotAfterTruncationWithUncommittedTail is similar in spirit to
 // TestSnapshotAfterTruncation/differentTerm. However, it differs in that we
 // take care to ensure that the partitioned Replica has a long uncommitted tail
@@ -1009,6 +1023,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		}
 		return nil
 	})
+	waitForTruncationForTesting(t, newLeaderRepl, index+1)
 
 	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()
