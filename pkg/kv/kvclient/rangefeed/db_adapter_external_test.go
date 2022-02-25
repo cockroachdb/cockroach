@@ -144,7 +144,7 @@ func TestDBClientScan(t *testing.T) {
 		proceed := make(chan struct{})
 
 		g := ctxgroup.WithContext(context.Background())
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("scan span", func(ctx context.Context) error {
 			return dba.ScanWithOptions(ctx, []roachpb.Span{fooSpan}, db.Clock().Now(),
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),

@@ -161,7 +161,7 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 	k := tc.ScratchRange(t)
 	g := ctxgroup.WithContext(ctx)
 	n1, n2 := 0, 1
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("add voters", func(ctx context.Context) error {
 		_, err := tc.AddVoters(k, tc.Target(n2))
 		return err
 	})

@@ -90,7 +90,7 @@ func ExampleIntPool_AcquireFunc() {
 	}
 	g := ctxgroup.WithContext(context.Background())
 	for i := 0; i < workers; i++ {
-		g.GoCtx("", runWorker(i))
+		g.GoCtx("run worker", runWorker(i))
 	}
 	if err := g.Wait(); err != nil {
 		panic(err)

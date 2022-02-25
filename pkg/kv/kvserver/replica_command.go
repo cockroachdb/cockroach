@@ -829,7 +829,7 @@ func waitForApplication(
 	g := ctxgroup.WithContext(ctx)
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("dial and wait for application", func(ctx context.Context) error {
 			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
 			if err != nil {
 				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
@@ -864,7 +864,7 @@ func waitForReplicasInit(
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
-			g.GoCtx("", func(ctx context.Context) error {
+			g.GoCtx("dial and wait for replica init", func(ctx context.Context) error {
 				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
 				if err != nil {
 					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)

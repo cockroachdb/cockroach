@@ -165,7 +165,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("add voters", func(ctx context.Context) error {
 		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
@@ -625,7 +625,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	// Create a learner replica.
 	scratchStartKey := tc.ScratchRange(t)
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("add voters", func(ctx context.Context) error {
 		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
@@ -685,7 +685,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	// Add the learner.
 	scratchStartKey := tc.ScratchRange(t)
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("admin change replicas", func(ctx context.Context) error {
 		// NB: we don't use tc.AddVoters because that will auto-retry
 		// and the test expects to see the error that results on the
 		// first attempt.
