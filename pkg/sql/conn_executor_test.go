@@ -609,7 +609,7 @@ func TestQueryProgress(t *testing.T) {
 	defer cancel()
 
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("exec query", func(ctx context.Context) error {
 		// Ensure that after query execution, we've actually hit and closed the
 		// stalled ch as expected.
 		defer func() {

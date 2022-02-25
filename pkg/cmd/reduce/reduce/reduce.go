@@ -114,7 +114,7 @@ func Reduce(
 		ctx := context.Background()
 		g := ctxgroup.WithContext(ctx)
 		variants := make(chan varState)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("generate and send variants", func(ctx context.Context) error {
 			// This goroutine generates all variants from passList and sends
 			// them on a chan for testing. It closes the variants chan when
 			// there are no more. Since numGoroutines are working at one time,
@@ -162,7 +162,7 @@ func Reduce(
 		})
 		// Start the workers.
 		for i := 0; i < numGoroutines; i++ {
-			g.GoCtx("", func(ctx context.Context) error {
+			g.GoCtx("start variant worker", func(ctx context.Context) error {
 				for vs := range variants {
 					if interesting, _ := isInteresting(ctx, vs.file); interesting {
 						// Wait for the previous test to finish.

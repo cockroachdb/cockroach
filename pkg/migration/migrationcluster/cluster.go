@@ -125,7 +125,7 @@ func (c *Cluster) ForEveryNode(
 			return err
 		}
 
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("run migration client", func(ctx context.Context) error {
 			defer alloc.Release()
 
 			conn, err := c.c.Dialer.Dial(ctx, id, rpc.DefaultClass)

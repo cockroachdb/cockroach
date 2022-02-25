@@ -630,7 +630,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			g := ctxgroup.WithContext(ctx)
-			g.GoCtx("", func(ctx context.Context) error {
+			g.GoCtx("exec query", func(ctx context.Context) error {
 				conn := tc.ServerConn(gatewayNodeID)
 				atomic.StoreInt64(&queryRunningAtomic, 1)
 				_, err := conn.ExecContext(ctx, query)

@@ -92,7 +92,7 @@ func buildData() embeddedproj.Data {
 		if end > len(records) {
 			end = len(records)
 		}
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("process record", func(ctx context.Context) error {
 			for _, record := range records[start:end] {
 				proj4text := strings.TrimRight(record[4], " \t")
 				isLatLng, s, err := geoproj.GetProjMetadata(geoprojbase.MakeProj4Text(proj4text))
