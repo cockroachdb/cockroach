@@ -38,7 +38,7 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
-import { util } from "@cockroachlabs/cluster-ui";
+import { TimeScale, util } from "@cockroachlabs/cluster-ui";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import Long from "long";
@@ -446,7 +446,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // setNewTimeRange uses code from the TimeScaleDropdown component
   // to set new start/end ranges in the query params and force a
   // reload of the rest of the dashboard at new ranges via the props
-  // `setTimeRange` and `setTimeScale`.
+  // `setMetricsFixedWindow` and `setTimeScale`.
   // TODO(davidh): centralize management of query params for time range
   // TODO(davidh): figure out why the timescale doesn't get more granular
   // automatically when a narrower time frame is selected.
@@ -458,18 +458,18 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       start: moment.unix(start),
       end: moment.unix(end),
     };
-    let newTimeScale = findClosestTimeScale(
-      defaultTimeScaleOptions,
-      end - start,
-      start,
-    );
+    let newTimeScale: TimeScale = {
+      ...findClosestTimeScale(defaultTimeScaleOptions, end - start, start),
+      key: "Custom",
+      fixedWindowEnd: moment.unix(end),
+    };
     if (this.props.adjustTimeScaleOnChange) {
       newTimeScale = this.props.adjustTimeScaleOnChange(
         newTimeScale,
         newTimeWindow,
       );
     }
-    this.props.setTimeRange(newTimeWindow);
+    this.props.setMetricsFixedWindow(newTimeWindow);
     this.props.setTimeScale(newTimeScale);
     const { pathname, search } = this.props.history.location;
     const urlParams = new URLSearchParams(search);

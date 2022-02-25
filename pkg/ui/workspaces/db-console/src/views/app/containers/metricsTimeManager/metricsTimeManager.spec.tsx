@@ -16,24 +16,24 @@ import moment from "moment";
 import _ from "lodash";
 
 import "src/enzymeInit";
-import { TimeWindowManagerUnconnected as TimeWindowManager } from "./";
-import * as timewindow from "src/redux/timewindow";
+import { MetricsTimeManagerUnconnected as MetricsTimeManager } from "./";
+import * as timewindow from "src/redux/timeScale";
 
-describe("<TimeWindowManager>", function() {
+describe("<MetricsTimeManager>", function() {
   let spy: sinon.SinonSpy;
-  let state: timewindow.TimeWindowState;
+  let state: timewindow.TimeScaleState;
   const now = () => moment("11-12-1955 10:04PM -0800", "MM-DD-YYYY hh:mma Z");
 
   beforeEach(function() {
     spy = sinon.spy();
-    state = new timewindow.TimeWindowState();
+    state = new timewindow.TimeScaleState();
   });
 
   const getManager = () =>
     shallow(
-      <TimeWindowManager
-        timeWindow={_.clone(state)}
-        setTimeWindow={spy}
+      <MetricsTimeManager
+        timeScale={_.clone(state)}
+        setMetricsMovingWindow={spy}
         now={now}
       />,
     );
@@ -48,7 +48,7 @@ describe("<TimeWindowManager>", function() {
   });
 
   it("resets time window immediately if expired", function() {
-    state.currentWindow = {
+    state.metricsTime.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       end: now()
         .subtract(state.scale.windowValid)
@@ -65,11 +65,11 @@ describe("<TimeWindowManager>", function() {
 
   it("resets time window immediately if scale has changed", function() {
     // valid window.
-    state.currentWindow = {
+    state.metricsTime.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       end: now(),
     };
-    state.scaleChanged = true;
+    state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
 
     getManager();
     assert.isTrue(spy.calledOnce);
@@ -80,7 +80,7 @@ describe("<TimeWindowManager>", function() {
   });
 
   it("resets time window later if current window is valid", function() {
-    state.currentWindow = {
+    state.metricsTime.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       // 5 milliseconds until expiration.
       end: now().subtract(state.scale.windowValid.asMilliseconds() - 5),
@@ -105,7 +105,7 @@ describe("<TimeWindowManager>", function() {
   // TODO (maxlang): Fix this test to actually change the state to catch the
   // issue that caused #7590. Tracked in #8595.
   it("has only a single timeout at a time.", function() {
-    state.currentWindow = {
+    state.metricsTime.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       // 5 milliseconds until expiration.
       end: now().subtract(state.scale.windowValid.asMilliseconds() - 5),
@@ -115,7 +115,7 @@ describe("<TimeWindowManager>", function() {
     assert.isTrue(spy.notCalled);
 
     // Set new props on currentWindow. The previous timeout should be abandoned.
-    state.currentWindow = {
+    state.metricsTime.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       // 10 milliseconds until expiration.
       end: now().subtract(state.scale.windowValid.asMilliseconds() - 10),
