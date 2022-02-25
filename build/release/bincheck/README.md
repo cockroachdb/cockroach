@@ -1,6 +1,4 @@
-# cockroachdb/bincheck
-
-[![Build Status](https://github.com/cockroachdb/bincheck/actions/workflows/ci.yaml/badge.svg)](https://github.com/cockroachdb/bincheck/actions/workflows/ci.yaml)
+# bincheck
 
 bincheck verifies the sanity of CockroachDB release binaries. At present, the
 sanity checks are:
@@ -10,18 +8,9 @@ sanity checks are:
 
 ## Testing a new release
 
-Open a PR that updates the version in [VERSION] on the appropriate branch (eg: `release-2.0` for 2.0 builds).
-You can use the little pencil button to edit the file directly through the GitHub UI (no need to
-fork the repo):
+bincheck action is triggered when a new tag with `v` prefix is created. Check
+https://github.com/cockroachdb/cockroach/actions after a release is published.
 
-**Important: make sure to select the "start a pull request" option before clicking "Propose changes":**
-  
-<img width="550" src="https://user-images.githubusercontent.com/3051672/105749155-0b15e880-5f11-11eb-97a7-308cec768df3.png">
-
-
-The PR will automatically kick off checks to verify the release using GitHub
-Actions.  If the checks complete successfully, you can merge the PR and you're
-done!
 
 ## The nitty-gritty
 
@@ -58,10 +47,10 @@ implementations at runtime [has proven difficult][issue-15589].
 After [installing Buildroot][buildroot-install]:
 
 ```shell
-$ make qemu_x86_64_glibc_defconfig BR2_EXTERNAL=${BINCHECK-REPO}/buildroot
+$ make qemu_x86_64_glibc_defconfig BR2_EXTERNAL=buildroot
 $ make menuconfig  # Only if configuration changes are necessary.
 $ make
-$ cp output/images/bzImage ${BINCHECK-REPO}/images/qemu_x86_64_glibc_bzImage
+$ cp output/images/bzImage images/qemu_x86_64_glibc_bzImage
 ```
 
 At the time of writing, `qemu_x86_64_glibc_defconfig` instructed Buildroot to
@@ -76,4 +65,3 @@ it's a FAT volume.
 [Buildroot]: https://buildroot.org
 [CRC32C]: http://www.evanjones.ca/crc32c.html
 [QEMU]: http://qemu.org
-[VERSION]: ./VERSION

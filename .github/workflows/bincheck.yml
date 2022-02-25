@@ -2,9 +2,7 @@ name: bincheck
 
 on:
   push:
-    branches: [ master, release-* ]
-  pull_request:
-    branches: [ master, release-* ]
+    tags: [ v* ]
 
 jobs:
 
@@ -13,16 +11,16 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
-    - run: ./test-linux
+    - run: cd build/release/bincheck && ./test-linux ${{ github.ref_name }} ${{ github.sha }}
 
   darwin:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
-    - run: ./test-macos
+    - run: cd build/release/bincheck && ./test-macos ${{ github.ref_name }} ${{ github.sha }}
 
   windows:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
-    - run: bash test-windows
+    - run: cd build/release/bincheck && bash test-windows ${{ github.ref_name }} ${{ github.sha }}
