@@ -160,6 +160,17 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 
+	origNumPlaceholders := stmt.NumPlaceholders
+	switch stmt.AST.(type) {
+	case *tree.Prepare:
+		// Special case: we're preparing a SQL-level PREPARE using the
+		// wire protocol. There's an ambiguity from the perspective of this code:
+		// any placeholders that are inside of the statement that we're preparing
+		// shouldn't be treated as placeholders to the PREPARE statement. So, we
+		// edit the NumPlaceholders field to be 0 here.
+		stmt.NumPlaceholders = 0
+	}
+
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		p := &ex.planner
@@ -205,6 +216,9 @@ func (ex *connExecutor) prepare(
 			},
 		}
 		prepared.Statement = stmt.Statement
+		// When we set our prepared statement, we need to make sure to propagate
+		// the original NumPlaceholders if we're preparing a PREPARE.
+		prepared.Statement.NumPlaceholders = origNumPlaceholders
 		prepared.StatementNoConstants = stmt.StmtNoConstants
 		prepared.StatementSummary = stmt.StmtSummary
 
