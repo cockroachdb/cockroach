@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Download the binary based on the VERSION file. This sets the COCKROACH_VERSION env variable
+# and downloads the binary in ./mnt/
+. download_binary.sh "darwin-10.9-amd64.tgz"
+
+./bincheck ./mnt/cockroach "$COCKROACH_VERSION" "$COCKROACH_SHA"
