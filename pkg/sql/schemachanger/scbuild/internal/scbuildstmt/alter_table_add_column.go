@@ -44,6 +44,11 @@ func alterTableAddColumn(
 			if t.IfNotExists {
 				return
 			}
+			if col.IsSystemColumn {
+				panic(pgerror.Newf(pgcode.DuplicateColumn,
+					"column name %q conflicts with a system column name",
+					d.Name))
+			}
 			panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), tn.Object()))
 		}
 	}

@@ -54,6 +54,7 @@ Column :  IsInaccessible
 Column :  GeneratedAsIdentityType
 Column :  GeneratedAsIdentitySequenceOption
 Column :  PgAttributeNum
+Column :  IsSystemColumn
 
 object PrimaryIndex
 

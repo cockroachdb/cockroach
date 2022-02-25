@@ -375,11 +375,6 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 	// Mark this node as having been visited in this traversal.
 	sb.visited[n] = sb.visitEpoch
 	// Do some sanity checks.
-	if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
-		// This should never happen.
-		panic(errors.AssertionFailedf("%s should not yet be fulfilled",
-			screl.NodeString(n)))
-	}
 	if _, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
 		// This should never happen.
 		panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",

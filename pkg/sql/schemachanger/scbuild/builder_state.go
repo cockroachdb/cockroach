@@ -161,6 +161,9 @@ func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID)
 		ret = tbl.GetNextColumnID()
 	}
 	scpb.ForEachColumn(b, func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
+		if column.IsSystemColumn {
+			return
+		}
 		if column.TableID == table.TableID && column.ColumnID >= ret {
 			ret = column.ColumnID + 1
 		}
