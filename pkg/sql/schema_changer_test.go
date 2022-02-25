@@ -6772,12 +6772,6 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 			jobRegex:   `updating privileges for schema`,
 		},
 		{
-			name:       "drop database cascade",
-			setupStmts: `CREATE DATABASE db_drop; CREATE SCHEMA db_drop.sc; CREATE TABLE db_drop.sc.tbl();`,
-			scStmt:     `DROP DATABASE db_drop CASCADE`,
-			jobRegex:   `^DROP DATABASE db_drop CASCADE$`,
-		},
-		{
 			name:       "rename database",
 			setupStmts: `CREATE DATABASE db_rename;`,
 			scStmt:     `ALTER DATABASE db_rename RENAME TO db_new_name`,
