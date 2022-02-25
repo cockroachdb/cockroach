@@ -26,7 +26,7 @@ descs 106
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[1]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 1}]
 /Table/10{7-8}                             num_replicas=7
 
 # Write a protected timestamp on db, so we should see it on both t1 and t2.
@@ -36,8 +36,8 @@ descs 104
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[1 2]
-/Table/10{7-8}                             num_replicas=7 pts=[2]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Table/10{7-8}                             num_replicas=7 protection_policies=[{ts: 2}]
 
 # Write a protected timestamp on the cluster.
 protect record-id=3 ts=3
@@ -63,8 +63,8 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[1 2]
-/Table/10{7-8}                             num_replicas=7 pts=[2]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Table/10{7-8}                             num_replicas=7 protection_policies=[{ts: 2}]
 
 # Release the protected timestamp on table t1
 release record-id=1
@@ -79,8 +79,8 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[2]
-/Table/10{7-8}                             num_replicas=7 pts=[2]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 2}]
+/Table/10{7-8}                             num_replicas=7 protection_policies=[{ts: 2}]
 
 # Release the protected timestamp on database db
 release record-id=2
@@ -123,7 +123,7 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Table/106{-/2}                            num_replicas=7 num_voters=5 pts=[6]
-/Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 pts=[6]
-/Table/10{6/3-7}                           num_replicas=7 num_voters=5 pts=[6]
+/Table/106{-/2}                            num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+/Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+/Table/10{6/3-7}                           num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
 /Table/10{7-8}                             num_replicas=7

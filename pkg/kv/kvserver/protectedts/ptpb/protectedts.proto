@@ -173,4 +173,15 @@ message Target {
     TenantsTarget tenants = 2;
     ClusterTarget cluster = 3;
   }
+
+  // IgnoreIfExcludedFromBackup is set to true if the Record can be ignored when
+  // making GC decisions on a table that has been marked to be excluded from
+  // backups i.e. the table has `exclude_data_from_backup = true`.
+  //
+  // This field is currently only set to true when a protected timestamp record
+  // has been written by a backup job. This is to ensure that Records written by
+  // non-backup users (CDC, streaming) on spans marked as
+  // `exclude_data_from_backup` are still respected when making GC decisions on
+  // the span.
+  bool ignore_if_excluded_from_backup = 4;
 }
