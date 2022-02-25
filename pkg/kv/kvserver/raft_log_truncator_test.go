@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -173,23 +175,21 @@ func (r *replicaTruncatorTest) writeRaftStateToEngine(
 ) {
 	require.NoError(t, r.stateLoader.SetRaftTruncatedState(context.Background(), eng,
 		&roachpb.RaftTruncatedState{Index: truncIndex}))
-	for i := truncIndex + 1; i < lastLogEntry; i++ {
+	for i := truncIndex + 1; i <= lastLogEntry; i++ {
 		require.NoError(t, eng.PutUnversioned(r.stateLoader.RaftLogKey(i), []byte("something")))
 	}
 }
 
 func (r *replicaTruncatorTest) writeRaftAppliedIndex(
-	t *testing.T, eng storage.Engine, raftAppliedIndex uint64,
+	t *testing.T, eng storage.Engine, raftAppliedIndex uint64, flush bool,
 ) {
 	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
 		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, nil))
 	// Flush to make it satisfy the contract of OnlyReadGuaranteedDurable in
 	// Pebble.
-	// TODO(sumeer): by controlling the size of the memtable we can probably
-	// construct a deterministic test where a flush does not happen, and we can
-	// test that raftLogTruncator is actually reading only the durable
-	// RaftAppliedIndex.
-	require.NoError(t, eng.Flush())
+	if flush {
+		require.NoError(t, eng.Flush())
+	}
 }
 
 func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
@@ -283,7 +283,10 @@ func TestRaftLogTruncator(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 	store := makeStoreTT(eng, &buf)
-	truncator := makeRaftLogTruncator(store)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	truncator := makeRaftLogTruncator(
+		log.MakeTestingAmbientContext(tracing.NewTracer()), store, stopper)
 
 	datadriven.RunTest(t, testutils.TestDataPath(t, "raft_log_truncator"),
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -335,7 +338,16 @@ func TestRaftLogTruncator(t *testing.T) {
 				rangeID := scanRangeID(t, d)
 				var raftAppliedIndex uint64
 				d.ScanArgs(t, "raft-applied-index", &raftAppliedIndex)
-				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, raftAppliedIndex)
+				noFlush := false
+				// The initial engine memtable size is 256KB, and doubles for each new
+				// memtable. Even the initial size is much larger than anything we do
+				// in this test between explicit flushes. Hence we can rely on the
+				// fact that no-flush will actually be respected, and we won't
+				// encounter an unexpected flush.
+				if d.HasArg("no-flush") {
+					d.ScanArgs(t, "no-flush", &noFlush)
+				}
+				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, raftAppliedIndex, !noFlush)
 				return flushAndReset()
 
 			case "add-replica-to-truncator":
