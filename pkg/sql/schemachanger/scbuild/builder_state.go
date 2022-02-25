@@ -130,16 +130,25 @@ func (b *builderState) CheckPrivilege(e scpb.Element, privilege privilege.Kind) 
 	b.checkPrivilege(screl.GetDescID(e), privilege)
 }
 
-func (b *builderState) checkPrivilege(id catid.DescID, privilege privilege.Kind) {
+func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	if c.hasOwnership {
 		return
 	}
-	err, found := c.privileges[privilege]
+	err, found := c.privileges[priv]
 	if !found {
-		err = b.auth.CheckPrivilege(b.ctx, c.desc, privilege)
-		c.privileges[privilege] = err
+		// Validate if this descriptor can be resolved under the current schema.
+		if c.desc.DescriptorType() != catalog.Schema &&
+			c.desc.DescriptorType() != catalog.Database {
+			scpb.ForEachSchemaParent(c.ers, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SchemaParent) {
+				if current == scpb.Status_PUBLIC {
+					b.checkPrivilege(e.SchemaID, privilege.USAGE)
+				}
+			})
+		}
+		err = b.auth.CheckPrivilege(b.ctx, c.desc, priv)
+		c.privileges[priv] = err
 	}
 	if err != nil {
 		panic(err)
@@ -601,6 +610,8 @@ func (b *builderState) resolveRelation(
 	}
 	err, found := c.privileges[p.RequiredPrivilege]
 	if !found {
+		// Validate if this descriptor can be resolved under the current schema.
+		b.checkPrivilege(rel.GetParentSchemaID(), privilege.USAGE)
 		err = b.auth.CheckPrivilege(b.ctx, rel, p.RequiredPrivilege)
 		c.privileges[p.RequiredPrivilege] = err
 	}
