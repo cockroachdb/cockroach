@@ -126,12 +126,12 @@ func TestKVFeed(t *testing.T) {
 			tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("run kvFeed", func(ctx context.Context) error {
 			return f.run(ctx)
 		})
 		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpoint)
 		testG := ctxgroup.WithContext(ctx)
-		testG.GoCtx("", func(ctx context.Context) error {
+		testG.GoCtx("check expected scans", func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
 				scan := <-scans
 				assert.Equal(t, expScans[0], scan.Timestamp)
@@ -140,7 +140,7 @@ func TestKVFeed(t *testing.T) {
 			}
 			return nil
 		})
-		testG.GoCtx("", func(ctx context.Context) error {
+		testG.GoCtx("check expected events", func(ctx context.Context) error {
 			for events := 0; events < tc.expEvents; events++ {
 				_, err := buf.Get(ctx)
 				assert.NoError(t, err)

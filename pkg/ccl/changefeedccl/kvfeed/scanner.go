@@ -88,7 +88,7 @@ func (p *scanRequestScanner) Scan(
 			return errors.CombineErrors(err, g.Wait())
 		}
 
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("export span", func(ctx context.Context) error {
 			defer limAlloc.Release()
 			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)

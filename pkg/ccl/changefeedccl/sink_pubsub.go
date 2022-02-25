@@ -330,7 +330,7 @@ func (p *pubsubSink) setupWorkers() {
 		//initialize worker goroutine and channel for worker
 		p.eventsChans[i] = make(chan pubsubMessage)
 		j := i
-		p.workerGroup.GoCtx("", func(ctx context.Context) error {
+		p.workerGroup.GoCtx("run pubsub sink worker loop", func(ctx context.Context) error {
 			p.workerLoop(j)
 			return nil
 		})
