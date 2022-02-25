@@ -78,6 +78,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":migrations"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

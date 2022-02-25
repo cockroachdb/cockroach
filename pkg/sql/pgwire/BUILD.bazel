@@ -94,6 +94,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":pgwire"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/cloud/impl:cloudimpl",

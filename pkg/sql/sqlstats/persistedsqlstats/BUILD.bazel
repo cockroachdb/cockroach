@@ -63,6 +63,7 @@ go_test(
         "scheduled_sql_stats_compaction_test.go",
     ],
     data = glob(["testdata/**"]),
+    shard_count = 16,
     deps = [
         ":persistedsqlstats",
         "//pkg/base",

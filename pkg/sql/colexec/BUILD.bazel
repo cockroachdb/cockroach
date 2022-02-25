@@ -132,6 +132,7 @@ go_test(
         "values_test.go",
     ],
     embed = [":colexec"],
+    shard_count = 16,
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

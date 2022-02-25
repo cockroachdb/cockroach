@@ -21,6 +21,7 @@ go_test(
     size = "large",
     srcs = [":example_interval_btree_test.go"],
     embed = [":generic"],
+    shard_count = 16,
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
