@@ -32,6 +32,15 @@ type httpSinkOptions struct {
 	disableKeepAlives bool
 }
 
+// formatToContentType map contains a mapping from the log format
+// to the content type header that should be set for that format
+// for the HTTP POST method. The content type header defaults
+// to `text/plain` when the http sink is configured with a format
+// not included in this map.
+var formatToContentType = map[string]string{
+	"json": "application/json",
+}
+
 func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
 	transport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -62,7 +71,7 @@ func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
 type httpSink struct {
 	client    http.Client
 	address   string
-	doRequest func(*httpSink, []byte) (*http.Response, error)
+	doRequest func(sink *httpSink, logEntry []byte, format string) (*http.Response, error)
 }
 
 // output emits some formatted bytes to this sink.
@@ -73,8 +82,8 @@ type httpSink struct {
 // The parent logger's outputMu is held during this operation: log
 // sinks must not recursively call into logging when implementing
 // this method.
-func (hs *httpSink) output(b []byte, _ sinkOutputOptions) (err error) {
-	resp, err := hs.doRequest(hs, b)
+func (hs *httpSink) output(b []byte, opt sinkOutputOptions) (err error) {
+	resp, err := hs.doRequest(hs, b, opt.format)
 	if err != nil {
 		return err
 	}
@@ -87,8 +96,12 @@ func (hs *httpSink) output(b []byte, _ sinkOutputOptions) (err error) {
 	return nil
 }
 
-func doPost(hs *httpSink, b []byte) (*http.Response, error) {
-	resp, err := hs.client.Post(hs.address, "text/plain", bytes.NewReader(b))
+func doPost(hs *httpSink, b []byte, format string) (*http.Response, error) {
+	contentType, ok := formatToContentType[format]
+	if !ok {
+		contentType = "text/plain"
+	}
+	resp, err := hs.client.Post(hs.address, contentType, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +109,7 @@ func doPost(hs *httpSink, b []byte) (*http.Response, error) {
 	return resp, nil
 }
 
-func doGet(hs *httpSink, b []byte) (*http.Response, error) {
+func doGet(hs *httpSink, b []byte, _ string) (*http.Response, error) {
 	resp, err := hs.client.Get(hs.address + "?" + url.QueryEscape(string(b)))
 	if err != nil {
 		return nil, err

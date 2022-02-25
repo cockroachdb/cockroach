@@ -695,6 +695,8 @@ func (ts *TestServer) StartTenant(
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
+	baseCfg.HeapProfileDirName = params.HeapProfileDirName
+	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	if params.SSLCertsDir != "" {
 		baseCfg.SSLCertsDir = params.SSLCertsDir
 	}

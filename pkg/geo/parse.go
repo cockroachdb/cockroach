@@ -239,6 +239,9 @@ func parseGeoHash(g string, precision int) (geohash.Box, error) {
 		return geohash.Box{}, pgerror.Newf(pgcode.InvalidParameterValue, "length of GeoHash must be greater than 0")
 	}
 
+	// In PostGIS the parsing is case-insensitive.
+	g = strings.ToLower(g)
+
 	// If precision is more than the length of the geohash
 	// or if precision is less than 0 then set
 	// precision equal to length of geohash.

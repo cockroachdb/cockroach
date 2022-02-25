@@ -813,6 +813,9 @@ message AggregatorSpec {
     FINAL_REGR_INTERCEPT = 55;
     FINAL_REGR_R2 = 56;
     FINAL_REGR_SLOPE = 57;
+    FINAL_COVAR_SAMP = 58;
+    FINAL_CORR = 59;
+    FINAL_SQRDIFF = 60;
   }
 
   enum Type {

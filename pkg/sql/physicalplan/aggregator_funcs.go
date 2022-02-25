@@ -419,4 +419,53 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 			},
 		},
 	},
+
+	execinfrapb.CovarSamp: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalCovarSamp,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.Corr: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalCorr,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrCount: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.RegrCount},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.SumInt,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	// For SQRDIFF the local stage consists of three aggregations,
+	// and the final stage aggregation uses all three values.
+	// respectively:
+	//  - the local stage accumulates the SQRDIFF, SUM and the COUNT
+	//  - the final stage calculates the FINAL_SQRDIFF
+	execinfrapb.Sqrdiff: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.Sqrdiff,
+			execinfrapb.Sum,
+			execinfrapb.Count,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalSqrdiff,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
 }

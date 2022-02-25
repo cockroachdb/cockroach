@@ -143,7 +143,7 @@ func TestDataDriven(t *testing.T) {
 				//   configuration changes
 				testutils.SucceedsSoon(t, func() error {
 					for _, tenant := range spanConfigTestCluster.Tenants() {
-						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastExec()
+						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastSQLChange()
 						if lastCheckpoint.IsEmpty() {
 							continue // reconciler wasn't started
 						}
@@ -191,7 +191,7 @@ func TestDataDriven(t *testing.T) {
 			case "exec-sql":
 				// Run under an explicit transaction -- we rely on having a
 				// single timestamp for the statements (see
-				// tenant.TimestampAfterLastExec) for ordering guarantees.
+				// tenant.TimestampAfterLastSQLChange) for ordering guarantees.
 				tenant.Exec(fmt.Sprintf("BEGIN; %s; COMMIT;", d.Input))
 
 			case "query-sql":

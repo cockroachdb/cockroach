@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -31,20 +32,26 @@ func TestTenantZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	skip.UnderRace(t, "test too slow under race")
+	tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
+	defer tenantDirCleanupFn()
+	tenantArgs := base.TestTenantArgs{
+		TenantID:             serverutils.TestTenantID(),
+		HeapProfileDirName:   tenantDir,
+		GoroutineDumpDirName: tenantDir,
+	}
 
-	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-
+	hostDir, hostDirCleanupFn := testutils.TempDir(t)
+	defer hostDirCleanupFn()
 	c := NewCLITest(TestCLIParams{
 		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
+			Path: hostDir,
 		}},
-		Multitenant: true,
-		Insecure:    true,
+		Insecure:   true,
+		TenantArgs: &tenantArgs,
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}

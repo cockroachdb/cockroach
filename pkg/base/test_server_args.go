@@ -312,4 +312,16 @@ type TestTenantArgs struct {
 
 	// RPCHeartbeatInterval controls how often the tenant sends Ping requests.
 	RPCHeartbeatInterval time.Duration
+
+	// GoroutineDumpDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is used as the directory name for
+	// goroutine dumps using goroutinedumper. If set, this directory should
+	// be cleaned up once the test completes.
+	GoroutineDumpDirName string
+
+	// HeapProfileDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is the directory name for heap profiles using
+	// heapprofiler. If empty, no heap profiles will be collected during the test.
+	// If set, this directory should be cleaned up after the test completes.
+	HeapProfileDirName string
 }

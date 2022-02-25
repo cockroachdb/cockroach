@@ -249,8 +249,8 @@ func (st SystemTarget) validate() error {
 	return nil
 }
 
-// isEmpty returns true if the receiver is empty.
-func (st SystemTarget) isEmpty() bool {
+// IsEmpty returns true if the receiver is empty.
+func (st SystemTarget) IsEmpty() bool {
 	return !st.sourceTenantID.IsSet() && !st.targetTenantID.IsSet() &&
 		st.systemTargetType == 0 // unset
 }

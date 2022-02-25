@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -91,9 +92,8 @@ var debugZipTablesPerNode = []string{
 //
 // This is called first and in isolation, before other zip operations
 // possibly influence the nodes.
-// TODO(rima): Collect profiles for tenant SQL nodes.
 func (zc *debugZipContext) collectCPUProfiles(
-	ctx context.Context, nodeList []serverpb.NodeDetails, livenessByNodeID nodeLivenesses,
+	ctx context.Context, ni nodesInfo, livenessByNodeID nodeLivenesses,
 ) error {
 	if zipCtx.cpuProfDuration <= 0 {
 		// Nothing to do; return early.
@@ -108,6 +108,11 @@ func (zc *debugZipContext) collectCPUProfiles(
 
 	zc.clusterPrinter.info("requesting CPU profiles")
 
+	if ni.nodesListResponse == nil {
+		return errors.AssertionFailedf("nodes list is empty; nothing to do")
+	}
+
+	nodeList := ni.nodesListResponse.Nodes
 	// NB: this takes care not to produce non-deterministic log output.
 	resps := make([]profData, len(nodeList))
 	for i := range nodeList {
@@ -164,9 +169,12 @@ func (zc *debugZipContext) collectCPUProfiles(
 }
 
 func (zc *debugZipContext) collectPerNodeData(
-	ctx context.Context, node serverpb.NodeDetails, livenessByNodeID nodeLivenesses,
+	ctx context.Context,
+	nodeDetails serverpb.NodeDetails,
+	nodeStatus *statuspb.NodeStatus,
+	livenessByNodeID nodeLivenesses,
 ) error {
-	nodeID := roachpb.NodeID(node.NodeID)
+	nodeID := roachpb.NodeID(nodeDetails.NodeID)
 
 	if livenessByNodeID != nil {
 		liveness := livenessByNodeID[nodeID]
@@ -195,9 +203,15 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 		return nil
 	}
-
-	if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", node); err != nil {
-		return err
+	if nodeStatus != nil {
+		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", *nodeStatus); err != nil {
+			return err
+		}
+	} else {
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", nodeDetails); err != nil {
+			return err
+		}
 	}
 
 	// Don't use sqlConn because that's only for is the node `debug
@@ -207,9 +221,9 @@ func (zc *debugZipContext) collectPerNodeData(
 	// not work and if it doesn't, we let the invalid curSQLConn get
 	// used anyway so that anything that does *not* need it will
 	// still happen.
-	sqlAddr := node.SQLAddress
+	sqlAddr := nodeDetails.SQLAddress
 	if sqlAddr.IsEmpty() {
-		sqlAddr = node.Address
+		sqlAddr = nodeDetails.Address
 	}
 	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
 	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())

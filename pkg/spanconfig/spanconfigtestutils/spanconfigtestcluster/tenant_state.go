@@ -13,11 +13,14 @@ package spanconfigtestcluster
 import (
 	"context"
 	gosql "database/sql"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,7 +52,7 @@ type Tenant struct {
 
 	mu struct {
 		syncutil.Mutex
-		lastCheckpoint, tsAfterLastExec hlc.Timestamp
+		lastCheckpoint, tsAfterLastSQLChange hlc.Timestamp
 	}
 }
 
@@ -68,22 +72,26 @@ func (s *Tenant) JobsRegistry() *jobs.Registry {
 	return s.JobRegistry().(*jobs.Registry)
 }
 
+func (s *Tenant) updateTimestampAfterLastSQLChange() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.tsAfterLastSQLChange = s.Clock().Now()
+}
+
 // Exec is a wrapper around gosql.Exec that kills the test on error. It records
 // the execution timestamp for subsequent use.
 func (s *Tenant) Exec(query string, args ...interface{}) {
 	s.db.Exec(s.t, query, args...)
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.tsAfterLastExec = s.Clock().Now()
+	s.updateTimestampAfterLastSQLChange()
 }
 
-// TimestampAfterLastExec returns a timestamp after the last time Exec was
+// TimestampAfterLastSQLChange returns a timestamp after the last time Exec was
 // invoked. It can be used for transactional ordering guarantees.
-func (s *Tenant) TimestampAfterLastExec() hlc.Timestamp {
+func (s *Tenant) TimestampAfterLastSQLChange() hlc.Timestamp {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.tsAfterLastExec
+	return s.mu.tsAfterLastSQLChange
 }
 
 // RecordCheckpoint is used to record the reconciliation checkpoint, retrievable
@@ -213,4 +221,37 @@ func (s *Tenant) LookupDatabaseByName(
 			return err
 		}))
 	return desc
+}
+
+// MakeProtectedTimestampRecordAndProtect will construct a ptpb.Record, and
+// persist it in the protected timestamp system table of the tenant.
+func (s *Tenant) MakeProtectedTimestampRecordAndProtect(
+	ctx context.Context, recordID string, protectTS int, target *ptpb.Target,
+) {
+	jobID := s.JobsRegistry().MakeJobID()
+	require.NoError(s.t, s.ExecCfg().DB.Txn(ctx,
+		func(ctx context.Context, txn *kv.Txn) (err error) {
+			require.Len(s.t, recordID, 1,
+				"datadriven test only supports single character record IDs")
+			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
+			require.NoError(s.t, err)
+			rec := jobsprotectedts.MakeRecord(recID, int64(jobID),
+				hlc.Timestamp{WallTime: int64(protectTS)}, nil, /* deprecatedSpans */
+				jobsprotectedts.Jobs, target)
+			return s.ProtectedTimestampProvider().Protect(ctx, txn, rec)
+		}))
+	s.updateTimestampAfterLastSQLChange()
+}
+
+// ReleaseProtectedTimestampRecord will release a ptpb.Record.
+func (s *Tenant) ReleaseProtectedTimestampRecord(ctx context.Context, recordID string) {
+	require.NoError(s.t, s.ExecCfg().DB.Txn(ctx,
+		func(ctx context.Context, txn *kv.Txn) error {
+			require.Len(s.t, recordID, 1,
+				"datadriven test only supports single character record IDs")
+			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
+			require.NoError(s.t, err)
+			return s.ProtectedTimestampProvider().Release(ctx, txn, recID)
+		}))
+	s.updateTimestampAfterLastSQLChange()
 }

@@ -900,18 +900,35 @@ func (c *cliState) GetCompletions(_ string) []string {
 	sql, _ := c.ins.GetLineInfo()
 
 	if !strings.HasSuffix(sql, "??") {
-		fmt.Fprintf(c.iCtx.stdout,
-			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
-	} else {
-		helpText, err := c.serverSideParse(sql)
-		if helpText != "" {
-			// We have a completion suggestion. Use that.
-			fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
-		} else if err != nil {
-			// Some other error. Display it.
-			fmt.Fprintln(c.iCtx.stdout)
+		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
+		var rows [][]string
+		var err error
+		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
+				clisqlclient.MakeQuery(query), true)
+			return err
+		})
+
+		if err != nil {
 			clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
 		}
+
+		var completions []string
+		for _, row := range rows {
+			completions = append(completions, row[0])
+		}
+
+		return completions
+	}
+
+	helpText, err := c.serverSideParse(sql)
+	if helpText != "" {
+		// We have a completion suggestion. Use that.
+		fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
+	} else if err != nil {
+		// Some other error. Display it.
+		fmt.Fprintln(c.iCtx.stdout)
+		clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
 	}
 
 	// After the suggestion or error, re-display the prompt and current entry.
