@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source ./download_binary.sh
 
-# Download the binary based on the VERSION file. This sets the COCKROACH_VERSION env variable
-# and downloads the binary in ./mnt/
-. download_binary.sh "linux-amd64.tgz"
+if [[ $# -ne 2 ]]
+then
+  echo "usage: $0 EXPECTED-VERSION EXPECTED-SHA" >&2
+  exit 1
+fi
+
+COCKROACH_VERSION=$1
+COCKROACH_SHA=$2
+
+download_and_extract "$COCKROACH_VERSION" "linux-amd64.tgz"
 
 ssh() {
   command ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
