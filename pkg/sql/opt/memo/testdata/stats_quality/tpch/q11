@@ -71,33 +71,33 @@ sort
       │    │    ├── save-table-name: q11_project_4
       │    │    ├── columns: column23:23(float!null) ps_partkey:1(int!null)
       │    │    ├── immutable
-      │    │    ├── stats: [rows=32258.06, distinct(1)=29783.5, null(1)=0, avgsize(1)=4, distinct(23)=31617.9, null(23)=0, avgsize(23)=8]
+      │    │    ├── stats: [rows=32258.06, distinct(1)=29783.5, null(1)=0, avgsize(1)=4, distinct(23)=31617.9, null(23)=0, avgsize(23)=13]
       │    │    ├── inner-join (lookup partsupp)
       │    │    │    ├── save-table-name: q11_lookup_join_5
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) ps_availqty:3(int!null) ps_supplycost:4(float!null) s_suppkey:8(int!null) s_nationkey:11(int!null) n_nationkey:17(int!null) n_name:18(char!null)
       │    │    │    ├── key columns: [1 2] = [1 2]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=32258.06, distinct(1)=29783.5, null(1)=0, avgsize(1)=4, distinct(2)=399.935, null(2)=0, avgsize(2)=4, distinct(3)=9536.12, null(3)=0, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(8)=399.935, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4, distinct(3,4)=31617.9, null(3,4)=0, avgsize(3,4)=8]
+      │    │    │    ├── stats: [rows=32258.06, distinct(1)=29783.5, null(1)=0, avgsize(1)=4, distinct(2)=399.935, null(2)=0, avgsize(2)=3, distinct(3)=9536.12, null(3)=0, avgsize(3)=4, distinct(4)=27589.3, null(4)=0, avgsize(4)=9, distinct(8)=399.935, null(8)=0, avgsize(8)=3, distinct(11)=1, null(11)=0, avgsize(11)=2, distinct(17)=1, null(17)=0, avgsize(17)=1, distinct(18)=1, null(18)=0, avgsize(18)=10, distinct(3,4)=31617.9, null(3,4)=0, avgsize(3,4)=13]
       │    │    │    ├── key: (1,8)
       │    │    │    ├── fd: ()-->(18), (1,2)-->(3,4), (8)-->(11), (11)==(17), (17)==(11), (2)==(8), (8)==(2)
       │    │    │    ├── inner-join (lookup partsupp@ps_sk)
       │    │    │    │    ├── save-table-name: q11_lookup_join_6
       │    │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) s_suppkey:8(int!null) s_nationkey:11(int!null) n_nationkey:17(int!null) n_name:18(char!null)
       │    │    │    │    ├── key columns: [8] = [2]
-      │    │    │    │    ├── stats: [rows=32258.06, distinct(1)=29783.5, null(1)=0, avgsize(1)=4, distinct(2)=399.935, null(2)=0, avgsize(2)=4, distinct(8)=399.935, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
+      │    │    │    │    ├── stats: [rows=32258.06, distinct(1)=29783.5, null(1)=0, avgsize(1)=4, distinct(2)=399.935, null(2)=0, avgsize(2)=3, distinct(8)=399.935, null(8)=0, avgsize(8)=3, distinct(11)=1, null(11)=0, avgsize(11)=2, distinct(17)=1, null(17)=0, avgsize(17)=1, distinct(18)=1, null(18)=0, avgsize(18)=10]
       │    │    │    │    ├── key: (1,8)
       │    │    │    │    ├── fd: ()-->(18), (8)-->(11), (11)==(17), (17)==(11), (2)==(8), (8)==(2)
       │    │    │    │    ├── inner-join (lookup supplier@s_nk)
       │    │    │    │    │    ├── save-table-name: q11_lookup_join_7
       │    │    │    │    │    ├── columns: s_suppkey:8(int!null) s_nationkey:11(int!null) n_nationkey:17(int!null) n_name:18(char!null)
       │    │    │    │    │    ├── key columns: [17] = [11]
-      │    │    │    │    │    ├── stats: [rows=400, distinct(8)=399.935, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
+      │    │    │    │    │    ├── stats: [rows=400, distinct(8)=399.935, null(8)=0, avgsize(8)=3, distinct(11)=1, null(11)=0, avgsize(11)=2, distinct(17)=1, null(17)=0, avgsize(17)=1, distinct(18)=1, null(18)=0, avgsize(18)=10]
       │    │    │    │    │    ├── key: (8)
       │    │    │    │    │    ├── fd: ()-->(18), (8)-->(11), (11)==(17), (17)==(11)
       │    │    │    │    │    ├── select
       │    │    │    │    │    │    ├── save-table-name: q11_select_8
       │    │    │    │    │    │    ├── columns: n_nationkey:17(int!null) n_name:18(char!null)
-      │    │    │    │    │    │    ├── stats: [rows=1, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
+      │    │    │    │    │    │    ├── stats: [rows=1, distinct(17)=1, null(17)=0, avgsize(17)=1, distinct(18)=1, null(18)=0, avgsize(18)=10]
       │    │    │    │    │    │    │   histogram(18)=  0      1
       │    │    │    │    │    │    │                 <--- 'GERMANY'
       │    │    │    │    │    │    ├── key: (17)
@@ -105,7 +105,7 @@ sort
       │    │    │    │    │    │    ├── scan nation
       │    │    │    │    │    │    │    ├── save-table-name: q11_scan_9
       │    │    │    │    │    │    │    ├── columns: n_nationkey:17(int!null) n_name:18(char!null)
-      │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(17)=25, null(17)=0, avgsize(17)=4, distinct(18)=25, null(18)=0, avgsize(18)=4]
+      │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(17)=25, null(17)=0, avgsize(17)=1, distinct(18)=25, null(18)=0, avgsize(18)=10]
       │    │    │    │    │    │    │    │   histogram(17)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
       │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
       │    │    │    │    │    │    │    │   histogram(18)=  0      1      23      1
@@ -146,32 +146,32 @@ sort
                           │    │    ├── save-table-name: q11_project_12
                           │    │    ├── columns: column47:47(float!null)
                           │    │    ├── immutable
-                          │    │    ├── stats: [rows=32258.06, distinct(47)=31617.9, null(47)=0, avgsize(47)=8]
+                          │    │    ├── stats: [rows=32258.06, distinct(47)=31617.9, null(47)=0, avgsize(47)=13]
                           │    │    ├── inner-join (lookup partsupp)
                           │    │    │    ├── save-table-name: q11_lookup_join_13
                           │    │    │    ├── columns: ps_suppkey:26(int!null) ps_availqty:27(int!null) ps_supplycost:28(float!null) s_suppkey:32(int!null) s_nationkey:35(int!null) n_nationkey:41(int!null) n_name:42(char!null)
                           │    │    │    ├── key columns: [25 26] = [25 26]
                           │    │    │    ├── lookup columns are key
-                          │    │    │    ├── stats: [rows=32258.06, distinct(26)=399.935, null(26)=0, avgsize(26)=4, distinct(27)=9536.12, null(27)=0, avgsize(27)=4, distinct(28)=1000, null(28)=0, avgsize(28)=4, distinct(32)=399.935, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4, distinct(27,28)=31617.9, null(27,28)=0, avgsize(27,28)=8]
+                          │    │    │    ├── stats: [rows=32258.06, distinct(26)=399.935, null(26)=0, avgsize(26)=3, distinct(27)=9536.12, null(27)=0, avgsize(27)=4, distinct(28)=27589.3, null(28)=0, avgsize(28)=9, distinct(32)=399.935, null(32)=0, avgsize(32)=3, distinct(35)=1, null(35)=0, avgsize(35)=2, distinct(41)=1, null(41)=0, avgsize(41)=1, distinct(42)=1, null(42)=0, avgsize(42)=10, distinct(27,28)=31617.9, null(27,28)=0, avgsize(27,28)=13]
                           │    │    │    ├── fd: ()-->(42), (32)-->(35), (35)==(41), (41)==(35), (26)==(32), (32)==(26)
                           │    │    │    ├── inner-join (lookup partsupp@ps_sk)
                           │    │    │    │    ├── save-table-name: q11_lookup_join_14
                           │    │    │    │    ├── columns: ps_partkey:25(int!null) ps_suppkey:26(int!null) s_suppkey:32(int!null) s_nationkey:35(int!null) n_nationkey:41(int!null) n_name:42(char!null)
                           │    │    │    │    ├── key columns: [32] = [26]
-                          │    │    │    │    ├── stats: [rows=32258.06, distinct(25)=29783.5, null(25)=0, avgsize(25)=4, distinct(26)=399.935, null(26)=0, avgsize(26)=4, distinct(32)=399.935, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4]
+                          │    │    │    │    ├── stats: [rows=32258.06, distinct(25)=29783.5, null(25)=0, avgsize(25)=4, distinct(26)=399.935, null(26)=0, avgsize(26)=3, distinct(32)=399.935, null(32)=0, avgsize(32)=3, distinct(35)=1, null(35)=0, avgsize(35)=2, distinct(41)=1, null(41)=0, avgsize(41)=1, distinct(42)=1, null(42)=0, avgsize(42)=10]
                           │    │    │    │    ├── key: (25,32)
                           │    │    │    │    ├── fd: ()-->(42), (32)-->(35), (35)==(41), (41)==(35), (26)==(32), (32)==(26)
                           │    │    │    │    ├── inner-join (lookup supplier@s_nk)
                           │    │    │    │    │    ├── save-table-name: q11_lookup_join_15
                           │    │    │    │    │    ├── columns: s_suppkey:32(int!null) s_nationkey:35(int!null) n_nationkey:41(int!null) n_name:42(char!null)
                           │    │    │    │    │    ├── key columns: [41] = [35]
-                          │    │    │    │    │    ├── stats: [rows=400, distinct(32)=399.935, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4]
+                          │    │    │    │    │    ├── stats: [rows=400, distinct(32)=399.935, null(32)=0, avgsize(32)=3, distinct(35)=1, null(35)=0, avgsize(35)=2, distinct(41)=1, null(41)=0, avgsize(41)=1, distinct(42)=1, null(42)=0, avgsize(42)=10]
                           │    │    │    │    │    ├── key: (32)
                           │    │    │    │    │    ├── fd: ()-->(42), (32)-->(35), (35)==(41), (41)==(35)
                           │    │    │    │    │    ├── select
                           │    │    │    │    │    │    ├── save-table-name: q11_select_16
                           │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(char!null)
-                          │    │    │    │    │    │    ├── stats: [rows=1, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4]
+                          │    │    │    │    │    │    ├── stats: [rows=1, distinct(41)=1, null(41)=0, avgsize(41)=1, distinct(42)=1, null(42)=0, avgsize(42)=10]
                           │    │    │    │    │    │    │   histogram(42)=  0      1
                           │    │    │    │    │    │    │                 <--- 'GERMANY'
                           │    │    │    │    │    │    ├── key: (41)
@@ -179,7 +179,7 @@ sort
                           │    │    │    │    │    │    ├── scan nation
                           │    │    │    │    │    │    │    ├── save-table-name: q11_scan_17
                           │    │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(char!null)
-                          │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(41)=25, null(41)=0, avgsize(41)=4, distinct(42)=25, null(42)=0, avgsize(42)=4]
+                          │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(41)=25, null(41)=0, avgsize(41)=1, distinct(42)=25, null(42)=0, avgsize(42)=10]
                           │    │    │    │    │    │    │    │   histogram(41)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
                           │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
                           │    │    │    │    │    │    │    │   histogram(42)=  0      1      23      1
@@ -252,7 +252,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
 {ps_partkey}     32258.00       1.02           29783.00            1.00                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
-{ps_supplycost}  32258.00       1.02           1000.00             27.35 <==           0.00            1.00
+{ps_supplycost}  32258.00       1.02           27589.00            1.01                0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
@@ -340,7 +340,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {n_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
-{ps_supplycost}  32258.00       1.02           1000.00             27.35 <==           0.00            1.00
+{ps_supplycost}  32258.00       1.02           27589.00            1.01                0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
