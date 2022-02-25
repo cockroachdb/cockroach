@@ -3749,3 +3749,38 @@ INSERT INTO t3 VALUES (1, 1, 1), (2, NULL, 2)
 
 statement ok
 DROP TABLE t3, t1, t2
+
+# Regression test for #76852. Correctly maintain child indexes on virtual
+# columns during a cascading delete.
+statement ok
+CREATE TABLE p76852 (
+  p STRING PRIMARY KEY,
+  i INT
+);
+CREATE TABLE c76852 (
+  b BOOL,
+  v STRING AS (b::STRING) VIRTUAL,
+  p STRING REFERENCES p76852 (p) ON DELETE CASCADE,
+  PRIMARY KEY (p, b),
+  INDEX idx (v)
+);
+
+statement ok
+INSERT INTO p76852 (p, i) VALUES ('foo', 1);
+INSERT INTO c76852 (b, p) VALUES (true, 'foo');
+DELETE FROM p76852 WHERE true;
+
+# Fast path case.
+query B
+SELECT b FROM c76852@idx WHERE b
+----
+
+statement ok
+INSERT INTO p76852 (p, i) VALUES ('foo', 1);
+INSERT INTO c76852 (b, p) VALUES (true, 'foo');
+DELETE FROM p76852 WHERE i = 1;
+
+# Non-fast path case.
+query B
+SELECT b FROM c76852@idx WHERE b
+----
