@@ -2049,6 +2049,8 @@ func (s *statusServer) rangesHelper(
 			LockWaitQueueWaiters:        metrics.LockTableMetrics.Waiters,
 			TopKLocksByWaitQueueWaiters: topKLocksByWaiters,
 			Locality:                    &locality,
+			IsLeaseholder:               metrics.Leaseholder,
+			LeaseValid:                  metrics.LeaseValid,
 		}
 	}
 

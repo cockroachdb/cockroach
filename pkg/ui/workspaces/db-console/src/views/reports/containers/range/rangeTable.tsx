@@ -61,6 +61,8 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "leaseState", display: "Lease State", compareToLeader: true },
   { variable: "leaseHolder", display: "Lease Holder", compareToLeader: true },
   { variable: "leaseEpoch", display: "Lease Epoch", compareToLeader: true },
+  { variable: "isLeaseholder", display: "Is Leaseholder", compareToLeader: false },
+  { variable: "leaseValid", display: "Lease Valid", compareToLeader: false },
   { variable: "leaseStart", display: "Lease Start", compareToLeader: true },
   {
     variable: "leaseExpiration",
@@ -248,7 +250,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
     variable: "locality",
     display: "Locality Info",
     compareToLeader: false,
-  }
+  },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -711,6 +713,12 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         leaseEpoch: epoch
           ? this.createContent(lease.epoch)
           : rangeTableEmptyContent,
+        isLeaseholder: this.createContent(
+          String(info.is_leaseholder),
+        ),
+        leaseValid: this.createContent(
+          String(info.lease_valid),
+        ),
         leaseStart: this.contentTimestamp(lease.start, now),
         leaseExpiration: epoch
           ? rangeTableEmptyContent
