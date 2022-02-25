@@ -212,15 +212,15 @@ upsert descriptor #108
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -541,15 +541,15 @@ upsert descriptor #108
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -2090,15 +2090,15 @@ upsert descriptor #116
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2414,15 +2414,15 @@ upsert descriptor #117
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2734,11 +2734,11 @@ upsert descriptor #118
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3023,7 +3023,7 @@ upsert descriptor #119
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3183,11 +3183,11 @@ upsert descriptor #120
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3393,11 +3393,11 @@ upsert descriptor #121
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3604,11 +3604,11 @@ upsert descriptor #122
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -4021,15 +4021,15 @@ upsert descriptor #125
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - DELETE_AND_WRITE_ONLY
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -4506,15 +4506,15 @@ upsert descriptor #116
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -4823,15 +4823,15 @@ upsert descriptor #117
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -5140,11 +5140,11 @@ upsert descriptor #118
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -5426,7 +5426,7 @@ upsert descriptor #119
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -5584,11 +5584,11 @@ upsert descriptor #120
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -5792,11 +5792,11 @@ upsert descriptor #121
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -6001,11 +6001,11 @@ upsert descriptor #122
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -6209,15 +6209,15 @@ upsert descriptor #125
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT

@@ -74,8 +74,8 @@ func Build(
 			// Explicity-set targets have non-zero values in the target metadata.
 			continue
 		}
-		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.targetStatus, e.element, &e.metadata))
-		current = append(current, e.currentStatus)
+		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
+		current = append(current, e.current)
 	}
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
 }
@@ -90,9 +90,10 @@ type (
 )
 
 type elementState struct {
-	element                     scpb.Element
-	targetStatus, currentStatus scpb.Status
-	metadata                    scpb.TargetMetadata
+	element  scpb.Element
+	current  scpb.Status
+	target   scpb.TargetStatus
+	metadata scpb.TargetMetadata
 }
 
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
@@ -146,7 +147,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		bs.ensureDescriptor(screl.GetDescID(t.Element()))
 	}
 	for i, t := range initial.TargetState.Targets {
-		bs.Ensure(initial.Current[i], t.TargetStatus, t.Element(), t.Metadata)
+		bs.Ensure(initial.Current[i], scpb.AsTargetStatus(t.TargetStatus), t.Element(), t.Metadata)
 	}
 	return &bs
 }
@@ -213,12 +214,12 @@ var _ scbuildstmt.BuildCtx = buildCtx{}
 
 // Add implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Add(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.Status_PUBLIC, element, b.TargetMetadata())
+	b.Ensure(scpb.Status_UNKNOWN, scpb.ToPublic, element, b.TargetMetadata())
 }
 
 // Drop implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Drop(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.Status_ABSENT, element, b.TargetMetadata())
+	b.Ensure(scpb.Status_UNKNOWN, scpb.ToAbsent, element, b.TargetMetadata())
 }
 
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.
