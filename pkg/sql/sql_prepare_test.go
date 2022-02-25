@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Make sure that running a wire-protocol-level PREPARE of a SQL-level PREPARE
@@ -31,24 +31,17 @@ func TestPreparePrepare(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	defer db.Close()
 
-	foo, err := db.Prepare("PREPARE x AS SELECT $1::int")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = foo.Exec()
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, err := db.Prepare("EXECUTE x(3)")
+	require.Contains(t, err.Error(), "no such prepared statement")
 
-	foo, err = db.Prepare("EXECUTE x(4)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := foo.QueryRow()
+	_, err = db.Exec("PREPARE x AS SELECT $1::int")
+	require.NoError(t, err)
+
+	s, err := db.Prepare("EXECUTE x(3)")
+	require.NoError(t, err)
+
 	var output int
-	if err := r.Scan(&output); err != nil {
-		t.Fatal(err)
-	}
-
-	assert.Equal(t, 4, output)
+	err = s.QueryRow().Scan(&output)
+	require.NoError(t, err)
+	require.Equal(t, 3, output)
 }
