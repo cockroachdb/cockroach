@@ -208,12 +208,12 @@ var tableParams = map[string]tableParam{
 				po.setAutomaticColumn = true
 			}
 			if !setTrue && po.tableDesc.RowLevelTTL != nil {
-				return unimplemented.NewWithIssue(75428, "unsetting TTL automatic column not yet implemented")
+				return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
 			}
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			return unimplemented.NewWithIssue(75428, "unsetting TTL automatic column not yet implemented")
+			return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
 		},
 	},
 	`ttl_expire_after`: {
@@ -258,7 +258,7 @@ var tableParams = map[string]tableParam{
 					pgcode.InvalidParameterValue,
 					`resetting "ttl_expire_after" is not permitted`,
 				),
-				"use `RESET (ttl_automatic_column)` to remove the automatic column or use `RESET (ttl)` to remove TTL from the table",
+				"use `RESET (ttl)` to remove TTL from the table",
 			)
 		},
 	},

@@ -624,10 +624,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence = relPersistenceTemporary
 		}
 		var relOptions tree.Datum = tree.DNull
-		if ttl := table.GetRowLevelTTL(); ttl != nil {
+		if storageParams := table.GetStorageParams(false /* spaceBetweenEqual */); len(storageParams) > 0 {
 			relOptionsArr := tree.NewDArray(types.String)
-			if err := relOptionsArr.Append(tree.NewDString(fmt.Sprintf("ttl_expire_after=%s", ttl.DurationExpr))); err != nil {
-				return err
+			for _, storageParam := range storageParams {
+				if err := relOptionsArr.Append(tree.NewDString(storageParam)); err != nil {
+					return err
+				}
 			}
 			relOptions = relOptionsArr
 		}

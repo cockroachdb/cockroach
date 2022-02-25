@@ -75,14 +75,14 @@ message BackfillerSpec {
 
   optional int32 initial_splits = 11 [(gogoproto.nullable) = false];
 
-  // WriteAtRequestTimestamp controls the corresponding AddSSTable request
-  // option which updates all MVCC timestamps in the SST to the request
-  // timestamp, even if the request gets pushed. This ensures the writes
-  // comply with the timestamp cache and closed timestamp.
+  // WriteAtBatchTimestamp will write the SST MVCC timestamps at the batch
+  // timestamp, even if the request gets pushed server-side. This ensures the
+  // writes comply with the timestamp cache and closed timestamp. See also
+  // AddSSTableRequest.SSTTimestampToRequestTimestamp.
   //
   // Note that older nodes do not respect this flag so callers should
   // check MVCCAddSSTable before setting this option.
-  optional bool write_at_request_timestamp = 12 [(gogoproto.nullable) = false];
+  optional bool write_at_batch_timestamp = 12 [(gogoproto.nullable) = false];
 }
 
 // JobProgress identifies the job to report progress on. This reporting
