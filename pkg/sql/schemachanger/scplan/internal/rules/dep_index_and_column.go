@@ -160,14 +160,14 @@ func init() {
 // Vice-versa for column removal.
 func init() {
 	depRule(
-		"column type set right after column existence",
+		"column name set right after column existence",
 		scgraph.SameStagePrecedence,
 		scpb.ToPublic,
 		element(scpb.Status_DELETE_ONLY,
 			(*scpb.Column)(nil),
 		),
 		element(scpb.Status_PUBLIC,
-			(*scpb.ColumnType)(nil),
+			(*scpb.ColumnName)(nil),
 		),
 		screl.DescID,
 		screl.ColumnID,
