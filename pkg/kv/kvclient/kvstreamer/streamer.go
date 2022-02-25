@@ -140,12 +140,12 @@ type Hints struct {
 // contributes to the refcounts.
 func (r Result) Release(ctx context.Context) {
 	if s := r.memoryTok.streamer; s != nil {
+		s.results.releaseOne()
 		s.budget.mu.Lock()
 		defer s.budget.mu.Unlock()
 		s.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.mu.numUnreleasedResults--
 		s.signalBudgetIfNoRequestsInProgressLocked()
 	}
 }
@@ -223,6 +223,14 @@ type Streamer struct {
 
 	enqueueKeys []int
 
+	// requestsToServe contains all single-range sub-requests that have yet
+	// to be served.
+	requestsToServe requestsProvider
+
+	// results are the results of already completed requests that haven't
+	// been returned by GetResults() yet.
+	results resultsBuffer
+
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first.
@@ -230,52 +238,17 @@ type Streamer struct {
 
 		avgResponseEstimator avgResponseEstimator
 
-		// requestsToServe contains all single-range sub-requests that have yet
-		// to be served.
-		// TODO(yuzefovich): consider using ring.Buffer instead of a slice.
-		requestsToServe []singleRangeBatch
-
-		// hasWork is used by the worker coordinator to block until some
-		// requests are added to requestsToServe.
-		hasWork *sync.Cond
-
 		// numRangesLeftPerScanRequest tracks how many ranges a particular
 		// originally enqueued ScanRequest touches, but scanning of those ranges
 		// isn't complete. It is allocated lazily when the first ScanRequest is
 		// encountered in Enqueue.
 		numRangesLeftPerScanRequest []int
 
-		// numEnqueuedRequests tracks the number of the originally enqueued
-		// requests.
-		numEnqueuedRequests int
-
-		// numCompleteRequests tracks the number of the originally enqueued
-		// requests that have already been completed.
-		numCompleteRequests int
-
 		// numRequestsInFlight tracks the number of single-range batches that
 		// are currently being served asynchronously (i.e. those that have
 		// already left requestsToServe queue, but for which we haven't received
 		// the results yet).
 		numRequestsInFlight int
-
-		// numUnreleasedResults tracks the number of Results that have already
-		// been created but haven't been Release()'d yet. This number includes
-		// those that are currently in 'results' in addition to those returned
-		// by GetResults() to the caller which the caller hasn't processed yet.
-		numUnreleasedResults int
-
-		// hasResults is used by the client's goroutine to block until there are
-		// some results to be picked up.
-		hasResults *sync.Cond
-
-		// results are the results of already completed requests that haven't
-		// been returned by GetResults() yet.
-		results []Result
-
-		// err is set once the Streamer cannot make progress any more and will
-		// be returned by GetResults().
-		err error
 
 		// done is set to true once the Streamer is closed meaning the worker
 		// coordinator must exit.
@@ -333,8 +306,6 @@ func NewStreamer(
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
 	}
-	s.mu.hasWork = sync.NewCond(&s.mu.Mutex)
-	s.mu.hasResults = sync.NewCond(&s.mu.Mutex)
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		txn:                    txn,
@@ -367,6 +338,14 @@ func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
 		panic(errors.AssertionFailedf("only OutOfOrder mode is supported"))
 	}
 	s.mode = mode
+	var requestsBase requestsProviderBase
+	requestsBase.hasWork = sync.NewCond(&requestsBase.Mutex)
+	resultsBase := resultsBufferBase{
+		budget:     s.budget,
+		hasResults: make(chan struct{}, 1),
+	}
+	s.requestsToServe = &outOfOrderRequestsProvider{requestsProviderBase: &requestsBase}
+	s.results = &outOfOrderResultsBuffer{resultsBufferBase: &resultsBase}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
 	}
@@ -425,24 +404,12 @@ func (s *Streamer) Enqueue(
 		s.coordinatorStarted = true
 	}
 
-	// TODO(yuzefovich): we might want to have more fine-grained lock
-	// acquisitions once pipelining is implemented.
-	s.mu.Lock()
 	defer func() {
-		// We assume that the Streamer's mutex is held when Enqueue returns.
-		s.mu.AssertHeld()
-		defer s.mu.Unlock()
-		if buildutil.CrdbTestBuild {
-			if s.mu.err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(s.mu.err, "s.mu.err is non-nil"))
-			}
-		}
 		// Set the error (if present) so that mainLoop of the worker coordinator
-		// exits as soon as possible, without issuing any requests. Note that
-		// s.mu.err couldn't have already been set by the worker coordinator or
-		// the asynchronous requests because the worker coordinator starts
-		// issuing the requests only after Enqueue() returns.
-		s.mu.err = retErr
+		// exits as soon as possible, without issuing any requests.
+		if retErr != nil {
+			s.results.setError(retErr)
+		}
 	}()
 
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
@@ -450,15 +417,9 @@ func (s *Streamer) Enqueue(
 	}
 	s.enqueueKeys = enqueueKeys
 
-	if s.mu.numEnqueuedRequests != s.mu.numCompleteRequests {
-		return errors.AssertionFailedf("Enqueue is called before the previous requests have been completed")
+	if err := s.results.init(ctx, len(reqs)); err != nil {
+		return err
 	}
-	if len(s.mu.results) > 0 {
-		return errors.AssertionFailedf("Enqueue is called before the results of the previous requests have been retrieved")
-	}
-
-	s.mu.numEnqueuedRequests = len(reqs)
-	s.mu.numCompleteRequests = 0
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
@@ -471,12 +432,11 @@ func (s *Streamer) Enqueue(
 	// requestsToServe, and the worker coordinator will then pick those batches
 	// up to execute asynchronously.
 	var totalReqsMemUsage int64
-	// Use a local variable for requestsToServe rather than
-	// s.mu.requestsToServe. This is needed in order for the worker coordinator
-	// to not pick up any work until we account for totalReqsMemUsage.
+	// Use a local variable for requestsToServe rather than adding them to the
+	// requestsProvider right away. This is needed in order for the worker
+	// coordinator to not pick up any work until we account for
+	// totalReqsMemUsage.
 	var requestsToServe []singleRangeBatch
-	// TODO(yuzefovich): in InOrder mode we need to treat the head-of-the-line
-	// request differently.
 	seekKey := rs.Key
 	const scanDir = kvcoord.Ascending
 	ri := kvcoord.MakeRangeIterator(s.distSender)
@@ -485,6 +445,12 @@ func (s *Streamer) Enqueue(
 		return ri.Error()
 	}
 	firstScanRequest := true
+	streamerLocked := false
+	defer func() {
+		if streamerLocked {
+			s.mu.Unlock()
+		}
+	}()
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Truncate the request span to the current range.
 		singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
@@ -501,6 +467,8 @@ func (s *Streamer) Enqueue(
 				if firstScanRequest {
 					// We have some ScanRequests, so we have to set up
 					// numRangesLeftPerScanRequest.
+					streamerLocked = true
+					s.mu.Lock()
 					if cap(s.mu.numRangesLeftPerScanRequest) < len(reqs) {
 						s.mu.numRangesLeftPerScanRequest = make([]int, len(reqs))
 					} else {
@@ -552,8 +520,19 @@ func (s *Streamer) Enqueue(
 		}
 	}
 
-	err = s.enqueueMemoryAccountingLocked(ctx, totalReqsMemUsage, len(reqs))
-	if err != nil {
+	if streamerLocked {
+		// Per the contract of the budget's mutex (which must be acquired first,
+		// before the Streamer's mutex), we cannot hold the mutex of s when
+		// consuming below, so we have to unlock it.
+		s.mu.Unlock()
+		streamerLocked = false
+	}
+
+	// We allow the budget to go into debt iff a single request was enqueued.
+	// This is needed to support the case of arbitrarily large keys - the caller
+	// is expected to produce requests with such cases one at a time.
+	allowDebt := len(reqs) == 1
+	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
 		return err
 	}
 
@@ -561,37 +540,8 @@ func (s *Streamer) Enqueue(
 	if debug {
 		fmt.Printf("enqueuing %s to serve\n", reqsToString(requestsToServe))
 	}
-	// Note that we do not just overwrite s.mu.requestsToServe because it is
-	// possible that the worker coordinator has not sliced off the issued
-	// requests yet. In other words, it is possible for a request to be issued,
-	// responded to, returned to the client before the deferred function in
-	// issueRequestsForAsyncProcessing is executed.
-	// TODO(yuzefovich): clean this up.
-	s.mu.requestsToServe = append(s.mu.requestsToServe, requestsToServe...)
-	s.mu.hasWork.Signal()
+	s.requestsToServe.enqueue(requestsToServe)
 	return nil
-}
-
-// enqueueMemoryAccountingLocked accounts for the memory used by all the
-// requests that are added in Enqueue.
-//
-// It assumes that the mutex of s is being held and guarantees that it will be
-// held when the function returns too.
-func (s *Streamer) enqueueMemoryAccountingLocked(
-	ctx context.Context, totalReqsMemUsage int64, numReqs int,
-) error {
-	s.mu.AssertHeld()
-	// Per the contract of the budget's mutex (which must be acquired first,
-	// before the Streamer's mutex), we cannot hold the mutex of s, so we have
-	// to release it first and acquire right before returning from this
-	// function.
-	s.mu.Unlock()
-	defer s.mu.Lock()
-	// We allow the budget to go into debt iff a single request was enqueued.
-	// This is needed to support the case of arbitrarily large keys - the caller
-	// is expected to produce requests with such cases one at a time.
-	allowDebt := numReqs == 1
-	return s.budget.consume(ctx, totalReqsMemUsage, allowDebt)
 }
 
 // GetResults blocks until at least one result is available. If the operation
@@ -600,77 +550,46 @@ func (s *Streamer) enqueueMemoryAccountingLocked(
 // corresponds to. For InOrder, only head-of-line results will do. Zero-length
 // result slice is returned once all enqueued requests have been responded to.
 func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for {
-		results := s.mu.results
-		s.mu.results = nil
-		allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
-		if len(results) > 0 || allComplete || s.mu.err != nil {
+		results, allComplete, err := s.results.get(ctx)
+		if len(results) > 0 || allComplete || err != nil {
 			if debug {
 				if len(results) > 0 {
 					fmt.Printf("returning %s to the client\n", resultsToString(results))
 				} else {
 					suffix := "all requests have been responded to"
 					if !allComplete {
-						suffix = fmt.Sprintf("%v", s.mu.err)
+						suffix = fmt.Sprintf("%v", err)
 					}
 					fmt.Printf("returning no results to the client because %s\n", suffix)
 				}
 			}
-			return results, s.mu.err
+			return results, err
 		}
 		if debug {
 			fmt.Println("client blocking to wait for results")
 		}
-		s.mu.hasResults.Wait()
+		s.results.wait()
 		// Check whether the Streamer has been canceled or closed while we were
 		// waiting for the results.
-		if err := ctx.Err(); err != nil {
-			// No need to use setErrorLocked here because the current goroutine
-			// is the only one blocking on hasResults condition variable.
-			s.mu.err = err
+		if err = ctx.Err(); err != nil {
+			s.results.setError(err)
 			return nil, err
 		}
 	}
 }
 
-// setError sets the error on the Streamer if no error has been set previously
-// and unblocks GetResults() if needed.
-//
-// The mutex of s must not be already held.
-func (s *Streamer) setError(err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.setErrorLocked(err)
-}
-
-// setErrorLocked is the same as setError but assumes that the mutex of s is
-// already being held.
-func (s *Streamer) setErrorLocked(err error) {
-	s.mu.AssertHeld()
-	if s.mu.err == nil {
-		s.mu.err = err
-	}
-	s.mu.hasResults.Signal()
-}
-
 // Close cancels all in-flight operations and releases all of the resources of
 // the Streamer. It blocks until all goroutines created by the Streamer exit. No
 // other calls on s are allowed after this.
-func (s *Streamer) Close() {
+func (s *Streamer) Close(ctx context.Context) {
 	if s.coordinatorStarted {
 		s.coordinatorCtxCancel()
 		s.mu.Lock()
 		s.mu.done = true
-		// Unblock the coordinator in case it is waiting for more work.
-		s.mu.hasWork.Signal()
-		// Note that only the client's goroutine can be blocked waiting for the
-		// results, and Close() is called only by the same goroutine, so
-		// signaling hasResult condition variable isn't necessary. However, we
-		// choose to be safe and do it anyway.
-		s.mu.hasResults.Signal()
 		s.mu.Unlock()
+		s.requestsToServe.close()
+		s.results.close(ctx)
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
 	}
@@ -685,7 +604,7 @@ func (s *Streamer) Close() {
 func (s *Streamer) getNumRequestsInProgress() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.numRequestsInFlight + s.mu.numUnreleasedResults
+	return s.mu.numRequestsInFlight + s.results.numUnreleased()
 }
 
 // signalBudgetIfNoRequestsInProgressLocked checks whether there are no requests
@@ -698,7 +617,7 @@ func (s *Streamer) getNumRequestsInProgress() int {
 // The mutex of s must be held.
 func (s *Streamer) signalBudgetIfNoRequestsInProgressLocked() {
 	s.mu.AssertHeld()
-	if s.mu.numRequestsInFlight == 0 && s.mu.numUnreleasedResults == 0 {
+	if s.mu.numRequestsInFlight == 0 && s.results.numUnreleased() == 0 {
 		s.budget.mu.waitForBudget.Signal()
 	}
 }
@@ -710,68 +629,6 @@ func (s *Streamer) adjustNumRequestsInFlight(delta int) {
 	defer s.mu.Unlock()
 	s.mu.numRequestsInFlight += delta
 	s.signalBudgetIfNoRequestsInProgressLocked()
-}
-
-// singleRangeBatch contains parts of the originally enqueued requests that have
-// been truncated to be within a single range. All requests within the
-// singleRangeBatch will be issued as a single BatchRequest.
-type singleRangeBatch struct {
-	reqs []roachpb.RequestUnion
-	// positions is a 1-to-1 mapping with reqs to indicate which ordinal among
-	// the originally enqueued requests a particular reqs[i] corresponds to. In
-	// other words, if reqs[i] is (or a part of) enqueuedReqs[j], then
-	// positions[i] = j.
-	// TODO(yuzefovich): this might need to be [][]int when non-unique requests
-	// are supported.
-	positions []int
-	// reqsReservedBytes tracks the memory reservation against the budget for
-	// the memory usage of reqs.
-	reqsReservedBytes int64
-	// minTargetBytes, if positive, indicates the minimum TargetBytes limit that
-	// this singleRangeBatch should be sent with in order for the response to
-	// not be empty. Note that TargetBytes of at least minTargetBytes is
-	// necessary but might not be sufficient for the response to be non-empty.
-	minTargetBytes int64
-}
-
-var _ sort.Interface = &singleRangeBatch{}
-
-func (r *singleRangeBatch) Len() int {
-	return len(r.reqs)
-}
-
-func (r *singleRangeBatch) Swap(i, j int) {
-	r.reqs[i], r.reqs[j] = r.reqs[j], r.reqs[i]
-	r.positions[i], r.positions[j] = r.positions[j], r.positions[i]
-}
-
-// Less returns true if r.reqs[i]'s key comes before r.reqs[j]'s key.
-func (r *singleRangeBatch) Less(i, j int) bool {
-	// TODO(yuzefovich): figure out whether it's worth extracting the keys when
-	// constructing singleRangeBatch object.
-	return r.reqs[i].GetInner().Header().Key.Compare(r.reqs[j].GetInner().Header().Key) < 0
-}
-
-func reqsToString(reqs []singleRangeBatch) string {
-	result := "requests for positions "
-	for i, r := range reqs {
-		if i > 0 {
-			result += ", "
-		}
-		result += fmt.Sprintf("%v", r.positions)
-	}
-	return result
-}
-
-func resultsToString(results []Result) string {
-	result := "results for positions "
-	for i, r := range results {
-		if i > 0 {
-			result += ", "
-		}
-		result += fmt.Sprintf("%d", r.position)
-	}
-	return result
 }
 
 type workerCoordinator struct {
@@ -795,28 +652,29 @@ type workerCoordinator struct {
 func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	defer w.s.waitGroup.Done()
 	for {
-		// Get next requests to serve.
-		requestsToServe, avgResponseSize, shouldExit := w.getRequests(ctx)
+		if err := w.waitForRequests(ctx); err != nil {
+			w.s.results.setError(err)
+			return
+		}
+
+		var atLeastBytes int64
+		w.s.requestsToServe.Lock()
+		if !w.s.requestsToServe.emptyLocked() {
+			// If we already have minTargetBytes set on the first request to be
+			// issued, then use that.
+			atLeastBytes = w.s.requestsToServe.firstLocked().minTargetBytes
+		}
+		w.s.requestsToServe.Unlock()
+
+		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
 			return
 		}
-		if buildutil.CrdbTestBuild {
-			if len(requestsToServe) == 0 {
-				panic(errors.AssertionFailedf(
-					"unexpectedly zero requests to serve returned by " +
-						"getRequests when shouldExit is false",
-				))
-			}
-		}
 
-		// If we already have minTargetBytes set on the first request to be
-		// issued, then use that; otherwise, use the estimate.
-		atLeastBytes := requestsToServe[0].minTargetBytes
 		if atLeastBytes == 0 {
-			// TODO(yuzefovich): consider using a multiple of avgResponseSize
-			// here.
 			atLeastBytes = avgResponseSize
 		}
+
 		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes)
 		if shouldExit {
 			return
@@ -828,61 +686,46 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 
-		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, maxNumRequestsToIssue, avgResponseSize)
+		err := w.issueRequestsForAsyncProcessing(ctx, maxNumRequestsToIssue, avgResponseSize)
 		if err != nil {
-			w.s.setError(err)
+			w.s.results.setError(err)
 			return
 		}
 	}
 }
 
-// getRequests returns all currently enqueued requests to be served, and if
-// there are none, it waits until some requests are added. It assumes that the
-// Streamer's mutex is not held.
-//
-// A boolean that indicates whether the coordinator should exit is returned.
-func (w *workerCoordinator) getRequests(
-	ctx context.Context,
-) (requestsToServe []singleRangeBatch, avgResponseSize int64, shouldExit bool) {
+// waitForRequests blocks until there is at least one request to be served.
+func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
+	w.s.requestsToServe.Lock()
+	defer w.s.requestsToServe.Unlock()
+	if w.s.requestsToServe.emptyLocked() {
+		w.s.requestsToServe.waitLocked()
+		// Check if the Streamer has been canceled or closed while we were
+		// waiting.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		w.s.mu.Lock()
+		shouldExit := w.s.results.error() != nil || w.s.mu.done
+		w.s.mu.Unlock()
+		if shouldExit {
+			return nil
+		}
+		if buildutil.CrdbTestBuild {
+			if w.s.requestsToServe.emptyLocked() {
+				panic(errors.AssertionFailedf("unexpectedly zero requests to serve after waiting "))
+			}
+		}
+	}
+	return nil
+}
+
+func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldExit bool) {
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
-	requestsToServe, avgResponseSize, shouldExit = w.getRequestsLocked()
-	if shouldExit {
-		return requestsToServe, avgResponseSize, shouldExit
-	}
-	if len(requestsToServe) == 0 {
-		w.s.mu.hasWork.Wait()
-		// Check whether the Streamer has been canceled or closed while we
-		// were waiting for work.
-		if ctx.Err() != nil {
-			// Note that if it was a graceful closure, we still will see a
-			// context cancellation error; however, it won't be propagated
-			// to the client because no more calls after Close() are
-			// allowed.
-			w.s.setErrorLocked(ctx.Err())
-			shouldExit = true
-			return
-		}
-		requestsToServe, avgResponseSize, shouldExit = w.getRequestsLocked()
-	}
-	return requestsToServe, avgResponseSize, shouldExit
-}
-
-// getRequestsLocked returns all currently enqueued requests to be served.
-// Unlike getRequests, it doesn't block if there are no requests at the moment.
-// It assumes that the Streamer's mutex is being held.
-//
-// A boolean that indicates whether the coordinator should exit is returned.
-func (w *workerCoordinator) getRequestsLocked() (
-	requestsToServe []singleRangeBatch,
-	avgResponseSize int64,
-	shouldExit bool,
-) {
-	w.s.mu.AssertHeld()
-	requestsToServe = w.s.mu.requestsToServe
 	avgResponseSize = w.s.mu.avgResponseEstimator.getAvgResponseSize()
-	shouldExit = w.s.mu.err != nil || w.s.mu.done
-	return requestsToServe, avgResponseSize, shouldExit
+	shouldExit = w.s.results.error() != nil || w.s.mu.done
+	return avgResponseSize, shouldExit
 }
 
 // waitUntilEnoughBudget waits until atLeastBytes bytes is available in the
@@ -913,7 +756,7 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 		// Check if the Streamer has been canceled or closed while we were
 		// waiting.
 		if ctx.Err() != nil {
-			w.s.setError(ctx.Err())
+			w.s.results.setError(ctx.Err())
 			return true
 		}
 	}
@@ -945,58 +788,36 @@ func (w *workerCoordinator) getMaxNumRequestsToIssue(ctx context.Context) (_ int
 	// 1.
 	alloc, err := w.asyncSem.Acquire(ctx, 1)
 	if err != nil {
-		w.s.setError(err)
+		w.s.results.setError(err)
 		return 0, true
 	}
 	alloc.Release()
 	return 1, false
 }
 
-// issueRequestsForAsyncProcessing iterates over the given requests and issues
-// them to be served asynchronously while there is enough budget available to
-// receive the responses. Once the budget is exhausted, no new requests are
-// issued, the only exception is made for the case when there are no requests in
-// progress (both requests in flight as well as unreleased results), and in that
-// scenario, a single request will be issued.
+// issueRequestsForAsyncProcessing iterates over the single-range requests
+// (supplied by the requestsProvider) and issues them to be served
+// asynchronously while there is enough budget available to receive the
+// responses. Once the budget is exhausted, no new requests are issued, the only
+// exception is made for the case when there are no requests in progress (both
+// requests in flight as well as unreleased results), and in that scenario, a
+// single request will be issued.
 //
 // maxNumRequestsToIssue specifies the maximum number of requests that can be
 // issued as part of this call. The caller guarantees that w.asyncSem has at
 // least that much quota available.
-//
-// It is assumed that requestsToServe is a prefix of w.s.mu.requestsToServe
-// (i.e. it is possible that some other requests have been appended to
-// w.s.mu.requestsToServe after requestsToServe have been grabbed). All issued
-// requests are removed from w.s.mu.requestToServe.
 func (w *workerCoordinator) issueRequestsForAsyncProcessing(
-	ctx context.Context,
-	requestsToServe []singleRangeBatch,
-	maxNumRequestsToIssue int,
-	avgResponseSize int64,
+	ctx context.Context, maxNumRequestsToIssue int, avgResponseSize int64,
 ) error {
-	var numRequestsIssued int
-	defer func() {
-		w.s.mu.Lock()
-		// We can just slice here since we only append to requestToServe at
-		// the moment.
-		w.s.mu.requestsToServe = w.s.mu.requestsToServe[numRequestsIssued:]
-		w.s.mu.Unlock()
-	}()
+	w.s.requestsToServe.Lock()
+	defer w.s.requestsToServe.Unlock()
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 
-	if debug {
-		fmt.Printf(
-			"picked up %s to serve, available budget %d, "+
-				"num requests in progress %d, average response size %d\n",
-			reqsToString(requestsToServe), w.s.budget.limitBytes-w.s.budget.mu.acc.Used(),
-			w.s.getNumRequestsInProgress(), avgResponseSize,
-		)
-	}
-
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
-	for numRequestsIssued < len(requestsToServe) && numRequestsIssued < maxNumRequestsToIssue && !budgetIsExhausted {
-		singleRangeReqs := requestsToServe[numRequestsIssued]
+	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
+		singleRangeReqs := w.s.requestsToServe.firstLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minAcceptableBudget is the minimum TargetBytes limit with which it
 		// makes sense to issue this request (if we issue the request with
@@ -1088,21 +909,11 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			)
 		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
-		numRequestsIssued++
+		w.s.requestsToServe.removeFirstLocked()
+		maxNumRequestsToIssue--
 		headOfLine = false
 	}
 	return nil
-}
-
-// addRequest adds a single-range batch to be processed later.
-func (w *workerCoordinator) addRequest(req singleRangeBatch) {
-	w.s.mu.Lock()
-	defer w.s.mu.Unlock()
-	if debug {
-		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", req.positions, req.minTargetBytes)
-	}
-	w.s.mu.requestsToServe = append(w.s.mu.requestsToServe, req)
-	w.s.mu.hasWork.Signal()
 }
 
 // budgetMuAlreadyLocked must be true if the caller is currently holding the
@@ -1214,7 +1025,7 @@ func (w *workerCoordinator) performRequestAsync(
 				// ReadWithinUncertaintyIntervalError and there is only a single
 				// Streamer in a single local flow, attempt to transparently
 				// refresh.
-				w.s.setError(err.GoError())
+				w.s.results.setError(err.GoError())
 				return
 			}
 
@@ -1260,7 +1071,7 @@ func (w *workerCoordinator) performRequestAsync(
 						// TODO(yuzefovich): consider updating the
 						// avgResponseSize and/or storing the information about
 						// the returned bytes size in req.
-						w.addRequest(req)
+						w.s.requestsToServe.add(req)
 						return
 					}
 					// The error indicates that the root memory pool has been
@@ -1269,7 +1080,7 @@ func (w *workerCoordinator) performRequestAsync(
 					// TODO(yuzefovich): if the response contains multiple rows,
 					// consider adding the request back to be served with a note
 					// to issue it with smaller targetBytes.
-					w.s.setError(err)
+					w.s.results.setError(err)
 					return
 				}
 			}
@@ -1282,7 +1093,7 @@ func (w *workerCoordinator) performRequestAsync(
 					CreateTime: w.requestAdmissionHeader.CreateTime,
 				}
 				if _, err := w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-					w.s.setError(err)
+					w.s.results.setError(err)
 					return
 				}
 			}
@@ -1293,13 +1104,13 @@ func (w *workerCoordinator) performRequestAsync(
 				req, br, memoryFootprintBytes, resumeReqsMemUsage,
 				numIncompleteGets, numIncompleteScans,
 			); err != nil {
-				w.s.setError(err)
+				w.s.results.setError(err)
 			}
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
 		w.asyncRequestCleanup(true /* budgetMuAlreadyLocked */)
-		w.s.setError(err)
+		w.s.results.setError(err)
 	}
 }
 
@@ -1539,7 +1350,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// If we have any incomplete requests, add them back into the work
 	// pool.
 	if len(resumeReq.reqs) > 0 {
-		w.addRequest(resumeReq)
+		w.s.requestsToServe.add(resumeReq)
 	}
 
 	return nil
@@ -1601,13 +1412,10 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// estimator doesn't distinguish the footprint of the full response vs the
 	// partial one. Think more about this.
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
-	w.s.mu.numCompleteRequests += numCompleteResponses
-	w.s.mu.numUnreleasedResults += len(results)
 	if debug {
 		fmt.Printf("created %s with total size %d\n", resultsToString(results), actualMemoryReservation)
 	}
-	w.s.mu.results = append(w.s.mu.results, results...)
-	w.s.mu.hasResults.Signal()
+	w.s.results.add(results, numCompleteResponses)
 }
 
 var zeroIntSlice []int
