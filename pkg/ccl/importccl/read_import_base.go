@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -363,15 +364,13 @@ func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 	return false
 }
 
-func makeRowErr(_ string, row int64, code pgcode.Code, format string, args ...interface{}) error {
+func makeRowErr(row int64, code pgcode.Code, format string, args ...interface{}) error {
 	err := pgerror.NewWithDepthf(1, code, format, args...)
 	err = errors.WrapWithDepthf(1, err, "row %d", row)
 	return err
 }
 
-func wrapRowErr(
-	err error, _ string, row int64, code pgcode.Code, format string, args ...interface{},
-) error {
+func wrapRowErr(err error, row int64, code pgcode.Code, format string, args ...interface{}) error {
 	if format != "" || len(args) > 0 {
 		err = errors.WrapWithDepthf(1, err, format, args...)
 	}
@@ -389,8 +388,21 @@ type importRowError struct {
 	rowNum int64
 }
 
+const (
+	importRowErrMaxRuneCount    = 1024
+	importRowErrTruncatedMarker = " -- TRUNCATED"
+)
+
 func (e *importRowError) Error() string {
-	return fmt.Sprintf("error parsing row %d: %v (row: %q)", e.rowNum, e.err, e.row)
+	// The job system will truncate this error before saving it,
+	// but we will additionally truncate it here since it is
+	// separately written to the log and could easily result in
+	// very large log files.
+	rowForLog := e.row
+	if len(rowForLog) > importRowErrMaxRuneCount {
+		rowForLog = util.TruncateString(rowForLog, importRowErrMaxRuneCount) + importRowErrTruncatedMarker
+	}
+	return fmt.Sprintf("error parsing row %d: %v (row: %s)", e.rowNum, e.err, rowForLog)
 }
 
 func newImportRowError(err error, row string, num int64) error {
