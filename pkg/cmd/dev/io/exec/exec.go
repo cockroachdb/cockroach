@@ -187,9 +187,12 @@ func (e *Exec) commandContextInheritingStdStreamsImpl(
 
 	_, err := e.Next(command, func(outTrace, errTrace io.Writer) (string, error) {
 		cmd := exec.CommandContext(ctx, name, args...)
+		// NB: In this function we specifically want to inherit the
+		// standard IO streams, so we are not going to capture the
+		// `outTrace` or `errTrace`.
 		cmd.Stdin = os.Stdin
-		cmd.Stdout = io.MultiWriter(e.stdout, outTrace)
-		cmd.Stderr = io.MultiWriter(e.stderr, errTrace)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		cmd.Dir = e.dir
 		cmd.Env = env
 
