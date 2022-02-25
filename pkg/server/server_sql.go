@@ -395,7 +395,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			}
 			info, err := cfg.sqlInstanceProvider.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
-				return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+				return nil, errors.Errorf("unable to look up descriptor for nsql%d", nodeID)
 			}
 			return &util.UnresolvedAddr{AddressField: info.InstanceAddr}, nil
 		}
@@ -708,6 +708,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			isAvailable,
 			cfg.nodeDialer,
 			cfg.podNodeDialer,
+			codec,
+			cfg.sqlInstanceProvider,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(

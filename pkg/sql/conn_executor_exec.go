@@ -756,38 +756,42 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 					return err
 				}
 			}
-		} else if p.extendedEvalCtx.AsOfSystemTime.BoundedStaleness {
-			// This has to be a bounded staleness read with nearest_only=True during
-			// a retry. The AOST read timestamps are expected to differ.
-			if p.extendedEvalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
-				return errors.AssertionFailedf(
-					"expected bounded_staleness set with a max_timestamp_bound",
-				)
+			return nil
+		}
+		if *p.extendedEvalCtx.AsOfSystemTime == *asOf {
+			// In most cases, the AOST timestamps are expected to match.
+			return nil
+		}
+		if p.extendedEvalCtx.AsOfSystemTime.BoundedStaleness {
+			if !p.extendedEvalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
+				// This has to be a bounded staleness read with nearest_only=True during
+				// a retry. The AOST read timestamps are expected to differ.
+				return nil
 			}
-		} else if *p.extendedEvalCtx.AsOfSystemTime != *asOf {
-			return errors.AssertionFailedf(
-				"cannot specify AS OF SYSTEM TIME with different timestamps",
-			)
+			return errors.AssertionFailedf("expected bounded_staleness set with a max_timestamp_bound")
 		}
-	} else {
-		// If we're in an explicit txn, we allow AOST but only if it matches with
-		// the transaction's timestamp. This is useful for running AOST statements
-		// using the InternalExecutor inside an external transaction; one might want
-		// to do that to force p.avoidLeasedDescriptors to be set below.
-		if asOf.BoundedStaleness {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"cannot use a bounded staleness query in a transaction",
-			)
-		}
-		if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
-			err = pgerror.Newf(pgcode.Syntax,
-				"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
-			err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
-			return err
-		}
-		p.extendedEvalCtx.AsOfSystemTime = asOf
+		return errors.AssertionFailedf(
+			"cannot specify AS OF SYSTEM TIME with different timestamps. expected: %s, got: %s",
+			p.extendedEvalCtx.AsOfSystemTime.Timestamp, asOf.Timestamp,
+		)
 	}
+	// If we're in an explicit txn, we allow AOST but only if it matches with
+	// the transaction's timestamp. This is useful for running AOST statements
+	// using the InternalExecutor inside an external transaction; one might want
+	// to do that to force p.avoidLeasedDescriptors to be set below.
+	if asOf.BoundedStaleness {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot use a bounded staleness query in a transaction",
+		)
+	}
+	if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
+		err = pgerror.Newf(pgcode.Syntax,
+			"inconsistent AS OF SYSTEM TIME timestamp; expected: %s, got: %s", readTs, asOf.Timestamp)
+		err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		return err
+	}
+	p.extendedEvalCtx.AsOfSystemTime = asOf
 	return nil
 }
 
@@ -1104,9 +1108,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.extraTxnState.autoRetryReason != nil {
 		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.extraTxnState.autoRetryReason, planner.EvalContext())
 	}
+	distribute := DistributionType(DistributionTypeNone)
+	if distributePlan.WillDistribute() {
+		distribute = DistributionTypeSystemTenantOnly
+	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
 	)
 	if res.Err() == nil {
 		// numTxnRetryErrors is the number of times an error will be injected if
@@ -1363,7 +1371,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planner *planner,
 	stmtType tree.StatementReturnType,
 	res RestrictedCommandResult,
-	distribute bool,
+	distribute DistributionType,
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
 	var testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
@@ -1383,7 +1391,8 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
-	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
+		planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
 	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)

@@ -67,11 +67,13 @@ func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exe
 		planningMode:         planningMode,
 		gatewaySQLInstanceID: p.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
 	}
-	distribute := e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning
+	distribute := DistributionType(DistributionTypeNone)
+	if e.planningMode != distSQLLocalOnlyPlanning {
+		distribute = DistributionTypeSystemTenantOnly
+	}
 	evalCtx := p.ExtendedEvalContext()
-	e.planCtx = e.dsp.NewPlanningCtx(
-		evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute,
-	)
+	e.planCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner,
+		e.planner.txn, distribute)
 	return e
 }
 
