@@ -1230,6 +1230,8 @@ Support status: [reserved](#support-status)
 | lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
 | top_k_locks_by_wait_queue_waiters | [RangeInfo.LockInfo](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeInfo.LockInfo) | repeated |  | [reserved](#support-status) |
 | locality | [Locality](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.Locality) |  |  | [reserved](#support-status) |
+| is_leaseholder | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -1466,6 +1468,8 @@ Support status: [reserved](#support-status)
 | lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
 | top_k_locks_by_wait_queue_waiters | [RangeInfo.LockInfo](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeInfo.LockInfo) | repeated |  | [reserved](#support-status) |
 | locality | [Locality](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.Locality) |  |  | [reserved](#support-status) |
+| is_leaseholder | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -3373,6 +3377,8 @@ Support status: [reserved](#support-status)
 | lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
 | top_k_locks_by_wait_queue_waiters | [RangeInfo.LockInfo](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeInfo.LockInfo) | repeated |  | [reserved](#support-status) |
 | locality | [Locality](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.Locality) |  |  | [reserved](#support-status) |
+| is_leaseholder | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
 
 
 
