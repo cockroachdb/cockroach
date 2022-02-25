@@ -75,7 +75,6 @@ upsert [a,c):C
 
 updates
 ----
-[/Min,/Max)
 [a,c)
 
 store-reader key=a

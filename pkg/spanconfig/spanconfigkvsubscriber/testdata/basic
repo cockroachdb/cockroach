@@ -40,7 +40,6 @@ delete [d,f)
 
 updates
 ----
-[/Min,/Max)
 [d,f)
 
 store-reader key=d
