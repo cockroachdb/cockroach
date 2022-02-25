@@ -21,7 +21,6 @@ delete {source=1,target=20}
 
 updates
 ----
-[/Min,/Max)
 [/Tenant/20,/Tenant/21)
 
 # Lastly, update a system span config set on a secondary tenant's keyspace and
@@ -32,5 +31,4 @@ upsert {source=10, target=10}:U
 
 updates
 ----
-[/Min,/Max)
 [/Tenant/10,/Tenant/11)

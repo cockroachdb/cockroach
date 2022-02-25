@@ -2395,45 +2395,43 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				return nil // placeholder; ignore
 			}
 
-			startKey := repl.Desc().StartKey
-			if !sp.ContainsKey(startKey) {
-				// It's possible that the update we're receiving here is the
-				// right-hand side of a span config getting split. Think of
-				// installing a zone config on some partition of an index where
-				// previously there was none on any of the partitions. The range
-				// spanning the entire index would have to split on the
-				// partition boundary, and before it does so, it's possible that
-				// it would receive a span config update for just the partition.
-				//
-				// To avoid clobbering the pre-split range's embedded span
-				// config with the partition's config, we'll ensure that the
-				// range's start key is part of the update. We don't have to
-				// enqueue the range in the split queue here, that takes place
-				// when processing the left-hand side span config update.
-
-				return nil // ignore
-			}
-
-			// TODO(irfansharif): It's possible for a config to be applied over an
-			// entire range when it only pertains to the first half of the range.
-			// This will be corrected shortly -- we enqueue the range for a split
-			// below where we then apply the right config on each half. But still,
-			// it's surprising behavior and gets in the way of a desirable
-			// consistency guarantee: a key's config at any point in time is one
-			// that was explicitly declared over it, or the default config.
-			//
-			// We can do better, we can skip applying the config entirely and
-			// enqueue the split, then relying on the split trigger to install
-			// the right configs on each half. The current structure is as it is
-			// to maintain parity with the system config span variant.
-
 			replCtx := repl.AnnotateCtx(ctx)
-			conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
-			if err != nil {
-				log.Errorf(ctx, "skipped applying update, unexpected error reading from subscriber: %v", err)
-				return err
+			startKey := repl.Desc().StartKey
+			if sp.ContainsKey(startKey) {
+				// It's possible that the update we're receiving here implies a split.
+				// If the update corresponds to what would be the config for the
+				// right-hand side after the split, we avoid clobbering the pre-split
+				// range's embedded span config by checking if the start key is part of
+				// the update.
+				//
+				// Even if we're dealing with what would be the right-hand side after
+				// the split is processed, we still want to nudge the split queue
+				// below -- we can't instead rely on there being an update for the
+				// left-hand side of the split. Concretely, consider the case when a
+				// new table is added with a different configuration to its (left)
+				// adjacent table. This results in a single update, corresponding to the
+				// new table's span, which forms the right-hand side post split.
+
+				// TODO(irfansharif): It's possible for a config to be applied over an
+				// entire range when it only pertains to the first half of the range.
+				// This will be corrected shortly -- we enqueue the range for a split
+				// below where we then apply the right config on each half. But still,
+				// it's surprising behavior and gets in the way of a desirable
+				// consistency guarantee: a key's config at any point in time is one
+				// that was explicitly declared over it, or the default config.
+				//
+				// We can do better, we can skip applying the config entirely and
+				// enqueue the split, then relying on the split trigger to install
+				// the right configs on each half. The current structure is as it is
+				// to maintain parity with the system config span variant.
+
+				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
+				if err != nil {
+					log.Errorf(ctx, "skipped applying update, unexpected error reading from subscriber: %v", err)
+					return err
+				}
+				repl.SetSpanConfig(conf)
 			}
-			repl.SetSpanConfig(conf)
 
 			// TODO(irfansharif): For symmetry with the system config span variant,
 			// we queue blindly; we could instead only queue it if we knew the
