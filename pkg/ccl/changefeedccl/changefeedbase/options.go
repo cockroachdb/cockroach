@@ -118,6 +118,10 @@ const (
 	OptKafkaSinkConfig   = `kafka_sink_config`
 	OptWebhookSinkConfig = `webhook_sink_config`
 
+	// OptSink allows users to alter the Sink URI of an existing changefeed.
+	// Note that this option is only allowed for alter changefeed statements.
+	OptSink = `sink`
+
 	SinkParamCACert                 = `ca_cert`
 	SinkParamClientCert             = `client_cert`
 	SinkParamClientKey              = `client_key`
@@ -237,3 +241,12 @@ var NoLongerExperimental = map[string]string{
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter
 var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan)
+
+var AlterChangefeedOptionExpectValues = func() map[string]sql.KVStringOptValidate {
+	alterChangefeedOptions := make(map[string]sql.KVStringOptValidate, len(ChangefeedOptionExpectValues)+1)
+	for key, value := range ChangefeedOptionExpectValues {
+		alterChangefeedOptions[key] = value
+	}
+	alterChangefeedOptions[OptSink] = sql.KVStringOptRequireValue
+	return alterChangefeedOptions
+}()

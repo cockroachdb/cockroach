@@ -12,16 +12,19 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -218,6 +221,10 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			`pq: cannot alter option "initial_scan"`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan`, feed.JobID()),
 		)
+		sqlDB.ExpectErr(t,
+			`cannot unset option "sink"`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET sink`, feed.JobID()),
+		)
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn))
@@ -303,4 +310,90 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	require.True(t, ok)
 
 	require.Equal(t, details.SinkURI, `s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456`)
+}
+
+func TestAlterChangefeedChangeSink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, stopServer := startTestServer(t, feedTestOptions{})
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	var changefeedID jobspb.JobID
+
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
+			r := fakeResumer{
+				done: doneCh,
+			}
+			return &r
+		},
+	}
+
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR TABLE foo INTO 's3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`).Scan(&changefeedID)
+
+	sqlDB.Exec(t, `PAUSE JOB $1`, changefeedID)
+	waitForJobStatus(sqlDB, t, changefeedID, `paused`)
+
+	// make sql sink
+	sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	f := makeTableFeedFactory(s, db, sink)
+
+	feedFactory := f.(*tableFeedFactory)
+
+	sinkURI := feedFactory.uri
+	sinkURI.Path = fmt.Sprintf(`table_%d`, timeutil.Now().UnixNano())
+
+	sinkDB, err := gosql.Open("postgres", sinkURI.String())
+	require.NoError(t, err)
+
+	defer func() {
+		_ = sinkDB.Close()
+	}()
+
+	sinkURI.Scheme = `experimental-sql`
+	_, err = sinkDB.Exec(`CREATE DATABASE ` + sinkURI.Path)
+	require.NoError(t, err)
+
+	ss := &sinkSynchronizer{}
+	wrapSink := func(s Sink) Sink {
+		return &notifyFlushSink{Sink: s, sync: ss}
+	}
+
+	c := &tableFeed{
+		jobFeed:        newJobFeed(feedFactory.db, wrapSink),
+		ss:             ss,
+		seenTrackerMap: make(map[string]struct{}),
+		sinkDB:         sinkDB,
+	}
+
+	c.jobFeed.jobID = changefeedID
+
+	feedFactory.di.prepareJob(c.jobFeed)
+
+	sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = '%s'`, changefeedID, sinkURI.String()))
+
+	sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, changefeedID))
+	waitForJobStatus(sqlDB, t, changefeedID, `running`)
+
+	feedFactory.di.startJob(c.jobFeed)
+
+	sqlDB.Exec(t, `INSERT INTO foo VALUES(1)`)
+	assertPayloads(t, c, []string{
+		`foo: [1]->{"after": {"a": 1}, "key": [1]}`,
+	})
 }
