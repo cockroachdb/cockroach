@@ -368,7 +368,7 @@ func restore(
 	}
 	tasks = append(tasks, runRestore)
 
-	if err := ctxgroup.GoAndWait(restoreCtx, "", tasks...); err != nil {
+	if err := ctxgroup.GoAndWait(restoreCtx, "run restore job", tasks...); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.

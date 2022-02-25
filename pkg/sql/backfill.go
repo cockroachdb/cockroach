@@ -710,7 +710,7 @@ func (sc *SchemaChanger) validateConstraints(
 
 	for i := range constraints {
 		c := constraints[i]
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("validate constraint", func(ctx context.Context) error {
 			// Make the mutations public in a private copy of the descriptor
 			// and add it to the Collection, so that we can use SQL below to perform
 			// the validation. We wouldn't have needed to do this if we could have
@@ -1118,7 +1118,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	stopProgress := make(chan struct{})
 	duration := 10 * time.Second
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("update index backfill job progress", func(ctx context.Context) error {
 		tick := time.NewTicker(duration)
 		defer tick.Stop()
 		done := ctx.Done()
@@ -1139,7 +1139,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	// Setup periodic job details update.
 	stopJobDetailsUpdate := make(chan struct{})
 	detailsDuration := backfill.IndexBackfillCheckpointInterval.Get(&sc.settings.SV)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("update index backfill job details", func(ctx context.Context) error {
 		tick := time.NewTicker(detailsDuration)
 		defer tick.Stop()
 		done := ctx.Done()
@@ -1158,7 +1158,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	})
 
 	// Run index backfill physical plan.
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("run index backfill physical plan", func(ctx context.Context) error {
 		defer close(stopProgress)
 		defer close(stopJobDetailsUpdate)
 		if err := sc.jobRegistry.CheckPausepoint("indexbackfill.before_flow"); err != nil {
@@ -1418,7 +1418,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	runHistoricalTxn := sc.makeFixedTimestampInternalExecRunner(readAsOf)
 
 	if len(forwardIndexes) > 0 {
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("validate forward indexes", func(ctx context.Context) error {
 			return ValidateForwardIndexes(
 				ctx,
 				tableDesc,
@@ -1431,7 +1431,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		})
 	}
 	if len(invertedIndexes) > 0 {
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("validate inverted indexes", func(ctx context.Context) error {
 			return ValidateInvertedIndexes(
 				ctx,
 				sc.execCfg.Codec,
@@ -1489,7 +1489,7 @@ func ValidateInvertedIndexes(
 		i, idx := i, idx
 		countReady[i] = make(chan struct{})
 
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("validate inverted index", func(ctx context.Context) error {
 			// KV scan can be used to get the index length.
 			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
 			// distributed execution and avoid bypassing the SQL decoding
@@ -1536,7 +1536,7 @@ func ValidateInvertedIndexes(
 			return nil
 		})
 
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("count inverted index rows", func(ctx context.Context) error {
 			c, err := countExpectedRowsForInvertedIndex(ctx, tableDesc, idx, runHistoricalTxn, withFirstMutationPublic, execOverride)
 			if err != nil {
 				return err
@@ -1678,7 +1678,7 @@ func ValidateForwardIndexes(
 		// Shadow idx to prevent its value from changing within each gorountine.
 		idx := idx
 
-		grp.GoCtx("", func(ctx context.Context) error {
+		grp.GoCtx("compare table and index row count", func(ctx context.Context) error {
 			start := timeutil.Now()
 			idxLen, err := countIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
 			if err != nil {
@@ -1717,7 +1717,7 @@ func ValidateForwardIndexes(
 		})
 	}
 
-	grp.GoCtx("", func(ctx context.Context) error {
+	grp.GoCtx("compute table row count", func(ctx context.Context) error {
 		start := timeutil.Now()
 		c, err := populateExpectedCounts(ctx, tableDesc, indexes, partialIndexExpectedCounts, withFirstMutationPublic, runHistoricalTxn, execOverride)
 		if err != nil {

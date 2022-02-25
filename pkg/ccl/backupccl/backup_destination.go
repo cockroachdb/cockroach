@@ -216,7 +216,7 @@ func getBackupManifests(
 		// pass while reading. When it is done, we'll lock an mu, reserve its size
 		// from the main one tracking the total amount reserved.
 		subMem := mem.Monitor().MakeBoundAccount()
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("read backup manifest", func(ctx context.Context) error {
 			defer subMem.Close(ctx)
 			// TODO(lucy): We may want to upgrade the table descs to the newer
 			// foreign key representation here, in case there are backups from an

@@ -195,7 +195,7 @@ func distImport(
 
 	stopProgress := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("update import job progress", func(ctx context.Context) error {
 		tick := time.NewTicker(time.Second * 10)
 		defer tick.Stop()
 		done := ctx.Done()
@@ -213,7 +213,7 @@ func distImport(
 		}
 	})
 
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("run import dist plan", func(ctx context.Context) error {
 		defer close(stopProgress)
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx

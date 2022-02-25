@@ -7938,7 +7938,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		beforePublishingNotif, continueNotif := initBackfillNotification()
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("restore database", func(ctx context.Context) error {
 			if _, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`); err != nil {
 				t.Fatal(err)
 			}
@@ -8038,7 +8038,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		beforePublishingNotif, continueNotif := initBackfillNotification()
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("restore wildcard", func(ctx context.Context) error {
 			if _, err := sqlDB.DB.ExecContext(ctx, `RESTORE d.* FROM 'nodelocal://0/test/' WITH into_db='newdb'`); err != nil {
 				t.Fatal(err)
 			}
@@ -8181,7 +8181,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		afterPublishNotif, continueNotif := notifyAfterPublishing()
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("restore database", func(ctx context.Context) error {
 			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
 			require.Regexp(t, "injected error", err)
 			return nil
@@ -8243,7 +8243,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		afterPublishNotif, continueNotif := notifyAfterPublishing()
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("restore database", func(ctx context.Context) error {
 			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
 			require.Regexp(t, "injected error", err)
 			return nil
@@ -8312,7 +8312,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		afterPublishNotif, continueNotif := notifyAfterPublishing()
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("restore oldb wildcard", func(ctx context.Context) error {
 			conn, err := tc.Conns[0].Conn(ctx)
 			require.NoError(t, err)
 			_, err = conn.ExecContext(ctx, `RESTORE olddb.* FROM 'nodelocal://0/test/' WITH into_db='newdb'`)

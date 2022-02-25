@@ -111,7 +111,7 @@ func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
 	resultCh := make(chan tree.Datums) // No need to close
 	g := ctxgroup.WithContext(ctx)
 
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("read backup plan hook results", func(ctx context.Context) error {
 		select {
 		case <-resultCh:
 			return nil
@@ -120,7 +120,7 @@ func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
 		}
 	})
 
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("invoke backup plan hook", func(ctx context.Context) error {
 		return backupFn(ctx, nil, resultCh)
 	})
 

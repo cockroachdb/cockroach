@@ -177,12 +177,12 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
 	rd.sstCh = make(chan mergedSST, rd.numWorkers)
-	rd.phaseGroup.GoCtx("", func(ctx context.Context) error {
+	rd.phaseGroup.GoCtx("read entries from input RowSource", func(ctx context.Context) error {
 		defer close(entries)
 		return inputReader(ctx, rd.input, entries, rd.metaCh)
 	})
 
-	rd.phaseGroup.GoCtx("", func(ctx context.Context) error {
+	rd.phaseGroup.GoCtx("open SST iterators", func(ctx context.Context) error {
 		defer close(rd.sstCh)
 		for entry := range entries {
 			if err := rd.openSSTs(ctx, entry, rd.sstCh); err != nil {
@@ -193,7 +193,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 		return nil
 	})
 
-	rd.phaseGroup.GoCtx("", func(ctx context.Context) error {
+	rd.phaseGroup.GoCtx("ingest SSTs", func(ctx context.Context) error {
 		defer close(rd.progCh)
 		return rd.runRestoreWorkers(ctx, rd.sstCh)
 	})

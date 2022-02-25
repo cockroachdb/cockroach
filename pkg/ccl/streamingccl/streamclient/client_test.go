@@ -114,7 +114,7 @@ func ExampleClient() {
 	done := make(chan struct{})
 
 	grp := ctxgroup.WithContext(context.Background())
-	grp.GoCtx("", func(ctx context.Context) error {
+	grp.GoCtx("client heartbeat", func(ctx context.Context) error {
 		ticker := time.NewTicker(time.Second * 30)
 		for {
 			select {
@@ -132,7 +132,7 @@ func ExampleClient() {
 		}
 	})
 
-	grp.GoCtx("", func(ctx context.Context) error {
+	grp.GoCtx("client subscribe", func(ctx context.Context) error {
 		defer close(done)
 		ingested.Lock()
 		ts := ingested.ts

@@ -82,7 +82,7 @@ func runImport(
 	conv.start(group)
 
 	// Read input files into kvs
-	group.GoCtx("", func(ctx context.Context) error {
+	group.GoCtx("import files to kv", func(ctx context.Context) error {
 		defer close(kvCh)
 		ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
 		defer span.Finish()
@@ -106,7 +106,7 @@ func runImport(
 	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *roachpb.BulkOpSummary
-	group.GoCtx("", func(ctx context.Context) error {
+	group.GoCtx("ingest kvs", func(ctx context.Context) error {
 		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
 		if err != nil {
 			return err
@@ -247,7 +247,7 @@ func readInputFiles(
 			}
 			if rejected != nil {
 				grp := ctxgroup.WithContext(ctx)
-				grp.GoCtx("", func(ctx context.Context) error {
+				grp.GoCtx("write rejected rows", func(ctx context.Context) error {
 					var buf []byte
 					var countRejected int64
 					for s := range rejected {
@@ -285,7 +285,7 @@ func readInputFiles(
 					return nil
 				})
 
-				grp.GoCtx("", func(ctx context.Context) error {
+				grp.GoCtx("read import file", func(ctx context.Context) error {
 					defer close(rejected)
 					if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], rejected); err != nil {
 						return err
@@ -587,7 +587,7 @@ func runParallelImport(
 	}
 
 	minEmited := make([]int64, parallelism)
-	group.GoCtx("", func(ctx context.Context) error {
+	group.GoCtx("import rows to datums", func(ctx context.Context) error {
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-rows-to-datums")
 		defer span.Finish()
@@ -597,7 +597,7 @@ func runParallelImport(
 	})
 
 	// Read data from producer and send it to consumers.
-	group.GoCtx("", func(ctx context.Context) error {
+	group.GoCtx("import file to rows", func(ctx context.Context) error {
 		defer close(importer.recordCh)
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-file-to-rows")

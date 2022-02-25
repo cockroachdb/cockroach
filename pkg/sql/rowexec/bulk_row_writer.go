@@ -114,10 +114,10 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	}
 
 	g = ctxgroup.WithContext(ctx)
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("ingest kvs", func(ctx context.Context) error {
 		return sp.ingestLoop(ctx, kvCh)
 	})
-	g.GoCtx("", func(ctx context.Context) error {
+	g.GoCtx("convert rows to kvs", func(ctx context.Context) error {
 		return sp.convertLoop(ctx, kvCh, conv)
 	})
 	return g.Wait()
