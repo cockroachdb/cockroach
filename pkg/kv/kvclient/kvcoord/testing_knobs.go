@@ -48,6 +48,10 @@ type ClientTestingKnobs struct {
 	// DisableCommitSanityCheck allows "setting" the DisableCommitSanityCheck to
 	// true without actually overriding the variable.
 	DisableCommitSanityCheck bool
+
+	// CommitWaitFilter allows tests to instrument the beginning of a transaction
+	// commit wait sleep.
+	CommitWaitFilter func()
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}
