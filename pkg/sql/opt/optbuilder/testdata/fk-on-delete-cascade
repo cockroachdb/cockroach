@@ -1005,7 +1005,8 @@ exec-ddl
 CREATE TABLE child_virt (
   c INT PRIMARY KEY,
   p INT REFERENCES parent_virt(p) ON DELETE CASCADE,
-  v INT AS (p) VIRTUAL
+  v INT AS (p) VIRTUAL,
+  v2 STRING AS (c::STRING) VIRTUAL
 )
 ----
 
@@ -1028,17 +1029,24 @@ root
  └── cascade
       └── delete child_virt
            ├── columns: <none>
-           ├── fetch columns: c:12 child_virt.p:13
+           ├── fetch columns: c:13 child_virt.p:14 v:15 v2:16
            └── select
-                ├── columns: c:12!null child_virt.p:13!null
-                ├── scan child_virt
-                │    ├── columns: c:12!null child_virt.p:13
-                │    └── computed column expressions
-                │         └── v:14
-                │              └── child_virt.p:13
+                ├── columns: c:13!null child_virt.p:14!null v:15 v2:16!null
+                ├── project
+                │    ├── columns: v:15 v2:16!null c:13!null child_virt.p:14
+                │    ├── scan child_virt
+                │    │    ├── columns: c:13!null child_virt.p:14
+                │    │    └── computed column expressions
+                │    │         ├── v:15
+                │    │         │    └── child_virt.p:14
+                │    │         └── v2:16
+                │    │              └── c:13::STRING
+                │    └── projections
+                │         ├── child_virt.p:14 [as=v:15]
+                │         └── c:13::STRING [as=v2:16]
                 └── filters
-                     ├── child_virt.p:13 > 1
-                     └── child_virt.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
+                     ├── child_virt.p:14 > 1
+                     └── child_virt.p:14 IS DISTINCT FROM CAST(NULL AS INT8)
 
 # No fast path.
 build-cascades
@@ -1060,17 +1068,24 @@ root
  └── cascade
       └── delete child_virt
            ├── columns: <none>
-           ├── fetch columns: c:12 child_virt.p:13
+           ├── fetch columns: c:13 child_virt.p:14 v:15 v2:16
            └── semi-join (hash)
-                ├── columns: c:12!null child_virt.p:13
-                ├── scan child_virt
-                │    ├── columns: c:12!null child_virt.p:13
-                │    └── computed column expressions
-                │         └── v:14
-                │              └── child_virt.p:13
+                ├── columns: c:13!null child_virt.p:14 v:15 v2:16!null
+                ├── project
+                │    ├── columns: v:15 v2:16!null c:13!null child_virt.p:14
+                │    ├── scan child_virt
+                │    │    ├── columns: c:13!null child_virt.p:14
+                │    │    └── computed column expressions
+                │    │         ├── v:15
+                │    │         │    └── child_virt.p:14
+                │    │         └── v2:16
+                │    │              └── c:13::STRING
+                │    └── projections
+                │         ├── child_virt.p:14 [as=v:15]
+                │         └── c:13::STRING [as=v2:16]
                 ├── with-scan &1
-                │    ├── columns: p:17!null
+                │    ├── columns: p:19!null
                 │    └── mapping:
-                │         └──  parent_virt.p:4 => p:17
+                │         └──  parent_virt.p:4 => p:19
                 └── filters
-                     └── child_virt.p:13 = p:17
+                     └── child_virt.p:14 = p:19
