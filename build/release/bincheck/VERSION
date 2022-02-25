@@ -1,0 +1,18 @@
+# WARNING: ARE YOU MAKING A PULL REQUEST AGAINST THE RIGHT BRANCH?
+# Use the release-X.Y branch that corresponds to the version of CockroachDB
+# you're checking. To check v2.0.4, for example, make your pull request against
+# the release-2.0 branch.
+#
+# The version can take one of two formats:
+#
+#     - v<version>: release binary from https://binaries.cockroachdb.com
+#       e.g.: v2.0.2
+#
+#     - test:v<version>: test release binary from https://binaries-test.cockroachdb.com
+#       e.g.: test:vx.y.z[-extensions]
+#
+# Be sure to list the expected SHA, in full, on the line following the version.
+#
+
+v20.2.19
+09707aabb12e50f6e7345b5c9664c0745bb7d742

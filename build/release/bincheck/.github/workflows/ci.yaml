@@ -1,0 +1,28 @@
+name: bincheck
+
+on:
+  push:
+    branches: [ master, release-* ]
+  pull_request:
+    branches: [ master, release-* ]
+
+jobs:
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+    - run: ./test-linux
+
+  darwin:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - run: ./test-macos
+
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - run: bash test-windows

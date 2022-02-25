@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Download the binary based on the VERSION file. This sets the COCKROACH_VERSION env variable
+# and downloads the binary in ./mnt/
+. download_binary.sh "linux-amd64.tgz"
+
+ssh() {
+  command ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    root@localhost -p 2222 "$@"
+}
+
+qemu-system-x86_64 \
+  -cpu qemu64,-sse4.2 \
+  -m 1G \
+  -kernel images/qemu_x86_64_glibc_bzImage \
+  -net nic,model=virtio -net user,hostfwd=tcp::2222-:22 \
+  -drive file=fat:rw:mnt,format=raw \
+  -nographic &
+
+trap "kill -9 $! &> /dev/null" EXIT
+
+for i in {0..4}
+do
+  ssh true && break
+  backoff=$((2 ** i))
+  echo "VM not yet available; sleeping for $backoff seconds"
+  sleep $backoff
+done
+
+ssh /bin/bash -s /bincheck/cockroach "$COCKROACH_VERSION" "$COCKROACH_SHA" < bincheck
