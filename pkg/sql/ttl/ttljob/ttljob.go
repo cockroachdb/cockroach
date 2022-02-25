@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -547,7 +548,7 @@ func runTTLOnRange(
 				until = len(expiredRowsPKs)
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := db.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
 				// If we detected a schema change here, the delete will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
 				desc, err := descriptors.GetImmutableTableByID(
@@ -576,7 +577,6 @@ func runTTLOnRange(
 				}
 				defer tokens.Consume()
 
-				// TODO(#75428): configure admission priority
 				start := timeutil.Now()
 				err = deleteBuilder.run(ctx, ie, txn, deleteBatch)
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
