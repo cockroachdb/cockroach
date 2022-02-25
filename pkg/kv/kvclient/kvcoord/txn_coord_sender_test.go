@@ -1349,8 +1349,12 @@ func TestTxnCommitWait(t *testing.T) {
 	//
 	testFn := func(t *testing.T, linearizable, commit, readOnly, futureTime, deferred bool) {
 		s, metrics, cleanupFn := setupMetricsTest(t)
-		s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).TestingSetLinearizable(linearizable)
 		defer cleanupFn()
+		s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).TestingSetLinearizable(linearizable)
+		commitWaitC := make(chan struct{})
+		s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).TestingSetCommitWaitFilter(func() {
+			close(commitWaitC)
+		})
 
 		// maxClockOffset defines the maximum clock offset between nodes in the
 		// cluster. When in linearizable mode, all writing transactions must
@@ -1361,7 +1365,7 @@ func TestTxnCommitWait(t *testing.T) {
 		// gateway they use. This ensures that all causally dependent
 		// transactions commit with higher timestamps, even if their read and
 		// writes sets do not conflict with the original transaction's. This, in
-		// turn, prevents the "causal reverse" anamoly which can be observed by
+		// turn, prevents the "causal reverse" anomaly which can be observed by
 		// a third, concurrent transaction. See the following blog post for
 		// more: https://www.cockroachlabs.com/blog/consistency-model/.
 		maxClockOffset := s.Clock.MaxOffset()
@@ -1468,8 +1472,10 @@ func TestTxnCommitWait(t *testing.T) {
 
 		// Advance the manual clock slowly. If the commit-wait sleep completes
 		// too early, we'll catch it with the require.Empty. If it completes too
-		// late, we'll stall when pulling from the channel.
+		// late, we'll stall when pulling from the channel. Before doing so, wait
+		// until the transaction has begun its commit-wait.
 		for expWait > 0 {
+			<-commitWaitC
 			require.Empty(t, errC)
 
 			adv := futureOffset / 5
@@ -2297,6 +2303,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 				return err
 			}
 		}
+		manual.Set(txn.ProvisionalCommitTimestamp().WallTime)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
