@@ -55,3 +55,9 @@ func (tcf *TxnCoordSenderFactory) TestingSetLinearizable(linearizable bool) {
 func (tcf *TxnCoordSenderFactory) TestingSetMetrics(metrics TxnMetrics) {
 	tcf.metrics = metrics
 }
+
+// TestingSetCommitWaitFilter allows tests to instrument the beginning of a
+// transaction commit wait sleep.
+func (tcf *TxnCoordSenderFactory) TestingSetCommitWaitFilter(filter func()) {
+	tcf.testingKnobs.CommitWaitFilter = filter
+}
