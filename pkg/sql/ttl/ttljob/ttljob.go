@@ -347,7 +347,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 	ch := make(chan rangeToProcess, rangeConcurrency)
 	for i := 0; i < rangeConcurrency; i++ {
-		g.GoCtx("", func(ctx context.Context) error {
+		g.GoCtx("run ttl on range", func(ctx context.Context) error {
 			for r := range ch {
 				start := timeutil.Now()
 				err := runTTLOnRange(
