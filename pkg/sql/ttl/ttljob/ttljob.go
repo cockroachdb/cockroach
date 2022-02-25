@@ -244,7 +244,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var initialVersion descpb.DescriptorVersion
 
 	// TODO(#75428): feature flag check, ttl pause check.
-	// TODO(#75428): only allow ascending order PKs for now schema side.
 	var ttlSettings catpb.RowLevelTTL
 	var pkColumns []string
 	var pkTypes []*types.T
@@ -496,7 +495,8 @@ func runTTLOnRange(
 	ie := execCfg.InternalExecutor
 	db := execCfg.DB
 
-	// TODO(#75428): look at using a dist sql flow job
+	// TODO(#76914): look at using a dist sql flow job, utilize any existing index
+	// on crdb_internal_expiration.
 
 	selectBuilder := makeSelectQueryBuilder(
 		details.TableID,

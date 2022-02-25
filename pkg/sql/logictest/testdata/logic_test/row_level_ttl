@@ -10,6 +10,22 @@ CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl = 'on')
 statement error "ttl_expire_after" must be set if "ttl_automatic_column" is set
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_automatic_column = 'on')
 
+statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration TIMESTAMPTZ,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
+statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration TIMESTAMPTZ DEFAULT current_timestamp() + '10 minutes'::interval,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
 statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
@@ -28,8 +44,14 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
-statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl_automatic_column\)` to remove the automatic column or use `RESET \(ttl\)` to remove TTL from the table
+statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
+
+statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+ALTER TABLE tbl ALTER COLUMN crdb_internal_expiration SET DEFAULT current_timestamp()
+
+statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+ALTER TABLE tbl ALTER COLUMN crdb_internal_expiration SET ON UPDATE current_timestamp()
 
 statement error cannot drop column crdb_internal_expiration while row-level TTL is active
 ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
@@ -37,7 +59,7 @@ ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
 query T
 SELECT reloptions FROM pg_class WHERE relname = 'tbl'
 ----
-{ttl_expire_after='00:10:00':::INTERVAL}
+{ttl='on',ttl_automatic_column='on',ttl_expire_after='00:10:00':::INTERVAL}
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -225,7 +247,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [120 as T] WITH (expire_after = ...)
+ALTER TABLE [122 as T] WITH (expire_after = ...)
 
 statement ok
 DROP TABLE tbl
@@ -244,11 +266,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
 ----
 CREATE TABLE public.tbl (
-                                                                                                                              id INT8 NOT NULL,
-                                                                                                                              text STRING NULL,
-                                                                                                                              crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-                                                                                                                              CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                                                                                              FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+                                                                                                                     id INT8 NOT NULL,
+                                                                                                                     text STRING NULL,
+                                                                                                                     crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                     CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                     FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@daily')
 
 let $table_id
@@ -327,6 +349,11 @@ CREATE TABLE tbl (
 ) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50, ttl_range_concurrency = 2, ttl_delete_rate_limit = 100, ttl_pause = true)
 
 query T
+SELECT reloptions FROM pg_class WHERE relname = 'tbl'
+----
+{ttl='on',ttl_automatic_column='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_select_batch_size=50,ttl_range_concurrency=2,ttl_delete_rate_limit=100,ttl_pause=true}
+
+query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
 ----
 CREATE TABLE public.tbl (
@@ -377,6 +404,19 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
+# Test adding to TTL table with crdb_internal_expiration already defined.
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration TIMESTAMPTZ,
+  FAMILY (id, text)
+)
+
+statement error cannot add TTL to table with the crdb_internal_expiration column already defined
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
+
 # Test we cannot add FKs to a TTL table.
 statement ok
 CREATE TABLE ref_table (id INT PRIMARY KEY, ref INT)
@@ -402,6 +442,27 @@ CREATE TABLE ttl_become_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table 
 statement error foreign keys to/from table with TTL "ttl_become_table" are not permitted
 ALTER TABLE ttl_become_table SET (ttl_expire_after = '10 minutes')
 
+# Check non-ascending PKs are not permitted.
+
+statement ok
+DROP TABLE tbl
+
+statement error non-ascending ordering on PRIMARY KEYs are not supported
+CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text DESC)) WITH (ttl_expire_after = '10 minutes')
+
+statement ok
+CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text DESC))
+
+statement error non-ascending ordering on PRIMARY KEYs are not supported
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
+
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text)) WITH (ttl_expire_after = '10 minutes')
+
+statement error non-ascending ordering on PRIMARY KEYs are not supported
+ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (id, text DESC)
+
 # Create a table without a TTL. Add the TTL to the table and ensure
 # the schedule and TTL is setup correctly.
 statement ok
@@ -422,7 +483,6 @@ ALTER TABLE tbl RESET (ttl_select_batch_size)
 
 statement ok
 ROLLBACK
-
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN;
