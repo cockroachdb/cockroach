@@ -606,7 +606,7 @@ func (s *ColIndexJoin) closeInternal() {
 		s.spanAssembler.Close()
 	}
 	if s.streamerInfo.Streamer != nil {
-		s.streamerInfo.Streamer.Close()
+		s.streamerInfo.Streamer.Close(ctx)
 	}
 	s.batch = nil
 }
