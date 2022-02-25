@@ -671,7 +671,7 @@ func TestMergeProcessor(t *testing.T) {
 		}))
 
 		sp := tableDesc.IndexSpan(codec, srcIndex.GetID())
-		_, err = im.Merge(context.Background(), codec, tableDesc, srcIndex.GetID(), dstIndex.GetID(), sp.Key, sp.EndKey, 1000)
+		_, err = im.Merge(context.Background(), codec, tableDesc, srcIndex.GetID(), dstIndex.GetID(), sp.Key, sp.EndKey, 1000, 10<<16)
 		if err != nil {
 			t.Fatal(err)
 		}

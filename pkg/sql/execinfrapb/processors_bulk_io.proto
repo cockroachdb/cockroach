@@ -322,4 +322,5 @@ message IndexBackfillMergerSpec {
   repeated int32 span_idx = 5;
 
   optional int64 chunk_size = 6 [(gogoproto.nullable) = false];
+  optional int64 chunk_bytes = 7 [(gogoproto.nullable) = false];
 }

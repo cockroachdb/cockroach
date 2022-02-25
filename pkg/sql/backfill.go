@@ -93,6 +93,14 @@ var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt, /* validateFn */
 )
 
+var indexBackfillMergeBatchBytes = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"bulkio.index_backfill.merge_batch_bytes",
+	"the max number of bytes we merge between temporary and adding indexes in a single batch",
+	16<<10,
+	settings.NonNegativeInt,
+)
+
 // columnBackfillBatchSize is the maximum number of rows we update at once when
 // adding or removing columns.
 var columnBackfillBatchSize = settings.RegisterIntSetting(

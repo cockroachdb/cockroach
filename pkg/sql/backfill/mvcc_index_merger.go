@@ -125,7 +125,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 			key := sp.Key
 			for key != nil {
 				nextKey, err := ibm.Merge(ctx, ibm.evalCtx.Codec, ibm.desc, ibm.spec.TemporaryIndexes[idx], ibm.spec.AddedIndexes[idx],
-					key, sp.EndKey, ibm.spec.ChunkSize)
+					key, sp.EndKey, ibm.spec.ChunkSize, ibm.spec.ChunkBytes)
 				if err != nil {
 					return err
 				}
@@ -188,6 +188,7 @@ func (ibm *IndexBackfillMerger) Merge(
 	startKey roachpb.Key,
 	endKey roachpb.Key,
 	chunkSize int64,
+	chunkBytes int64,
 ) (roachpb.Key, error) {
 	sourcePrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), sourceID)
 	prefixLen := len(sourcePrefix)
@@ -205,19 +206,29 @@ func (ibm *IndexBackfillMerger) Merge(
 	var nextStart roachpb.Key
 	err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// For now just grab all of the destination KVs and merge the corresponding entries.
-		kvs, err := txn.Scan(ctx, startKey, endKey, chunkSize)
+		var b roachpb.BatchRequest
+		b.TargetBytes = chunkBytes
+		b.MaxSpanRequestKeys = chunkSize
+		b.Add(&roachpb.ScanRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+			ScanFormat: roachpb.KEY_VALUES,
+		})
+		br, err := txn.Send(ctx, b)
 		if err != nil {
-			return err
+			return err.GoError()
 		}
-
-		if len(kvs) == 0 {
+		resp := br.Responses[0].GetScan()
+		if len(resp.Rows) == 0 {
 			nextStart = nil
 			return nil
 		}
 
-		destKeys := make([]roachpb.Key, len(kvs))
-		for i := range kvs {
-			sourceKV := &kvs[i]
+		destKeys := make([]roachpb.Key, len(resp.Rows))
+		for i := range resp.Rows {
+			sourceKV := &resp.Rows[i]
 
 			if len(sourceKV.Key) < prefixLen {
 				return errors.Errorf("Key for index entry %v does not start with prefix %v", sourceKV, sourcePrefix)
@@ -231,8 +242,8 @@ func (ibm *IndexBackfillMerger) Merge(
 		}
 
 		wb := txn.NewBatch()
-		for i := range kvs {
-			mergedEntry, deleted, err := mergeEntry(&kvs[i], destKeys[i])
+		for i := range resp.Rows {
+			mergedEntry, deleted, err := mergeEntry(&resp.Rows[i], destKeys[i])
 			if err != nil {
 				return err
 			}
@@ -248,7 +259,7 @@ func (ibm *IndexBackfillMerger) Merge(
 			return err
 		}
 
-		nextStart = kvs[len(kvs)-1].Key.Next()
+		nextStart = resp.Rows[len(resp.Rows)-1].Key.Next()
 
 		if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
 			if knobs != nil && knobs.RunDuringMergeTxn != nil {
@@ -267,11 +278,11 @@ func (ibm *IndexBackfillMerger) Merge(
 	return nextStart, nil
 }
 
-func mergeEntry(sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error) {
+func mergeEntry(sourceKV *roachpb.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error) {
 	var destTagAndData []byte
 	var deleted bool
 
-	tempWrapper, err := rowenc.DecodeWrapper(sourceKV.Value)
+	tempWrapper, err := rowenc.DecodeWrapper(&sourceKV.Value)
 	if err != nil {
 		return nil, false, err
 	}
