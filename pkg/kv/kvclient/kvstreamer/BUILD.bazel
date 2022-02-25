@@ -5,6 +5,8 @@ go_library(
     srcs = [
         "avg_response_estimator.go",
         "budget.go",
+        "requests_provider.go",
+        "results_buffer.go",
         "streamer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer",
