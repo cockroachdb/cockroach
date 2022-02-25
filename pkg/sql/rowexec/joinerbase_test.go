@@ -82,8 +82,6 @@ func TestAddColumnsNeededByOnExpr(t *testing.T) {
 			rightTypes,
 			descpb.InnerJoin,
 			tc.onExpr,
-			nil,   /* leftEqColumns */
-			nil,   /* rightEqColumns */
 			false, /* outputContinuationColumn */
 			&execinfrapb.PostProcessSpec{},
 			&distsqlutils.RowBuffer{},

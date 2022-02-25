@@ -592,8 +592,8 @@ build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert partial_indexes
- ├── columns: <none>
  ├── arbiter indexes: partial_indexes_pkey partial_indexes_b_c_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -659,8 +659,8 @@ build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT (b, c) DO UPDATE SET b = partial_indexes.b + 1, c = 'baz'
 ----
 upsert partial_indexes
- ├── columns: <none>
  ├── arbiter indexes: partial_indexes_b_c_key
+ ├── columns: <none>
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 c:11
  ├── insert-mapping:
@@ -724,8 +724,8 @@ build
 UPSERT INTO partial_indexes VALUES (2, 1, 'bar')
 ----
 upsert partial_indexes
- ├── columns: <none>
  ├── arbiter indexes: partial_indexes_pkey
+ ├── columns: <none>
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 c:11
  ├── insert-mapping:
@@ -791,8 +791,8 @@ build
 INSERT INTO comp VALUES (2, 1, 'Foo') ON CONFLICT DO NOTHING
 ----
 insert comp
- ├── columns: <none>
  ├── arbiter indexes: comp_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -850,8 +850,8 @@ build
 INSERT INTO comp VALUES (2, 1, 'Foo') ON CONFLICT (a) DO UPDATE SET b = comp.b + 1, c = 'Bar'
 ----
 upsert comp
- ├── columns: <none>
  ├── arbiter indexes: comp_pkey
+ ├── columns: <none>
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 d:16 e:17
  ├── insert-mapping:
@@ -937,8 +937,8 @@ build
 UPSERT INTO comp VALUES (2, 1, 'Foo')
 ----
 upsert comp
- ├── columns: <none>
  ├── arbiter indexes: comp_pkey
+ ├── columns: <none>
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15 d:16 e:17
  ├── insert-mapping:
@@ -1010,8 +1010,8 @@ build
 INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_b_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1079,8 +1079,8 @@ build
 INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_b_key u2
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1174,8 +1174,8 @@ build
 INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: u3
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1230,8 +1230,8 @@ opt
 INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: u4
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1270,8 +1270,8 @@ build
 INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' DO UPDATE SET b = 10
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_b_key
+ ├── columns: <none>
  ├── canary column: a:10
  ├── fetch columns: a:10 b:11 c:12
  ├── insert-mapping:
@@ -1341,8 +1341,8 @@ ON CONFLICT (partial_index_put1) WHERE partial_index_put1 > 0 AND partial_index_
 DO UPDATE SET partial_index_put1 = 10, partial_index_del1 = 20
 ----
 upsert ambig
- ├── columns: <none>
  ├── arbiter indexes: ambig_partial_index_put1_key
+ ├── columns: <none>
  ├── canary column: rowid:15
  ├── fetch columns: ambig.partial_index_put1:12 ambig.partial_index_del1:13 ambig.check1:14 rowid:15
  ├── insert-mapping:
@@ -1432,8 +1432,8 @@ build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert comp
- ├── columns: <none>
  ├── arbiter indexes: comp_pkey u1
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -1544,8 +1544,8 @@ build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE d = 'foo' AND e = 'bar' DO NOTHING
 ----
 insert comp
- ├── columns: <none>
  ├── arbiter indexes: u1 u2
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -1681,8 +1681,8 @@ build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE d = 'foo' AND e = 'bar' DO NOTHING
 ----
 insert comp
- ├── columns: <none>
  ├── arbiter indexes: u3
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => a:1
  │    ├── column2:9 => b:2
@@ -1755,14 +1755,14 @@ error (0A000): unimplemented: there are multiple unique or exclusion constraints
 build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT ON CONSTRAINT u1 DO UPDATE SET b = 10
 ----
-error (42809): unique constraint "u1" for table "comp" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
+error (42809): unique constraint "u1" for table "comp" is partial, so it cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 build
 INSERT INTO comp VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE d = 'foo' DO UPDATE SET b = 10
 ----
 upsert comp
- ├── columns: <none>
  ├── arbiter indexes: u1
+ ├── columns: <none>
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 d:17 e:18
  ├── insert-mapping:

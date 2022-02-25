@@ -52,6 +52,16 @@ func (s *Builder) Init(
 	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
 }
 
+// InitWithFetchSpec creates a Builder using IndexFetchSpec.
+func (s *Builder) InitWithFetchSpec(
+	evalCtx *tree.EvalContext, codec keys.SQLCodec, spec *descpb.IndexFetchSpec,
+) {
+	s.evalCtx = evalCtx
+	s.codec = codec
+	s.keyAndPrefixCols = spec.KeyAndSuffixColumns
+	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, spec.TableID, spec.IndexID)
+}
+
 // SpanFromEncDatums encodes a span with len(values) constraint columns from the
 // index prefixed with the index key prefix that includes the table and index
 // ID. SpanFromEncDatums assumes that the EncDatums in values are in the order

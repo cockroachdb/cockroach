@@ -65,8 +65,8 @@ build
 UPSERT INTO c1(c) VALUES (100), (200)
 ----
 upsert c1
- ├── columns: <none>
  ├── arbiter indexes: c1_pkey
+ ├── columns: <none>
  ├── canary column: c:9
  ├── fetch columns: c:9 c1.p:10 i:11
  ├── insert-mapping:
@@ -152,8 +152,8 @@ build
 INSERT INTO c1 VALUES (100, 1), (200, 1) ON CONFLICT (c) DO UPDATE SET p = excluded.p + 1
 ----
 upsert c1
- ├── columns: <none>
  ├── arbiter indexes: c1_pkey
+ ├── columns: <none>
  ├── canary column: c:9
  ├── fetch columns: c:9 c1.p:10 i:11
  ├── insert-mapping:
@@ -212,8 +212,8 @@ build
 INSERT INTO c1 SELECT u, v FROM uv ON CONFLICT (c) DO UPDATE SET i = c1.c + 1
 ----
 upsert c1
- ├── columns: <none>
  ├── arbiter indexes: c1_pkey
+ ├── columns: <none>
  ├── canary column: c:12
  ├── fetch columns: c:12 c1.p:13 i:14
  ├── insert-mapping:
@@ -276,8 +276,8 @@ build
 INSERT INTO c2 VALUES (1), (2) ON CONFLICT (c) DO UPDATE SET c = 1
 ----
 upsert c2
- ├── columns: <none>
  ├── arbiter indexes: c2_pkey
+ ├── columns: <none>
  ├── canary column: c2.c:5
  ├── fetch columns: c2.c:5
  ├── insert-mapping:
@@ -359,8 +359,8 @@ build
 UPSERT INTO c3(c) VALUES (100), (200)
 ----
 upsert c3
- ├── columns: <none>
  ├── arbiter indexes: c3_pkey
+ ├── columns: <none>
  ├── canary column: c:7
  ├── fetch columns: c:7 c3.p:8
  ├── insert-mapping:
@@ -417,8 +417,8 @@ build
 INSERT INTO c4 SELECT x, y, z FROM xyzw ON CONFLICT (a) DO UPDATE SET other = 1
 ----
 upsert c4
- ├── columns: <none>
  ├── arbiter indexes: c4_a_key
+ ├── columns: <none>
  ├── canary column: c:13
  ├── fetch columns: c:13 c4.a:14 c4.other:15
  ├── insert-mapping:
@@ -477,8 +477,8 @@ build
 INSERT INTO c4 SELECT x, y, z FROM xyzw ON CONFLICT (a) DO UPDATE SET a = 5
 ----
 upsert c4
- ├── columns: <none>
  ├── arbiter indexes: c4_a_key
+ ├── columns: <none>
  ├── canary column: c:13
  ├── fetch columns: c:13 c4.a:14 c4.other:15
  ├── insert-mapping:
@@ -629,8 +629,8 @@ build
 UPSERT INTO cpq(c,p) SELECT x,y FROM xyzw
 ----
 upsert cpq
- ├── columns: <none>
  ├── arbiter indexes: cpq_pkey
+ ├── columns: <none>
  ├── canary column: c:16
  ├── fetch columns: c:16 cpq.p:17 cpq.q:18 cpq.other:19
  ├── insert-mapping:
@@ -696,8 +696,8 @@ build
 UPSERT INTO cpq(c) SELECT x FROM xyzw
 ----
 upsert cpq
- ├── columns: <none>
  ├── arbiter indexes: cpq_pkey
+ ├── columns: <none>
  ├── canary column: c:17
  ├── fetch columns: c:17 cpq.p:18 cpq.q:19 cpq.other:20
  ├── insert-mapping:
@@ -801,8 +801,8 @@ build
 INSERT INTO cpq VALUES (1), (2) ON CONFLICT (c) DO UPDATE SET p = 10
 ----
 upsert cpq
- ├── columns: <none>
  ├── arbiter indexes: cpq_pkey
+ ├── columns: <none>
  ├── canary column: c:11
  ├── fetch columns: c:11 cpq.p:12 cpq.q:13 cpq.other:14
  ├── insert-mapping:
@@ -930,8 +930,8 @@ build
 UPSERT INTO cmulti(a,b,c) SELECT x,y,z FROM xyzw
 ----
 upsert cmulti
- ├── columns: <none>
  ├── arbiter indexes: cmulti_pkey
+ ├── columns: <none>
  ├── canary column: cmulti.a:15
  ├── fetch columns: cmulti.a:15 cmulti.b:16 cmulti.c:17 d:18
  ├── insert-mapping:
@@ -1028,8 +1028,8 @@ build
 UPSERT INTO p1 VALUES (1, 1), (2, 2)
 ----
 upsert p1
- ├── columns: <none>
  ├── arbiter indexes: p1_pkey
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 other:8
  ├── insert-mapping:
@@ -1064,8 +1064,8 @@ build
 INSERT INTO p1 VALUES (100, 1), (200, 1) ON CONFLICT (p) DO UPDATE SET p = excluded.p + 1
 ----
 upsert p1
- ├── columns: <none>
  ├── arbiter indexes: p1_pkey
+ ├── columns: <none>
  ├── canary column: p1.p:7
  ├── fetch columns: p1.p:7 other:8
  ├── insert-mapping:
@@ -1125,8 +1125,8 @@ build
 INSERT INTO p1 VALUES (100, 1), (200, 1) ON CONFLICT (p) DO UPDATE SET other = p1.other + 1
 ----
 upsert p1
- ├── columns: <none>
  ├── arbiter indexes: p1_pkey
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 other:8
  ├── insert-mapping:
@@ -1173,8 +1173,8 @@ build
 UPSERT INTO p2 VALUES (1, 1), (2, 2)
 ----
 upsert p2
- ├── columns: <none>
  ├── arbiter indexes: p2_pkey
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 p2.fk:8
  ├── insert-mapping:
@@ -1230,8 +1230,8 @@ build
 INSERT INTO p2 VALUES (1, 1), (2, 2) ON CONFLICT (p) DO UPDATE SET p = excluded.p + 1
 ----
 upsert p2
- ├── columns: <none>
  ├── arbiter indexes: p2_pkey
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 fk:8
  ├── insert-mapping:
@@ -1271,8 +1271,8 @@ build
 INSERT INTO p2 VALUES (1, 1), (2, 2) ON CONFLICT (p) DO UPDATE SET fk = excluded.fk + 1
 ----
 upsert p2
- ├── columns: <none>
  ├── arbiter indexes: p2_pkey
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 p2.fk:8
  ├── insert-mapping:
@@ -1333,8 +1333,8 @@ build
 INSERT INTO p2 VALUES (1, 1), (2, 2) ON CONFLICT (fk) DO UPDATE SET p = excluded.p + 1
 ----
 upsert p2
- ├── columns: <none>
  ├── arbiter indexes: p2_fk_key
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 fk:8
  ├── insert-mapping:
@@ -1372,8 +1372,8 @@ build
 INSERT INTO p2 VALUES (1, 1), (2, 2) ON CONFLICT (fk) DO UPDATE SET fk = excluded.fk + 1
 ----
 upsert p2
- ├── columns: <none>
  ├── arbiter indexes: p2_fk_key
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 p2.fk:8
  ├── insert-mapping:
@@ -1434,8 +1434,8 @@ build
 UPSERT INTO p2(p) VALUES (1), (2)
 ----
 upsert p2
- ├── columns: <none>
  ├── arbiter indexes: p2_pkey
+ ├── columns: <none>
  ├── canary column: p:7
  ├── fetch columns: p:7 fk:8
  ├── insert-mapping:
@@ -1475,8 +1475,8 @@ build
 UPSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2)
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_pkey
+ ├── columns: <none>
  ├── canary column: k:11
  ├── fetch columns: k:11 pq.p:12 pq.q:13 pq.other:14
  ├── insert-mapping:
@@ -1564,8 +1564,8 @@ build
 UPSERT INTO pq (k) VALUES (1), (2)
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_pkey
+ ├── columns: <none>
  ├── canary column: k:9
  ├── fetch columns: k:9 p:10 q:11 other:12
  ├── insert-mapping:
@@ -1605,8 +1605,8 @@ build
 UPSERT INTO pq (k,q) VALUES (1, 1), (2, 2)
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_pkey
+ ├── columns: <none>
  ├── canary column: k:10
  ├── fetch columns: k:10 pq.p:11 pq.q:12 pq.other:13
  ├── insert-mapping:
@@ -1696,8 +1696,8 @@ build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (p,q) DO UPDATE SET k = pq.k + 1
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_p_q_key
+ ├── columns: <none>
  ├── canary column: k:11
  ├── fetch columns: k:11 p:12 q:13 other:14
  ├── insert-mapping:
@@ -1742,8 +1742,8 @@ build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (p,q) DO UPDATE SET p = pq.p + 1
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_p_q_key
+ ├── columns: <none>
  ├── canary column: k:11
  ├── fetch columns: k:11 pq.p:12 pq.q:13 pq.other:14
  ├── insert-mapping:
@@ -1835,8 +1835,8 @@ build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (k) DO UPDATE SET other = 5
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_pkey
+ ├── columns: <none>
  ├── canary column: k:11
  ├── fetch columns: k:11 p:12 q:13 other:14
  ├── insert-mapping:
@@ -1882,8 +1882,8 @@ build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (k) DO UPDATE SET q = 5
 ----
 upsert pq
- ├── columns: <none>
  ├── arbiter indexes: pq_pkey
+ ├── columns: <none>
  ├── canary column: k:11
  ├── fetch columns: k:11 pq.p:12 pq.q:13 pq.other:14
  ├── insert-mapping:
@@ -2001,8 +2001,8 @@ build
 UPSERT INTO tab2 VALUES (1,NULL,NULL), (2,2,2)
 ----
 upsert tab2
- ├── columns: <none>
  ├── arbiter indexes: tab2_pkey
+ ├── columns: <none>
  ├── canary column: c:9
  ├── fetch columns: c:9 tab2.d:10 tab2.e:11
  ├── insert-mapping:
@@ -2075,8 +2075,8 @@ build
 INSERT INTO tab2 VALUES (1,1,1) ON CONFLICT (c) DO UPDATE SET e = tab2.e + 1
 ----
 upsert tab2
- ├── columns: <none>
  ├── arbiter indexes: tab2_pkey
+ ├── columns: <none>
  ├── canary column: c:9
  ├── fetch columns: c:9 tab2.d:10 tab2.e:11
  ├── insert-mapping:
@@ -2154,8 +2154,8 @@ build
 INSERT INTO tab2 VALUES (1,1,1) ON CONFLICT (e) DO UPDATE SET d = tab2.d + 1
 ----
 upsert tab2
- ├── columns: <none>
  ├── arbiter indexes: tab2_e_key
+ ├── columns: <none>
  ├── canary column: c:9
  ├── fetch columns: c:9 tab2.d:10 e:11
  ├── insert-mapping:
@@ -2227,8 +2227,8 @@ build
 UPSERT INTO self SELECT x, y, z, w FROM xyzw
 ----
 upsert self
- ├── columns: <none>
  ├── arbiter indexes: self_pkey
+ ├── columns: <none>
  ├── canary column: self.a:14
  ├── fetch columns: self.a:14 self.b:15 self.c:16 self.d:17
  ├── insert-mapping:

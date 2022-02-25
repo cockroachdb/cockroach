@@ -245,8 +245,8 @@ SELECT z::int FROM xyz
 ON CONFLICT (v) DO UPDATE SET v=1
 ----
 upsert uv
- ├── columns: <none>
  ├── arbiter indexes: uv_v_key
+ ├── columns: <none>
  ├── canary column: u:12(int)
  ├── fetch columns: u:12(int) v:13(int)
  ├── insert-mapping:
@@ -329,8 +329,8 @@ SELECT * FROM mno
 ON CONFLICT (n, o) DO UPDATE SET o = 5
 ----
 upsert mno
- ├── columns: <none>
  ├── arbiter indexes: mno_n_o_key
+ ├── columns: <none>
  ├── canary column: m:11(int)
  ├── fetch columns: m:11(int) n:12(int) o:13(int)
  ├── insert-mapping:

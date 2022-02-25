@@ -578,12 +578,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *InsertExpr:
+		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
-			f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
@@ -604,13 +604,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *UpsertExpr:
+		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
 			if t.CanaryCol != 0 {
-				f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
-				f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
 				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)

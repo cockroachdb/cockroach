@@ -122,8 +122,8 @@ ON CONFLICT (a) DO
 UPDATE SET a=5
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_a_key
+ ├── columns: <none>
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 rowid:17
  ├── insert-mapping:
@@ -263,8 +263,8 @@ UPDATE SET b=10
 WHERE abc.a>0
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_a_key
+ ├── columns: <none>
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 rowid:17
  ├── insert-mapping:
@@ -418,8 +418,8 @@ ON CONFLICT (a) DO
 UPDATE SET a=tab.a*excluded.a
 ----
 upsert abc [as=tab]
- ├── columns: <none>
  ├── arbiter indexes: abc_a_key
+ ├── columns: <none>
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -483,8 +483,8 @@ ON CONFLICT (c, b) DO
 UPDATE SET a=5
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_b_c_key
+ ├── columns: <none>
  ├── canary column: rowid:14
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -577,8 +577,8 @@ VALUES (1, 2, 3), (4, 5, 6)
 ON CONFLICT DO NOTHING
 ----
 insert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
@@ -635,8 +635,8 @@ VALUES (1, 2, 3), (4, 5, 6)
 ON CONFLICT (y, z) DO NOTHING
 ----
 insert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_y_z_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
@@ -664,8 +664,8 @@ INSERT INTO uniq VALUES ('x2', 'y1', 'z2'), ('x2', 'y2', 'z2'), ('x2', 'y2', 'z2
 ON CONFLICT DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_y_key uniq_z_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
@@ -817,8 +817,8 @@ ON CONFLICT (a) DO
 UPDATE SET (b, a)=(SELECT x, y+excluded.b FROM xyz WHERE x=excluded.a)
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_a_key
+ ├── columns: <none>
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -895,8 +895,8 @@ ON CONFLICT (a) DO
 UPDATE SET a=DEFAULT, b=DEFAULT
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_a_key
+ ├── columns: <none>
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -966,8 +966,8 @@ ON CONFLICT (m) DO
 UPDATE SET m=mutation.m+1
 ----
 upsert mutation
- ├── columns: <none>
  ├── arbiter indexes: mutation_pkey
+ ├── columns: <none>
  ├── canary column: m:12
  ├── fetch columns: m:12 n:13 o:14 p:15 q:16
  ├── insert-mapping:
@@ -1037,8 +1037,8 @@ build
 UPSERT INTO xyz VALUES (1)
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:8
  ├── fetch columns: x:8 y:9 z:10
  ├── insert-mapping:
@@ -1159,8 +1159,8 @@ build
 UPSERT INTO xyz (z, x, y) VALUES (1, 2, 3)
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 z:11
  ├── insert-mapping:
@@ -1214,8 +1214,8 @@ build
 UPSERT INTO checks (a, b, c) VALUES (1, 2, 3)
 ----
 upsert checks
- ├── columns: <none>
  ├── arbiter indexes: checks_pkey
+ ├── columns: <none>
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -1272,8 +1272,8 @@ build
 UPSERT INTO mutation (m, n) VALUES (1, 2)
 ----
 upsert mutation
- ├── columns: <none>
  ├── arbiter indexes: mutation_pkey
+ ├── columns: <none>
  ├── canary column: m:12
  ├── fetch columns: m:12 n:13 o:14 p:15 q:16
  ├── insert-mapping:
@@ -1330,8 +1330,8 @@ build
 UPSERT INTO mutation VALUES (1, 2)
 ----
 upsert mutation
- ├── columns: <none>
  ├── arbiter indexes: mutation_pkey
+ ├── columns: <none>
  ├── canary column: m:12
  ├── fetch columns: m:12 n:13 o:14 p:15 q:16
  ├── insert-mapping:
@@ -1397,8 +1397,8 @@ build
 INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=3, c=4
 ----
 upsert checks
- ├── columns: <none>
  ├── arbiter indexes: checks_pkey
+ ├── columns: <none>
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -1470,8 +1470,8 @@ build
 INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO NOTHING
 ----
 insert checks
- ├── columns: <none>
  ├── arbiter indexes: checks_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
@@ -1521,8 +1521,8 @@ build
 UPSERT INTO checks (a, b) VALUES (1, 2)
 ----
 upsert checks
- ├── columns: <none>
  ├── arbiter indexes: checks_pkey
+ ├── columns: <none>
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -1588,8 +1588,8 @@ SELECT a, b FROM abc
 ON CONFLICT (a) DO UPDATE SET a=excluded.a, b=(SELECT x FROM xyz WHERE x=checks.a)
 ----
 upsert checks
- ├── columns: <none>
  ├── arbiter indexes: checks_pkey
+ ├── columns: <none>
  ├── canary column: checks.a:15
  ├── fetch columns: checks.a:15 checks.b:16 checks.c:17 d:18
  ├── insert-mapping:
@@ -1674,8 +1674,8 @@ SELECT a, b, c FROM abc ORDER BY a
 ON CONFLICT (z, y) DO UPDATE SET y=5
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_y_z_key
+ ├── columns: <none>
  ├── canary column: x:12
  ├── fetch columns: x:12 y:13 z:14
  ├── insert-mapping:
@@ -1724,8 +1724,8 @@ build
 UPSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95])
 ----
 upsert decimals
- ├── columns: <none>
  ├── arbiter indexes: decimals_pkey
+ ├── columns: <none>
  ├── canary column: a:15
  ├── fetch columns: a:15 b:16 c:17 d:18
  ├── insert-mapping:
@@ -1804,8 +1804,8 @@ build
 UPSERT INTO decimals (a) VALUES (1.1)
 ----
 upsert decimals
- ├── columns: <none>
  ├── arbiter indexes: decimals_pkey
+ ├── columns: <none>
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 d:17
  ├── insert-mapping:
@@ -1882,8 +1882,8 @@ assign-placeholders-build query-args=(1.1)
 UPSERT INTO decimals (a) VALUES ($1)
 ----
 upsert decimals
- ├── columns: <none>
  ├── arbiter indexes: decimals_pkey
+ ├── columns: <none>
  ├── canary column: a:14
  ├── fetch columns: a:14 b:15 c:16 d:17
  ├── insert-mapping:
@@ -1962,8 +1962,8 @@ ON CONFLICT (a)
 DO UPDATE SET b=ARRAY[0.99]
 ----
 upsert decimals
- ├── columns: <none>
  ├── arbiter indexes: decimals_pkey
+ ├── columns: <none>
  ├── canary column: a:15
  ├── fetch columns: a:15 b:16 c:17 d:18
  ├── insert-mapping:
@@ -2054,8 +2054,8 @@ ON CONFLICT (a)
 DO UPDATE SET b=$3
 ----
 upsert decimals
- ├── columns: <none>
  ├── arbiter indexes: decimals_pkey
+ ├── columns: <none>
  ├── canary column: a:15
  ├── fetch columns: a:15 b:16 c:17 d:18
  ├── insert-mapping:
@@ -2144,8 +2144,8 @@ build
 UPSERT INTO assn_cast (k, c, qc, i, s) VALUES (1.0::DECIMAL, ' ', 'foo', '1', 2)
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:22
  ├── fetch columns: k:22 c:23 qc:24 i:25 s:26 d:27 d_comp:28
  ├── insert-mapping:
@@ -2229,8 +2229,8 @@ assign-placeholders-build query-args=(1.0, ' ', 'foo', '1')
 UPSERT INTO assn_cast (k, c, qc, i) VALUES ($1::DECIMAL, $2, $3, $4)
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:21
  ├── fetch columns: k:21 c:22 qc:23 i:24 s:25 d:26 d_comp:27
  ├── insert-mapping:
@@ -2313,8 +2313,8 @@ build
 INSERT INTO assn_cast (k, c, qc, i, s) VALUES (1.0::DECIMAL, ' ', 'foo', '1', 2) ON CONFLICT DO NOTHING
 ----
 insert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── k_cast:15 => k:1
  │    ├── c_cast:16 => c:2
@@ -2382,8 +2382,8 @@ INSERT INTO assn_cast (k, c, qc, i, s) VALUES (1.0::DECIMAL, 'a', 'b', 1, 'c')
 ON CONFLICT (k) DO UPDATE SET c = ' ', qc = 'foo', i = '1', s = 2
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:21
  ├── fetch columns: k:21 c:22 qc:23 i:24 s:25 d:26 d_comp:27
  ├── insert-mapping:
@@ -2485,8 +2485,8 @@ build
 UPSERT INTO assn_cast (k, i) VALUES (1, DEFAULT)
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:19
  ├── fetch columns: k:19 c:20 qc:21 i:22 s:23 d:24 d_comp:25
  ├── insert-mapping:
@@ -2567,8 +2567,8 @@ build
 INSERT INTO assn_cast (k, i) VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET i = DEFAULT
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:18
  ├── fetch columns: k:18 c:19 qc:20 i:21 s:22 d:23 d_comp:24
  ├── insert-mapping:
@@ -2655,8 +2655,8 @@ build
 UPSERT INTO assn_cast (k, d) VALUES (1, 1.45::DECIMAL(10, 2))
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:20
  ├── fetch columns: k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26
  ├── insert-mapping:
@@ -2739,8 +2739,8 @@ assign-placeholders-build query-args=(1.45::DECIMAL(10, 2))
 UPSERT INTO assn_cast (k, d) VALUES (1, $1)
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:20
  ├── fetch columns: k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26
  ├── insert-mapping:
@@ -2823,8 +2823,8 @@ build
 INSERT INTO assn_cast (k, d) VALUES (1, 1.45::DECIMAL(10, 2)) ON CONFLICT DO NOTHING
 ----
 insert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:10 => k:1
  │    ├── c_default:13 => c:2
@@ -2894,8 +2894,8 @@ build
 INSERT INTO assn_cast (k, d) VALUES (1, 1.45) ON CONFLICT (k) DO UPDATE SET d = 2.67::DECIMAL(10, 2)
 ----
 upsert assn_cast
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_pkey
+ ├── columns: <none>
  ├── canary column: k:20
  ├── fetch columns: k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26
  ├── insert-mapping:
@@ -2997,8 +2997,8 @@ build
 INSERT INTO assn_cast_on_update (k, i) VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET i = 3
 ----
 upsert assn_cast_on_update
- ├── columns: <none>
  ├── arbiter indexes: assn_cast_on_update_pkey
+ ├── columns: <none>
  ├── canary column: k:12
  ├── fetch columns: k:12 i:13 d:14 d2:15 d_comp:16
  ├── insert-mapping:
@@ -3143,8 +3143,8 @@ build
 UPSERT INTO on_update_bare (a) VALUES (1)
 ----
 upsert on_update_bare
- ├── columns: <none>
  ├── arbiter indexes: on_update_bare_pkey
+ ├── columns: <none>
  ├── canary column: a:7
  ├── fetch columns: a:7 v:8
  ├── insert-mapping:
@@ -3198,8 +3198,8 @@ build
 UPSERT INTO on_update_with_default (a, b) VALUES (1, 2)
 ----
 upsert on_update_with_default
- ├── columns: <none>
  ├── arbiter indexes: on_update_with_default_pkey
+ ├── columns: <none>
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -3247,8 +3247,8 @@ ON CONFLICT (a) DO
 UPDATE SET (a, v) = (5, 4)
 ----
 upsert on_update_with_default
- ├── columns: <none>
  ├── arbiter indexes: on_update_with_default_pkey
+ ├── columns: <none>
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -3298,8 +3298,8 @@ ON CONFLICT (a) DO
 UPDATE SET a=5
 ----
 upsert on_update_with_default
- ├── columns: <none>
  ├── arbiter indexes: on_update_with_default_pkey
+ ├── columns: <none>
  ├── canary column: a:9
  ├── fetch columns: a:9 b:10 v:11
  ├── insert-mapping:
@@ -3374,8 +3374,8 @@ build
 UPSERT INTO generated_as_identity (a) VALUES (2)
 ----
 upsert generated_as_identity
- ├── columns: <none>
  ├── arbiter indexes: generated_as_identity_pkey
+ ├── columns: <none>
  ├── canary column: rowid:14
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -3426,8 +3426,8 @@ build
 UPSERT INTO generated_as_identity (a, c) VALUES (3, 30)
 ----
 upsert generated_as_identity
- ├── columns: <none>
  ├── arbiter indexes: generated_as_identity_pkey
+ ├── columns: <none>
  ├── canary column: rowid:14
  ├── fetch columns: a:11 b:12 c:13 rowid:14
  ├── insert-mapping:
@@ -3478,8 +3478,8 @@ ON CONFLICT ON CONSTRAINT xyz_pkey DO
 UPDATE SET x=5
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 z:11
  ├── insert-mapping:
@@ -3527,8 +3527,8 @@ ON CONFLICT ON CONSTRAINT xyz_y_z_key DO
 UPDATE SET x=5
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_y_z_key
+ ├── columns: <none>
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 z:11
  ├── insert-mapping:
@@ -3575,8 +3575,8 @@ ON CONFLICT ON CONSTRAINT xyz_z_y_key DO
 UPDATE SET x=5
 ----
 upsert xyz
- ├── columns: <none>
  ├── arbiter indexes: xyz_z_y_key
+ ├── columns: <none>
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 z:11
  ├── insert-mapping:
@@ -3623,3 +3623,521 @@ ON CONFLICT ON CONSTRAINT no_such_constraint DO
 UPDATE SET x=5
 ----
 error (42704): constraint "no_such_constraint" for table "xyz" does not exist
+
+exec-ddl
+CREATE TABLE min_arbiters (
+  a INT,
+  b INT,
+  c INT,
+  UNIQUE WITHOUT INDEX (b),
+  UNIQUE WITHOUT INDEX (c) WHERE a > 0
+)
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (a, b)
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      └── upsert-distinct-on
+           ├── project
+           │    ├── upsert-distinct-on
+           │    │    ├── upsert-distinct-on
+           │    │    │    ├── anti-join (hash)
+           │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    └── (1,)
+           │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │         ├── NULL::INT8
+           │    │    │    │    │    │    │         └── unique_rowid()
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── rowid_default = rowid
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── b_default = b
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── a > 0
+           │    │    │    │    └── filters
+           │    │    │    │         ├── b_default = c
+           │    │    │    │         └── column1 > 0
+           │    │    │    └── aggregations
+           │    │    │         ├── first-agg
+           │    │    │         │    └── column1
+           │    │    │         └── first-agg
+           │    │    │              └── b_default
+           │    │    └── aggregations
+           │    │         ├── first-agg
+           │    │         │    └── column1
+           │    │         └── first-agg
+           │    │              └── rowid_default
+           │    └── projections
+           │         └── (column1 > 0) OR NULL::BOOL
+           └── aggregations
+                ├── first-agg
+                │    └── column1
+                └── first-agg
+                     └── rowid_default
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (a, b, c)
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      └── upsert-distinct-on
+           ├── project
+           │    ├── upsert-distinct-on
+           │    │    ├── upsert-distinct-on
+           │    │    │    ├── anti-join (hash)
+           │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    └── (1,)
+           │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │         ├── NULL::INT8
+           │    │    │    │    │    │    │         └── unique_rowid()
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── rowid_default = rowid
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── b_default = b
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── a > 0
+           │    │    │    │    └── filters
+           │    │    │    │         ├── b_default = c
+           │    │    │    │         └── column1 > 0
+           │    │    │    └── aggregations
+           │    │    │         ├── first-agg
+           │    │    │         │    └── column1
+           │    │    │         └── first-agg
+           │    │    │              └── b_default
+           │    │    └── aggregations
+           │    │         ├── first-agg
+           │    │         │    └── column1
+           │    │         └── first-agg
+           │    │              └── rowid_default
+           │    └── projections
+           │         └── (column1 > 0) OR NULL::BOOL
+           └── aggregations
+                ├── first-agg
+                │    └── column1
+                └── first-agg
+                     └── rowid_default
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (b, c) WHERE a > 0
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── upsert-distinct-on
+      │         │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    │    ├── project
+      │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── b_default = b
+      │         │    │    │    │    ├── select
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── a > 0
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         ├── b_default = c
+      │         │    │    │    │         └── column1 > 0
+      │         │    │    │    └── aggregations
+      │         │    │    │         ├── first-agg
+      │         │    │    │         │    └── column1
+      │         │    │    │         └── first-agg
+      │         │    │    │              └── b_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── column1 > 0
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX redundant ON min_arbiters (b, c) WHERE a > 0
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── upsert-distinct-on
+      │         │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │    │    │    │    ├── project
+      │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── b_default = b
+      │         │    │    │    │    ├── select
+      │         │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │    │         └── redundant: filters
+      │         │    │    │    │    │    │              └── a > 0
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── a > 0
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         ├── b_default = c
+      │         │    │    │    │         └── column1 > 0
+      │         │    │    │    └── aggregations
+      │         │    │    │         ├── first-agg
+      │         │    │    │         │    └── column1
+      │         │    │    │         └── first-agg
+      │         │    │    │              └── b_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── column1 > 0
+
+exec-ddl
+DROP INDEX redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX not_redundant ON min_arbiters (b, c) WHERE a > 10
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey not_redundant
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── project
+      │         │    │    │    └── upsert-distinct-on
+      │         │    │    │         ├── project
+      │         │    │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    │    ├── project
+      │         │    │    │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │         │    │    │    │    │    ├── select
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── a > 10
+      │         │    │    │         │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │         ├── b_default = b
+      │         │    │    │         │    │    │    │    │         ├── b_default = c
+      │         │    │    │         │    │    │    │    │         └── column1 > 10
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── b_default = b
+      │         │    │    │         │    │    │    ├── select
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── a > 10
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── a > 0
+      │         │    │    │         │    │    │    └── filters
+      │         │    │    │         │    │    │         ├── b_default = c
+      │         │    │    │         │    │    │         └── column1 > 0
+      │         │    │    │         │    │    └── aggregations
+      │         │    │    │         │    │         ├── first-agg
+      │         │    │    │         │    │         │    └── column1
+      │         │    │    │         │    │         └── first-agg
+      │         │    │    │         │    │              └── b_default
+      │         │    │    │         │    └── projections
+      │         │    │    │         │         └── (column1 > 10) OR NULL::BOOL
+      │         │    │    │         └── aggregations
+      │         │    │    │              ├── first-agg
+      │         │    │    │              │    └── column1
+      │         │    │    │              └── first-agg
+      │         │    │    │                   └── rowid_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── column1 > 10
+
+exec-ddl
+DROP INDEX not_redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX not_redundant ON min_arbiters (a, b) WHERE c > 0
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey not_redundant
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      ├── project
+      │    └── upsert-distinct-on
+      │         ├── project
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── project
+      │         │    │    │    └── upsert-distinct-on
+      │         │    │    │         ├── project
+      │         │    │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    ├── anti-join (hash)
+      │         │    │    │         │    │    │    │    │    │    ├── project
+      │         │    │    │         │    │    │    │    │    │    │    ├── values
+      │         │    │    │         │    │    │    │    │    │    │    │    └── (1,)
+      │         │    │    │         │    │    │    │    │    │    │    └── projections
+      │         │    │    │         │    │    │    │    │    │    │         ├── NULL::INT8
+      │         │    │    │         │    │    │    │    │    │    │         └── unique_rowid()
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── rowid_default = rowid
+      │         │    │    │         │    │    │    │    │    ├── select
+      │         │    │    │         │    │    │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │    │         └── c > 0
+      │         │    │    │         │    │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │    │         ├── column1 = a
+      │         │    │    │         │    │    │    │    │         ├── b_default = b
+      │         │    │    │         │    │    │    │    │         └── b_default > 0
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── b_default = b
+      │         │    │    │         │    │    │    ├── select
+      │         │    │    │         │    │    │    │    ├── scan min_arbiters
+      │         │    │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │         │    │    │    │    │         └── not_redundant: filters
+      │         │    │    │         │    │    │    │    │              └── c > 0
+      │         │    │    │         │    │    │    │    └── filters
+      │         │    │    │         │    │    │    │         └── a > 0
+      │         │    │    │         │    │    │    └── filters
+      │         │    │    │         │    │    │         ├── b_default = c
+      │         │    │    │         │    │    │         └── column1 > 0
+      │         │    │    │         │    │    └── aggregations
+      │         │    │    │         │    │         ├── first-agg
+      │         │    │    │         │    │         │    └── column1
+      │         │    │    │         │    │         └── first-agg
+      │         │    │    │         │    │              └── b_default
+      │         │    │    │         │    └── projections
+      │         │    │    │         │         └── (b_default > 0) OR NULL::BOOL
+      │         │    │    │         └── aggregations
+      │         │    │    │              └── first-agg
+      │         │    │    │                   └── rowid_default
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg
+      │         │    │         │    └── column1
+      │         │    │         └── first-agg
+      │         │    │              └── rowid_default
+      │         │    └── projections
+      │         │         └── (column1 > 0) OR NULL::BOOL
+      │         └── aggregations
+      │              ├── first-agg
+      │              │    └── column1
+      │              └── first-agg
+      │                   └── rowid_default
+      └── projections
+           └── b_default > 0
+
+exec-ddl
+DROP INDEX not_redundant
+----
+
+exec-ddl
+CREATE UNIQUE INDEX not_redundant ON min_arbiters (a, c)
+----
+
+build format=hide-all
+INSERT INTO min_arbiters (a) VALUES (1) ON CONFLICT DO NOTHING
+----
+insert min_arbiters
+ ├── arbiter indexes: min_arbiters_pkey not_redundant
+ ├── arbiter constraints: unique_b unique_c
+ └── project
+      └── upsert-distinct-on
+           ├── project
+           │    ├── upsert-distinct-on
+           │    │    ├── upsert-distinct-on
+           │    │    │    ├── upsert-distinct-on
+           │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    │    ├── anti-join (hash)
+           │    │    │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    │    │    └── (1,)
+           │    │    │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │    │    │         ├── NULL::INT8
+           │    │    │    │    │    │    │    │    │         └── unique_rowid()
+           │    │    │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │    │    │         └── rowid_default = rowid
+           │    │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │    │         ├── column1 = a
+           │    │    │    │    │    │    │         └── b_default = c
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── b_default = b
+           │    │    │    │    │    ├── select
+           │    │    │    │    │    │    ├── scan min_arbiters
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── a > 0
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         ├── b_default = c
+           │    │    │    │    │         └── column1 > 0
+           │    │    │    │    └── aggregations
+           │    │    │    │         ├── first-agg
+           │    │    │    │         │    └── column1
+           │    │    │    │         └── first-agg
+           │    │    │    │              └── b_default
+           │    │    │    └── aggregations
+           │    │    │         └── first-agg
+           │    │    │              └── rowid_default
+           │    │    └── aggregations
+           │    │         ├── first-agg
+           │    │         │    └── column1
+           │    │         └── first-agg
+           │    │              └── rowid_default
+           │    └── projections
+           │         └── (column1 > 0) OR NULL::BOOL
+           └── aggregations
+                ├── first-agg
+                │    └── column1
+                └── first-agg
+                     └── rowid_default
