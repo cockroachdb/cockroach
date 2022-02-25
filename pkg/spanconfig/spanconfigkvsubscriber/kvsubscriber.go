@@ -248,10 +248,10 @@ func (s *KVSubscriber) handlePartialUpdate(
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
-	for _, handler := range handlers {
+	for i := range handlers {
 		for _, ev := range events {
 			target := ev.(*bufferEvent).Update.Target
-			handler.invoke(ctx, target.KeyspaceTargeted())
+			handlers[i].invoke(ctx, target.KeyspaceTargeted())
 		}
 	}
 }
