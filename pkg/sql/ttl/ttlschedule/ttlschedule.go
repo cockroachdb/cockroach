@@ -149,7 +149,7 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 		return "", err
 	}
 
-	// TODO(#75428): consider using table name instead - we would need to pass in descCol from the planner.
+	// TODO(#76915): consider using table name instead - we would need to pass in descCol from the planner.
 	return fmt.Sprintf("ALTER TABLE [%d as T] WITH (expire_after = ...)", args.TableID), nil
 }
 
