@@ -653,12 +653,11 @@ func RunCommitTrigger(
 	// side-effects beyond those of the intents that it has written.
 
 	// The transaction should not have a commit timestamp in the future of present
-	// time, even it its commit timestamp is synthetic. Such cases should be
-	// caught in maybeCommitWaitBeforeCommitTrigger before getting here, which
-	// should sleep for long enough to ensure that the local clock leads the
-	// commit timestamp. An error here may indicate that the transaction's commit
-	// timestamp was bumped after it acquired latches.
-	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
+	// time. Such cases should be caught in maybeCommitWaitBeforeCommitTrigger
+	// before getting here, which should sleep for long enough to ensure that the
+	// local clock leads the commit timestamp. An error here may indicate that the
+	// transaction's commit timestamp was bumped after it acquired latches.
+	if rec.Clock().Now().Less(txn.WriteTimestamp) {
 		return result.Result{}, errors.AssertionFailedf("txn %s with %s commit trigger needs "+
 			"commit wait. Was its timestamp bumped after acquiring latches?", txn, ct.Kind())
 	}
