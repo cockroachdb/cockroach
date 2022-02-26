@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+source ./download_binary.sh
+
+if [[ $# -ne 2 ]]
+then
+  echo "usage: $0 EXPECTED-VERSION EXPECTED-SHA" >&2
+  exit 1
+fi
+
+COCKROACH_VERSION=$1
+COCKROACH_SHA=$2
+
+download_and_extract "$COCKROACH_VERSION" "linux-amd64.tgz"
+
+ssh() {
+  command ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    root@localhost -p 2222 "$@"
+}
+
+qemu-system-x86_64 \
+  -cpu qemu64,-sse4.2 \
+  -m 1G \
+  -kernel images/qemu_x86_64_glibc_bzImage \
+  -net nic,model=virtio -net user,hostfwd=tcp::2222-:22 \
+  -drive file=fat:rw:mnt,format=raw \
+  -nographic &
+
+trap "kill -9 $! &> /dev/null" EXIT
+
+for i in {0..4}
+do
+  ssh true && break
+  backoff=$((2 ** i))
+  echo "VM not yet available; sleeping for $backoff seconds"
+  sleep $backoff
+done
+
+ssh /bin/bash -s /bincheck/cockroach "$COCKROACH_VERSION" "$COCKROACH_SHA" < bincheck
