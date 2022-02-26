@@ -538,6 +538,8 @@ type testClusterConfig struct {
 	overrideVectorize string
 	// if non-empty, overrides the default experimental DistSQL planning mode.
 	overrideExperimentalDistSQLPlanning string
+	// if true, execute queries and statements with Prepare and Execute.
+	prepareQueries bool
 	// if set, queries using distSQL processors or vectorized operators that can
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
@@ -752,6 +754,11 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:                            1,
 		overrideDistSQLMode:                 "off",
 		overrideExperimentalDistSQLPlanning: "on",
+	},
+	{
+		numNodes:       1,
+		name:           "local-prepared",
+		prepareQueries: true,
 	},
 	{
 		name:                "fakedist",
@@ -1022,6 +1029,8 @@ type logicStatement struct {
 	pos string
 	// SQL string to be sent to the database.
 	sql string
+	// stmts are the parsed statements from the SQL string.
+	stmts []tree.Statement
 	// expected notice, if any.
 	expectNotice string
 	// expected error, if any. "" indicates the statement should
@@ -3490,23 +3499,48 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		return true, nil
 	}
 
-	res, err := db.Exec(execSQL)
-	return t.finishExecStatement(stmt, execSQL, res, err)
+	var res gosql.Result
+	var execErr error
+	if t.cfg.prepareQueries {
+		// It's not possible to prepare a compound statement, so prepare and execute
+		// all of the initial queries except for the last one separately.
+		parsed, err := parser.Parse(stmt.sql)
+		if err != nil {
+			// In this case, just give up and send the whole statement to the server
+			// as normal. Probably, the test is expecting a parse error.
+			res, execErr = t.db.Exec(stmt.sql)
+		}
+		for _, p := range parsed {
+			var prep *gosql.Stmt
+			prep, execErr = t.db.Prepare(p.SQL)
+			if execErr == nil {
+				res, execErr = prep.Exec()
+			}
+			if execErr != nil {
+				// As soon as a non-nil error is encountered, leave the loop and let
+				// the error handling below take care of the rest.
+				break
+			}
+		}
+	} else {
+		res, execErr = t.db.Exec(execSQL)
+	}
+	return t.finishExecStatement(stmt, execSQL, res, execErr)
 }
 
 func (t *logicTest) finishExecStatement(
-	stmt logicStatement, execSQL string, res gosql.Result, err error,
+	stmt logicStatement, execSQL string, res gosql.Result, execErr error,
 ) (bool, error) {
-	if err == nil {
+	if execErr == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 	}
-	if err == nil && stmt.expectCount >= 0 {
+	if execErr == nil && stmt.expectCount >= 0 {
 		var count int64
-		count, err = res.RowsAffected()
+		count, execErr = res.RowsAffected()
 
 		// If err becomes non-nil here, we'll catch it below.
 
-		if err == nil && count != stmt.expectCount {
+		if execErr == nil && count != stmt.expectCount {
 			t.Errorf("%s: %s\nexpected %d rows affected, got %d", stmt.pos, execSQL, stmt.expectCount, count)
 		}
 	}
@@ -3518,11 +3552,11 @@ func (t *logicTest) finishExecStatement(
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	cont, err := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, err)
-	if err != nil {
+	cont, execErr := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, execErr)
+	if execErr != nil {
 		t.finishOne("OK")
 	}
-	return cont, err
+	return cont, execErr
 }
 
 func (t *logicTest) hashResults(results []string) (string, error) {
@@ -3594,12 +3628,43 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		defer closeDB()
 	}
 
-	rows, err := db.Query(query.sql)
-	return t.finishExecQuery(query, rows, err)
+	var rowses []*gosql.Rows
+	var execErr error
+	if t.cfg.prepareQueries {
+		// It's not possible to prepare a compound statement, so prepare and execute
+		// all of the initial queries except for the last one separately.
+		parsed, err := parser.Parse(query.sql)
+		if err != nil {
+			// In this case, just give up and send the whole statement to the server
+			// as normal. Probably, the test is expecting a parse error.
+			var rows *gosql.Rows
+			rows, execErr = db.Query(query.sql)
+			rowses = []*gosql.Rows{rows}
+		}
+		for _, p := range parsed {
+			var prep *gosql.Stmt
+			var rows *gosql.Rows
+			prep, execErr = t.db.Prepare(p.SQL)
+			if execErr == nil {
+				rows, execErr = prep.Query()
+				rowses = append(rowses, rows)
+			}
+			if execErr != nil {
+				// As soon as a non-nil error is encountered, leave the loop and let
+				// the error handling below take care of the rest.
+				break
+			}
+		}
+	} else {
+		var res *gosql.Rows
+		res, execErr = db.Query(query.sql)
+		rowses = []*gosql.Rows{res}
+	}
+	return t.finishExecQuery(query, rows, execErr)
 }
 
-func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err error) error {
-	if err == nil {
+func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, execErr error) error {
+	if execErr == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 
 		// If expecting an error, then read all result rows, since some errors are
@@ -3607,140 +3672,162 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		if query.expectErr != "" {
 			// Break early if error is detected, and be sure to test for error in case
 			// where Next returns false.
-			for rows.Next() {
-				if rows.Err() != nil {
-					break
+		outerRows:
+			for _, rows := range rowses {
+				for rows.Next() {
+					execErr = rows.Err()
+					if execErr != nil {
+						break outerRows
+					}
 				}
 			}
-			err = rows.Err()
 		}
 	}
-	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, err); err != nil {
+	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, execErr); err != nil {
 		return err
 	}
-	if err != nil {
+	if execErr != nil {
 		// An error occurred, but it was expected.
 		t.finishOne("XFAIL")
 		//nolint:returnerrcheck
 		return nil
 	}
-	defer rows.Close()
+	defer func() {
+		for _, rows := range rowses {
+			_ = rows.Close()
+		}
+	}()
 
 	var actualResultsRaw []string
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
-		// returns results.
-		if err := rows.Err(); err != nil {
-			return err
+		// to return results.
+		for _, rows := range rowses {
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			_ = rows.Close()
 		}
-		rows.Close()
 		actualResultsRaw = t.noticeBuffer
 	} else {
-		cols, err := rows.Columns()
-		if err != nil {
-			return err
-		}
-		if len(query.colTypes) != len(cols) {
-			return fmt.Errorf("%s: expected %d columns, but found %d",
-				query.pos, len(query.colTypes), len(cols))
-		}
-		vals := make([]interface{}, len(cols))
-		for i := range vals {
-			vals[i] = new(interface{})
-		}
-
-		if query.colNames {
-			actualResultsRaw = append(actualResultsRaw, cols...)
-		}
-		for nextResultSet := true; nextResultSet; nextResultSet = rows.NextResultSet() {
-			for rows.Next() {
-				if err := rows.Scan(vals...); err != nil {
-					return err
+		// foundCols is set to true once we've found the first statement that
+		// actually returns columns.
+		foundCols := false
+		for i, rows := range rowses {
+			cols, err := rows.Columns()
+			if err != nil {
+				return err
+			}
+			if len(cols) > 0 {
+				foundCols = true
+			}
+			if len(cols) > 0 || (!foundCols && i == len(rowses)-1) {
+				// If we have more than 0 cols, or we've made it to the end of our
+				// result sets without finding a non-0 column result, we might need to
+				// return an error about mismatched columns.
+				if len(query.colTypes) != len(cols) {
+					return fmt.Errorf("%s: expected %d columns, but found %d",
+						query.pos, len(query.colTypes), len(cols))
 				}
-				for i, v := range vals {
-					if val := *v.(*interface{}); val != nil {
-						valT := reflect.TypeOf(val).Kind()
-						colT := query.colTypes[i]
-						switch colT {
-						case 'T':
-							if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-								return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'I':
-							if valT != reflect.Int64 {
-								if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
-									t.signalIgnoredError(
-										fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
-									)
-									return nil
-								}
-								return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'F', 'R':
-							if valT != reflect.Float64 && valT != reflect.Slice {
-								if *flexTypes && (valT == reflect.Int64) {
-									t.signalIgnoredError(
-										fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
-									)
-									return nil
-								}
-								return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'B':
-							if valT != reflect.Bool {
-								return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'O':
-							if valT != reflect.Slice {
-								return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						default:
-							return fmt.Errorf("%s: unknown type in type string: %c in %s",
-								query.pos, colT, query.colTypes,
-							)
-						}
+			}
+			vals := make([]interface{}, len(cols))
+			for i := range vals {
+				vals[i] = new(interface{})
+			}
 
-						if byteArray, ok := val.([]byte); ok {
-							// The postgres wire protocol does not distinguish between
-							// strings and byte arrays, but our tests do. In order to do
-							// The Right Thing™, we replace byte arrays which are valid
-							// UTF-8 with strings. This allows byte arrays which are not
-							// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
-							// while printing valid strings naturally.
-							if str := string(byteArray); utf8.ValidString(str) {
-								val = str
-							}
-						}
-						// Empty strings are rendered as "·" (middle dot)
-						if val == "" {
-							val = "·"
-						}
-						s := fmt.Sprint(val)
-						if query.roundFloatsInStrings {
-							s = roundFloatsInString(s)
-						}
-						actualResultsRaw = append(actualResultsRaw, s)
-					} else {
-						actualResultsRaw = append(actualResultsRaw, "NULL")
+			if query.colNames {
+				actualResultsRaw = append(actualResultsRaw, cols...)
+			}
+			for nextResultSet := true; nextResultSet; nextResultSet = rows.NextResultSet() {
+				for rows.Next() {
+					if err := rows.Scan(vals...); err != nil {
+						return err
 					}
+					for i, v := range vals {
+						if val := *v.(*interface{}); val != nil {
+							valT := reflect.TypeOf(val).Kind()
+							colT := query.colTypes[i]
+							switch colT {
+							case 'T':
+								if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+									return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
+										query.pos, i, val, val,
+									)
+								}
+							case 'I':
+								if valT != reflect.Int64 {
+									if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
+										t.signalIgnoredError(
+											fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
+										)
+										return nil
+									}
+									return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
+										query.pos, i, val, val,
+									)
+								}
+							case 'F', 'R':
+								if valT != reflect.Float64 && valT != reflect.Slice {
+									if *flexTypes && (valT == reflect.Int64) {
+										t.signalIgnoredError(
+											fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
+										)
+										return nil
+									}
+									return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
+										query.pos, i, val, val,
+									)
+								}
+							case 'B':
+								if valT != reflect.Bool {
+									return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
+										query.pos, i, val, val,
+									)
+								}
+							case 'O':
+								if valT != reflect.Slice {
+									return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
+										query.pos, i, val, val,
+									)
+								}
+							default:
+								return fmt.Errorf("%s: unknown type in type string: %c in %s",
+									query.pos, colT, query.colTypes,
+								)
+							}
+
+							if byteArray, ok := val.([]byte); ok {
+								// The postgres wire protocol does not distinguish between
+								// strings and byte arrays, but our tests do. In order to do
+								// The Right Thing™, we replace byte arrays which are valid
+								// UTF-8 with strings. This allows byte arrays which are not
+								// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+								// while printing valid strings naturally.
+								if str := string(byteArray); utf8.ValidString(str) {
+									val = str
+								}
+							}
+							// Empty strings are rendered as "·" (middle dot)
+							if val == "" {
+								val = "·"
+							}
+							s := fmt.Sprint(val)
+							if query.roundFloatsInStrings {
+								s = roundFloatsInString(s)
+							}
+							actualResultsRaw = append(actualResultsRaw, s)
+						} else {
+							actualResultsRaw = append(actualResultsRaw, "NULL")
+						}
+					}
+				}
+				if err := rows.Err(); err != nil {
+					return err
 				}
 			}
 			if err := rows.Err(); err != nil {
 				return err
 			}
-		}
-		if err := rows.Err(); err != nil {
-			return err
 		}
 	}
 
@@ -3763,9 +3850,9 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		query.sorter(len(query.colTypes), query.expectedResults)
 	}
 
-	hash, err := t.hashResults(actualResults)
-	if err != nil {
-		return err
+	hash, execErr := t.hashResults(actualResults)
+	if execErr != nil {
+		return execErr
 	}
 
 	if query.expectedHash != "" {

@@ -278,9 +278,12 @@ statement ok
 BEGIN; ALTER TABLE t33361 DROP COLUMN y
 
 query II
-DELETE FROM t33361 RETURNING *; COMMIT
+DELETE FROM t33361 RETURNING *
 ----
 1 3
+
+statement ok
+COMMIT
 
 # Test that delete works with column families (no indexes, so fast path).
 statement ok
