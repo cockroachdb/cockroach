@@ -907,6 +907,7 @@ func TestPartitionSpans(t *testing.T) {
 						return true
 					},
 				},
+				codec: keys.SystemSQLCodec,
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
@@ -1091,6 +1092,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 						return true
 					},
 				},
+				codec: keys.SystemSQLCodec,
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
@@ -1190,6 +1192,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				return true
 			},
 		},
+		codec: keys.SystemSQLCodec,
 	}
 
 	planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
