@@ -9,7 +9,7 @@ go_library(
         "results_buffer.go",
         "streamer.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/kvstreamer",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
