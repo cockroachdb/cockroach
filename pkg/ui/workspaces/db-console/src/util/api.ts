@@ -18,6 +18,8 @@ import moment from "moment";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { propsToQueryString } from "src/util/query";
+import { cockroach } from "src/js/protos";
+import TakeTracingSnapshotRequest = cockroach.server.serverpb.TakeTracingSnapshotRequest;
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
@@ -147,6 +149,21 @@ export type ResetIndexUsageStatsResponseMessage = protos.cockroach.server.server
 
 export type UserSQLRolesRequestMessage = protos.cockroach.server.serverpb.UserSQLRolesRequest;
 export type UserSQLRolesResponseMessage = protos.cockroach.server.serverpb.UserSQLRolesResponse;
+
+export type ListTracingSnapshotsRequestMessage = protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
+export type ListTracingSnapshotsResponseMessage = protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
+
+export type TakeTracingSnapshotRequestMessage = protos.cockroach.server.serverpb.TakeTracingSnapshotRequest;
+export type TakeTracingSnapshotResponseMessage = protos.cockroach.server.serverpb.TakeTracingSnapshotResponse;
+
+export type GetTracingSnapshotRequestMessage = protos.cockroach.server.serverpb.GetTracingSnapshotRequest;
+export type GetTracingSnapshotResponseMessage = protos.cockroach.server.serverpb.GetTracingSnapshotResponse;
+
+export type GetTraceRequestMessage = protos.cockroach.server.serverpb.GetTraceRequest;
+export type GetTraceResponseMessage = protos.cockroach.server.serverpb.GetTraceResponse;
+
+export type SetTraceRecordingTypeRequestMessage = protos.cockroach.server.serverpb.SetTraceRecordingTypeRequest;
+export type SetTraceRecordingTypeResponseMessage = protos.cockroach.server.serverpb.SetTraceRecordingTypeResponse;
 
 // API constants
 
@@ -817,6 +834,78 @@ export function getUserSQLRoles(
   return timeoutFetch(
     serverpb.UserSQLRolesResponse,
     `${STATUS_PREFIX}/sqlroles`,
+    req as any,
+    timeout,
+  );
+}
+
+export function listTracingSnapshots(
+  timeout?: moment.Duration,
+): Promise<ListTracingSnapshotsResponseMessage> {
+  return timeoutFetch(
+    serverpb.ListTracingSnapshotsResponse,
+    `${API_PREFIX}/snapshots`,
+    null,
+    timeout,
+  );
+}
+
+export function takeTracingSnapshot(
+  timeout?: moment.Duration,
+): Promise<TakeTracingSnapshotResponseMessage> {
+  const req = new TakeTracingSnapshotRequest();
+  return timeoutFetch(
+    serverpb.TakeTracingSnapshotResponse,
+    `${API_PREFIX}/snapshots`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getTracingSnapshot(
+  req: GetTracingSnapshotRequestMessage,
+  timeout?: moment.Duration,
+): Promise<GetTracingSnapshotResponseMessage> {
+  return timeoutFetch(
+    serverpb.GetTracingSnapshotResponse,
+    `${API_PREFIX}/snapshots/${req.snapshot_id}`,
+    null,
+    timeout,
+  );
+}
+
+export function getTraceForSnapshot(
+  req: GetTraceRequestMessage,
+  timeout?: moment.Duration,
+): Promise<GetTraceRequestMessage> {
+  return timeoutFetch(
+    serverpb.GetTraceResponse,
+    `${API_PREFIX}/snapshots/${req.snapshot_id}/traces/${req.trace_id}`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getLiveTrace(
+  req: GetTraceRequestMessage,
+  timeout?: moment.Duration,
+): Promise<GetTraceRequestMessage> {
+  return timeoutFetch(
+    serverpb.GetTraceResponse,
+    `${API_PREFIX}/traces/${req.trace_id}`,
+    req as any,
+    timeout,
+  );
+}
+
+export function setTraceRecordingType(
+  req: SetTraceRecordingTypeRequestMessage,
+  timeout?: moment.Duration,
+): Promise<SetTraceRecordingTypeResponseMessage> {
+  return timeoutFetch(
+    serverpb.SetTraceRecordingTypeResponse,
+    // TODO(davidh): Consider making this endpoint just POST to `/traces/{trace_ID}`
+    `${STATUS_PREFIX}/settracerecordingtype`,
     req as any,
     timeout,
   );

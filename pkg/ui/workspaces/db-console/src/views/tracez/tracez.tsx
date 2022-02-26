@@ -1,0 +1,504 @@
+import React, { useEffect, useState } from "react";
+import Long from "long";
+import {
+  Badge,
+  ColumnDescriptor,
+  EmptyTable,
+  Search,
+  SortedTable,
+  SortSetting,
+  util,
+} from "@cockroachlabs/cluster-ui";
+import { Button, Icon } from "@cockroachlabs/ui-components";
+import Dropdown from "src/views/shared/components/dropdown";
+import {
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
+import { cockroach, google } from "src/js/protos";
+import {
+  getLiveTrace,
+  getTraceForSnapshot,
+  getTracingSnapshot,
+  listTracingSnapshots,
+  setTraceRecordingType,
+  takeTracingSnapshot,
+} from "src/util/api";
+import { CaretRight } from "@cockroachlabs/icons";
+import ISnapshotInfo = cockroach.server.serverpb.ISnapshotInfo;
+import GetTracingSnapshotRequest = cockroach.server.serverpb.GetTracingSnapshotRequest;
+import GetTraceRequest = cockroach.server.serverpb.GetTraceRequest;
+import IGetTraceResponse = cockroach.server.serverpb.IGetTraceResponse;
+import ITag = cockroach.server.serverpb.ITag;
+import SetTraceRecordingTypeRequest = cockroach.server.serverpb.SetTraceRecordingTypeRequest;
+import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
+import { Switch } from "antd";
+
+const TS_FORMAT = "MMMM Do YYYY, h:mm:ss a"; // January 28th 2022, 7:12:40 pm;
+
+const tsToFormat = (ts: google.protobuf.ITimestamp) =>
+  util.TimestampToMoment(ts).format(TS_FORMAT);
+
+const SnapshotSelector = ({
+  setSnapshot,
+  snapshots,
+  currentSnapshot,
+}: {
+  setSnapshot: (id: string) => void;
+  snapshots: ISnapshotInfo[];
+  currentSnapshot: Snapshot;
+}) => {
+  return (
+    <Dropdown
+      title="Snapshots"
+      options={snapshots.map(s => {
+        return {
+          value: `${s.snapshot_id}`,
+          label: `${s.snapshot_id}: ${tsToFormat(s.captured_at)}`,
+        };
+      })}
+      selected={`${currentSnapshot.id}`}
+      onChange={dropdownOption => setSnapshot(dropdownOption.value)}
+    />
+  );
+};
+
+interface SnapshotRow {
+  span: cockroach.server.serverpb.ISpan;
+  stack: string;
+  verbose?: boolean;
+}
+
+const GoroutineToggler = ({ id, stack }: { id: Long; stack: string }) => {
+  const [showStack, setShowStack] = useState<Boolean>(false);
+
+  if (!showStack) {
+    return (
+      <Button as="a" intent="tertiary" onClick={() => setShowStack(true)}>
+        {id.toString(10)}
+      </Button>
+    );
+  } else {
+    return (
+      <div>
+        <Button as="a" intent="tertiary" onClick={() => setShowStack(false)}>
+          Hide
+        </Button>
+        <pre>{stack}</pre>
+      </div>
+    );
+  }
+};
+
+interface TagProps {
+  t: ITag;
+  setSearch: (s: string) => void;
+}
+
+const TagValue = ({ t, setSearch }: TagProps) => {
+  let v = <>{t.val}</>;
+  if (t.link) {
+    v = (
+      <Button as="a" onClick={() => setSearch(t.link)}>
+        {t.val}
+      </Button>
+    );
+  }
+  return <span title={t.caption}>{v}</span>;
+};
+
+const TagBadge = ({ t, setSearch }: TagProps) => {
+  let highlight = null;
+  if (t.highlight) {
+    highlight = <Icon iconName="Caution" />;
+  }
+  let arrow = null;
+  if (t.inherited) {
+    arrow = <span title="from parent">(↓)</span>;
+  } else if (t.copied_from_child) {
+    arrow = <span title="from child">(↑)</span>;
+  }
+  return (
+    <Badge
+      text={
+        <>
+          {highlight}
+          {t.key}
+          {arrow}
+          {t.val ? ":" : ""}
+          <TagValue t={t} setSearch={setSearch} />
+        </>
+      }
+      size="small"
+      status={t.hidden ? "default" : "info"}
+    />
+  );
+};
+
+const OperationCell = (props: {
+  sr: SnapshotRow;
+  setRecording: (trace: cockroach.server.serverpb.ISpan) => void;
+}) => {
+  return (
+    <div>
+      <Button
+        as="a"
+        intent="tertiary"
+        onClick={() => props.setRecording(props.sr.span)}
+      >
+        {props.sr.span.operation}
+      </Button>
+    </div>
+  );
+};
+
+const TagCell = (props: {
+  sr: SnapshotRow;
+  setSearch: (s: string) => void;
+}) => {
+  return (
+    <div style={{ display: "flex", gap: "10px", maxWidth: "20%" }}>
+      {props.sr.span.processed_tags
+        .filter(t => !t.hidden)
+        .map((t, i) => (
+          <TagBadge t={t} setSearch={props.setSearch} key={i} />
+        ))}
+      {props.sr.span.processed_tags
+        .filter(t => t.hidden)
+        .map((t, i) => (
+          <TagBadge t={t} setSearch={props.setSearch} key={i} />
+        ))}
+    </div>
+  );
+};
+
+const snapshotColumns = (
+  setRecording: (span: cockroach.server.serverpb.ISpan) => void,
+  setSearch: (s: string) => void,
+  setTraceRecordingVerbose: (trace_id: Long) => void,
+): ColumnDescriptor<SnapshotRow>[] => {
+  return [
+    {
+      title: "Operation",
+      name: "operation",
+      cell: sr => <OperationCell sr={sr} setRecording={setRecording} />,
+      sort: sr => sr.span.operation,
+    },
+    {
+      title: "Tags",
+      name: "tags",
+      cell: sr => <TagCell sr={sr} setSearch={setSearch} />,
+    },
+    {
+      title: "Verbose",
+      name: "verbose",
+      cell: sr => (
+        <Switch
+          checked={sr.verbose}
+          // TODO(davidh): Implement toggling back and forth
+          onClick={() => setTraceRecordingVerbose(sr.span.trace_id)}
+        />
+      ),
+      sort: sr => `${sr.verbose}`,
+    },
+    {
+      title: "Start Time",
+      name: "startTime",
+      cell: sr => tsToFormat(sr.span.start),
+      sort: sr => util.TimestampToMoment(sr.span.start),
+    },
+    {
+      title: "Goroutine ID",
+      name: "goroutineID",
+      cell: sr => (
+        <GoroutineToggler id={sr.span.goroutine_id} stack={sr.stack} />
+      ),
+      sort: sr => sr.span.goroutine_id.toNumber(),
+    },
+  ];
+};
+
+export class SnapshotSortedTable extends SortedTable<SnapshotRow> {}
+
+const CurrentSnapshot = ({
+  snapshot,
+  search,
+  setRecording,
+  setSearch,
+  setTraceRecordingVerbose,
+}: {
+  snapshot: Snapshot;
+  search: string;
+  setRecording: (trace: cockroach.server.serverpb.ISpan) => void;
+  setSearch: (s: string) => void;
+  setTraceRecordingVerbose: (trace_id: Long) => void;
+}) => {
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: true,
+    columnTitle: "startTime",
+  });
+  return (
+    <SnapshotSortedTable
+      data={snapshot.rows.filter(r => {
+        return JSON.stringify(r)
+          .toLowerCase()
+          .includes(search.toLowerCase());
+      })}
+      columns={snapshotColumns(
+        setRecording,
+        setSearch,
+        setTraceRecordingVerbose,
+      )}
+      sortSetting={sortSetting}
+      onChangeSortSetting={setSortSetting}
+      renderNoResult={<EmptyTable title="No snapshot selected" />}
+    />
+  );
+};
+
+interface Snapshot {
+  id?: Long;
+  rows?: SnapshotRow[];
+  captured_at?: google.protobuf.ITimestamp;
+}
+
+export const Tracez = () => {
+  // Snapshot state
+  const [snapshot, setSnapshot] = useState<Snapshot>({ rows: [] });
+  const [search, setSearch] = useState<string>("");
+  const [snapshots, setSnapshots] = useState<ISnapshotInfo[]>([]);
+
+  // Recording view state
+  // In the UI when you click on an operation we set the requestedSpan. Then
+  // the effect is triggered to retrieve the trace for that span, once that's
+  // updated the UI is changed.
+  const [requestedSpan, setRequestedSpan] = useState<
+    cockroach.server.serverpb.ISpan
+  >(null);
+  const [currentTrace, setCurrentTrace] = useState<IGetTraceResponse>(null);
+  const [showTrace, setShowTrace] = useState<boolean>(false);
+  const [showLiveTrace, setShowLiveTrace] = useState<boolean>(false);
+
+  const takeSnapshot = () => {
+    takeTracingSnapshot().then(() => {
+      refreshTracingSnapshots();
+    });
+  };
+
+  const setSnapshotID = (id: string) => {
+    const req = new GetTracingSnapshotRequest({
+      snapshot_id: Long.fromString(id),
+    });
+    getTracingSnapshot(req).then(req => {
+      setSnapshot({
+        id: req.snapshot.snapshot_id,
+        captured_at: req.snapshot.captured_at,
+        rows: req.snapshot.spans.map(span => {
+          return {
+            span,
+            stack: req.snapshot.stacks[`${span.goroutine_id}`],
+          };
+        }),
+      });
+    });
+  };
+
+  const refreshTracingSnapshots = () => {
+    listTracingSnapshots().then(resp => {
+      setSnapshots(resp.snapshots);
+    });
+  };
+
+  useEffect(refreshTracingSnapshots, []);
+
+  useEffect(() => {
+    if (showTrace) {
+      if (showLiveTrace) {
+        getLiveTrace(
+          new GetTraceRequest({
+            trace_id: requestedSpan.trace_id,
+          }),
+        ).then(resp => {
+          setCurrentTrace(resp);
+          setShowTrace(true);
+        });
+      } else {
+        getTraceForSnapshot(
+          new GetTraceRequest({
+            trace_id: requestedSpan.trace_id,
+            snapshot_id: snapshot.id,
+          }),
+        ).then(resp => {
+          setCurrentTrace(resp);
+          setShowTrace(true);
+        });
+      }
+    }
+  }, [showTrace, snapshot, requestedSpan, showLiveTrace]);
+
+  const setTraceRecordingVerbose = (t: Long) => {
+    setTraceRecordingType(
+      new SetTraceRecordingTypeRequest({
+        trace_id: t,
+        recording_mode: RecordingMode.VERBOSE,
+        // TODO(davidh): do we need `span_id` on this request?
+      }),
+    ).then(() => {
+      setSnapshot({
+        id: snapshot.id,
+        captured_at: snapshot.captured_at,
+        rows: snapshot.rows.map(r => {
+          if (r.span.trace_id === t) {
+            r.verbose = true;
+          }
+          return r;
+        }),
+      });
+    });
+  };
+
+  return (
+    <div>
+      {showTrace && currentTrace ? (
+        <TraceView
+          currentTrace={currentTrace}
+          cancel={() => {
+            setShowTrace(false);
+            setShowLiveTrace(false);
+          }}
+          showLive={() => {
+            setShowLiveTrace(true);
+          }}
+          operation={requestedSpan.operation}
+        />
+      ) : (
+        <SnapshotView
+          takeSnapshot={takeSnapshot}
+          setSnapshotID={setSnapshotID}
+          snapshots={snapshots}
+          snapshot={snapshot}
+          setSearch={setSearch}
+          search={search}
+          setRecording={span => {
+            setRequestedSpan(span);
+            setShowTrace(true);
+          }}
+          setTraceRecordingVerbose={setTraceRecordingVerbose}
+        />
+      )}
+    </div>
+  );
+};
+
+interface TraceViewProps {
+  currentTrace: IGetTraceResponse;
+  cancel: () => void;
+  showLive: () => void;
+  operation: string;
+}
+
+const TraceView = ({
+  currentTrace,
+  cancel,
+  showLive,
+  operation,
+}: TraceViewProps) => {
+  return (
+    <>
+      <h3 className="base-heading">
+        Active Traces{" "}
+        <span>
+          <CaretRight />
+          {currentTrace.live
+            ? "Latest"
+            : `Snapshot: ${currentTrace.snapshot_id}`}
+          <CaretRight />
+          {operation}
+        </span>
+      </h3>
+      <PageConfig>
+        <PageConfigItem>
+          <Button as={"button"} onClick={cancel}>
+            Back
+          </Button>
+        </PageConfigItem>
+        <PageConfigItem>
+          <Button as={"button"} onClick={showLive}>
+            Switch to Latest
+          </Button>
+        </PageConfigItem>
+      </PageConfig>
+      <section className="section">
+        <div>
+          <pre>{currentTrace.recording}</pre>
+        </div>
+      </section>
+    </>
+  );
+};
+
+interface SnapshotViewProps {
+  takeSnapshot: () => void;
+  setSnapshotID: (s: string) => void;
+  snapshots: ISnapshotInfo[];
+  snapshot: Snapshot;
+  setSearch: (s: string) => void;
+  search: string;
+  setRecording: (s: cockroach.server.serverpb.ISpan) => void;
+  setTraceRecordingVerbose: (trace_id: Long) => void;
+}
+
+const SnapshotView = ({
+  takeSnapshot,
+  setSnapshotID,
+  snapshots,
+  snapshot,
+  setSearch,
+  search,
+  setRecording,
+  setTraceRecordingVerbose,
+}: SnapshotViewProps) => (
+  <>
+    <h3 className="base-heading">
+      Active Traces
+      {snapshot.id ? (
+        <>
+          <CaretRight />
+          {`Snapshot: ${snapshot.id}`}
+        </>
+      ) : null}
+    </h3>
+    <PageConfig>
+      <PageConfigItem>
+        <Button onClick={takeSnapshot} intent="secondary">
+          <Icon iconName="Download" /> Take snapshot
+        </Button>
+      </PageConfigItem>
+      <PageConfigItem>
+        <SnapshotSelector
+          setSnapshot={setSnapshotID}
+          snapshots={snapshots || []}
+          currentSnapshot={snapshot}
+        />
+      </PageConfigItem>
+      <PageConfigItem>
+        <Search
+          /* Use of `any` type here is due to some issues with `Search` component. */
+          onSubmit={setSearch as any}
+          onClear={() => setSearch("")}
+          defaultValue={search}
+          placeholder={"Search snapshot"}
+        />
+      </PageConfigItem>
+    </PageConfig>
+    <section className="section">
+      <CurrentSnapshot
+        snapshot={snapshot}
+        search={search}
+        setRecording={setRecording}
+        setSearch={setSearch}
+        setTraceRecordingVerbose={setTraceRecordingVerbose}
+      />
+    </section>
+  </>
+);
