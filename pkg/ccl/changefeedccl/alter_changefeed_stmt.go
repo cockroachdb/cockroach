@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -163,7 +164,7 @@ func alterChangefeedPlanHook(
 					delete(newDescs, desc.GetID())
 				}
 			case *tree.AlterChangefeedSetOptions:
-				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.ChangefeedOptionExpectValues)
+				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
 				if err != nil {
 					return err
 				}
@@ -174,21 +175,44 @@ func alterChangefeedPlanHook(
 				}
 
 				for key, value := range opts {
-					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
-					}
 					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
 						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
 					}
-					opt := tree.KVOption{Key: tree.Name(key)}
-					if len(value) > 0 {
-						opt.Value = tree.NewDString(value)
+					if key == changefeedbase.OptSink {
+						newSinkURI, err := url.Parse(value)
+						if err != nil {
+							return err
+						}
+
+						prevSinkURI, err := url.Parse(prevDetails.SinkURI)
+						if err != nil {
+							return err
+						}
+
+						if newSinkURI.Scheme != prevSinkURI.Scheme {
+							return pgerror.Newf(
+								pgcode.InvalidParameterValue,
+								`new sink type %q does not match original sink type %q, sink type cannot be altered`,
+								newSinkURI.Scheme,
+								prevSinkURI.Scheme,
+							)
+						}
+
+						newChangefeedStmt.SinkURI = tree.NewDString(value)
+					} else {
+						opt := tree.KVOption{Key: tree.Name(key)}
+						if len(value) > 0 {
+							opt.Value = tree.NewDString(value)
+						}
+						optionsMap[key] = opt
 					}
-					optionsMap[key] = opt
 				}
 			case *tree.AlterChangefeedUnsetOptions:
 				optKeys := v.Options.ToStrings()
 				for _, key := range optKeys {
+					if key == changefeedbase.OptSink {
+						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot unset option %q`, key)
+					}
 					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
 						return pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
 					}
