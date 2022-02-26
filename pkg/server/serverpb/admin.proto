@@ -1045,4 +1045,106 @@ service Admin {
   // response. It is used by the CLI `debug send-kv-batch` command.
   rpc SendKVBatch(roachpb.BatchRequest) returns (roachpb.BatchResponse) {
   }
+
+  rpc ListTracingSnapshots(ListTracingSnapshotsRequest) returns (ListTracingSnapshotsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/snapshots"
+    };
+  }
+
+  rpc TakeTracingSnapshot(TakeTracingSnapshotRequest) returns (TakeTracingSnapshotResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/snapshots"
+    };
+  }
+
+  rpc GetTracingSnapshot(GetTracingSnapshotRequest) returns (GetTracingSnapshotResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/snapshots/{snapshot_id}"
+    };
+  }
+
+  rpc GetTrace(GetTraceRequest) returns (GetTraceResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/snapshots/{snapshot_id}/traces/{trace_id}"
+      additional_bindings {
+        post: "/_admin/v1/traces/{trace_id}"
+      }
+    };
+  }
+}
+
+message ListTracingSnapshotsRequest {}
+
+message ListTracingSnapshotsResponse {
+  repeated SnapshotInfo snapshots = 1;
+}
+
+message SnapshotInfo {
+  int64 snapshot_id = 1;
+  google.protobuf.Timestamp captured_at = 2 [(gogoproto.stdtime) = true];
+}
+
+message TakeTracingSnapshotRequest {}
+
+message TakeTracingSnapshotResponse {
+  SnapshotInfo snapshot = 1;
+}
+
+message GetTracingSnapshotRequest {
+  int64 snapshot_id = 1;
+}
+
+message GetTracingSnapshotResponse {
+  Snapshot snapshot = 1;
+}
+
+message GetTraceRequest {
+  int64 snapshot_id = 1 [(gogoproto.nullable) = true];
+  uint64 trace_id = 2;
+  string rec_mode = 3;
+}
+
+message GetTraceResponse {
+  int64 snapshot_id = 1 [(gogoproto.nullable) = true];
+  bool live = 2;
+  uint64 trace_id = 3;
+  string rec_mode = 4;
+  bool still_exists = 5;
+  string recording = 6;
+}
+
+message Snapshot {
+  int64 snapshot_id = 1;
+  google.protobuf.Timestamp captured_at = 2 [(gogoproto.stdtime) = true];
+  repeated Span spans = 3;
+  // Ideally we'd use int64 to match the goroutine_id type
+  // but unfortunately, the way that grpc-gateway parses
+  // these objects into Javascript results in odd encodings
+  // of Long JS types that are difficult to interact with
+  // as map keys. Thus, we settle for string.
+  map<string, string> stacks = 4;
+}
+
+message Span {
+  string operation = 1;
+  uint64 trace_id = 2;
+  uint64 span_id = 3;
+  uint64 parent_span_id = 4;
+  google.protobuf.Timestamp start = 5 [(gogoproto.stdtime) = true];
+  uint64 goroutine_id = 6;
+  repeated Tag processed_tags = 7;
+}
+
+message Tag {
+  string key = 1;
+  string val = 2;
+  string caption = 3;
+  string link = 4;
+  bool hidden = 5;
+  bool highlight = 6;
+  bool inherit = 7;
+  bool inherited = 8;
+  bool propagate_up = 9;
+  bool copied_from_child = 10;
 }

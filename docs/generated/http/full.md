@@ -6262,3 +6262,236 @@ Support status: [reserved](#support-status)
 
 
 
+## ListTracingSnapshots
+
+`GET /_admin/v1/snapshots`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshots | [SnapshotInfo](#cockroach.server.serverpb.ListTracingSnapshotsResponse-cockroach.server.serverpb.SnapshotInfo) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListTracingSnapshotsResponse-cockroach.server.serverpb.SnapshotInfo"></a>
+#### SnapshotInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.ListTracingSnapshotsResponse-int64) |  |  | [reserved](#support-status) |
+| captured_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListTracingSnapshotsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## TakeTracingSnapshot
+
+`POST /_admin/v1/snapshots`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot | [SnapshotInfo](#cockroach.server.serverpb.TakeTracingSnapshotResponse-cockroach.server.serverpb.SnapshotInfo) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TakeTracingSnapshotResponse-cockroach.server.serverpb.SnapshotInfo"></a>
+#### SnapshotInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.TakeTracingSnapshotResponse-int64) |  |  | [reserved](#support-status) |
+| captured_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TakeTracingSnapshotResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## GetTracingSnapshot
+
+`GET /_admin/v1/snapshots/{snapshot_id}`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.GetTracingSnapshotRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot | [Snapshot](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.Snapshot) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.Snapshot"></a>
+#### Snapshot
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| spans | [SpansList](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpansList) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpansList"></a>
+#### SpansList
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| spans | [Span](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.Span) | repeated |  | [reserved](#support-status) |
+| stacks | [SpansList.StacksEntry](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpansList.StacksEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.Span"></a>
+#### Span
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| operation | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| span_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| parent_span_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.GetTracingSnapshotResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| goroutine_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| processed_tags | [Tag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.Tag) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.Tag"></a>
+#### Tag
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| val | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| link | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| hidden | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| highlight | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| inherit | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| inherited | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| propagate_up | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| copied_from_child | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpansList.StacksEntry"></a>
+#### SpansList.StacksEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int64](#cockroach.server.serverpb.GetTracingSnapshotResponse-int64) |  |  |  |
+| value | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  |  |
+
+
+
+
+
+
