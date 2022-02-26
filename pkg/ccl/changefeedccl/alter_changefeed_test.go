@@ -218,6 +218,11 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			`pq: cannot alter option "initial_scan"`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan`, feed.JobID()),
 		)
+
+		sqlDB.ExpectErr(t,
+			`cannot unset option "sink"`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET sink`, feed.JobID()),
+		)
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn))
@@ -303,4 +308,68 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	require.True(t, ok)
 
 	require.Equal(t, details.SinkURI, `s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456`)
+}
+
+func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.ExpectErr(t,
+			`pq: new sink type "s3" does not match original sink type "kafka", sink type cannot be altered`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = 's3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`, feed.JobID()),
+		)
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestAlterChangefeedChangeSinkURI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		registry := f.Server().JobRegistry().(*jobs.Registry)
+		ctx := context.Background()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		newSinkURI := `kafka://new_kafka_uri`
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = '%s'`, feed.JobID(), newSinkURI))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+
+		job, err := registry.LoadJob(ctx, feed.JobID())
+		require.NoError(t, err)
+		details, ok := job.Details().(jobspb.ChangefeedDetails)
+		require.True(t, ok)
+
+		require.Equal(t, newSinkURI, details.SinkURI)
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
 }
