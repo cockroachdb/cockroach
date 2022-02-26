@@ -304,8 +304,6 @@ type inOrderResultsBuffer struct {
 		initialized bool
 		// container stores all Results that have been spilled to disk since the
 		// last call to init().
-		// TODO(yuzefovich): probably move kvstreamer package into sql since we
-		// now have a dependency on sql/rowcontainer.
 		// TODO(yuzefovich): at the moment, all spilled results that have been
 		// returned to the client still exist in the row container, so they have
 		// to be skipped over many times leading to a quadratic behavior.
