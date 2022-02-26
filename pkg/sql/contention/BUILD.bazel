@@ -2,18 +2,32 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "contention",
-    srcs = ["registry.go"],
+    srcs = [
+        "cluster_settings.go",
+        "event_store.go",
+        "registry.go",
+        "resolver.go",
+        "test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/contention",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/contention/contentionutils",
         "//pkg/sql/contentionpb",
         "//pkg/util/cache",
+        "//pkg/util/log",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -21,7 +35,9 @@ go_test(
     name = "contention_test",
     size = "small",
     srcs = [
+        "event_store_test.go",
         "registry_test.go",
+        "resolver_test.go",
         "utils_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -29,6 +45,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/sql/contentionpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
@@ -36,8 +53,11 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
