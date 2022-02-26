@@ -487,6 +487,8 @@ type testClusterConfig struct {
 	overrideAutoStats string
 	// if non-empty, overrides the default experimental DistSQL planning mode.
 	overrideExperimentalDistSQLPlanning string
+	// if true, execute queries and statements with Prepare and Execute.
+	prepareQueries bool
 	// if set, queries using distSQL processors or vectorized operators that can
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
@@ -607,6 +609,11 @@ var logicTestConfigs = []testClusterConfig{
 		overrideDistSQLMode:                 "off",
 		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
+	},
+	{
+		numNodes:       1,
+		name:           "local-prepared",
+		prepareQueries: true,
 	},
 	{
 		name:                "fakedist",
@@ -805,6 +812,7 @@ var (
 		"local",
 		"local-vec-off",
 		"local-spec-planning",
+		"local-prepared",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-metadata",
@@ -878,6 +886,8 @@ type logicStatement struct {
 	pos string
 	// SQL string to be sent to the database.
 	sql string
+	// stmts are the parsed statements from the SQL string.
+	stmts []tree.Statement
 	// expected notice, if any.
 	expectNotice string
 	// expected error, if any. "" indicates the statement should
@@ -2781,17 +2791,42 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 			t.outf("rewrote:\n%s\n", execSQL)
 		}
 	}
-	res, err := t.db.Exec(execSQL)
-	if err == nil {
+	var res gosql.Result
+	var execErr error
+	if t.cfg.prepareQueries {
+		// It's not possible to prepare a compound statement, so prepare and execute
+		// all of the initial queries except for the last one separately.
+		parsed, err := parser.Parse(stmt.sql)
+		if err != nil {
+			// In this case, just give up and send the whole statement to the server
+			// as normal. Probably, the test is expecting a parse error.
+			res, execErr = t.db.Exec(stmt.sql)
+		}
+		for _, p := range parsed {
+			var prep *gosql.Stmt
+			prep, execErr = t.db.Prepare(p.SQL)
+			if execErr == nil {
+				res, execErr = prep.Exec()
+			}
+			if execErr != nil {
+				// As soon as a non-nil error is encountered, leave the loop and let
+				// the error handling below take care of the rest.
+				break
+			}
+		}
+	} else {
+		res, execErr = t.db.Exec(execSQL)
+	}
+	if execErr == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 	}
-	if err == nil && stmt.expectCount >= 0 {
+	if execErr == nil && stmt.expectCount >= 0 {
 		var count int64
-		count, err = res.RowsAffected()
+		count, execErr = res.RowsAffected()
 
 		// If err becomes non-nil here, we'll catch it below.
 
-		if err == nil && count != stmt.expectCount {
+		if execErr == nil && count != stmt.expectCount {
 			t.Errorf("%s: %s\nexpected %d rows affected, got %d", stmt.pos, execSQL, stmt.expectCount, count)
 		}
 	}
@@ -2803,11 +2838,11 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	cont, err := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, err)
-	if err != nil {
+	cont, execErr := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, execErr)
+	if execErr != nil {
 		t.finishOne("OK")
 	}
-	return cont, err
+	return cont, execErr
 }
 
 func (t *logicTest) hashResults(results []string) (string, error) {
@@ -2846,8 +2881,38 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			}
 		}()
 	}
-	rows, err := db.Query(query.sql)
-	if err == nil {
+	var rows *gosql.Rows
+	var execErr error
+	if t.cfg.prepareQueries {
+		// It's not possible to prepare a compound statement, so prepare and execute
+		// all of the initial queries except for the last one separately.
+		parsed, err := parser.Parse(query.sql)
+		if err != nil {
+			// In this case, just give up and send the whole statement to the server
+			// as normal. Probably, the test is expecting a parse error.
+			rows, execErr = db.Query(query.sql)
+		}
+		for i, p := range parsed {
+			var prep *gosql.Stmt
+			prep, execErr = t.db.Prepare(p.SQL)
+			if execErr == nil {
+				if i < len(parsed)-1 {
+					// Just execute all but the last statement.
+					_, execErr = prep.Exec()
+				} else {
+					rows, execErr = prep.Query()
+				}
+			}
+			if execErr != nil {
+				// As soon as a non-nil error is encountered, leave the loop and let
+				// the error handling below take care of the rest.
+				break
+			}
+		}
+	} else {
+		rows, execErr = db.Query(query.sql)
+	}
+	if execErr == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 
 		// If expecting an error, then read all result rows, since some errors are
@@ -2860,13 +2925,13 @@ func (t *logicTest) execQuery(query logicQuery) error {
 					break
 				}
 			}
-			err = rows.Err()
+			execErr = rows.Err()
 		}
 	}
-	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, err); err != nil {
+	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, execErr); err != nil {
 		return err
 	}
-	if err != nil {
+	if execErr != nil {
 		// An error occurred, but it was expected.
 		t.finishOne("XFAIL")
 		//nolint:returnerrcheck
@@ -3011,9 +3076,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		query.sorter(len(query.colTypes), query.expectedResults)
 	}
 
-	hash, err := t.hashResults(actualResults)
-	if err != nil {
-		return err
+	hash, execErr := t.hashResults(actualResults)
+	if execErr != nil {
+		return execErr
 	}
 
 	if query.expectedHash != "" {
