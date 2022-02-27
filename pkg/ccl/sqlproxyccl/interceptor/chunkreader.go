@@ -34,6 +34,11 @@ func newChunkReader(msg []byte) pgproto3.ChunkReader {
 // returned once the entire message has been read. If the caller tries to read
 // more bytes than it could, an errInvalidRead will be returned.
 func (cr *chunkReader) Next(n int) (buf []byte, err error) {
+	// pgproto3's Receive methods will still invoke Next even if the body size
+	// is 0. We shouldn't return an EOF in that case.
+	if n == 0 {
+		return []byte{}, nil
+	}
 	if cr.pos == len(cr.msg) {
 		return nil, io.EOF
 	}
