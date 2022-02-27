@@ -17,6 +17,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// errConnRecoverableSentinel exists as a sentinel value to denote that errors
+// should not terminate the connection. Use errors.Mark and errors.Is to mark
+// and validate accordingly.
+var errConnRecoverableSentinel = errors.New("connection recoverable error")
+
 // forwarder is used to forward pgwire messages from the client to the server,
 // and vice-versa. At the moment, this does a direct proxying, and there is
 // no intercepting. Once https://github.com/cockroachdb/cockroach/issues/76000
