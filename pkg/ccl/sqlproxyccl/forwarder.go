@@ -204,3 +204,21 @@ func wrapServerToClientError(err error) error {
 	}
 	return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
 }
+
+// errConnRecoverableSentinel exists as a sentinel value to denote that errors
+// should not terminate the connection.
+var errConnRecoverableSentinel = errors.New("connection recoverable error")
+
+// markAsConnRecoverableError marks the given error with errConnRecoverableSentinel
+// to denote that the connection can continue despite having an error.
+func markAsConnRecoverableError(err error) error {
+	return errors.Mark(err, errConnRecoverableSentinel)
+}
+
+// isConnRecoverableError checks whether a given error denotes that a connection
+// is recoverable. If this is true, the caller should try to recover the
+// connection (e.g. continue the forwarding process instead of terminating the
+// forwarder).
+func isConnRecoverableError(err error) bool {
+	return errors.Is(err, errConnRecoverableSentinel)
+}

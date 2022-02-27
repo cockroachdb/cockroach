@@ -299,3 +299,13 @@ func TestWrapServerToClientError(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectionRecoverableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	err := errors.New("foobar")
+	require.False(t, isConnRecoverableError(err))
+	err = markAsConnRecoverableError(err)
+	require.True(t, isConnRecoverableError(err))
+	require.True(t, errors.Is(err, errConnRecoverableSentinel))
+}
