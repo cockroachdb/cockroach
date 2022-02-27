@@ -133,8 +133,10 @@ type connector struct {
 }
 
 // OpenTenantConnWithToken opens a connection to the tenant cluster using the
-// token-based authentication.
-func (c *connector) OpenTenantConnWithToken(ctx context.Context, token string) (net.Conn, error) {
+// token-based authentication during connection migration.
+func (c *connector) OpenTenantConnWithToken(
+	ctx context.Context, token string,
+) (retServerConn net.Conn, retErr error) {
 	c.StartupMsg.Parameters[sessionRevivalTokenStartupParam] = token
 	defer func() {
 		// Delete token after return.
@@ -145,9 +147,27 @@ func (c *connector) OpenTenantConnWithToken(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if retErr != nil {
+			serverConn.Close()
+		}
+	}()
+
 	if c.IdleMonitorWrapperFn != nil {
 		serverConn = c.IdleMonitorWrapperFn(serverConn)
 	}
+
+	// When we use token-based authentication, we will still get the initial
+	// connection data messages (e.g. ParameterStatus and BackendKeyData).
+	// Since this method is only used during connection migration (i.e. proxy
+	// is connecting to the SQL pod), we'll discard all of the messages, and
+	// only return once we've seen a ReadyForQuery message.
+	//
+	// NOTE: This will need to be updated when we implement query cancellation.
+	if err := readTokenAuthResult(serverConn); err != nil {
+		return nil, err
+	}
+	log.Infof(ctx, "connected to %s through token-based auth", serverConn.RemoteAddr())
 	return serverConn, nil
 }
 
@@ -188,6 +208,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	if err := authenticate(clientConn, serverConn, throttleHook); err != nil {
 		return nil, true, err
 	}
+	log.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())
 	return serverConn, false, nil
 }
 
