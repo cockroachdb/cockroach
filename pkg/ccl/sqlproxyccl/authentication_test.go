@@ -202,3 +202,60 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	require.True(t, errors.As(err, &codeErr))
 	require.Equal(t, codeBackendDisconnected, codeErr.code)
 }
+
+func TestImplicitAuthenticate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("unexpected message", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
+
+		go func() {
+			err := be.Send(&pgproto3.BindComplete{})
+			require.NoError(t, err)
+		}()
+
+		err := implicitAuthenticate(cli)
+		require.Error(t, err)
+		codeErr := (*codeError)(nil)
+		require.True(t, errors.As(err, &codeErr))
+		require.Equal(t, codeBackendDisconnected, codeErr.code)
+	})
+
+	t.Run("error_response", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
+
+		go func() {
+			err := be.Send(&pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"})
+			require.NoError(t, err)
+		}()
+
+		err := implicitAuthenticate(cli)
+		require.Error(t, err)
+		codeErr := (*codeError)(nil)
+		require.True(t, errors.As(err, &codeErr))
+		require.Equal(t, codeAuthFailed, codeErr.code)
+	})
+
+	t.Run("successful", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
+
+		go func() {
+			err := be.Send(&pgproto3.AuthenticationOk{})
+			require.NoError(t, err)
+
+			err = be.Send(&pgproto3.ParameterStatus{Name: "Server Version", Value: "1.3"})
+			require.NoError(t, err)
+
+			err = be.Send(&pgproto3.BackendKeyData{ProcessID: uint32(42)})
+			require.NoError(t, err)
+
+			err = be.Send(&pgproto3.ReadyForQuery{})
+			require.NoError(t, err)
+		}()
+
+		require.NoError(t, implicitAuthenticate(cli))
+	})
+}
