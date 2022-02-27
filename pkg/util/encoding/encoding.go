@@ -715,7 +715,7 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 		switch tempB[i+1] {
 		case escapedTerm:
 			if len(tempB[:i]) > 0 {
-				outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i]))
+				outBytes = outBytes + strconv.Quote(UnsafeString(tempB[:i]))
 			} else {
 				lenOut := len(outBytes)
 				if lenOut > 1 && outBytes[lenOut-1] == '/' {
@@ -724,7 +724,7 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 			}
 			return outBytes, tempB[i+escapeLength:], nil
 		case escapedJSONObjectKeyTerm:
-			outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i])) + "/"
+			outBytes = outBytes + strconv.Quote(UnsafeString(tempB[:i])) + "/"
 		case escapedJSONArray:
 			outBytes = outBytes + "Arr/"
 		default:
@@ -823,11 +823,11 @@ func EncodeStringDescending(b []byte, s string) []byte {
 	return EncodeBytesDescending(b, arg)
 }
 
-// unsafeString performs an unsafe conversion from a []byte to a string. The
+// UnsafeString performs an unsafe conversion from a []byte to a string. The
 // returned string will share the underlying memory with the []byte which thus
 // allows the string to be mutable through the []byte. We're careful to use
 // this method only in situations in which the []byte will not be modified.
-func unsafeString(b []byte) string {
+func UnsafeString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
@@ -838,7 +838,7 @@ func unsafeString(b []byte) string {
 // string may share storage with the input buffer.
 func DecodeUnsafeStringAscending(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesAscending(b, r)
-	return b, unsafeString(r), err
+	return b, UnsafeString(r), err
 }
 
 // DecodeUnsafeStringAscendingDeepCopy is the same as
@@ -846,7 +846,7 @@ func DecodeUnsafeStringAscending(b []byte, r []byte) ([]byte, string, error) {
 // with the input buffer.
 func DecodeUnsafeStringAscendingDeepCopy(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesAscendingDeepCopy(b, r)
-	return b, unsafeString(r), err
+	return b, UnsafeString(r), err
 }
 
 // DecodeUnsafeStringDescending decodes a string value from the input buffer which
@@ -857,7 +857,7 @@ func DecodeUnsafeStringAscendingDeepCopy(b []byte, r []byte) ([]byte, string, er
 // buffer.
 func DecodeUnsafeStringDescending(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesDescending(b, r)
-	return b, unsafeString(r), err
+	return b, UnsafeString(r), err
 }
 
 // EncodeNullAscending encodes a NULL value. The encodes bytes are appended to the
