@@ -26,7 +26,7 @@ const pgHeaderSizeBytes = 5
 // chosen to match Postgres' send and receive buffer sizes.
 //
 // See: https://github.com/postgres/postgres/blob/249d64999615802752940e017ee5166e726bc7cd/src/backend/libpq/pqcomm.c#L134-L135.
-const defaultBufferSize = 2 << 13 // 8K
+const defaultBufferSize = 1 << 13 // 8K
 
 // ErrProtocolError indicates that the packets are malformed, and are not as
 // expected.

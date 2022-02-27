@@ -33,8 +33,8 @@ func TestNewPgInterceptor(t *testing.T) {
 		bufSize           int
 		normalizedBufSize int
 	}{
-		{-1, defaultBufferSize},
-		{pgHeaderSizeBytes - 1, defaultBufferSize},
+		{-1, 8192},
+		{pgHeaderSizeBytes - 1, 8192},
 		{pgHeaderSizeBytes, pgHeaderSizeBytes},
 		{1024, 1024},
 	} {
