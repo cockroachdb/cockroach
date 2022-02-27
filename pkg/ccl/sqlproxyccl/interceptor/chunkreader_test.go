@@ -30,6 +30,11 @@ func TestChunkReader(t *testing.T) {
 	require.EqualError(t, err, errInvalidRead.Error())
 	require.Nil(t, buf)
 
+	// Attempt n = 0 before EOF.
+	buf, err = cr.Next(0)
+	require.NoError(t, err)
+	require.Len(t, buf, 0)
+
 	buf, err = cr.Next(11)
 	require.NoError(t, err)
 	require.Equal(t, "hello world", string(buf))
@@ -37,4 +42,9 @@ func TestChunkReader(t *testing.T) {
 	buf, err = cr.Next(1)
 	require.EqualError(t, err, io.EOF.Error())
 	require.Nil(t, buf)
+
+	// Attempting n = 0 after EOF returns nothing instead of an error.
+	buf, err = cr.Next(0)
+	require.NoError(t, err)
+	require.Len(t, buf, 0)
 }
