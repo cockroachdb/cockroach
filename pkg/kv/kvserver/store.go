@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -1050,7 +1051,8 @@ type StoreConfig struct {
 
 	// KV Memory Monitor. Must be non-nil for production, and can be nil in some
 	// tests.
-	KVMemoryMonitor *mon.BytesMonitor
+	KVMemoryMonitor        *mon.BytesMonitor
+	RangefeedBudgetFactory *rangefeed.BudgetFactory
 
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
