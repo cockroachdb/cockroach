@@ -35,13 +35,13 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 	}
 
 	if s.Hold {
-		return nil, unimplemented.NewWithIssue(41412, "DECLARE CURSOR WITH HOLD")
+		return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD")
 	}
 	if s.Binary {
-		return nil, unimplemented.NewWithIssue(41412, "DECLARE BINARY CURSOR")
+		return nil, unimplemented.NewWithIssue(77099, "DECLARE BINARY CURSOR")
 	}
 	if s.Scroll == tree.Scroll {
-		return nil, unimplemented.NewWithIssue(41412, "DECLARE SCROLL CURSOR")
+		return nil, unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR")
 	}
 
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
