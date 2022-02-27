@@ -1,5 +1,8 @@
 Setting	Type	Default	Description
 admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission
+admission.epoch_lifo.epoch_closing_delta_duration	duration	5ms	the delta duration before closing an epoch, for epoch-LIFO admission control ordering
+admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for epoch-LIFO admission control ordering
+admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering
 admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
 admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP
