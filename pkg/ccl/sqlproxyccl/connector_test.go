@@ -33,7 +33,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 	const token = "foobarbaz"
 	ctx := context.Background()
 
-	t.Run("error", func(t *testing.T) {
+	t.Run("error during open", func(t *testing.T) {
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
@@ -51,6 +51,48 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		str, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
 		require.False(t, ok)
 		require.Equal(t, "", str)
+	})
+
+	t.Run("error during auth", func(t *testing.T) {
+		c := &connector{
+			StartupMsg: &pgproto3.StartupMessage{
+				Parameters: make(map[string]string),
+			},
+		}
+		conn, _ := net.Pipe()
+		defer conn.Close()
+
+		var openCalled bool
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+			openCalled = true
+
+			// Validate that token is set.
+			str, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
+			require.True(t, ok)
+			require.Equal(t, token, str)
+
+			return conn, nil
+		}
+
+		defer testutils.TestingHook(
+			&implicitAuthenticate,
+			func(serverConn net.Conn) error {
+				return errors.New("bar")
+			},
+		)()
+
+		crdbConn, err := c.OpenTenantConnWithToken(ctx, token)
+		require.True(t, openCalled)
+		require.EqualError(t, err, "bar")
+		require.Nil(t, crdbConn)
+
+		// Ensure that token is deleted.
+		_, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
+		require.False(t, ok)
+
+		// Connection should be closed.
+		_, err = conn.Write([]byte("foo"))
+		require.Regexp(t, "closed pipe", err)
 	})
 
 	t.Run("successful", func(t *testing.T) {
@@ -74,8 +116,19 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 			return conn, nil
 		}
 
+		var authCalled bool
+		defer testutils.TestingHook(
+			&implicitAuthenticate,
+			func(serverConn net.Conn) error {
+				authCalled = true
+				require.Equal(t, conn, serverConn)
+				return nil
+			},
+		)()
+
 		crdbConn, err := c.OpenTenantConnWithToken(ctx, token)
 		require.True(t, openCalled)
+		require.True(t, authCalled)
 		require.NoError(t, err)
 		require.Equal(t, conn, crdbConn)
 
@@ -111,9 +164,20 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 			return conn, nil
 		}
 
+		var authCalled bool
+		defer testutils.TestingHook(
+			&implicitAuthenticate,
+			func(serverConn net.Conn) error {
+				authCalled = true
+				require.Equal(t, conn, serverConn)
+				return nil
+			},
+		)()
+
 		crdbConn, err := c.OpenTenantConnWithToken(ctx, token)
 		require.True(t, wrapperCalled)
 		require.True(t, openCalled)
+		require.True(t, authCalled)
 		require.NoError(t, err)
 		require.Equal(t, conn, crdbConn)
 
@@ -641,6 +705,7 @@ func TestRetriableConnectorError(t *testing.T) {
 	require.False(t, isRetriableConnectorError(err))
 	err = markAsRetriableConnectorError(err)
 	require.True(t, isRetriableConnectorError(err))
+	require.True(t, errors.Is(err, errRetryConnectorSentinel))
 }
 
 var _ TenantResolver = &testTenantResolver{}

@@ -133,3 +133,43 @@ var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttl
 	}
 	return newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
 }
+
+// implicitAuthenticate assumes that the connection credentials have already
+// been transmitted to the server, and discards all messages until we get a
+// ReadyForQuery message. If authentication fails, this will return an error.
+//
+// Discarding messages is fine because this will only be used during connection
+// migration with the token-based authentication, and the proxy is the client.
+var implicitAuthenticate = func(crdbConn net.Conn) error {
+	// Use pgproto3 directly for now even though there is an internal buffer
+	// within the chunkreader. This is fine since there won't be any other
+	// messages from the server once we receive the ReadyForQuery message. This
+	// is the same approach as the one used in the authenticate function above.
+	be := pgproto3.NewFrontend(pgproto3.NewChunkReader(crdbConn), crdbConn)
+
+	// The auth step should require only a few back and forths so 20 iterations
+	// should be enough.
+	var i int
+	for ; i < 20; i++ {
+		backendMsg, err := be.Receive()
+		if err != nil {
+			return newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
+		}
+
+		switch tp := backendMsg.(type) {
+		case *pgproto3.AuthenticationOk, *pgproto3.ParameterStatus, *pgproto3.BackendKeyData:
+			// Do nothing.
+
+		case *pgproto3.ErrorResponse:
+			return newErrorf(codeAuthFailed, "authentication failed: %s", tp.Message)
+
+		case *pgproto3.ReadyForQuery:
+			return nil
+
+		default:
+			return newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
+		}
+	}
+
+	return newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
+}
