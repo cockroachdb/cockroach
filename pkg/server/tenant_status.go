@@ -512,7 +512,7 @@ func (t *tenantStatusServer) ResetSQLStats(
 
 	var fanoutError error
 
-	if err := t.iteratePods(ctx, fmt.Sprintf("reset SQL statistics for instance %s", req.NodeID),
+	if err := t.iteratePods(ctx, "reset SQL statistics",
 		t.dialCallback,
 		nodeResetFn,
 		func(instanceID base.SQLInstanceID, resp interface{}) {
@@ -624,7 +624,7 @@ func (t *tenantStatusServer) Statements(
 		return localResponse, err
 	}
 
-	if err := t.iteratePods(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
+	if err := t.iteratePods(ctx, "statement statistics",
 		t.dialCallback,
 		nodeStatement,
 		func(instanceID base.SQLInstanceID, resp interface{}) {
@@ -917,7 +917,7 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 		combinedError = errors.CombineErrors(combinedError, nodeFnError)
 	}
 
-	if err := t.iteratePods(ctx, fmt.Sprintf("requesting index usage stats for instance %s", req.NodeID),
+	if err := t.iteratePods(ctx, "requesting index usage stats",
 		t.dialCallback,
 		fetchIndexUsageStats,
 		aggFn,
@@ -982,7 +982,7 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 
 	var combinedError error
 
-	if err := t.iteratePods(ctx, fmt.Sprintf("Resetting index usage stats for instance %s", req.NodeID),
+	if err := t.iteratePods(ctx, "Resetting index usage stats for instance",
 		t.dialCallback,
 		resetIndexUsageStats,
 		func(instanceID base.SQLInstanceID, resp interface{}) {

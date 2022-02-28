@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -83,7 +82,7 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	if err := s.iterateNodes(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
+	if err := s.iterateNodes(ctx, "statement statistics",
 		dialFn,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
