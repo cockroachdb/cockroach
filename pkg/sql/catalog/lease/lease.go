@@ -476,11 +476,8 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
-		baseCtx := m.ambientCtx.AnnotateCtx(context.Background())
-		// AddTags and not WithTags, so that we combine the tags with those
-		// filled by AnnotateCtx.
-		baseCtx = logtags.AddTags(baseCtx, logtags.FromContext(ctx))
-		newCtx, cancel := m.stopper.WithCancelOnQuiesce(baseCtx)
+		lt := logtags.FromContext(ctx)
+		ctx, cancel := m.stopper.WithCancelOnQuiesce(logtags.AddTags(m.ambientCtx.AnnotateCtx(context.Background()), lt))
 		defer cancel()
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
@@ -490,7 +487,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		if newest != nil {
 			minExpiration = newest.getExpiration()
 		}
-		desc, expiration, err := m.storage.acquire(newCtx, minExpiration, id)
+		desc, expiration, err := m.storage.acquire(ctx, minExpiration, id)
 		if err != nil {
 			return nil, err
 		}
@@ -499,7 +496,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		t.mu.takenOffline = false
 		defer t.mu.Unlock()
 		var newDescVersionState *descriptorVersionState
-		newDescVersionState, toRelease, err = t.upsertLeaseLocked(newCtx, desc, expiration)
+		newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration)
 		if err != nil {
 			return nil, err
 		}
@@ -507,7 +504,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			m.names.insert(newDescVersionState)
 		}
 		if toRelease != nil {
-			releaseLease(newCtx, toRelease, m)
+			releaseLease(ctx, toRelease, m)
 		}
 		return true, nil
 	})
