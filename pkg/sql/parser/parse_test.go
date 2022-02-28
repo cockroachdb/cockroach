@@ -528,7 +528,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
-		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`, ``},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`, ``},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},
