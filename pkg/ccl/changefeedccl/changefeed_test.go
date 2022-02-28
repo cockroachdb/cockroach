@@ -737,6 +737,79 @@ func TestChangefeedInitialScan(t *testing.T) {
 	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
+func TestChangefeedBackfillObservability(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		registry := f.Server().JobRegistry().(*jobs.Registry)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		pendingRanges := sli.BackfillPendingRanges
+
+		// Create a table with multiple ranges
+		numRanges := 10
+		rowsPerRange := 20
+		sqlDB.Exec(t, fmt.Sprintf(`
+  CREATE TABLE foo (key INT PRIMARY KEY);
+  INSERT INTO foo (key) SELECT * FROM generate_series(1, %d);
+  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
+  `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`,
+			[][]string{{fmt.Sprint(numRanges)}},
+		)
+
+		// Allow control of the scans
+		scanCtx, scanCancel := context.WithCancel(context.Background())
+		scanChan := make(chan struct{})
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
+			select {
+			case <-scanCtx.Done():
+				return scanCtx.Err()
+			case <-scanChan:
+				return nil
+			}
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		require.Equal(t, pendingRanges.Value(), int64(0))
+
+		// Progress the initial backfill halfway through its ranges
+		for i := 0; i < numRanges/2; i++ {
+			scanChan <- struct{}{}
+		}
+		testutils.SucceedsSoon(t, func() error {
+			count := pendingRanges.Value()
+			if count != int64(numRanges/2) {
+				return fmt.Errorf("range count %d should be %d", count, numRanges/2)
+			}
+			return nil
+		})
+
+		// Ensure that the pending count is cleared if the backfill completes
+		// regardless of successful scans
+		scanCancel()
+		testutils.SucceedsSoon(t, func() error {
+			count := pendingRanges.Value()
+			if count > 0 {
+				return fmt.Errorf("range count %d should be 0", count)
+			}
+			return nil
+		})
+	}
+
+	t.Run("enterprise", enterpriseTest(testFn, feedTestNoTenants))
+	t.Run("cloudstorage", cloudStorageTest(testFn, feedTestNoTenants))
+	t.Run("kafka", kafkaTest(testFn, feedTestNoTenants))
+}
+
 func TestChangefeedUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
@@ -1069,8 +1142,9 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 		// Ensure Scan Requests are always small enough that we receive multiple
 		// resolved events during a backfill
-		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) {
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
 			b.Header.MaxSpanRequestKeys = 10
+			return nil
 		}
 
 		// Setup changefeed job details, avoid relying on initial scan functionality
@@ -2861,12 +2935,13 @@ func TestChangefeedDataTTL(t *testing.T) {
 		knobs := f.Server().TestingKnobs().
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.FeedKnobs.BeforeScanRequest = func(_ *kv.Batch) {
+		knobs.FeedKnobs.BeforeScanRequest = func(_ *kv.Batch) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
-				return
+				return nil
 			}
 			wait <- struct{}{}
 			<-resume
+			return nil
 		}
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -4824,8 +4899,9 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Ensure Scan Requests are always small enough that we receive multiple
 		// resolved events during a backfill
-		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) {
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
 			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(100)
+			return nil
 		}
 
 		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
