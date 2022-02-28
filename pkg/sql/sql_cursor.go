@@ -30,10 +30,6 @@ import (
 // DeclareCursor implements the DECLARE statement.
 // See https://www.postgresql.org/docs/current/sql-declare.html for details.
 func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (planNode, error) {
-	if p.autoCommit {
-		return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
-	}
-
 	if s.Hold {
 		return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD")
 	}
@@ -44,61 +40,71 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 		return nil, unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR")
 	}
 
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	cursorName := s.Name.String()
-	if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
-		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
-	}
+	return &delayedNode{
+		name: s.String(),
+		constructor: func(ctx context.Context, p *planner) (_ planNode, _ error) {
+			if p.extendedEvalCtx.TxnImplicit {
+				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
+			}
 
-	// Try to plan the cursor query to make sure that it's valid.
-	stmt := makeStatement(parser.Statement{AST: s.Select}, ClusterWideID{})
-	pt := planTop{}
-	pt.init(&stmt, &p.instrumentation)
-	opc := &p.optPlanningCtx
-	opc.p.stmt = stmt
-	opc.reset()
+			ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+			cursorName := s.Name.String()
+			if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
+				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
+			}
 
-	memo, err := opc.buildExecMemo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := opc.runExecBuilder(
-		&pt,
-		&stmt,
-		newExecFactory(p),
-		memo,
-		p.EvalContext(),
-		p.autoCommit,
-	); err != nil {
-		return nil, err
-	}
-	if pt.flags.IsSet(planFlagContainsMutation) {
-		// Cursors with mutations are invalid.
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-			"DECLARE CURSOR must not contain data-modifying statements in WITH")
-	}
+			// Try to plan the cursor query to make sure that it's valid.
+			stmt := makeStatement(parser.Statement{AST: s.Select}, ClusterWideID{})
+			pt := planTop{}
+			pt.init(&stmt, &p.instrumentation)
+			opc := &p.optPlanningCtx
+			opc.p.stmt = stmt
+			opc.reset()
 
-	statement := s.Select.String()
-	rows, err := ie.QueryIterator(ctx, "sql-cursor", p.txn, statement)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to DECLARE CURSOR")
-	}
-	inputState := p.txn.GetLeafTxnInputState(ctx)
-	cursor := &sqlCursor{
-		InternalRows: rows,
-		readSeqNum:   inputState.ReadSeqNum,
-		txn:          p.txn,
-		statement:    statement,
-		created:      timeutil.Now(),
-	}
-	if err := p.sqlCursors.addCursor(cursorName, cursor); err != nil {
-		// This case shouldn't happen because cursor names are scoped to a session,
-		// and sessions can't have more than one statement running at once. But
-		// let's be diligent and clean up if it somehow does happen anyway.
-		_ = cursor.Close()
-		return nil, err
-	}
-	return newZeroNode(nil /* columns */), nil
+			memo, err := opc.buildExecMemo(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := opc.runExecBuilder(
+				&pt,
+				&stmt,
+				newExecFactory(p),
+				memo,
+				p.EvalContext(),
+				p.autoCommit,
+			); err != nil {
+				return nil, err
+			}
+			if pt.flags.IsSet(planFlagContainsMutation) {
+				// Cursors with mutations are invalid.
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"DECLARE CURSOR must not contain data-modifying statements in WITH")
+			}
+
+			statement := s.Select.String()
+			itCtx := context.Background()
+			rows, err := ie.QueryIterator(itCtx, "sql-cursor", p.txn, statement)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to DECLARE CURSOR")
+			}
+			inputState := p.txn.GetLeafTxnInputState(ctx)
+			cursor := &sqlCursor{
+				InternalRows: rows,
+				readSeqNum:   inputState.ReadSeqNum,
+				txn:          p.txn,
+				statement:    statement,
+				created:      timeutil.Now(),
+			}
+			if err := p.sqlCursors.addCursor(cursorName, cursor); err != nil {
+				// This case shouldn't happen because cursor names are scoped to a session,
+				// and sessions can't have more than one statement running at once. But
+				// let's be diligent and clean up if it somehow does happen anyway.
+				_ = cursor.Close()
+				return nil, err
+			}
+			return newZeroNode(nil /* columns */), nil
+		},
+	}, nil
 }
 
 var errBackwardScan = pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cursor can only scan forward")
@@ -219,7 +225,12 @@ func (f fetchNode) Close(ctx context.Context) {
 // CloseCursor implements the FETCH statement.
 // See https://www.postgresql.org/docs/current/sql-close.html for details.
 func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNode, error) {
-	return newZeroNode(nil /* columns */), p.sqlCursors.closeCursor(n.Name.String())
+	return &delayedNode{
+		name: n.String(),
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			return newZeroNode(nil /* columns */), p.sqlCursors.closeCursor(n.Name.String())
+		},
+	}, nil
 }
 
 type sqlCursor struct {
