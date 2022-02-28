@@ -69,7 +69,7 @@ func (s *Container) RecordStatement(
 	}
 
 	// Get the statistics object.
-	stats, stmtFingerprintID, created, throttled := s.getStatsForStmt(
+	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
 		key.Query,
 		key.ImplicitTxn,
 		key.Database,
@@ -105,7 +105,7 @@ func (s *Container) RecordStatement(
 	if value.Plan != nil {
 		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
 		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
-		s.setLogicalPlanLastSampled(stats.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -138,11 +138,11 @@ func (s *Container) RecordStatement(
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
-		estimatedMemoryAllocBytes := stats.sizeUnsafe() + int64(unsafe.Sizeof(invalidStmtFingerprintID)) + 8
+		estimatedMemoryAllocBytes := stats.sizeUnsafe() + statementKey.size() + 8
 
 		// We also accounts for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + stats.sampledPlanKey.size() + 8
+		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
@@ -154,7 +154,7 @@ func (s *Container) RecordStatement(
 		// We attempt to account for all the memory we used. If we have exceeded our
 		// memory budget, delete the entry that we just created and report the error.
 		if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
-			delete(s.mu.stmts, stmtFingerprintID)
+			delete(s.mu.stmts, statementKey)
 			return stats.ID, ErrMemoryPressure
 		}
 	}
@@ -166,7 +166,7 @@ func (s *Container) RecordStatement(
 func (s *Container) RecordStatementExecStats(
 	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
-	stmtStats, _, _, _ :=
+	stmtStats, _, _, _, _ :=
 		s.getStatsForStmt(
 			key.Query,
 			key.ImplicitTxn,
