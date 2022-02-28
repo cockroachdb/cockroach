@@ -2048,6 +2048,12 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 	return nil
 }
 
+func TypeCheckComparisonOp(
+	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
+) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
+	return typeCheckComparisonOp(ctx, semaCtx, op, left, right)
+}
+
 func typeCheckComparisonOp(
 	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {

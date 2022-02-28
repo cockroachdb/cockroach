@@ -569,6 +569,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 	"current_timestamp":     useDefaultBuiltin,
 	"localtimestamp":        useDefaultBuiltin,
 	"now":                   useDefaultBuiltin,
+	"overlaps":              useDefaultBuiltin,
 	"statement_timestamp":   useDefaultBuiltin,
 	"timeofday":             useDefaultBuiltin,
 	"transaction_timestamp": useDefaultBuiltin,
