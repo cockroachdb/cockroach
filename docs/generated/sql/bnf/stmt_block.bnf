@@ -1626,8 +1626,7 @@ opt_with_schedule_options ::=
 	| 
 
 changefeed_targets ::=
-	single_table_pattern_list
-	| 'TABLE' single_table_pattern_list
+	( changefeed_target ) ( ( ',' changefeed_target ) )*
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
@@ -2239,8 +2238,11 @@ opt_sequence_option_list ::=
 	sequence_option_list
 	| 
 
-single_table_pattern_list ::=
-	( table_name ) ( ( ',' table_name ) )*
+changefeed_target ::=
+	'TABLE' table_name
+	| table_name
+	| 'TABLE' table_name 'FAMILY' family_name
+	| table_name 'FAMILY' family_name
 
 replication_options_list ::=
 	( replication_options ) ( ( ',' replication_options ) )*
@@ -2762,6 +2764,9 @@ create_as_table_defs ::=
 
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
+
+family_name ::=
+	name
 
 replication_options ::=
 	'CURSOR' '=' a_expr
@@ -3460,9 +3465,6 @@ like_table_option ::=
 
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY' opt_with_storage_parameter_list
-
-family_name ::=
-	name
 
 create_as_params ::=
 	( create_as_param ) ( ( ',' create_as_param ) )*

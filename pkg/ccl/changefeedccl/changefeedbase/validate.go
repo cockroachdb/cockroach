@@ -20,54 +20,70 @@ func ValidateTable(
 	tableDesc catalog.TableDescriptor,
 	opts map[string]string,
 ) error {
-	var t jobspb.ChangefeedTargetSpecification
 	var found bool
 	for _, cts := range targets {
+		var t jobspb.ChangefeedTargetSpecification
 		if cts.TableID == tableDesc.GetID() {
 			t = cts
 			found = true
-			break
+		} else {
+			continue
+		}
+
+		// Technically, the only non-user table known not to work is system.jobs
+		// (which creates a cycle since the resolved timestamp high-water mark is
+		// saved in it), but there are subtle differences in the way many of them
+		// work and this will be under-tested, so disallow them all until demand
+		// dictates.
+		if catalog.IsSystemDescriptor(tableDesc) {
+			return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+		}
+		if tableDesc.IsView() {
+			return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
+		}
+		if tableDesc.IsVirtualTable() {
+			return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
+		}
+		if tableDesc.IsSequence() {
+			return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
+		}
+		switch t.Type {
+		case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+			if len(tableDesc.GetFamilies()) != 1 {
+				return errors.Errorf(
+					`CHANGEFEED created on a table with a single column family (%s) cannot now target a table with %d families. targets: %+v, tableDesc: %+v`,
+					tableDesc.GetName(), len(tableDesc.GetFamilies()), targets, tableDesc)
+			}
+		case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+			_, columnFamiliesOpt := opts[OptSplitColumnFamilies]
+			if !columnFamiliesOpt && len(tableDesc.GetFamilies()) != 1 {
+				return errors.Errorf(
+					`CHANGEFEED targeting a table (%s) with multiple column families requires WITH %s and will emit multiple events per row.`,
+					tableDesc.GetName(), OptSplitColumnFamilies)
+			}
+		case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+			cols := 0
+			for _, family := range tableDesc.GetFamilies() {
+				if family.Name == t.FamilyName {
+					cols = len(family.ColumnIDs)
+					break
+				}
+			}
+			if cols == 0 {
+				return errors.Errorf("CHANGEFEED targeting nonexistent or removed column family %s of table %s", t.FamilyName, tableDesc.GetName())
+			}
+		}
+
+		if tableDesc.Dropped() {
+			return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
+		}
+
+		if tableDesc.Offline() {
+			return errors.Errorf("CHANGEFEED cannot target offline table: %s (offline reason: %q)", tableDesc.GetName(), tableDesc.GetOfflineReason())
 		}
 	}
 	if !found {
 		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
-	}
-
-	// Technically, the only non-user table known not to work is system.jobs
-	// (which creates a cycle since the resolved timestamp high-water mark is
-	// saved in it), but there are subtle differences in the way many of them
-	// work and this will be under-tested, so disallow them all until demand
-	// dictates.
-	if catalog.IsSystemDescriptor(tableDesc) {
-		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
-	}
-	if tableDesc.IsView() {
-		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
-	}
-	if tableDesc.IsVirtualTable() {
-		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
-	}
-	if tableDesc.IsSequence() {
-		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
-	}
-	if t.Type == jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY && len(tableDesc.GetFamilies()) != 1 {
-		return errors.Errorf(
-			`CHANGEFEED created on a table with a single column family (%s) cannot now target a table with %d families.`,
-			tableDesc.GetName(), len(tableDesc.GetFamilies()))
-	}
-	_, columnFamiliesOpt := opts[OptSplitColumnFamilies]
-	if !columnFamiliesOpt && len(tableDesc.GetFamilies()) != 1 {
-		return errors.Errorf(
-			`CHANGEFEED targeting a table (%s) with multiple column families requires WITH %s and will emit multiple events per row.`,
-			tableDesc.GetName(), OptSplitColumnFamilies)
-	}
-
-	if tableDesc.Dropped() {
-		return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
-	}
-
-	if tableDesc.Offline() {
-		return errors.Errorf("CHANGEFEED cannot target offline table: %s (offline reason: %q)", tableDesc.GetName(), tableDesc.GetOfflineReason())
 	}
 
 	return nil
@@ -89,7 +105,7 @@ func WarningsForTable(
 	}
 	if tableDesc.NumFamilies() > 1 {
 		warnings = append(warnings,
-			errors.Errorf("Table %s has %d underlying column families. Messages will be emitted separately for each family.",
+			errors.Errorf("Table %s has %d underlying column families. Messages will be emitted separately for each family specified, or each family if none specified.",
 				tableDesc.GetName(), tableDesc.NumFamilies(),
 			))
 	}
