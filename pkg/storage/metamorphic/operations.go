@@ -702,7 +702,7 @@ type compactOp struct {
 }
 
 func (c compactOp) run(ctx context.Context) string {
-	err := c.m.engine.CompactRange(c.key, c.endKey, false)
+	err := c.m.engine.CompactRange(c.key, c.endKey)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err.Error())
 	}
