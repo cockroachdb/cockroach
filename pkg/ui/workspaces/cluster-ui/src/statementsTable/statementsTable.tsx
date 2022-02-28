@@ -42,7 +42,6 @@ import {
   statisticsTableTitles,
   NodeNames,
   StatisticType,
-  formatAggregationIntervalColumn,
 } from "../statsTableUtil/statsTableUtil";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -214,7 +213,10 @@ export interface AggregateStatistics {
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-export function shortStatement(summary: StatementSummary, original: string) {
+export function shortStatement(
+  summary: StatementSummary,
+  original: string,
+): string {
   switch (summary.statement) {
     case "update":
       return "UPDATE " + summary.table;
@@ -235,7 +237,7 @@ export function shortStatement(summary: StatementSummary, original: string) {
 
 export function makeStatementFingerprintColumn(
   statType: StatisticType,
-  selectedApp: string,
+  selectedApp: string[],
   search?: string,
   onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics> {
@@ -251,7 +253,7 @@ export function makeStatementFingerprintColumn(
 
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
-  selectedApp: string,
+  selectedApp: string[],
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload: number,
   nodeRegions: { [nodeId: string]: string },

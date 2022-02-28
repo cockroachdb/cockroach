@@ -47,7 +47,7 @@ func (s *statusServer) CombinedStatementStats(
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
-		return nil, serverError(ctx, err)
+		return nil, err
 	}
 
 	return getCombinedStatementStats(
@@ -338,7 +338,7 @@ func (s *statusServer) StatementDetails(
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
-		return nil, serverError(ctx, err)
+		return nil, err
 	}
 
 	return getStatementDetails(
