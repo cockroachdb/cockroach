@@ -63,9 +63,10 @@ func (s *StmtStatsIterator) Next() bool {
 
 	stmtKey := s.stmtKeys[s.idx]
 
-	stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
-	statementStats, _, _ :=
-		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
+	// We don't want to create the key if it doesn't exist, so it's okay to
+	// pass an empty sampledPlanKey, planHash, and transactionFingerprintID as
+	// they are only set when a key is constructed.
+	statementStats, _, _ := s.container.getStatsForStmtWithKey(stmtKey, sampledPlanKey{}, 0, 0, false)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In
@@ -85,19 +86,19 @@ func (s *StmtStatsIterator) Next() bool {
 
 	s.currentValue = &roachpb.CollectedStatementStatistics{
 		Key: roachpb.StatementStatisticsKey{
-			Query:                    stmtKey.anonymizedStmt,
+			Query:                    statementStats.anonymizedStmt,
 			QuerySummary:             querySummary,
 			DistSQL:                  distSQLUsed,
 			Vec:                      vectorized,
-			ImplicitTxn:              stmtKey.implicitTxn,
+			ImplicitTxn:              statementStats.implicitTxn,
 			FullScan:                 fullScan,
-			Failed:                   stmtKey.failed,
+			Failed:                   statementStats.failed,
 			App:                      s.container.appName,
 			Database:                 database,
-			PlanHash:                 stmtKey.planHash,
-			TransactionFingerprintID: stmtKey.transactionFingerprintID,
+			PlanHash:                 statementStats.planHash,
+			TransactionFingerprintID: statementStats.transactionFingerprintID,
 		},
-		ID:    stmtFingerprintID,
+		ID:    statementStats.ID,
 		Stats: data,
 	}
 

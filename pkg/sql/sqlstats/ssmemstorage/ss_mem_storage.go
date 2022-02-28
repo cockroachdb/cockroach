@@ -35,16 +35,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(arul): The fields on stmtKey should really be immutable fields on
-// stmtStats which are set once (on first addition to the map). Instead, we
-// should use stmtFingerprintID (which is a hashed string of the fields below) as the
-// stmtKey.
-type stmtKey struct {
-	sampledPlanKey
-	planHash                 uint64
-	transactionFingerprintID roachpb.TransactionFingerprintID
-}
-
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
 	anonymizedStmt string
@@ -57,15 +47,11 @@ func (p sampledPlanKey) size() int64 {
 	return int64(unsafe.Sizeof(p)) + int64(len(p.anonymizedStmt)) + int64(len(p.database))
 }
 
-func (s stmtKey) String() string {
-	if s.failed {
-		return "!" + s.anonymizedStmt
+func (p sampledPlanKey) String() string {
+	if p.failed {
+		return "!" + p.anonymizedStmt
 	}
-	return s.anonymizedStmt
-}
-
-func (s stmtKey) size() int64 {
-	return s.sampledPlanKey.size() + int64(unsafe.Sizeof(invalidStmtFingerprintID))
+	return p.anonymizedStmt
 }
 
 const invalidStmtFingerprintID = 0
@@ -104,7 +90,7 @@ type Container struct {
 		// reset, we never close this account.
 		acc mon.BoundAccount
 
-		stmts map[stmtKey]*stmtStats
+		stmts map[roachpb.StmtFingerprintID]*stmtStats
 		txns  map[roachpb.TransactionFingerprintID]*txnStats
 
 		// sampledPlanMetadataCache records when was the last time the plan was
@@ -147,7 +133,7 @@ func New(
 		s.mu.acc = mon.MakeBoundAccount()
 	}
 
-	s.mu.stmts = make(map[stmtKey]*stmtStats)
+	s.mu.stmts = make(map[roachpb.StmtFingerprintID]*stmtStats)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats)
 	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
 
@@ -251,18 +237,15 @@ func NewTempContainerFromExistingStmtStats(
 		if currentAppName := statistics[i].Key.KeyData.App; currentAppName != appName {
 			return container, statistics[i:], nil
 		}
-		key := stmtKey{
-			sampledPlanKey: sampledPlanKey{
-				anonymizedStmt: statistics[i].Key.KeyData.Query,
-				failed:         statistics[i].Key.KeyData.Failed,
-				implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
-				database:       statistics[i].Key.KeyData.Database,
-			},
-			planHash:                 statistics[i].Key.KeyData.PlanHash,
-			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
+		planKey := sampledPlanKey{
+			anonymizedStmt: statistics[i].Key.KeyData.Query,
+			failed:         statistics[i].Key.KeyData.Failed,
+			implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
+			database:       statistics[i].Key.KeyData.Database,
 		}
+
 		stmtStats, _, throttled :=
-			container.getStatsForStmtWithKeyLocked(key, statistics[i].ID, true /* createIfNonexistent */)
+			container.getStatsForStmtWithKeyLocked(statistics[i].ID, planKey, 0, 0, true)
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
 		}
@@ -271,7 +254,7 @@ func NewTempContainerFromExistingStmtStats(
 		stmtStats.mu.data.Add(&statistics[i].Stats)
 
 		// Setting all metadata fields.
-		if stmtStats.mu.data.SensitiveInfo.LastErr == "" && key.failed {
+		if stmtStats.mu.data.SensitiveInfo.LastErr == "" && statistics[i].Key.KeyData.Failed {
 			stmtStats.mu.data.SensitiveInfo.LastErr = statistics[i].Stats.SensitiveInfo.LastErr
 		}
 
@@ -394,6 +377,10 @@ type stmtStats struct {
 	// ID is the statementFingerprintID constructed using the stmtKey fields.
 	ID roachpb.StmtFingerprintID
 
+	sampledPlanKey
+	planHash                 uint64
+	transactionFingerprintID roachpb.TransactionFingerprintID
+
 	// data contains all fields that are modified when new statements matching
 	// the stmtKey are executed, and therefore must be protected by a mutex.
 	mu struct {
@@ -480,53 +467,55 @@ func (s *Container) getStatsForStmt(
 	createIfNonexistent bool,
 ) (
 	stats *stmtStats,
-	key stmtKey,
 	stmtFingerprintID roachpb.StmtFingerprintID,
 	created bool,
 	throttled bool,
 ) {
+	planKey := sampledPlanKey{
+		anonymizedStmt: anonymizedStmt,
+		failed:         failed,
+		implicitTxn:    implicitTxn,
+		database:       database,
+	}
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
-	key = stmtKey{
-		sampledPlanKey: sampledPlanKey{
-			anonymizedStmt: anonymizedStmt,
-			failed:         failed,
-			implicitTxn:    implicitTxn,
-			database:       database,
-		},
-		planHash:                 planHash,
-		transactionFingerprintID: transactionFingerprintID,
-	}
 
 	// We first try and see if we can get by without creating a new entry for this
 	// key, as this allows us to not construct the statementFingerprintID from scratch (which
 	// is an expensive operation)
-	stats, _, _ = s.getStatsForStmtWithKey(key, invalidStmtFingerprintID, false /* createIfNonexistent */)
+	stats, _, _ = s.getStatsForStmtWithKey(invalidStmtFingerprintID, planKey, planHash, transactionFingerprintID, false)
 	if stats == nil {
-		stmtFingerprintID = constructStatementFingerprintIDFromStmtKey(key)
-		stats, created, throttled = s.getStatsForStmtWithKey(key, stmtFingerprintID, createIfNonexistent)
-		return stats, key, stmtFingerprintID, created, throttled
+		stmtFingerprintID = constructStatementFingerprintIDFromPlanKey(planKey)
+		stats, created, throttled = s.getStatsForStmtWithKey(stmtFingerprintID, planKey, planHash, transactionFingerprintID, createIfNonexistent)
+		return stats, stmtFingerprintID, created, throttled
 	}
-	return stats, key, stats.ID, false /* created */, false /* throttled */
+	return stats, stats.ID, false /* created */, false /* throttled */
 }
 
 // getStatsForStmtWithKey returns an instance of stmtStats.
 // If createIfNonexistent flag is set to true, then a new entry is created in
 // the Container if it does not yet exist.
 func (s *Container) getStatsForStmtWithKey(
-	key stmtKey, stmtFingerprintID roachpb.StmtFingerprintID, createIfNonexistent bool,
+	stmtFingerprintID roachpb.StmtFingerprintID,
+	planKey sampledPlanKey,
+	planHash uint64,
+	transactionFingerprintID roachpb.TransactionFingerprintID,
+	createIfNonexistent bool,
 ) (stats *stmtStats, created, throttled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.getStatsForStmtWithKeyLocked(key, stmtFingerprintID, createIfNonexistent)
+	return s.getStatsForStmtWithKeyLocked(stmtFingerprintID, planKey, planHash, transactionFingerprintID, createIfNonexistent)
 }
 
-func (s *Container) getStatsForStmtWithKeyLocked(
-	key stmtKey, stmtFingerprintID roachpb.StmtFingerprintID, createIfNonexistent bool,
+func (s *Container) getStatsForStmtWithKeyLocked(stmtFingerprintID roachpb.StmtFingerprintID,
+	planKey sampledPlanKey,
+	planHash uint64,
+	transactionFingerprintID roachpb.TransactionFingerprintID,
+	createIfNonexistent bool,
 ) (stats *stmtStats, created, throttled bool) {
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
-	stats, ok := s.mu.stmts[key]
+	stats, ok := s.mu.stmts[stmtFingerprintID]
 	if !ok && createIfNonexistent {
 		// If the uniqueStmtFingerprintCount is nil, then we don't check for
 		// fingerprint limit.
@@ -545,8 +534,10 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 		}
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
-		s.mu.stmts[key] = stats
-		s.mu.sampledPlanMetadataCache[key.sampledPlanKey] = s.getTimeNow()
+		stats.planHash = planHash
+		stats.transactionFingerprintID = transactionFingerprintID
+		s.mu.stmts[stmtFingerprintID] = stats
+		s.mu.sampledPlanMetadataCache[planKey] = s.getTimeNow()
 
 		return stats, true /* created */, false /* throttled */
 	}
@@ -603,15 +594,15 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 		return
 	}
 	var buf bytes.Buffer
-	for key, stats := range s.mu.stmts {
+	for _, stats := range s.mu.stmts {
 		stats.mu.Lock()
 		json, err := json.Marshal(stats.mu.data)
 		s.mu.Unlock()
 		if err != nil {
-			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.String(), err)
+			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, stats.sampledPlanKey.String(), err)
 			continue
 		}
-		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
+		fmt.Fprintf(&buf, "%q: %s\n", stats.sampledPlanKey.String(), json)
 	}
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
@@ -626,7 +617,7 @@ func (s *Container) Clear(ctx context.Context) {
 
 	// Clear the map, to release the memory; make the new map somewhat already
 	// large for the likely future workload.
-	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
+	s.mu.stmts = make(map[roachpb.StmtFingerprintID]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
 	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
 }
@@ -661,19 +652,15 @@ func (s *Container) MergeApplicationStatementStats(
 			if transformer != nil {
 				transformer(statistics)
 			}
-			key := stmtKey{
-				sampledPlanKey: sampledPlanKey{
-					anonymizedStmt: statistics.Key.Query,
-					failed:         statistics.Key.Failed,
-					implicitTxn:    statistics.Key.ImplicitTxn,
-					database:       statistics.Key.Database,
-				},
-				planHash:                 statistics.Key.PlanHash,
-				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
+			planKey := sampledPlanKey{
+				anonymizedStmt: statistics.Key.Query,
+				failed:         statistics.Key.Failed,
+				implicitTxn:    statistics.Key.ImplicitTxn,
+				database:       statistics.Key.Database,
 			}
 
 			stmtStats, _, throttled :=
-				s.getStatsForStmtWithKey(key, statistics.ID, true /* createIfNoneExistent */)
+				s.getStatsForStmtWithKey(statistics.ID, planKey, statistics.Key.PlanHash, statistics.Key.TransactionFingerprintID, true)
 			if throttled {
 				discardedStats++
 				return nil
@@ -683,9 +670,9 @@ func (s *Container) MergeApplicationStatementStats(
 			defer stmtStats.mu.Unlock()
 
 			stmtStats.mergeStatsLocked(statistics)
-			planLastSampled := s.getLogicalPlanLastSampled(key.sampledPlanKey)
+			planLastSampled := s.getLogicalPlanLastSampled(planKey)
 			if planLastSampled.Before(stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp) {
-				s.setLogicalPlanLastSampled(key.sampledPlanKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+				s.setLogicalPlanLastSampled(planKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 			}
 
 			return nil
@@ -738,7 +725,7 @@ func (s *Container) MergeApplicationTransactionStats(
 // a lock on a will cause a deadlock.
 func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 	other.mu.Lock()
-	statMap := make(map[stmtKey]*stmtStats)
+	statMap := make(map[roachpb.StmtFingerprintID]*stmtStats)
 	for k, v := range other.mu.stmts {
 		statMap[k] = v
 	}
@@ -756,7 +743,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		stats, created, throttled := s.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
+		stats, created, throttled := s.getStatsForStmtWithKey(v.ID, v.sampledPlanKey, v.planHash, v.transactionFingerprintID, true)
 
 		// If we have reached the limit of fingerprints, we skip this fingerprint.
 		// No cleanup necessary.
@@ -769,7 +756,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 		// If we created a new entry for the fingerprint, we check if we have
 		// exceeded our memory budget.
 		if created {
-			estimatedAllocBytes := stats.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
+			estimatedAllocBytes := stats.sizeUnsafe() + int64(unsafe.Sizeof(invalidStmtFingerprintID)) + 8 /* stmtKey hash */
 			// We still want to continue this loop to merge stats that are already
 			// present in our map that do not require allocation.
 			s.mu.Lock()
@@ -920,8 +907,8 @@ type transactionCounts struct {
 	}
 }
 
-func constructStatementFingerprintIDFromStmtKey(key stmtKey) roachpb.StmtFingerprintID {
+func constructStatementFingerprintIDFromPlanKey(sampledPlan sampledPlanKey) roachpb.StmtFingerprintID {
 	return roachpb.ConstructStatementFingerprintID(
-		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
+		sampledPlan.anonymizedStmt, sampledPlan.failed, sampledPlan.implicitTxn, sampledPlan.database,
 	)
 }
