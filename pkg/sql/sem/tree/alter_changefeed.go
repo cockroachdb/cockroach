@@ -58,14 +58,14 @@ var _ AlterChangefeedCmd = &AlterChangefeedUnsetOptions{}
 
 // AlterChangefeedAddTarget represents an ADD <targets> command
 type AlterChangefeedAddTarget struct {
-	Targets TargetList
+	Targets ChangefeedTargets
 	Options KVOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeedAddTarget) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ADD ")
-	ctx.FormatNode(&node.Targets.Tables)
+	ctx.FormatNode(&node.Targets)
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
@@ -74,13 +74,13 @@ func (node *AlterChangefeedAddTarget) Format(ctx *FmtCtx) {
 
 // AlterChangefeedDropTarget represents an DROP <targets> command
 type AlterChangefeedDropTarget struct {
-	Targets TargetList
+	Targets ChangefeedTargets
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeedDropTarget) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP ")
-	ctx.FormatNode(&node.Targets.Tables)
+	ctx.FormatNode(&node.Targets)
 }
 
 // AlterChangefeedSetOptions represents an SET <options> command
