@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -752,6 +755,384 @@ func TestDirectoryConnect(t *testing.T) {
 			// Ensure failure was due to forced drain disconnection.
 			require.Equal(t, int64(1), proxy.metrics.IdleDisconnectCount.Count())
 		})
+	})
+}
+
+func TestConnectionMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tenantID := serverutils.TestTenantID()
+
+	// Start first SQL pod.
+	tenant1, mainDB1 := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(tenantID))
+	tenant1.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	defer tenant1.Stopper().Stop(ctx)
+	defer mainDB1.Close()
+
+	// Start second SQL pod.
+	params2 := tests.CreateTestTenantParams(tenantID)
+	params2.Existing = true
+	tenant2, mainDB2 := serverutils.StartTenant(t, s, params2)
+	tenant2.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	defer tenant2.Stopper().Stop(ctx)
+	defer mainDB2.Close()
+
+	_, err := mainDB1.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+	require.NoError(t, err)
+	_, err = mainDB1.Exec("GRANT admin TO testuser")
+	require.NoError(t, err)
+	_, err = mainDB1.Exec("SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	require.NoError(t, err)
+
+	// Create a proxy server without using a directory. The directory is very
+	// difficult to work with, and there isn't a way to easily stub out fake
+	// loads. For this test, we will stub out lookupAddr in the connector. We
+	// will alternate between tenant1 and tenant2, starting with tenant1.
+	forwarderCh := make(chan *forwarder)
+	opts := &ProxyOptions{SkipVerify: true, RoutingRule: tenant1.SQLAddr()}
+	opts.testingKnobs.afterForward = func(f *forwarder) error {
+		select {
+		case forwarderCh <- f:
+		case <-time.After(10 * time.Second):
+			return errors.New("no receivers for forwarder")
+		}
+		return nil
+	}
+	_, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+
+	// The tenant ID does not matter here since we stubbed RoutingRule.
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-28", addr)
+
+	type queryer interface {
+		QueryRowContext(context.Context, string, ...interface{}) *gosql.Row
+	}
+	// queryAddr queries the SQL node that `db` is connected to for its address.
+	queryAddr := func(t *testing.T, ctx context.Context, db queryer) string {
+		t.Helper()
+		var host, port string
+		require.NoError(t, db.QueryRowContext(ctx, `
+			SELECT
+				a.value AS "host", b.value AS "port"
+			FROM crdb_internal.node_runtime_info a, crdb_internal.node_runtime_info b
+			WHERE a.component = 'DB' AND a.field = 'Host'
+				AND b.component = 'DB' AND b.field = 'Port'
+		`).Scan(&host, &port))
+		return fmt.Sprintf("%s:%s", host, port)
+	}
+
+	// Test that connection transfers are successful. Note that if one sub-test
+	// fails, the remaining will fail as well since they all use the same
+	// forwarder instance.
+	t.Run("successful", func(t *testing.T) {
+		tCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Spin up a goroutine to trigger the initial connection.
+		go func() {
+			_ = db.PingContext(tCtx)
+		}()
+
+		var f *forwarder
+		select {
+		case f = <-forwarderCh:
+		case <-time.After(10 * time.Second):
+			t.Fatal("no connection")
+		}
+
+		// Set up forwarder hooks.
+		prevTenant1 := true
+		var lookupAddrDelayDuration time.Duration
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+			if lookupAddrDelayDuration != 0 {
+				select {
+				case <-ctx.Done():
+					return "", errors.Wrap(ctx.Err(), "injected delays")
+				case <-time.After(lookupAddrDelayDuration):
+				}
+			}
+			if prevTenant1 {
+				prevTenant1 = false
+				return tenant2.SQLAddr(), nil
+			}
+			prevTenant1 = true
+			return tenant1.SQLAddr(), nil
+		}
+
+		t.Run("normal_transfer", func(t *testing.T) {
+			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
+
+			_, err = db.Exec("SET application_name = 'foo'")
+			require.NoError(t, err)
+
+			// Show that we get alternating SQL pods when we transfer.
+			f.RequestTransfer()
+			require.Eventually(t, func() bool {
+				return f.metrics.ConnMigrationSuccessCount.Count() == 1
+			}, 20*time.Second, 25*time.Millisecond)
+			require.Equal(t, tenant2.SQLAddr(), queryAddr(t, tCtx, db))
+
+			var name string
+			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
+			require.Equal(t, "foo", name)
+
+			_, err = db.Exec("SET application_name = 'bar'")
+			require.NoError(t, err)
+
+			f.RequestTransfer()
+			require.Eventually(t, func() bool {
+				return f.metrics.ConnMigrationSuccessCount.Count() == 1
+			}, 20*time.Second, 25*time.Millisecond)
+			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
+
+			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
+			require.Equal(t, "bar", name)
+
+			// Now attempt a transfer concurrently with requests.
+			closerCh := make(chan struct{})
+			go func() {
+				for i := 0; i < 10 && tCtx.Err() == nil; i++ {
+					f.RequestTransfer()
+					time.Sleep(500 * time.Millisecond)
+				}
+				closerCh <- struct{}{}
+			}()
+
+			// This test runs for 5 seconds.
+			var tenant1Addr, tenant2Addr int
+			for i := 0; i < 100; i++ {
+				addr := queryAddr(t, tCtx, db)
+				if addr == tenant1.SQLAddr() {
+					tenant1Addr++
+				} else {
+					require.Equal(t, tenant2.SQLAddr(), addr)
+					tenant2Addr++
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			// In 5s, we should have at least 10 successful transfers. Just do
+			// an approximation here.
+			require.Eventually(t, func() bool {
+				return f.metrics.ConnMigrationSuccessCount.Count() >= 5
+			}, 20*time.Second, 25*time.Millisecond)
+			require.True(t, tenant1Addr > 2)
+			require.True(t, tenant2Addr > 2)
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			// Ensure that the goroutine terminates so other subtests are not
+			// affected.
+			<-closerCh
+
+			// There's a chance that we still have an in-progress transfer, so
+			// attempt to wait.
+			require.Eventually(t, func() bool {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				return stateReady == f.mu.state
+			}, 10*time.Second, 25*time.Millisecond)
+
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationRequestedCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationProtocolErrorCount.Count())
+		})
+
+		// Transfers should fail if there is an open transaction. These failed
+		// transfers should not close the connection.
+		t.Run("failed_transfers_with_tx", func(t *testing.T) {
+			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			initAddr := queryAddr(t, tCtx, db)
+
+			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+				for i := 0; i < 10; i++ {
+					f.RequestTransfer()
+					addr := queryAddr(t, tCtx, tx)
+					if initAddr != addr {
+						return errors.Newf(
+							"address does not match, expected %s, found %s",
+							initAddr,
+							addr,
+						)
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+				return nil
+			})
+			require.NoError(t, err)
+
+			// Make sure there are no pending transfers.
+			func() {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				require.Equal(t, stateReady, f.mu.state)
+			}()
+
+			// Just check that we have half of what we requested since we cannot
+			// guarantee that the transfer will run within 50ms.
+			require.True(t, f.metrics.ConnMigrationErrorRecoverableCount.Count() >= 5)
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+			prevErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
+
+			// Once the transaction is closed, transfers should work.
+			f.RequestTransfer()
+			require.Eventually(t, func() bool {
+				return f.metrics.ConnMigrationSuccessCount.Count() == initSuccessCount+1
+			}, 20*time.Second, 25*time.Millisecond)
+			require.NotEqual(t, initAddr, queryAddr(t, tCtx, db))
+			require.Equal(t, prevErrorRecoverableCount, f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			// We have already asserted metrics above, so transfer must have
+			// been completed.
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.Equal(t, stateReady, f.mu.state)
+
+			require.Equal(t, int64(0), f.metrics.ConnMigrationProtocolErrorCount.Count())
+		})
+
+		// Transfer timeout caused by dial issues should not close the session.
+		// We will test this by introducing delays when connecting to the SQL
+		// pod.
+		t.Run("failed_transfers_with_dial_issues", func(t *testing.T) {
+			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
+			initAddr := queryAddr(t, tCtx, db)
+
+			// Set the delay longer than the timeout.
+			lookupAddrDelayDuration = 10 * time.Second
+			f.testingKnobs.transferTimeoutDuration = func() time.Duration {
+				return 3 * time.Second
+			}
+
+			f.RequestTransfer()
+			require.Eventually(t, func() bool {
+				return f.metrics.ConnMigrationErrorRecoverableCount.Count() == initErrorRecoverableCount+1
+			}, 20*time.Second, 25*time.Millisecond)
+			require.Equal(t, initAddr, queryAddr(t, tCtx, db))
+			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			// We have already asserted metrics above, so transfer must have
+			// been completed.
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.Equal(t, stateReady, f.mu.state)
+
+			require.Equal(t, int64(0), f.metrics.ConnMigrationProtocolErrorCount.Count())
+		})
+	})
+
+	// Test transfer timeouts caused by waiting for a transfer state response.
+	// In reality, this can only be caused by pipelined queries. Consider the
+	// folllowing:
+	//   1. short-running simple query
+	//   2. long-running simple query
+	//   3. SHOW TRANSFER STATE
+	// When (1) returns a response, the forwarder will see that we're in a
+	// safe transfer point, and initiate (3). But (2) may block until we hit
+	// a timeout.
+	//
+	// There's no easy way to simulate pipelined queries. pgtest (that allows
+	// us to send individual pgwire messages) does not support authentication,
+	// which is what the proxy needs, so we will stub isSafeTransferPoint
+	// instead.
+	t.Run("transfer_timeout_in_response", func(t *testing.T) {
+		tCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Use a single connection so that we don't reopen when the connection
+		// is closed.
+		conn, err := db.Conn(tCtx)
+		require.NoError(t, err)
+
+		// Spin up a goroutine to trigger the initial connection.
+		go func() {
+			_ = conn.PingContext(tCtx)
+		}()
+
+		var f *forwarder
+		select {
+		case f = <-forwarderCh:
+		case <-time.After(10 * time.Second):
+			t.Fatal("no connection")
+		}
+
+		// Set up forwarder hooks.
+		prevTenant1 := true
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+			if prevTenant1 {
+				prevTenant1 = false
+				return tenant2.SQLAddr(), nil
+			}
+			prevTenant1 = true
+			return tenant1.SQLAddr(), nil
+		}
+		f.testingKnobs.isSafeTransferPoint = func() bool {
+			return true
+		}
+		f.testingKnobs.transferTimeoutDuration = func() time.Duration {
+			// Transfer timeout is 3s, and we'll run pg_sleep for 10s.
+			return 3 * time.Second
+		}
+
+		goCh := make(chan struct{}, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			goCh <- struct{}{}
+			_, err = conn.ExecContext(tCtx, "SELECT pg_sleep(10)")
+			errCh <- err
+		}()
+
+		// Block until goroutine is started. We want to make sure we run the
+		// transfer request *after* sending the query. This doesn't guarantee,
+		// but is the best that we can do. We also added a sleep call here.
+		//
+		// Alternatively, we could open another connection, and query the server
+		// to make sure pg_sleep is running, but that seems unnecessary for just
+		// one test.
+		<-goCh
+		time.Sleep(250 * time.Millisecond)
+		f.RequestTransfer()
+
+		// Connection should be closed because this is a non-recoverable error,
+		// i.e. timeout after sending the request, but before fully receiving
+		// its response.
+		require.Eventually(t, func() bool {
+			err := conn.PingContext(tCtx)
+			return err != nil && strings.Contains(err.Error(), "bad connection")
+		}, 20*time.Second, 25*time.Millisecond)
+
+		select {
+		case <-time.After(10 * time.Second):
+			t.Fatalf("require that pg_sleep query terminates")
+		case err = <-errCh:
+			require.NotNil(t, err)
+			require.Regexp(t, "bad connection", err.Error())
+		}
+		require.Eventually(t, func() bool {
+			return f.metrics.ConnMigrationErrorFatalCount.Count() == 1
+		}, 30*time.Second, 25*time.Millisecond)
+		require.Equal(t, int64(0), f.metrics.ConnMigrationProtocolErrorCount.Count())
+
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		require.Equal(t, stateTransferSessionSerialization, f.mu.state)
 	})
 }
 
