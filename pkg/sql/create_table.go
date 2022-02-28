@@ -2399,6 +2399,7 @@ func CreateRowLevelTTLScheduledJob(
 	tblID descpb.ID,
 	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
+	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
 	env := JobSchedulerEnv(execCfg)
 	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
 	if err != nil {

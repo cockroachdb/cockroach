@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
+        "//pkg/server/telemetry",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
@@ -18,6 +19,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",

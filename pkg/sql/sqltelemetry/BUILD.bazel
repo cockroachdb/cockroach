@@ -23,6 +23,7 @@ go_library(
         "schema.go",
         "session.go",
         "show.go",
+        "ttl.go",
         "user_defined_schema.go",
         "virtual_schema.go",
     ],
