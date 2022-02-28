@@ -2,7 +2,7 @@
 #
 # Prepare the commit message by adding a release note.
 
-require_justification=0
+require_justification=1
 set -euo pipefail
 
 if [[ "${2-}" = "message" ]]; then
