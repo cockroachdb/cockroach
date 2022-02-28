@@ -507,7 +507,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			m.names.insert(newDescVersionState)
 		}
 		if toRelease != nil {
-			releaseLease(ctx, toRelease, m)
+			releaseLease(newCtx, toRelease, m)
 		}
 		return true, nil
 	})
