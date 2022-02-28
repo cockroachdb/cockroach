@@ -80,7 +80,7 @@ func TestOpenExistingStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("dir=%s", test.dir), func(t *testing.T) {
-			_, err := OpenExistingStore(test.dir, stopper, false /* readOnly */)
+			_, err := OpenExistingStore(test.dir, stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
 			if !testutils.IsError(err, test.expErr) {
 				t.Errorf("wanted %s but got %v", test.expErr, err)
 			}
@@ -114,7 +114,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
-			db, err := OpenExistingStore(storePath, stopper, test.readOnly)
+			db, err := OpenExistingStore(storePath, stopper, test.readOnly, false /* disableAutomaticCompactions */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -255,7 +255,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					stopper := stop.NewStopper()
 					defer stopper.Stop(ctx)
 
-					db, err := OpenExistingStore(storePaths[idx], stopper, false /* readOnly */)
+					db, err := OpenExistingStore(storePaths[idx], stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
 					if err != nil {
 						return err
 					}

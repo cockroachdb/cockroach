@@ -203,7 +203,7 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 
 	var stores []storage.Engine
 	for _, storeSpec := range debugRecoverCollectInfoOpts.Stores.Specs {
-		db, err := OpenExistingStore(storeSpec.Path, stopper, true /* readOnly */)
+		db, err := OpenExistingStore(storeSpec.Path, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q, ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)
@@ -457,7 +457,7 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 	var localNodeID roachpb.NodeID
 	batches := make(map[roachpb.StoreID]storage.Batch)
 	for _, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
-		store, err := OpenExistingStore(storeSpec.Path, stopper, false /* readOnly */)
+		store, err := OpenExistingStore(storeSpec.Path, stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)

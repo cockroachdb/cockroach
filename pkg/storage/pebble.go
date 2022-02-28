@@ -1482,14 +1482,14 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 
 // Compact implements the Engine interface.
 func (p *Pebble) Compact() error {
-	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax))
+	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax), true)
 }
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) error {
 	bufStart := EncodeMVCCKey(MVCCKey{start, hlc.Timestamp{}})
 	bufEnd := EncodeMVCCKey(MVCCKey{end, hlc.Timestamp{}})
-	return p.db.Compact(bufStart, bufEnd)
+	return p.db.Compact(bufStart, bufEnd, true)
 }
 
 // InMem returns true if the receiver is an in-memory engine and false

@@ -48,6 +48,11 @@ var MustExist ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
+var DisableAutomaticCompactions ConfigOption = func(cfg *engineConfig) error {
+	cfg.Opts.DisableAutomaticCompactions = true
+	return nil
+}
+
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {
