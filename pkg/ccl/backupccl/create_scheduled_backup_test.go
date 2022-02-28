@@ -801,7 +801,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 				}
 
 				// Verify backup.
-				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestFileName))
+				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestHistoryDirectory+"/"+latestFileName))
 				require.NoError(t, err)
 				backedUp := th.sqlDB.QueryStr(t,
 					`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
