@@ -328,7 +328,7 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.ExpectErr(t,
-			`pq: new sink type "s3" does not match original sink type "kafka", sink type cannot be altered`,
+			`pq: New sink type "s3" does not match original sink type "kafka". Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = 's3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`, feed.JobID()),
 		)
 	}
