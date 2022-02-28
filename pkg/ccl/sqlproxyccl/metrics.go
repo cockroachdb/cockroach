@@ -15,16 +15,24 @@ import (
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
 type metrics struct {
-	BackendDisconnectCount *metric.Counter
-	IdleDisconnectCount    *metric.Counter
-	BackendDownCount       *metric.Counter
-	ClientDisconnectCount  *metric.Counter
-	CurConnCount           *metric.Gauge
-	RoutingErrCount        *metric.Counter
-	RefusedConnCount       *metric.Counter
-	SuccessfulConnCount    *metric.Counter
-	AuthFailedCount        *metric.Counter
-	ExpiredClientConnCount *metric.Counter
+	BackendDisconnectCount               *metric.Counter
+	IdleDisconnectCount                  *metric.Counter
+	BackendDownCount                     *metric.Counter
+	ClientDisconnectCount                *metric.Counter
+	CurConnCount                         *metric.Gauge
+	RoutingErrCount                      *metric.Counter
+	RefusedConnCount                     *metric.Counter
+	SuccessfulConnCount                  *metric.Counter
+	AuthFailedCount                      *metric.Counter
+	ExpiredClientConnCount               *metric.Counter
+	ConnMigrationRequestedCount          *metric.Counter
+	ConnMigrationAcceptedCount           *metric.Counter
+	ConnMigrationRejectedCount           *metric.Counter
+	ConnMigrationSuccessCount            *metric.Counter
+	ConnMigrationErrorCount              *metric.Counter
+	ConnMigrationFailCount               *metric.Counter
+	ConnMigrationTimeoutClosedCount      *metric.Counter
+	ConnMigrationTimeoutRecoverableCount *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -93,6 +101,65 @@ var (
 		Measurement: "Expired Client Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	// Connection migration metrics.
+	//
+	// requested = accepted + rejected
+	// - Connections are rejected if we're not in a safe transfer point.
+	//
+	// accepted >= success + error + fail
+	// - Note that it's >= because some timeout errors are excluded. For
+	//   example, if we timed out in writing the SHOW TRANSFER STATE query to
+	//   the server, we'll see a timeout_closed metric, but not the error metric.
+	metaConnMigrationRequestedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.requested",
+		Help:        "Number of requested connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationAcceptedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.accepted",
+		Help:        "Number of accepted connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationRejectedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.rejected",
+		Help:        "Number of rejected connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationSuccessCount = metric.Metadata{
+		Name:        "proxy.conn_migration.success",
+		Help:        "Number of connection migrations which are successful",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationErrorCount = metric.Metadata{
+		// When connection migrations errored out, connections will be closed.
+		Name:        "proxy.conn_migration.error",
+		Help:        "Number of connection migrations which errored",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationFailCount = metric.Metadata{
+		// Connections are recoverable, so they won't be closed.
+		Name:        "proxy.conn_migration.fail",
+		Help:        "Number of connection migrations which failed",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationTimeoutClosedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.timeout_closed",
+		Help:        "Number of expired connection migrations that closes connections",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationTimeoutRecoverableCount = metric.Metadata{
+		Name:        "proxy.conn_migration.timeout_recoverable",
+		Help:        "Number of expired connection migrations that recovers connections",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -108,6 +175,15 @@ func makeProxyMetrics() metrics {
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
+		// Connection migration metrics.
+		ConnMigrationRequestedCount:          metric.NewCounter(metaConnMigrationRequestedCount),
+		ConnMigrationAcceptedCount:           metric.NewCounter(metaConnMigrationAcceptedCount),
+		ConnMigrationRejectedCount:           metric.NewCounter(metaConnMigrationRejectedCount),
+		ConnMigrationSuccessCount:            metric.NewCounter(metaConnMigrationSuccessCount),
+		ConnMigrationErrorCount:              metric.NewCounter(metaConnMigrationErrorCount),
+		ConnMigrationFailCount:               metric.NewCounter(metaConnMigrationFailCount),
+		ConnMigrationTimeoutClosedCount:      metric.NewCounter(metaConnMigrationTimeoutClosedCount),
+		ConnMigrationTimeoutRecoverableCount: metric.NewCounter(metaConnMigrationTimeoutRecoverableCount),
 	}
 }
 
