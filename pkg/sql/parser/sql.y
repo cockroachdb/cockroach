@@ -11845,7 +11845,10 @@ a_expr:
   {
     $$.val = &tree.IsNotNullExpr{Expr: $1.expr()}
   }
-| row OVERLAPS row { return unimplemented(sqllex, "overlaps") }
+| row OVERLAPS row
+  {
+   $$.val = &tree.FuncExpr{Func: tree.WrapFunction("overlaps"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
 | a_expr IS TRUE %prec IS
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
