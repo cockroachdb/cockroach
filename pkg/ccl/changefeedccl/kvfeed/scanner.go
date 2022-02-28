@@ -40,9 +40,10 @@ type kvScanner interface {
 }
 
 type scanRequestScanner struct {
-	settings *cluster.Settings
-	gossip   gossip.OptionalGossip
-	db       *kv.DB
+	settings                *cluster.Settings
+	gossip                  gossip.OptionalGossip
+	db                      *kv.DB
+	onBackfillRangeCallback func(int64) (func(), func())
 }
 
 var _ kvScanner = (*scanRequestScanner)(nil)
@@ -65,6 +66,12 @@ func (p *scanRequestScanner) Scan(
 		return err
 	}
 
+	var backfillDec, backfillClear func()
+	if p.onBackfillRangeCallback != nil {
+		backfillDec, backfillClear = p.onBackfillRangeCallback(int64(len(spans)))
+		defer backfillClear()
+	}
+
 	maxConcurrentExports := maxConcurrentExportRequests(p.gossip, &p.settings.SV)
 	exportLim := limit.MakeConcurrentRequestLimiter("changefeedExportRequestLimiter", maxConcurrentExports)
 	g := ctxgroup.WithContext(ctx)
@@ -82,6 +89,9 @@ func (p *scanRequestScanner) Scan(
 			defer limAlloc.Release()
 			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
+			if backfillDec != nil {
+				backfillDec()
+			}
 			if log.V(2) {
 				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
@@ -120,7 +130,9 @@ func (p *scanRequestScanner) exportSpan(
 		// during result parsing.
 		b.AddRawRequest(r)
 		if knobs.BeforeScanRequest != nil {
-			knobs.BeforeScanRequest(b)
+			if err := knobs.BeforeScanRequest(b); err != nil {
+				return err
+			}
 		}
 
 		if err := txn.Run(ctx, b); err != nil {
