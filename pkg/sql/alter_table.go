@@ -1905,6 +1905,8 @@ func handleTTLStorageParamChange(
 			return err
 		}
 	case before != nil && after == nil:
+		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
+
 		// Keep the TTL from beforehand, but create the DROP COLUMN job and the
 		// associated mutation.
 		tableDesc.RowLevelTTL = before

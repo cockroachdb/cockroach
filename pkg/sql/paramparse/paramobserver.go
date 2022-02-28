@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -42,6 +44,8 @@ func SetStorageParameters(
 		if sp.Value == nil {
 			return pgerror.Newf(pgcode.InvalidParameterValue, "storage parameter %q requires a value", key)
 		}
+		telemetry.Inc(sqltelemetry.SetTableStorageParameter(key))
+
 		// Expressions may be an unresolved name.
 		// Cast these as strings.
 		expr := UnresolvedNameToStrVal(sp.Value)
@@ -75,6 +79,7 @@ func ResetStorageParameters(
 	paramObserver StorageParamObserver,
 ) error {
 	for _, p := range params {
+		telemetry.Inc(sqltelemetry.ResetTableStorageParameter(string(p)))
 		if err := paramObserver.onReset(evalCtx, string(p)); err != nil {
 			return err
 		}
