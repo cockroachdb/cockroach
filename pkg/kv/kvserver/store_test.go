@@ -2737,15 +2737,16 @@ func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotRequest) error {
 }
 
 type fakeStorePool struct {
-	failedThrottles int
+	declinedThrottles int
+	failedThrottles   int
 }
 
 func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID roachpb.StoreID) {
 	switch reason {
+	case throttleDeclined:
+		sp.declinedThrottles++
 	case throttleFailed:
 		sp.failedThrottles++
-	default:
-		panic("unknown reason")
 	}
 }
 
@@ -2762,6 +2763,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	header := kvserverpb.SnapshotRequest_Header{
+		CanDecline: true,
 		State: kvserverpb.ReplicaState{
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
@@ -2779,6 +2781,39 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		}
 		if !errors.Is(err, expectedErr) {
 			t.Fatalf("expected error %s, but found %s", err, expectedErr)
+		}
+	}
+
+	// Test that a declined snapshot causes a decline throttle.
+	{
+		sp := &fakeStorePool{}
+		resp := &kvserverpb.SnapshotResponse{
+			Status: kvserverpb.SnapshotResponse_DECLINED,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
+		if sp.declinedThrottles != 1 {
+			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
+		}
+	}
+
+	// Test that a declined but required snapshot causes a fail throttle.
+	{
+		sp := &fakeStorePool{}
+		header.CanDecline = false
+		resp := &kvserverpb.SnapshotResponse{
+			Status: kvserverpb.SnapshotResponse_DECLINED,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
+		if sp.failedThrottles != 1 {
+			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
 		}
 	}
 
@@ -2832,6 +2867,18 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 	cleanupEmpty()
 
+	// Verify that a declinable snapshot will be declined if another is in
+	// progress.
+	cleanupNonEmpty2, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+		RangeSize:  1,
+		CanDecline: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanupNonEmpty2 != nil {
+		t.Fatalf("got unexpected non-nil cleanup method")
+	}
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
@@ -2861,8 +2908,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 }
 
-// TestReserveSnapshotFullnessLimit documents that we have no mechanism to
-// decline snapshots based on the remaining capacity of the target store.
+// TestReserveSnapshotFullnessLimit verifies that snapshots are rejected when
+// the recipient store's disk is near full.
 func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2885,6 +2932,17 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
 	s.cfg.StorePool.detailsMu.Unlock()
 
+	// A declinable snapshot to a nearly full store should be rejected.
+	cleanupRejected, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+		RangeSize:  1,
+		CanDecline: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanupRejected != nil {
+		t.Fatalf("got unexpected non-nil cleanup method")
+	}
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
 	}
@@ -2909,6 +2967,17 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
 	s.cfg.StorePool.detailsMu.Unlock()
 
+	// A declinable snapshot to a nearly full store should be rejected.
+	cleanupRejected2, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+		RangeSize:  desc.Capacity.Available + 1,
+		CanDecline: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanupRejected2 != nil {
+		t.Fatalf("got unexpected non-nil cleanup method")
+	}
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
 	}

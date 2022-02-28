@@ -40,7 +40,9 @@ import (
 
 const (
 	// Messages that provide detail about why a snapshot was rejected.
-	storeDrainingMsg = "store is draining"
+	snapshotStoreTooFullMsg = "store almost out of disk space"
+	snapshotApplySemBusyMsg = "store busy applying snapshots"
+	storeDrainingMsg        = "store is draining"
 
 	// IntersectingSnapshotMsg is part of the error message returned from
 	// canAcceptSnapshotLocked and is exposed here so testing can rely on it.
@@ -404,17 +406,32 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 }
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
-// to cleanup the reservation and release its resources.
+// to cleanup the reservation and release its resources. A nil cleanup function
+// and a non-empty rejectionMessage indicates the reservation was declined.
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
 	tBegin := timeutil.Now()
-
-	// Empty snapshots are exempt from rate limits because they're so cheap to
-	// apply. This vastly speeds up rebalancing any empty ranges created by a
-	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
-	// getting stuck behind large snapshots managed by the replicate queue.
-	if header.RangeSize != 0 {
+	if header.RangeSize == 0 {
+		// Empty snapshots are exempt from rate limits because they're so cheap to
+		// apply. This vastly speeds up rebalancing any empty ranges created by a
+		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
+		// getting stuck behind large snapshots managed by the replicate queue.
+	} else if header.CanDecline {
+		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
+		if ok && (!maxCapacityCheck(storeDesc) || header.RangeSize > storeDesc.Capacity.Available) {
+			return nil, nil
+		}
+		select {
+		case s.snapshotApplySem <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-s.stopper.ShouldQuiesce():
+			return nil, errors.Errorf("stopped")
+		default:
+			return nil, nil
+		}
+	} else {
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -636,6 +653,12 @@ func (s *Store) receiveSnapshot(
 	cleanup, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err
+	}
+	if cleanup == nil {
+		return stream.Send(&kvserverpb.SnapshotResponse{
+			Status:  kvserverpb.SnapshotResponse_DECLINED,
+			Message: err.Error(),
+		})
 	}
 	defer cleanup()
 
@@ -1107,6 +1130,20 @@ func sendSnapshot(
 		return err
 	}
 	switch resp.Status {
+	case kvserverpb.SnapshotResponse_DECLINED:
+		if header.CanDecline {
+			declinedMsg := "reservation rejected"
+			if len(resp.Message) > 0 {
+				declinedMsg = resp.Message
+			}
+			err := &benignError{errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)}
+			storePool.throttle(throttleDeclined, err.Error(), to.StoreID)
+			return err
+		}
+		err := errors.Errorf("%s: programming error: remote declined required %s: %s",
+			to, snap, resp.Message)
+		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
+		return err
 	case kvserverpb.SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",

@@ -41,11 +41,22 @@ const (
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
 )
 
+// DeclinedReservationsTimeout specifies a duration during which the local
+// replicate queue will not consider stores which have rejected a reservation a
+// viable target.
+var DeclinedReservationsTimeout = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.declined_reservation_timeout",
+	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
+	1*time.Second,
+	settings.NonNegativeDuration,
+)
+
 // FailedReservationsTimeout specifies a duration during which the local
 // replicate queue will not consider stores which have failed a reservation a
 // viable target.
 var FailedReservationsTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
@@ -925,6 +936,7 @@ type throttleReason int
 
 const (
 	_ throttleReason = iota
+	throttleDeclined
 	throttleFailed
 )
 
@@ -939,10 +951,19 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 	detail := sp.getStoreDetailLocked(storeID)
 	detail.throttledBecause = why
 
-	// If a snapshot is declined, we mark the store detail as having been declined
-	// so it won't be considered as a candidate for new replicas until after the
-	// configured timeout period has passed.
+	// If a snapshot is declined, be it due to an error or because it was
+	// rejected, we mark the store detail as having been declined so it won't
+	// be considered as a candidate for new replicas until after the configured
+	// timeout period has passed.
 	switch reason {
+	case throttleDeclined:
+		timeout := DeclinedReservationsTimeout.Get(&sp.st.SV)
+		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
+		if log.V(2) {
+			ctx := sp.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "snapshot declined (%s), s%d will be throttled for %s until %s",
+				why, storeID, timeout, detail.throttledUntil)
+		}
 	case throttleFailed:
 		timeout := FailedReservationsTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
@@ -951,8 +972,6 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
 				why, storeID, timeout, detail.throttledUntil)
 		}
-	default:
-		log.Warningf(sp.AnnotateCtx(context.TODO()), "unknown throttle reason %v", reason)
 	}
 }
 
