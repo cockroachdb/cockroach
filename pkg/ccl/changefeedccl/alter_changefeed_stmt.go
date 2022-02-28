@@ -192,7 +192,7 @@ func alterChangefeedPlanHook(
 						if newSinkURI.Scheme != prevSinkURI.Scheme {
 							return pgerror.Newf(
 								pgcode.InvalidParameterValue,
-								`new sink type %q does not match original sink type %q, sink type cannot be altered`,
+								`New sink type %q does not match original sink type %q. Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
 								newSinkURI.Scheme,
 								prevSinkURI.Scheme,
 							)
