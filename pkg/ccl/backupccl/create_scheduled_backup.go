@@ -555,16 +555,10 @@ func checkForExistingBackupsInCollection(
 	if err != nil {
 		return err
 	}
-	defaultStore, err := makeCloudFactory(ctx, collectionURI, p.User())
-	if err != nil {
-		return err
-	}
-	defer defaultStore.Close()
 
-	r, err := defaultStore.ReadFile(ctx, latestFileName)
+	_, err = readLatestFile(ctx, collectionURI, makeCloudFactory, p.User())
 	if err == nil {
 		// A full backup has already been taken to this location.
-		r.Close(ctx)
 		return errors.Newf("backups already created in %s; to ignore existing backups, "+
 			"the schedule can be created with the 'ignore_existing_backups' option",
 			collectionURI)
