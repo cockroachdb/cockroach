@@ -276,12 +276,17 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescsFn := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
+		seen := make(map[descpb.ID]struct{}, len(tf.targets))
 		initialDescs = initialDescs[:0]
 		if err := txn.SetFixedTimestamp(ctx, initialTableDescTs); err != nil {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
 		for _, table := range tf.targets {
+			if _, dup := seen[table.TableID]; dup {
+				continue
+			}
+			seen[table.TableID] = struct{}{}
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.AvoidLeased = true
 			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
