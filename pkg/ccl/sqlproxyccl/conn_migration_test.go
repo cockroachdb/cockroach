@@ -284,7 +284,7 @@ func TestWaitForShowTransferState(t *testing.T) {
 				},
 				&pgproto3.DataRow{
 					Values: [][]byte{
-						[]byte{},
+						{},
 						[]byte("foo-state"),
 						[]byte("foo-token"),
 						[]byte("foo-transfer-key"),
