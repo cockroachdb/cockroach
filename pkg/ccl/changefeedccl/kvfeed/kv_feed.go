@@ -36,22 +36,23 @@ import (
 
 // Config configures a kvfeed.
 type Config struct {
-	Settings           *cluster.Settings
-	DB                 *kv.DB
-	Codec              keys.SQLCodec
-	Clock              *hlc.Clock
-	Gossip             gossip.OptionalGossip
-	Spans              []roachpb.Span
-	BackfillCheckpoint []roachpb.Span
-	Targets            []jobspb.ChangefeedTargetSpecification
-	Writer             kvevent.Writer
-	Metrics            *kvevent.Metrics
-	OnBackfillCallback func() func()
-	MM                 *mon.BytesMonitor
-	WithDiff           bool
-	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
-	SchemaChangePolicy changefeedbase.SchemaChangePolicy
-	SchemaFeed         schemafeed.SchemaFeed
+	Settings                *cluster.Settings
+	DB                      *kv.DB
+	Codec                   keys.SQLCodec
+	Clock                   *hlc.Clock
+	Gossip                  gossip.OptionalGossip
+	Spans                   []roachpb.Span
+	BackfillCheckpoint      []roachpb.Span
+	Targets                 []jobspb.ChangefeedTargetSpecification
+	Writer                  kvevent.Writer
+	Metrics                 *kvevent.Metrics
+	OnBackfillCallback      func() func()
+	OnBackfillRangeCallback func(int64) (func(), func())
+	MM                      *mon.BytesMonitor
+	WithDiff                bool
+	SchemaChangeEvents      changefeedbase.SchemaChangeEventClass
+	SchemaChangePolicy      changefeedbase.SchemaChangePolicy
+	SchemaFeed              schemafeed.SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -74,9 +75,10 @@ func Run(ctx context.Context, cfg Config) error {
 	var sc kvScanner
 	{
 		sc = &scanRequestScanner{
-			settings: cfg.Settings,
-			gossip:   cfg.Gossip,
-			db:       cfg.DB,
+			settings:                cfg.Settings,
+			gossip:                  cfg.Gossip,
+			db:                      cfg.DB,
+			onBackfillRangeCallback: cfg.OnBackfillRangeCallback,
 		}
 	}
 	var pff physicalFeedFactory
