@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,12 +67,6 @@ func makeClusterWideZipRequests(
 				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
 			},
 			pathName: problemRangesName,
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
-			},
-			pathName: tenantRangesName,
 		},
 	}
 }
@@ -196,6 +191,43 @@ func (zc *debugZipContext) collectClusterData(
 			livenessByNodeID = lresponse.Statuses
 		}
 	}
+
+	{
+		var tenantRanges *serverpb.TenantRangesResponse
+		s := zc.clusterPrinter.start("requesting tenant ranges")
+		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+			var err error
+			tenantRanges, err = zc.status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
+			return err
+		}); requestErr != nil {
+			if err := zc.z.createError(s, tenantRangesName, requestErr); err != nil {
+				return nodesInfo{}, nil, errors.Wrap(err, "fetching tenant ranges")
+			}
+		} else {
+			s.done()
+			rangesFound := 0
+			for _, value := range tenantRanges.RangesByLocality {
+				rangesFound += len(value.Ranges)
+			}
+			zc.clusterPrinter.info("%d tenant ranges found", rangesFound)
+			for locality, rangeList := range tenantRanges.RangesByLocality {
+				sort.Slice(rangeList.Ranges, func(i, j int) bool {
+					return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
+				})
+				sLocality := zc.clusterPrinter.start("writing tenant ranges for locality: %s", locality)
+				prefix := fmt.Sprintf("%s/%s", tenantRangesName, locality)
+				for _, r := range rangeList.Ranges {
+					sRange := zc.clusterPrinter.start("writing tenant range %d", r.RangeID)
+					name := fmt.Sprintf("%s/%d", prefix, r.RangeID)
+					if err := zc.z.createJSON(sRange, name+".json", r); err != nil {
+						return nodesInfo{}, nil, errors.Wrapf(err, "writing tenant range %d for locality %s", r.RangeID, locality)
+					}
+				}
+				sLocality.done()
+			}
+		}
+	}
+
 	return ni, livenessByNodeID, nil
 }
 
