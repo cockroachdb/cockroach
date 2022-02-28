@@ -45,6 +45,7 @@ go_library(
 
 go_test(
     name = "tenant_test",
+    size = "large",
     srcs = [
         "directory_test.go",
         "main_test.go",
