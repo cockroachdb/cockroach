@@ -27,8 +27,8 @@ go_library(
         "//pkg/sql/sqlfsm",
         "//pkg/util/envutil",
         "//pkg/util/syncutil",
+        "//temp_vendor/github.com/knz/go-libedit",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_knz_go_libedit//:go-libedit",
     ],
 )
 

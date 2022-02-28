@@ -12,7 +12,7 @@ package tree
 
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
-	Targets TargetList
+	Targets ChangefeedTargets
 	SinkURI Expr
 	Options KVOptions
 }
@@ -37,5 +37,31 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
+	}
+}
+
+type ChangefeedTarget struct {
+	TableName  TablePattern
+	FamilyName Name
+}
+
+// Format implements the NodeFormatter interface.
+func (ct *ChangefeedTarget) Format(ctx *FmtCtx) {
+	ctx.FormatNode(ct.TableName)
+	if ct.FamilyName != "" {
+		ctx.WriteString(" FAMILY ")
+		ctx.FormatNode(&ct.FamilyName)
+	}
+}
+
+type ChangefeedTargets []ChangefeedTarget
+
+// Format implements the NodeFormatter interface.
+func (cts *ChangefeedTargets) Format(ctx *FmtCtx) {
+	for i, ct := range *cts {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&ct)
 	}
 }

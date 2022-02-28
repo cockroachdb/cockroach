@@ -50,16 +50,31 @@ func ValidateTable(
 	if tableDesc.IsSequence() {
 		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
-	if t.Type == jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY && len(tableDesc.GetFamilies()) != 1 {
-		return errors.Errorf(
-			`CHANGEFEED created on a table with a single column family (%s) cannot now target a table with %d families.`,
-			tableDesc.GetName(), len(tableDesc.GetFamilies()))
-	}
-	_, columnFamiliesOpt := opts[OptSplitColumnFamilies]
-	if !columnFamiliesOpt && len(tableDesc.GetFamilies()) != 1 {
-		return errors.Errorf(
-			`CHANGEFEED targeting a table (%s) with multiple column families requires WITH %s and will emit multiple events per row.`,
-			tableDesc.GetName(), OptSplitColumnFamilies)
+	switch t.Type {
+	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+		if len(tableDesc.GetFamilies()) != 1 {
+			return errors.Errorf(
+				`CHANGEFEED created on a table with a single column family (%s) cannot now target a table with %d families.`,
+				tableDesc.GetName(), len(tableDesc.GetFamilies()))
+		}
+	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+		_, columnFamiliesOpt := opts[OptSplitColumnFamilies]
+		if !columnFamiliesOpt && len(tableDesc.GetFamilies()) != 1 {
+			return errors.Errorf(
+				`CHANGEFEED targeting a table (%s) with multiple column families requires WITH %s and will emit multiple events per row.`,
+				tableDesc.GetName(), OptSplitColumnFamilies)
+		}
+	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+		cols := 0
+		for _, family := range tableDesc.GetFamilies() {
+			if family.Name == t.FamilyName {
+				cols = len(family.ColumnIDs)
+				break
+			}
+		}
+		if cols == 0 {
+			return errors.Errorf("CHANGEFEED targeting nonexistent or removed column family %s of table %s", t.FamilyName, tableDesc.GetName())
+		}
 	}
 
 	if tableDesc.Dropped() {
