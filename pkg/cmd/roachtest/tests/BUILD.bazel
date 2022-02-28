@@ -238,8 +238,8 @@ go_test(
 gomock(
     name = "mocks_drt",
     out = "drt_generated_test.go",
-    interfaces = ["PromClient"],
-    library = ":tests",
+    interfaces = ["Client"],
+    library = "//pkg/cmd/roachtest/prometheus",
     package = "tests",
     visibility = [
         ":__pkg__",
