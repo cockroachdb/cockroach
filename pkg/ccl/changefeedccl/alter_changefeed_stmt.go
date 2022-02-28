@@ -120,7 +120,7 @@ func alterChangefeedPlanHook(
 		for _, cmd := range alterChangefeedStmt.Cmds {
 			switch v := cmd.(type) {
 			case *tree.AlterChangefeedAddTarget:
-				for _, targetPattern := range v.Targets.Tables {
+				for _, targetPattern := range v.Targets {
 					targetName, err := getTargetName(targetPattern)
 					if err != nil {
 						return err
@@ -137,12 +137,12 @@ func alterChangefeedPlanHook(
 						return err
 					}
 					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
+						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern.TableName))
 					}
 					newDescs[desc.GetID()] = tree.NewUnresolvedName(desc.GetName())
 				}
 			case *tree.AlterChangefeedDropTarget:
-				for _, targetPattern := range v.Targets.Tables {
+				for _, targetPattern := range v.Targets {
 					targetName, err := getTargetName(targetPattern)
 					if err != nil {
 						return err
@@ -159,7 +159,7 @@ func alterChangefeedPlanHook(
 						return err
 					}
 					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
+						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern.TableName))
 					}
 					delete(newDescs, desc.GetID())
 				}
@@ -229,7 +229,7 @@ func alterChangefeedPlanHook(
 		}
 
 		for _, targetName := range newDescs {
-			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, targetName)
+			newChangefeedStmt.Targets = append(newChangefeedStmt.Targets, tree.ChangefeedTarget{TableName: targetName})
 		}
 
 		for _, val := range optionsMap {
@@ -305,14 +305,14 @@ func alterChangefeedPlanHook(
 	return fn, header, nil, false, nil
 }
 
-func getTargetName(targetPattern tree.TablePattern) (*tree.TableName, error) {
-	pattern, err := targetPattern.NormalizeTablePattern()
+func getTargetName(target tree.ChangefeedTarget) (*tree.TableName, error) {
+	pattern, err := target.TableName.NormalizeTablePattern()
 	if err != nil {
 		return nil, err
 	}
 	targetName, ok := pattern.(*tree.TableName)
 	if !ok {
-		return nil, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(targetPattern))
+		return nil, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(pattern))
 	}
 
 	return targetName, nil

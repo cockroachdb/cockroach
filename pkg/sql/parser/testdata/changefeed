@@ -1,50 +1,58 @@
 parse
 EXPERIMENTAL CHANGEFEED FOR TABLE foo
 ----
-EXPERIMENTAL CHANGEFEED FOR TABLE foo
-EXPERIMENTAL CHANGEFEED FOR TABLE (foo) -- fully parenthesized
-EXPERIMENTAL CHANGEFEED FOR TABLE foo -- literals removed
-EXPERIMENTAL CHANGEFEED FOR TABLE _ -- identifiers removed
+EXPERIMENTAL CHANGEFEED FOR foo -- normalized!
+EXPERIMENTAL CHANGEFEED FOR (foo) -- fully parenthesized
+EXPERIMENTAL CHANGEFEED FOR foo -- literals removed
+EXPERIMENTAL CHANGEFEED FOR _ -- identifiers removed
+
+parse
+EXPERIMENTAL CHANGEFEED FOR TABLE foo FAMILY bar
+----
+EXPERIMENTAL CHANGEFEED FOR foo FAMILY bar -- normalized!
+EXPERIMENTAL CHANGEFEED FOR (foo) FAMILY bar -- fully parenthesized
+EXPERIMENTAL CHANGEFEED FOR foo FAMILY bar -- literals removed
+EXPERIMENTAL CHANGEFEED FOR _ FAMILY _ -- identifiers removed
 
 parse
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
 ----
-EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
-EXPLAIN CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
-EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
-EXPLAIN CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
+EXPLAIN CREATE CHANGEFEED FOR foo INTO 'sink' -- normalized!
+EXPLAIN CREATE CHANGEFEED FOR (foo) INTO ('sink') -- fully parenthesized
+EXPLAIN CREATE CHANGEFEED FOR foo INTO '_' -- literals removed
+EXPLAIN CREATE CHANGEFEED FOR _ INTO 'sink' -- identifiers removed
 
 parse
 CREATE CHANGEFEED FOR foo INTO 'sink'
 ----
-CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- normalized!
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
+CREATE CHANGEFEED FOR foo INTO 'sink'
+CREATE CHANGEFEED FOR (foo) INTO ('sink') -- fully parenthesized
+CREATE CHANGEFEED FOR foo INTO '_' -- literals removed
+CREATE CHANGEFEED FOR _ INTO 'sink' -- identifiers removed
 
 parse
 CREATE CHANGEFEED FOR TABLE foo INTO sink
 ----
-CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- normalized!
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
+CREATE CHANGEFEED FOR foo INTO 'sink' -- normalized!
+CREATE CHANGEFEED FOR (foo) INTO ('sink') -- fully parenthesized
+CREATE CHANGEFEED FOR foo INTO '_' -- literals removed
+CREATE CHANGEFEED FOR _ INTO 'sink' -- identifiers removed
 
 parse
-CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'
+CREATE CHANGEFEED FOR TABLE foo, db.bar, foo FAMILY bar, schema.db.foo INTO 'sink'
 ----
-CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'
-CREATE CHANGEFEED FOR TABLE (foo), (db.bar), (schema.db.foo) INTO ('sink') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _, _._, _._._ INTO 'sink' -- identifiers removed
+CREATE CHANGEFEED FOR foo, db.bar, foo FAMILY bar, schema.db.foo INTO 'sink' -- normalized!
+CREATE CHANGEFEED FOR (foo), (db.bar), (foo) FAMILY bar, (schema.db.foo) INTO ('sink') -- fully parenthesized
+CREATE CHANGEFEED FOR foo, db.bar, foo FAMILY bar, schema.db.foo INTO '_' -- literals removed
+CREATE CHANGEFEED FOR _, _._, _ FAMILY _, _._._ INTO 'sink' -- identifiers removed
 
 parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
 ----
-CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
+CREATE CHANGEFEED FOR foo INTO 'sink' -- normalized!
+CREATE CHANGEFEED FOR (foo) INTO ('sink') -- fully parenthesized
+CREATE CHANGEFEED FOR foo INTO '_' -- literals removed
+CREATE CHANGEFEED FOR _ INTO 'sink' -- identifiers removed
 
 ## TODO(dan): Implement:
 ## CREATE CHANGEFEED FOR TABLE foo VALUES FROM (1) TO (2) INTO 'sink'
@@ -54,7 +62,7 @@ CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
 parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
 ----
-CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH bar = '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH _ = 'baz' -- identifiers removed
+CREATE CHANGEFEED FOR foo INTO 'sink' WITH bar = 'baz' -- normalized!
+CREATE CHANGEFEED FOR (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthesized
+CREATE CHANGEFEED FOR foo INTO '_' WITH bar = '_' -- literals removed
+CREATE CHANGEFEED FOR _ INTO 'sink' WITH _ = 'baz' -- identifiers removed

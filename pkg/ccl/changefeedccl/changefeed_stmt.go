@@ -289,15 +289,27 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
+	targetList := uniqueTableNames(changefeedStmt.Targets)
+
 	// This grabs table descriptors once to get their ids.
-	targetDescs, err := getTableDescriptors(ctx, p, &changefeedStmt.Targets, statementTime, initialHighWater)
+	targetDescs, err := getTableDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
 	if err != nil {
 		return nil, err
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, opts)
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, opts)
 	if err != nil {
 		return nil, err
+	}
+	for _, desc := range targetDescs {
+		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			if err := changefeedbase.ValidateTable(targets, table, opts); err != nil {
+				return nil, err
+			}
+			for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
+				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
+			}
+		}
 	}
 
 	details := jobspb.ChangefeedDetails{
@@ -522,10 +534,12 @@ func getTargetsAndTables(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targetDescs []catalog.Descriptor,
+	rawTargets tree.ChangefeedTargets,
 	opts map[string]string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
-	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDescs))
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
+
 	for _, desc := range targetDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
@@ -539,24 +553,50 @@ func getTargetsAndTables(
 			tables[table.GetID()] = jobspb.ChangefeedTargetTable{
 				StatementTimeName: name,
 			}
-			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
-			if len(table.GetFamilies()) > 1 {
+		}
+	}
+	for i, ct := range rawTargets {
+
+		td, err := matchDescriptorToTablePattern(p, targetDescs, ct.TableName)
+		if err != nil {
+			return nil, nil, err
+		}
+		typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+		if ct.FamilyName != "" {
+			typ = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+		} else {
+			if td.NumFamilies() > 1 {
 				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 			}
-			ts := jobspb.ChangefeedTargetSpecification{
-				Type:    typ,
-				TableID: table.GetID(),
-			}
-			targets = append(targets, ts)
-			if err := changefeedbase.ValidateTable(targets, table, opts); err != nil {
-				return nil, nil, err
-			}
-			for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
-				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
-			}
+		}
+		targets[i] = jobspb.ChangefeedTargetSpecification{
+			Type:              typ,
+			TableID:           td.GetID(),
+			FamilyName:        string(ct.FamilyName),
+			StatementTimeName: tables[td.GetID()].StatementTimeName,
 		}
 	}
 	return targets, tables, nil
+}
+
+//TODO (zinger): Handle name collision here across databases and schemas
+func matchDescriptorToTablePattern(
+	p sql.PlanHookState, descs []catalog.Descriptor, t tree.TablePattern,
+) (catalog.TableDescriptor, error) {
+	pattern, err := t.NormalizeTablePattern()
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := pattern.(*tree.TableName); !ok {
+		return nil, errors.Newf("%v is not a TableName", pattern)
+	}
+	for _, desc := range descs {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if ok && tbl.GetName() == string(pattern.(*tree.TableName).ObjectName) {
+			return tbl, nil
+		}
+	}
+	return nil, errors.Newf("could not match %v to a fetched descriptor", t)
 }
 
 func validateSink(
@@ -1035,4 +1075,20 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetS
 		}
 	}
 	return
+}
+
+// uniqueTableNames creates a TargetList whose Tables are
+// the table names in cts, removing duplicates.
+func uniqueTableNames(cts tree.ChangefeedTargets) tree.TargetList {
+	uniqueTablePatterns := make(map[string]tree.TablePattern)
+	for _, t := range cts {
+		uniqueTablePatterns[t.TableName.String()] = t.TableName
+	}
+
+	targetList := tree.TargetList{}
+	for _, t := range uniqueTablePatterns {
+		targetList.Tables = append(targetList.Tables, t)
+	}
+
+	return targetList
 }

@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -149,13 +148,13 @@ func doCreateReplicationStream(
 	}
 
 	var spans []roachpb.Span
-	if !eval.Targets.TenantID.IsSet() {
+	if eval.Targets.Tenant == (roachpb.TenantID{}) {
 		// TODO(yevgeniy): Only tenant streaming supported now; Support granular streaming.
 		return pgerror.New(pgcode.FeatureNotSupported, "granular replication streaming not supported")
 	}
 
 	telemetry.Count(`replication.create.tenant`)
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(eval.Targets.TenantID.ToUint64()))
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(eval.Targets.Tenant.ToUint64()))
 	spans = append(spans, roachpb.Span{
 		Key:    prefix,
 		EndKey: prefix.PrefixEnd(),
@@ -228,8 +227,8 @@ func getReplicationStreamSpec(
 	// Partition the spans with SQLPlanner
 	var noTxn *kv.Txn
 	dsp := jobExecCtx.DistSQLPlanner()
-	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(),
-		nil /* planner */, noTxn, sql.DistributionTypeSystemTenantOnly)
+	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(), nil /* planner */, noTxn,
+		true /* distribute */)
 
 	replicatedSpans := j.Details().(jobspb.StreamReplicationDetails).Spans
 	spans := make([]roachpb.Span, 0, len(replicatedSpans))
@@ -255,9 +254,7 @@ func getReplicationStreamSpec(
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
 				Spans: sp.Spans,
-				Config: streampb.StreamPartitionSpec_ExecutionConfig{
-					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
-				},
+				// Use default ExecutionConfig for now
 			},
 		})
 	}
