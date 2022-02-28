@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/alessio/shellescape"
@@ -40,7 +41,11 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	buildCmd := &cobra.Command{
 		Use:   "build <binary>",
 		Short: "Build the specified binaries",
-		Long:  "Build the specified binaries.",
+		Long: fmt.Sprintf(
+			"Build the specified binaries either using their bazel targets or one "+
+				"of the following shorthands:\n\t%s",
+			strings.Join(allBuildTargets, "\n\t"),
+		),
 		// TODO(irfansharif): Flesh out the example usage patterns.
 		Example: `
 	dev build cockroach
@@ -92,6 +97,16 @@ var buildTargetMapping = map[string]string{
 	"stress":           stressTarget,
 	"workload":         "//pkg/cmd/workload:workload",
 }
+
+// allBuildTargets is a sorted list of all the available build targets.
+var allBuildTargets = func() []string {
+	ret := make([]string, 0, len(buildTargetMapping))
+	for t := range buildTargetMapping {
+		ret = append(ret, t)
+	}
+	sort.Strings(ret)
+	return ret
+}()
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
