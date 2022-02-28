@@ -288,13 +288,15 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
+	targetList := uniqueTableNames(changefeedStmt.Targets)
+
 	// This grabs table descriptors once to get their ids.
-	targetDescs, err := getTableDescriptors(ctx, p, &changefeedStmt.Targets, statementTime, initialHighWater)
+	targetDescs, err := getTableDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
 	if err != nil {
 		return nil, err
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, opts)
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -521,10 +523,12 @@ func getTargetsAndTables(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targetDescs []catalog.Descriptor,
+	rawTargets tree.ChangefeedTargets,
 	opts map[string]string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
-	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDescs))
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
+
 	for _, desc := range targetDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
@@ -538,7 +542,8 @@ func getTargetsAndTables(
 			tables[table.GetID()] = jobspb.ChangefeedTargetTable{
 				StatementTimeName: name,
 			}
-			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+
+			/* typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
 			if len(table.GetFamilies()) > 1 {
 				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 			}
@@ -549,13 +554,53 @@ func getTargetsAndTables(
 			targets = append(targets, ts)
 			if err := changefeedbase.ValidateTable(targets, table); err != nil {
 				return nil, nil, err
-			}
+			} */
 			for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
 				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 			}
 		}
 	}
+	for i, ct := range rawTargets {
+		td, err := matchDescriptorToTableName(p, targetDescs, ct.TableName.(tree.TableName))
+		if err != nil {
+			return nil, nil, err
+		}
+		typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+		if ct.FamilyName != "" {
+			typ = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+			familyExists := false
+			for _, family := range td.GetFamilies() {
+				if family.Name == string(ct.FamilyName) {
+					familyExists = true
+					break
+				}
+			}
+			if !familyExists {
+				return nil, nil, errors.Newf("could not resolve %s", ct)
+			}
+		} else {
+			if td.NumFamilies() > 1 {
+				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			}
+		}
+		targets[i] = jobspb.ChangefeedTargetSpecification{
+			Type:       typ,
+			TableID:    td.GetID(),
+			FamilyName: string(ct.FamilyName),
+		}
+	}
 	return targets, tables, nil
+}
+
+//TODO (zinger): Handle name collision here across databases and schemas
+func matchDescriptorToTableName(p sql.PlanHookState, descs []catalog.Descriptor, n tree.TableName) (catalog.TableDescriptor, error) {
+	for _, desc := range descs {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if ok && tbl.GetName() == n.Table() {
+			return desc, nil
+		}
+	}
+	return nil, errors.Newf("could not match %v to a fetched descriptor", n)
 }
 
 func validateSink(
@@ -1034,4 +1079,21 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetS
 		}
 	}
 	return
+}
+
+// uniqueTableNames creates a TargetList whose Tables are
+// the table names in cts, removing duplicates.
+func uniqueTableNames(cts tree.ChangefeedTargets) tree.TargetList {
+	uniqueTablePatterns := make(map[tree.TablePattern]struct{})
+	var seen struct{}
+	for _, t := range cts {
+		uniqueTablePatterns[t.TableName] = seen
+	}
+
+	targetList := tree.TargetList{}
+	for name, _ := range uniqueTablePatterns {
+		targetList.Tables = append(targetList.Tables, name)
+	}
+
+	return targetList
 }

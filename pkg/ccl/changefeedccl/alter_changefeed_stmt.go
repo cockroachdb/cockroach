@@ -11,17 +11,15 @@ package changefeedccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,6 +28,11 @@ import (
 
 func init() {
 	sql.AddPlanHook("alter changefeed", alterChangefeedPlanHook)
+}
+
+type alterChangefeedOpts struct {
+	AddTargets  []tree.ChangefeedTargets
+	DropTargets []tree.ChangefeedTargets
 }
 
 // alterChangefeedPlanHook implements sql.PlanHookFn.
@@ -64,7 +67,7 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		prevDetails, ok := job.Details().(jobspb.ChangefeedDetails)
+		details, ok := job.Details().(jobspb.ChangefeedDetails)
 		if !ok {
 			return errors.Errorf(`job %d is not changefeed job`, jobID)
 		}
@@ -73,188 +76,119 @@ func alterChangefeedPlanHook(
 			return errors.Errorf(`job %d is not paused`, jobID)
 		}
 
-		// this CREATE CHANGEFEED node will be used to update the existing changefeed
-		newChangefeedStmt := &tree.CreateChangefeed{
-			SinkURI: tree.NewDString(prevDetails.SinkURI),
+		var opts alterChangefeedOpts
+		for _, cmd := range alterChangefeedStmt.Cmds {
+			switch v := cmd.(type) {
+			case *tree.AlterChangefeedAddTarget:
+				opts.AddTargets = append(opts.AddTargets, v.Targets)
+			case *tree.AlterChangefeedDropTarget:
+				opts.DropTargets = append(opts.DropTargets, v.Targets)
+			}
 		}
 
-		optionsMap := make(map[string]tree.KVOption, len(prevDetails.Opts))
-
-		// pull the options that are set for the existing changefeed
-		for key, value := range prevDetails.Opts {
-			// There are some options (e.g. topics) that we set during the creation of
-			// a changefeed, but we do not allow these options to be set by the user.
-			// Hence, we can not include these options in our new CREATE CHANGEFEED
-			// statement.
-			if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-				continue
-			}
-			existingOpt := tree.KVOption{Key: tree.Name(key)}
-			if len(value) > 0 {
-				existingOpt.Value = tree.NewDString(value)
-			}
-			optionsMap[key] = existingOpt
-		}
-
+		var initialHighWater hlc.Timestamp
 		statementTime := hlc.Timestamp{
 			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 		}
 
-		allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), statementTime)
-		if err != nil {
-			return err
-		}
-		descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
-		if err != nil {
-			return err
-		}
+		if opts.AddTargets != nil {
+			var targetDescs []catalog.Descriptor
 
-		newDescs := make(map[descpb.ID]*tree.UnresolvedName)
-
-		for _, target := range AllTargets(prevDetails) {
-			desc := descResolver.DescByID[target.TableID]
-			newDescs[target.TableID] = tree.NewUnresolvedName(desc.GetName())
-		}
-
-		for _, cmd := range alterChangefeedStmt.Cmds {
-			switch v := cmd.(type) {
-			case *tree.AlterChangefeedAddTarget:
-				for _, targetPattern := range v.Targets.Tables {
-					targetName, err := getTargetName(targetPattern)
-					if err != nil {
-						return err
-					}
-					found, _, desc, err := resolver.ResolveExisting(
-						ctx,
-						targetName.ToUnresolvedObjectName(),
-						descResolver,
-						tree.ObjectLookupFlags{},
-						p.CurrentDatabase(),
-						p.CurrentSearchPath(),
-					)
-					if err != nil {
-						return err
-					}
-					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
-					}
-					newDescs[desc.GetID()] = tree.NewUnresolvedName(desc.GetName())
-				}
-			case *tree.AlterChangefeedDropTarget:
-				for _, targetPattern := range v.Targets.Tables {
-					targetName, err := getTargetName(targetPattern)
-					if err != nil {
-						return err
-					}
-					found, _, desc, err := resolver.ResolveExisting(
-						ctx,
-						targetName.ToUnresolvedObjectName(),
-						descResolver,
-						tree.ObjectLookupFlags{},
-						p.CurrentDatabase(),
-						p.CurrentSearchPath(),
-					)
-					if err != nil {
-						return err
-					}
-					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
-					}
-					delete(newDescs, desc.GetID())
-				}
-			case *tree.AlterChangefeedSetOptions:
-				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.ChangefeedOptionExpectValues)
+			for _, targetList := range opts.AddTargets {
+				tl := uniqueTableNames(targetList)
+				descs, err := getTableDescriptors(ctx, p, &tl, statementTime, initialHighWater)
 				if err != nil {
 					return err
 				}
+				targetDescs = append(targetDescs, descs...)
+			}
 
-				opts, err := optsFn()
+			newTargets, newTables, err := getTargetsAndTables(ctx, p, targetDescs, details.Opts)
+			if err != nil {
+				return err
+			}
+			// add old targets
+			for id, table := range details.Tables {
+				newTables[id] = table
+			}
+			details.Tables = newTables
+			details.TargetSpecifications = append(details.TargetSpecifications, newTargets...)
+
+		}
+
+		if opts.DropTargets != nil {
+			var targetDescs []catalog.Descriptor
+
+			for _, targetList := range opts.DropTargets {
+				tl := uniqueTableNames(targetList)
+				descs, err := getTableDescriptors(ctx, p, &tl, statementTime, initialHighWater)
 				if err != nil {
 					return err
 				}
+				targetDescs = append(targetDescs, descs...)
+			}
 
-				for key, value := range opts {
-					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
+			for _, desc := range targetDescs {
+				if table, isTable := desc.(catalog.TableDescriptor); isTable {
+					if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+						return err
 					}
-					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
-					}
-					opt := tree.KVOption{Key: tree.Name(key)}
-					if len(value) > 0 {
-						opt.Value = tree.NewDString(value)
-					}
-					optionsMap[key] = opt
-				}
-			case *tree.AlterChangefeedUnsetOptions:
-				optKeys := v.Options.ToStrings()
-				for _, key := range optKeys {
-					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
-					}
-					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
-					}
-					delete(optionsMap, key)
+					delete(details.Tables, table.GetID())
 				}
 			}
+
+			newTargetSpecifications := make([]jobspb.ChangefeedTargetSpecification, len(details.TargetSpecifications)-len(opts.DropTargets))
+			for _, ts := range details.TargetSpecifications {
+				if _, stillThere := details.Tables[ts.TableID]; stillThere {
+					newTargetSpecifications = append(newTargetSpecifications, ts)
+				}
+			}
+			details.TargetSpecifications = newTargetSpecifications
+
 		}
 
-		if len(newDescs) == 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop all targets for changefeed job %d", jobID)
+		if len(details.Tables) == 0 {
+			return errors.Errorf("cannot drop all targets for changefeed job %d", jobID)
 		}
 
-		for _, targetName := range newDescs {
-			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, targetName)
-		}
-
-		for _, val := range optionsMap {
-			newChangefeedStmt.Options = append(newChangefeedStmt.Options, val)
-		}
-
-		sinkURIFn, err := p.TypeAsString(ctx, newChangefeedStmt.SinkURI, `ALTER CHANGEFEED`)
-		if err != nil {
+		if err := validateSink(ctx, p, jobID, details, details.Opts); err != nil {
 			return err
 		}
 
-		optsFn, err := p.TypeAsStringOpts(ctx, newChangefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+		oldStmt, err := parser.ParseOne(job.Payload().Description)
 		if err != nil {
 			return err
 		}
-
-		sinkURI, err := sinkURIFn()
-		if err != nil {
-			return err
+		oldChangefeedStmt, ok := oldStmt.AST.(*tree.CreateChangefeed)
+		if !ok {
+			return errors.Errorf(`could not parse create changefeed statement for job %d`, jobID)
 		}
 
-		opts, err := optsFn()
-		if err != nil {
-			return err
+		var targets tree.ChangefeedTargets
+		for _, target := range details.Tables {
+			targetName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(target.StatementTimeName))
+			targets = append(targets, tree.ChangefeedTarget{TableName: &targetName}) // family goes here
 		}
 
-		jobRecord, err := createChangefeedJobRecord(
-			ctx,
-			p,
-			newChangefeedStmt,
-			sinkURI,
-			opts,
-			jobID,
-			``,
-		)
-		if err != nil {
-			return errors.Wrap(err, `failed to alter changefeed`)
-		}
-
-		newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
-
-		// We need to persist the statement time that was generated during the
-		// creation of the changefeed
-		newDetails.StatementTime = prevDetails.StatementTime
+		oldChangefeedStmt.Targets = targets
+		jobDescription := tree.AsString(oldChangefeedStmt)
 
 		newPayload := job.Payload()
-		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
-		newPayload.Description = jobRecord.Description
-		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
+		newPayload.Description = jobDescription
+		newPayload.Details = jobspb.WrapPayloadDetails(details)
+
+		tl := uniqueTableNames(targets)
+		finalDescs, err := getTableDescriptors(ctx, p, &tl, statementTime, initialHighWater)
+		if err != nil {
+			return err
+		}
+
+		newPayload.DescriptorIDs = func() (sqlDescIDs []descpb.ID) {
+			for _, desc := range finalDescs {
+				sqlDescIDs = append(sqlDescIDs, desc.GetID())
+			}
+			return sqlDescIDs
+		}()
 
 		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, lockForUpdate, func(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
@@ -272,24 +206,11 @@ func alterChangefeedPlanHook(
 			return ctx.Err()
 		case resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(jobID)),
-			tree.NewDString(jobRecord.Description),
+			tree.NewDString(jobDescription),
 		}:
 			return nil
 		}
 	}
 
 	return fn, header, nil, false, nil
-}
-
-func getTargetName(targetPattern tree.TablePattern) (*tree.TableName, error) {
-	pattern, err := targetPattern.NormalizeTablePattern()
-	if err != nil {
-		return nil, err
-	}
-	targetName, ok := pattern.(*tree.TableName)
-	if !ok {
-		return nil, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(targetPattern))
-	}
-
-	return targetName, nil
 }

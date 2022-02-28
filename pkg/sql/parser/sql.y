@@ -504,6 +504,12 @@ func (u *sqlSymUnion) targetList() tree.TargetList {
 func (u *sqlSymUnion) targetListPtr() *tree.TargetList {
     return u.val.(*tree.TargetList)
 }
+func (u *sqlSymUnion) changefeedTargets() tree.ChangefeedTargets {
+    return u.val.(tree.ChangefeedTargets)
+}
+func (u *sqlSymUnion) changefeedTarget() tree.ChangefeedTarget {
+    return u.val.(tree.ChangefeedTarget)
+}
 func (u *sqlSymUnion) privilegeType() privilege.Kind {
     return u.val.(privilege.Kind)
 }
@@ -1265,7 +1271,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <[]int32> opt_array_bounds
 %type <tree.From> from_clause
 %type <tree.TableExprs> from_list rowsfrom_list opt_from_list
-%type <tree.TablePatterns> table_pattern_list single_table_pattern_list
+%type <tree.TablePatterns> table_pattern_list
 %type <tree.TableNames> table_name_list opt_locked_rels
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
@@ -1432,7 +1438,9 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.TargetList> targets targets_roles target_types changefeed_targets
+%type <tree.TargetList> targets targets_roles target_types
+%type <tree.ChangefeedTargets> changefeed_targets
+%type <tree.ChangefeedTarget> changefeed_target
 %type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
 %type <tree.RoleSpecList> for_grantee_clause
 %type <privilege.List> privileges
@@ -3854,7 +3862,7 @@ create_changefeed_stmt:
   CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
-      Targets: $4.targetList(),
+      Targets: $4.changefeedTargets(),
       SinkURI: $5.expr(),
       Options: $6.kvOptions(),
     }
@@ -3863,30 +3871,51 @@ create_changefeed_stmt:
   {
     /* SKIP DOC */
     $$.val = &tree.CreateChangefeed{
-      Targets: $4.targetList(),
+      Targets: $4.changefeedTargets(),
       Options: $5.kvOptions(),
     }
   }
 
 changefeed_targets:
-  single_table_pattern_list
+  changefeed_target
   {
-    $$.val = tree.TargetList{Tables: $1.tablePatterns()}
+    $$.val = tree.ChangefeedTargets{$1.changefeedTarget()}
   }
-| TABLE single_table_pattern_list
+| changefeed_target ',' changefeed_targets
   {
-    $$.val = tree.TargetList{Tables: $2.tablePatterns()}
+    $$.val = append($1.changefeedTargets(), $3.changefeedTarget())
   }
 
-single_table_pattern_list:
-  table_name
+changefeed_target:
+  TABLE table_name
   {
-    $$.val = tree.TablePatterns{$1.unresolvedObjectName().ToUnresolvedName()}
+    $$.val = tree.ChangefeedTarget{
+      TableName: $2.unresolvedObjectName().ToUnresolvedName(),
+      }
   }
-| single_table_pattern_list ',' table_name
+| table_name
   {
-    $$.val = append($1.tablePatterns(), $3.unresolvedObjectName().ToUnresolvedName())
+    $$.val = tree.ChangefeedTarget{
+      TableName: $1.unresolvedObjectName().ToUnresolvedName(),
+      }
   }
+|
+  TABLE table_name FAMILY family_name
+  {
+    $$.val = tree.ChangefeedTarget{
+      TableName: $2.unresolvedObjectName().ToUnresolvedName(),
+      FamilyName: tree.Name($4),
+      }
+  }
+|
+table_name FAMILY family_name
+  {
+    $$.val = tree.ChangefeedTarget{
+      TableName: $1.unresolvedObjectName().ToUnresolvedName(),
+      FamilyName: tree.Name($3),
+      }
+  }
+
 
 
 opt_changefeed_sink:
@@ -4402,14 +4431,14 @@ alter_changefeed_cmd:
   ADD changefeed_targets
   {
     $$.val = &tree.AlterChangefeedAddTarget{
-      Targets: $2.targetList(),
+      Targets: $2.changefeedTargets(),
     }
   }
   // ALTER CHANGEFEED <job_id> DROP [TABLE] ...
 | DROP changefeed_targets
   {
     $$.val = &tree.AlterChangefeedDropTarget{
-      Targets: $2.targetList(),
+      Targets: $2.changefeedTargets(),
     }
   }
 | SET kv_option_list

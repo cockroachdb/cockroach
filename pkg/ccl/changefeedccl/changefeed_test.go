@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+
 	// Imported to allow multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	// Imported to allow locality-related table mutations
@@ -1696,7 +1697,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	}
 }
 
-func TestChangefeedColumnFamily(t *testing.T) {
+func TestChangefeedEachColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1726,6 +1727,28 @@ func TestChangefeedColumnFamily(t *testing.T) {
 		if _, err := bar.Next(); !testutils.IsError(err, `multiple column families`) {
 			t.Errorf(`expected "multiple column families" error got: %+v`, err)
 		}
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedSingleColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Table with 2 column families.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY onlycat (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlycat`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo.onlycat: [0]->{"after": {"c": "cat"}}`,
+		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
