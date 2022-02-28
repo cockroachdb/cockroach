@@ -51,6 +51,7 @@ go_test(
         "pod_test.go",
     ],
     embed = [":tenant"],
+    size = "large",
     deps = [
         "//pkg/base",
         "//pkg/ccl",
