@@ -286,6 +286,15 @@ find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort
 		}
 	}
 
+	// A script to summarize the hottest ranges for a tenant's range report.
+	{
+		s := zc.clusterPrinter.start("tenant hot range summary script")
+		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20`)); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
