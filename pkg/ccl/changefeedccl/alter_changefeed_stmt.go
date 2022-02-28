@@ -110,17 +110,22 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		newDescs := make(map[descpb.ID]*tree.UnresolvedName)
+		type targetKey struct {
+			TableID    descpb.ID
+			FamilyName string
+		}
+		newTargets := make(map[targetKey]tree.ChangefeedTarget)
 
 		for _, target := range AllTargets(prevDetails) {
 			desc := descResolver.DescByID[target.TableID]
-			newDescs[target.TableID] = tree.NewUnresolvedName(desc.GetName())
+			k := targetKey{TableID: target.TableID, FamilyName: target.FamilyName}
+			newTargets[k] = tree.ChangefeedTarget{TableName: tree.NewUnresolvedName(desc.GetName()), FamilyName: tree.Name(target.FamilyName)}
 		}
 
 		for _, cmd := range alterChangefeedStmt.Cmds {
 			switch v := cmd.(type) {
 			case *tree.AlterChangefeedAddTarget:
-				for _, targetPattern := range v.Targets.Tables {
+				for _, targetPattern := range v.Targets {
 					targetName, err := getTargetName(targetPattern)
 					if err != nil {
 						return err
@@ -137,12 +142,16 @@ func alterChangefeedPlanHook(
 						return err
 					}
 					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
+						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern.TableName))
 					}
-					newDescs[desc.GetID()] = tree.NewUnresolvedName(desc.GetName())
+					k := targetKey{TableID: desc.GetID(), FamilyName: targetPattern.FamilyName.String()}
+					if k.FamilyName == `""` {
+						k.FamilyName = ""
+					}
+					newTargets[k] = targetPattern
 				}
 			case *tree.AlterChangefeedDropTarget:
-				for _, targetPattern := range v.Targets.Tables {
+				for _, targetPattern := range v.Targets {
 					targetName, err := getTargetName(targetPattern)
 					if err != nil {
 						return err
@@ -159,9 +168,17 @@ func alterChangefeedPlanHook(
 						return err
 					}
 					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
+						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern.TableName))
 					}
-					delete(newDescs, desc.GetID())
+					k := targetKey{TableID: desc.GetID(), FamilyName: targetPattern.FamilyName.String()}
+					if k.FamilyName == `""` {
+						k.FamilyName = ""
+					}
+					_, recognized := newTargets[k]
+					if !recognized {
+						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q already not watched by changefeed`, tree.ErrString(&targetPattern))
+					}
+					delete(newTargets, k)
 				}
 			case *tree.AlterChangefeedSetOptions:
 				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
@@ -224,12 +241,12 @@ func alterChangefeedPlanHook(
 			}
 		}
 
-		if len(newDescs) == 0 {
+		if len(newTargets) == 0 {
 			return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop all targets for changefeed job %d", jobID)
 		}
 
-		for _, targetName := range newDescs {
-			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, targetName)
+		for _, newTarget := range newTargets {
+			newChangefeedStmt.Targets = append(newChangefeedStmt.Targets, newTarget)
 		}
 
 		for _, val := range optionsMap {
@@ -305,14 +322,14 @@ func alterChangefeedPlanHook(
 	return fn, header, nil, false, nil
 }
 
-func getTargetName(targetPattern tree.TablePattern) (*tree.TableName, error) {
-	pattern, err := targetPattern.NormalizeTablePattern()
+func getTargetName(target tree.ChangefeedTarget) (*tree.TableName, error) {
+	pattern, err := target.TableName.NormalizeTablePattern()
 	if err != nil {
 		return nil, err
 	}
 	targetName, ok := pattern.(*tree.TableName)
 	if !ok {
-		return nil, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(targetPattern))
+		return nil, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(pattern))
 	}
 
 	return targetName, nil
