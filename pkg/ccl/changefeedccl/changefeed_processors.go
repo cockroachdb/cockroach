@@ -692,6 +692,7 @@ func newKVEventToRowConsumer(
 		cfg.LeaseManager.(*lease.Manager),
 		cfg.CollectionFactory,
 		cfg.DB,
+		details,
 	)
 
 	return &kvEventToRowConsumer{
@@ -719,6 +720,11 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	r, err := c.eventToRow(ctx, ev)
 	if err != nil {
+		// Column families are stored contiguously, so we'll get
+		// events for each one even if we're not watching them all.
+		if errors.Is(err, ErrUnwatchedFamily) {
+			return nil
+		}
 		return err
 	}
 

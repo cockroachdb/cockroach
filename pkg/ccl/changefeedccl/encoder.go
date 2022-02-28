@@ -188,6 +188,7 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	return jsonEntries, nil
 }
 
+// TODO (zinger): Cache this, but with eviction in the EACH_FAMILY case.
 func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
 	descID := row.tableDesc.GetID()
 	// use the target list since row.tableDesc.GetName() will not have fully qualified names
@@ -203,7 +204,15 @@ func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
 				}
 				return fmt.Sprintf("%s.%s", target.StatementTimeName, family.Name), nil
 			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-				// Not implemented yet
+				family, err := row.tableDesc.FindFamilyByID(row.familyID)
+				if err != nil {
+					return nil, err
+				}
+				if family.Name != target.FamilyName {
+					// Not the right target specification for this family
+					continue
+				}
+				return fmt.Sprintf("%s.%s", target.StatementTimeName, target.FamilyName), nil
 			default:
 				// fall through to error
 			}
@@ -474,7 +483,15 @@ func (e *confluentAvroEncoder) rawTableName(
 				}
 				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, family.Name), nil
 			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-				// Not implemented yet
+				family, err := desc.FindFamilyByID(familyID)
+				if err != nil {
+					return "", err
+				}
+				if family.Name != target.FamilyName {
+					// Not the right target specification for this family
+					continue
+				}
+				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, target.FamilyName), nil
 			default:
 				// fall through to error
 			}

@@ -1770,7 +1770,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	}
 }
 
-func TestChangefeedColumnFamily(t *testing.T) {
+func TestChangefeedEachColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1787,6 +1787,7 @@ func TestChangefeedColumnFamily(t *testing.T) {
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
 		defer closeFeed(t, foo)
+
 		assertPayloads(t, foo, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
 			`foo: [0]->{"after": {"c": "cat"}}`,
@@ -1838,7 +1839,7 @@ func TestChangefeedColumnFamily(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
-func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
+func TestChangefeedSingleColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1847,30 +1848,79 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		// Table with 2 column families.
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY rest (c))`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
-		defer closeFeed(t, foo)
-		assertPayloads(t, foo, []string{
+		sqlDB.Exec(t, `INSERT INTO foo values (1, 'dollar', 'cent')`)
+
+		sqlDB.ExpectErr(t, `nosuchfamily`, `CREATE CHANGEFEED FOR foo FAMILY nosuchfamily`)
+
+		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`)
+		defer closeFeed(t, fooMost)
+		assertPayloads(t, fooMost, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "dollar"}}`,
+		})
+
+		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`)
+		defer closeFeed(t, fooRest)
+		assertPayloads(t, fooRest, []string{
+			`foo: [0]->{"after": {"c": "cat"}}`,
+			`foo: [1]->{"after": {"c": "cent"}}`,
+		})
+
+		fooBoth := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest, foo FAMILY most`)
+		defer closeFeed(t, fooBoth)
+		assertPayloads(t, fooBoth, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`foo: [0]->{"after": {"c": "cat"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "dollar"}}`,
+			`foo: [1]->{"after": {"c": "cent"}}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// requireErrorSoon times out after 30 seconds
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Table with 2 column families.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY rest (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+
+		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`)
+		defer closeFeed(t, fooMost)
+		assertPayloads(t, fooMost, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+		})
+
+		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`)
+		defer closeFeed(t, fooRest)
+		assertPayloads(t, fooRest, []string{
 			`foo: [0]->{"after": {"c": "cat"}}`,
 		})
 
-		// Add a column to an existing family
-		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d string DEFAULT 'hi' FAMILY f2`)
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"c": "cat", "d": "hi"}}`,
+		// Add a column to an existing family, it shows up in the feed for that family
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN more int DEFAULT 11 FAMILY most`)
+		assertPayloads(t, fooMost, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog", "more": 11}}`,
 		})
 
-		// Add a column to a new family.
-		// Behavior here is a little wonky with default values in a way
-		// that's likely to change with declarative schema changer,
-		// so not asserting anything either way about that.
-		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN e string CREATE FAMILY f3`)
-		sqlDB.Exec(t, `UPDATE foo SET e='hello' WHERE a=0`)
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"e": "hello"}}`,
-		})
+		// Removing all columns in a watched family fails the feed
+		waitForSchemaChange(t, sqlDB, `ALTER TABLE foo DROP column c`)
+		requireErrorSoon(context.Background(), t, fooRest,
+			regexp.MustCompile(`CHANGEFEED targeting nonexistent or removed column family rest of table foo`))
 
 	}
 
@@ -1879,12 +1929,11 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
-func TestChangefeedEachColumnFamilyVirtualColumns(t *testing.T) {
+func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		// Table with 2 column families.
@@ -2668,6 +2717,47 @@ func TestChangefeedStoredComputedColumn(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
 	t.Run(`pubsub`, pubsubTest(testFn))
+}
+
+func TestChangefeedEachColumnFamilyVirtualColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Table with 2 column families.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`foo: [0]->{"after": {"c": "cat"}}`,
+		})
+
+		// Add a column to an existing family
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d string DEFAULT 'hi' FAMILY f2`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"c": "cat", "d": "hi"}}`,
+		})
+
+		// Add a column to a new family.
+		// Behavior here is a little wonky with default values in a way
+		// that's likely to change with declarative schema changer,
+		// so not asserting anything either way about that.
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN e string CREATE FAMILY f3`)
+		sqlDB.Exec(t, `UPDATE foo SET e='hello' WHERE a=0`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"e": "hello"}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func TestChangefeedVirtualComputedColumn(t *testing.T) {

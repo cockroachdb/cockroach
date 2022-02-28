@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -132,8 +133,15 @@ func fetchSpansForTargets(
 		if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
 			return err
 		}
-		// Note that all targets are currently guaranteed to be tables.
+		seen := make(map[descpb.ID]struct{}, len(targets))
+		// Note that all targets are currently guaranteed to have a Table ID
+		// and lie within the primary index span. Deduplication is important
+		// here as requesting the same span twice will deadlock.
 		for _, table := range targets {
+			if _, dup := seen[table.TableID]; dup {
+				continue
+			}
+			seen[table.TableID] = struct{}{}
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.AvoidLeased = true
 			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
