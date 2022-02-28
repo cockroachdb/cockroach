@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -94,7 +93,7 @@ func (s *statusServer) IndexUsageStatistics(
 	// need to aggregate all stats before returning. Returning a partial result
 	// yields an incorrect result.
 	if err := s.iterateNodes(ctx,
-		fmt.Sprintf("requesting index usage stats for node %s", req.NodeID),
+		"requesting index usage stats",
 		dialFn, fetchIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
@@ -177,7 +176,7 @@ func (s *statusServer) ResetIndexUsageStats(
 	}
 
 	if err := s.iterateNodes(ctx,
-		fmt.Sprintf("Resetting index usage stats for node %s", req.NodeID),
+		"Resetting index usage stats",
 		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
