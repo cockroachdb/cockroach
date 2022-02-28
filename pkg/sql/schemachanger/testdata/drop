@@ -470,17 +470,16 @@ upsert descriptor #108
   +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            indexId: 1
-  +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 3
-  +            storingColumnIds:
-  +            - 1
-  +            - 2
-  +            tableId: 108
+  +          indexId: 1
+  +          isUnique: true
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 3
+  +          storingColumnIds:
+  +          - 1
+  +          - 2
+  +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -799,17 +798,16 @@ upsert descriptor #108
   -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            indexId: 1
-  -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 3
-  -            storingColumnIds:
-  -            - 1
-  -            - 2
-  -            tableId: 108
+  -          indexId: 1
+  -          isUnique: true
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 3
+  -          storingColumnIds:
+  -          - 1
+  -          - 2
+  -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -2351,17 +2349,16 @@ upsert descriptor #116
   +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            indexId: 1
-  +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
-  +            tableId: 116
+  +          indexId: 1
+  +          isUnique: true
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          storingColumnIds:
+  +          - 2
+  +          - 3
+  +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
   +        subWorkId: 1
@@ -2675,17 +2672,16 @@ upsert descriptor #117
   +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            indexId: 1
-  +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
-  +            tableId: 117
+  +          indexId: 1
+  +          isUnique: true
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          storingColumnIds:
+  +          - 2
+  +          - 3
+  +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
   +        subWorkId: 1
@@ -2956,16 +2952,15 @@ upsert descriptor #118
   +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            indexId: 1
-  +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            tableId: 118
+  +          indexId: 1
+  +          isUnique: true
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          storingColumnIds:
+  +          - 2
+  +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
   +        subWorkId: 1
@@ -4767,17 +4762,16 @@ upsert descriptor #116
   -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            indexId: 1
-  -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
-  -            tableId: 116
+  -          indexId: 1
+  -          isUnique: true
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          storingColumnIds:
+  -          - 2
+  -          - 3
+  -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
   -        subWorkId: 1
@@ -5084,17 +5078,16 @@ upsert descriptor #117
   -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            indexId: 1
-  -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
-  -            tableId: 117
+  -          indexId: 1
+  -          isUnique: true
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          storingColumnIds:
+  -          - 2
+  -          - 3
+  -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
   -        subWorkId: 1
@@ -5362,16 +5355,15 @@ upsert descriptor #118
   -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            indexId: 1
-  -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            tableId: 118
+  -          indexId: 1
+  -          isUnique: true
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          storingColumnIds:
+  -          - 2
+  -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
   -        subWorkId: 1

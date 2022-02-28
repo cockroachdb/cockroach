@@ -55,14 +55,13 @@ upsert descriptor #106
   +    targets:
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            indexId: 1
-  +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            tableId: 106
+  +          indexId: 1
+  +          isUnique: true
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -118,17 +117,16 @@ upsert descriptor #106
   +      targetStatus: PUBLIC
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            indexId: 2
-  +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 2
-  +            tableId: 106
+  +          indexId: 2
+  +          isUnique: true
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          sourceIndexId: 1
+  +          storingColumnIds:
+  +          - 2
+  +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -429,14 +427,13 @@ upsert descriptor #106
   -    targets:
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            indexId: 1
-  -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            tableId: 106
+  -          indexId: 1
+  -          isUnique: true
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -492,17 +489,16 @@ upsert descriptor #106
   -      targetStatus: PUBLIC
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            indexId: 2
-  -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 2
-  -            tableId: 106
+  -          indexId: 2
+  -          isUnique: true
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          sourceIndexId: 1
+  -          storingColumnIds:
+  -          - 2
+  -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1

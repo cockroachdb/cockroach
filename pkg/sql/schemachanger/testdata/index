@@ -36,16 +36,15 @@ upsert descriptor #104
   +    targets:
   +    - elementProto:
   +        secondaryIndex:
-  +          embeddedIndex:
-  +            indexId: 2
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
-  +            - 1
-  +            sourceIndexId: 1
-  +            tableId: 104
+  +          indexId: 2
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 2
+  +          keySuffixColumnIds:
+  +          - 1
+  +          sourceIndexId: 1
+  +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -163,16 +162,15 @@ upsert descriptor #104
   -    targets:
   -    - elementProto:
   -        secondaryIndex:
-  -          embeddedIndex:
-  -            indexId: 2
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 2
-  -            keySuffixColumnIds:
-  -            - 1
-  -            sourceIndexId: 1
-  -            tableId: 104
+  -          indexId: 2
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 2
+  -          keySuffixColumnIds:
+  -          - 1
+  -          sourceIndexId: 1
+  -          tableId: 104
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
