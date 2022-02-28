@@ -2819,6 +2819,64 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"overlaps": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryDateAndTime,
+		},
+
+		// TODO(janexing): overlaps(NULL, NULL, NULL, NULL) is returning NULL now,
+		// but in postgres this overload gives "ERROR: function overlaps(unknown,
+		// unknown, unknown, unknown) is not unique"
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"s1", types.Any},
+				{"e1", types.Any},
+				{"s1", types.Any},
+				{"e2", types.Any},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				intervalEndpoints, err := getIntervalEndpoints(args)
+				if err != nil {
+					return nil, err
+				}
+				return checkIfTwoIntervalsOverlap(ctx, intervalEndpoints)
+			},
+			Info:       "Returns if two time periods (defined by their endpoints) overlap.",
+			Volatility: tree.VolatilityStable,
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"t1", types.AnyTuple},
+				{"t2", types.AnyTuple},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				t1, t2 := args[0], args[1]
+				if len(t1.(*tree.DTuple).D) != 2 {
+
+					return nil, pgerror.New(pgcode.Syntax,
+						"wrong number of parameters on left side of OVERLAPS expression",
+					)
+				}
+				if len(t2.(*tree.DTuple).D) != 2 {
+					return nil, pgerror.New(pgcode.Syntax,
+						"wrong number of parameters on right side of OVERLAPS expression",
+					)
+				}
+				t1Lst, t2Lst := t1.(*tree.DTuple).D, t2.(*tree.DTuple).D
+				intervalEndpoints, err := getIntervalEndpoints([]tree.Datum{t1Lst[0], t1Lst[1], t2Lst[0], t2Lst[1]})
+				if err != nil {
+					return nil, err
+				}
+				return checkIfTwoIntervalsOverlap(ctx, intervalEndpoints)
+			},
+			Info:       "Returns if two time periods (defined by their endpoints) overlap.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	"extract":   extractBuiltin,
 	"date_part": extractBuiltin,
 
@@ -9026,4 +9084,203 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 		formattedStmt.WriteString("\n")
 	}
 	return formattedStmt.String(), nil
+}
+
+// checkIfTwoIntervalsOverlap check if two intervals overlap, return a bool
+// and a possible error. The passed `args` parameter consists of
+// [start/end_of_interval_1, end/start_of_interval_2, start/end_of_interval_2,
+// end/start_of_interval_2]. When a pair of values is provided, either the start
+// or the end can be written first; OVERLAPS automatically takes the earlier
+// value of the pair as the start.
+// Each interval is considered to represent the half-open
+// interval start <= time < end, unless start and end are equal in which case
+// it represents that single time instant.
+func checkIfTwoIntervalsOverlap(ctx *tree.EvalContext, args []tree.Datum) (tree.Datum, error) {
+
+	// `s` represents `interval start`, `e` represents `interval end`.
+	s1, e1, s2, e2 := args[0], args[1], args[2], args[3]
+
+	s1IsNull := s1 == tree.DNull
+	e1IsNull := e1 == tree.DNull
+	s2IsNull := s2 == tree.DNull
+	e2IsNull := e2 == tree.DNull
+
+	// Like in Postgres 14, if both endpoints of interval 1 are null, the result
+	// is null (unknown).
+	// If just one endpoint is null, take s1 as the non-null one. Otherwise,
+	// take s1 as the lesser endpoint.
+	if s1IsNull {
+		if e1IsNull {
+			return tree.DNull, nil
+		}
+		s1 = e1
+		e1IsNull = true
+	} else if !e1IsNull {
+		res, err := s1.CompareError(ctx, e1)
+		if err != nil {
+			return nil, err
+		}
+		if res > 0 {
+			s1, e1 = e1, s1
+		}
+	}
+
+	// Likewise for interval 2.
+	if s2IsNull {
+		if e2IsNull {
+			return tree.DNull, nil
+		}
+		s2 = e2
+		e2IsNull = true
+	} else if !e2IsNull {
+		res, err := s2.CompareError(ctx, e2)
+		if err != nil {
+			return nil, err
+		}
+		if res > 0 {
+			s2, e2 = e2, s2
+		}
+	}
+
+	// At this point neither s1 nor s2 is null, so we can consider three
+	compS1S2, err := s1.CompareError(ctx, s2)
+	if err != nil {
+		return nil, err
+	}
+	switch compS1S2 {
+
+	// Case s1 > s2.
+	case 1:
+		if e2IsNull {
+			return tree.DNull, nil
+		}
+		compS1E2, err := s1.CompareError(ctx, e2)
+		if err != nil {
+			return nil, err
+		}
+		if compS1E2 < 0 {
+			return tree.DBoolTrue, nil
+		}
+		if e1IsNull {
+			return tree.DNull, nil
+		}
+
+		// If e1 is not null then we had s1 <= e1 above, and we just found
+		// s1 >= e2, hence e1 >= e2.
+		return tree.DBoolFalse, nil
+
+	// Case s1 < s2.
+	case -1:
+		if e1IsNull {
+			return tree.DNull, nil
+		}
+		compS2E1, err := s2.CompareError(ctx, e1)
+		if err != nil {
+			return nil, err
+		}
+		if compS2E1 < 0 {
+			return tree.DBoolTrue, nil
+		}
+		if e2IsNull {
+			return tree.DNull, nil
+		}
+
+		// If e2 is not null then we had s2 <= e2 above, and we just found
+		// s2 >= e1, hence e2 >= e1.
+		return tree.DBoolFalse, nil
+
+	// Case s1 == s2.
+	default:
+		if e1IsNull || e2IsNull {
+			return tree.DNull, nil
+		}
+		return tree.DBoolTrue, nil
+	}
+}
+
+// getIntervalEndpoints is to represent each interval with (endpoint, endpoint)
+// format. The supported format of an interval are (endpoint1, endpoint2) or
+// (endpoint, interval). This function is to return normalized intervals
+// to the first format.
+func getIntervalEndpoints(args []tree.Datum) (res []tree.Datum, err error) {
+
+	if len(args) != 4 {
+		return nil, pgerror.New(pgcode.Syntax,
+			"wrong number of parameters for the OVERLAPS expression",
+		)
+	}
+
+	if args[0] == tree.DNull && args[1] == tree.DNull && args[2] == tree.DNull && args[3] == tree.DNull {
+		return nil, pgerror.New(pgcode.AmbiguousFunction,
+			"function overlaps(unknown, unknown, unknown, unknown) is not unique")
+	}
+
+	var existingTyp *types.T
+
+	for i, d := range args {
+		if d == tree.DNull {
+			res = append(res, d)
+			continue
+		}
+
+		switch d.(type) {
+		// If the current argument is of the "endpoint" type, append it to the result list.
+		case *tree.DDate, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DTime, *tree.DTimeTZ:
+			if existingTyp == nil {
+				existingTyp = d.ResolvedType()
+			} else {
+				if !existingTyp.Identical(d.ResolvedType()) {
+					return nil, pgerror.New(pgcode.UndefinedFunction, "does not support the current overload")
+				}
+			}
+			res = append(res, d)
+		case *tree.DInterval:
+			// Only the second and the fourth arguments are allowed to be of interval type.
+			if i == 0 || i == 2 {
+				return nil, pgerror.New(pgcode.UndefinedFunction,
+					"overload of the overlaps function must be either "+
+						"(time/date, time/date, time/date, time/date) or "+
+						"(time/date, interval, time/date, interval).")
+			} else {
+				if args[i-1] == tree.DNull {
+					res = append(res, tree.DNull)
+					continue
+				}
+				is, err := normalizeToTime(args[i-1])
+				if err != nil {
+					return nil, err
+				}
+				ie, err := tree.MakeDTimestamp(duration.Add(is, d.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, ie)
+			}
+		default:
+			return nil, pgerror.New(pgcode.UndefinedFunction,
+				"overload of the overlaps syntax must be either "+
+					"(time/date, time/date, time/date, time/date) or "+
+					"(time/date, interval, time/date, interval).")
+		}
+	}
+	return res, nil
+}
+
+// normalizeToTime converts a tree.Datum to time.Time.
+func normalizeToTime(d tree.Datum) (time.Time, error) {
+	switch d.(type) {
+	case *tree.DDate:
+		return d.(*tree.DDate).ToTime()
+	case *tree.DTimestamp:
+		return d.(*tree.DTimestamp).Time, nil
+	case *tree.DTimestampTZ:
+		return d.(*tree.DTimestampTZ).Time, nil
+	case *tree.DTime:
+		return timeofday.TimeOfDay(*d.(*tree.DTime)).ToTime(), nil
+	case *tree.DTimeTZ:
+		tz := *d.(*tree.DTimeTZ)
+		return tz.ToTime(), nil
+	default:
+		return time.Time{}, errors.Newf("%s cannot be converted to time.Time", d)
+	}
 }
