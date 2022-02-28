@@ -518,8 +518,8 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 				allowZeroSuccessDuringUptime: tc.allowZeroSuccessDuringUptime,
 				maxErrorsDuringUptime:        tc.maxErrorsDuringUptime,
 
-				promClient: func(ctrl *gomock.Controller) PromClient {
-					c := NewMockPromClient(ctrl)
+				promClient: func(ctrl *gomock.Controller) prometheus.Client {
+					c := NewMockClient(ctrl)
 					e := c.EXPECT()
 					for _, m := range tc.mockPromQueries {
 						e.Query(ctx, m.q, m.t).Return(
