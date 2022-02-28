@@ -70,8 +70,9 @@ INSERT INTO t VALUES (1), (2), (3);
 		Spans:     []roachpb.Span{span},
 		Timestamp: exportTime,
 		Knobs: TestingKnobs{
-			BeforeScanRequest: func(b *kv.Batch) {
+			BeforeScanRequest: func(b *kv.Batch) error {
 				b.Header.MaxSpanRequestKeys = 1
+				return nil
 			},
 		},
 	}
