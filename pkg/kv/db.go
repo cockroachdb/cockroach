@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -872,6 +873,25 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// https://github.com/cockroachdb/cockroach/issues/48008
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxn(ctx, db, nodeID)
+	txn.SetDebugName("unnamed")
+	return runTxn(ctx, txn, retryable)
+}
+
+// TxnWithSteppingEnabled is the same Txn, but represents a request originating
+// from SQL and has stepping enabled and quality of service set.
+func (db *DB) TxnWithSteppingEnabled(
+	ctx context.Context,
+	qualityOfService sessiondatapb.QoSLevel,
+	retryable func(context.Context, *Txn) error,
+) error {
+	// TODO(radu): we should open a tracing Span here (we need to figure out how
+	// to use the correct tracer).
+
+	// Observed timestamps don't work with multi-tenancy. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/48008
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxnWithSteppingEnabled(ctx, db, nodeID, qualityOfService)
 	txn.SetDebugName("unnamed")
 	return runTxn(ctx, txn, retryable)
 }

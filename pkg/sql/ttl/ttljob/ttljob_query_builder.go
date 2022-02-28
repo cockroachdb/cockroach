@@ -17,10 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -153,13 +156,19 @@ func (b *selectQueryBuilder) run(
 	ctx context.Context, ie *sql.InternalExecutor,
 ) ([]tree.Datums, error) {
 	q, args := b.nextQuery()
+
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
 	// the internal executor will treat a passed-in txn as an explicit txn, so
 	// the AOST clause on the SELECT query would not be interpreted correctly.
-	ret, err := ie.QueryBuffered(
+	qosLevel := sessiondatapb.TTLLow
+	ret, err := ie.QueryBufferedEx(
 		ctx,
 		"ttl_scanner",
 		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User:             security.RootUserName(),
+			QualityOfService: &qosLevel,
+		},
 		q,
 		args...,
 	)
@@ -194,12 +203,12 @@ type deleteQueryBuilder struct {
 	pkColumns       []string
 	deleteBatchSize int
 
-	// queryCache is the cached query, which stays the same as long as we are
+	// cachedQuery is the cached query, which stays the same as long as we are
 	// deleting up to deleteBatchSize elements.
-	queryCache string
-	// argsCache keeps a cache of args to use in the run query.
+	cachedQuery string
+	// cachedArgs keeps a cache of args to use in the run query.
 	// The cache is of form [cutoff, flattened PKs...].
-	argsCache []interface{}
+	cachedArgs []interface{}
 }
 
 func makeDeleteQueryBuilder(
@@ -213,7 +222,7 @@ func makeDeleteQueryBuilder(
 		pkColumns:       pkColumns,
 		deleteBatchSize: deleteBatchSize,
 
-		argsCache: argsCache,
+		cachedArgs: argsCache,
 	}
 }
 
@@ -245,14 +254,14 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 func (b *deleteQueryBuilder) buildQueryAndArgs(rows []tree.Datums) (string, []interface{}) {
 	var q string
 	if len(rows) == b.deleteBatchSize {
-		if b.queryCache == "" {
-			b.queryCache = b.buildQuery(len(rows))
+		if b.cachedQuery == "" {
+			b.cachedQuery = b.buildQuery(len(rows))
 		}
-		q = b.queryCache
+		q = b.cachedQuery
 	} else {
 		q = b.buildQuery(len(rows))
 	}
-	deleteArgs := b.argsCache[:1]
+	deleteArgs := b.cachedArgs[:1]
 	for _, row := range rows {
 		for _, col := range row {
 			deleteArgs = append(deleteArgs, col)
@@ -265,10 +274,15 @@ func (b *deleteQueryBuilder) run(
 	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, rows []tree.Datums,
 ) error {
 	q, deleteArgs := b.buildQueryAndArgs(rows)
-	_, err := ie.Exec(
+	qosLevel := sessiondatapb.TTLLow
+	_, err := ie.ExecEx(
 		ctx,
 		"ttl_delete",
 		txn,
+		sessiondata.InternalExecutorOverride{
+			User:             security.RootUserName(),
+			QualityOfService: &qosLevel,
+		},
 		q,
 		deleteArgs...,
 	)
