@@ -124,7 +124,7 @@ func TestRaftAppliedIndexTermMigration(t *testing.T) {
 			// Start at the version immediately preceding the migration.
 			BinaryVersionOverride: bootstrapVersion,
 			// We want to exercise manual control over the upgrade process.
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 		}
 		return args
 	}
@@ -234,7 +234,7 @@ func TestLatestClusterDoesNotNeedRaftAppliedIndexTermMigration(t *testing.T) {
 		args.Knobs.Server = &server.TestingKnobs{
 			BinaryVersionOverride: binaryVersion,
 			// We want to exercise manual control over the upgrade process.
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 		}
 		return args
 	}

@@ -12,6 +12,7 @@ package scstage
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -22,10 +23,13 @@ import (
 )
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
+// Note that the scJobIDSupplier function is idempotent, and must return the
+// same value for all calls.
 func BuildStages(
 	init scpb.CurrentState, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
 ) []Stage {
 	c := buildContext{
+		rollback:               init.InRollback,
 		g:                      g,
 		scJobIDSupplier:        scJobIDSupplier,
 		isRevertibilityIgnored: true,
@@ -47,6 +51,7 @@ func BuildStages(
 // buildContext contains the global constants for building the stages.
 // Only the BuildStages function mutates it, it's read-only everywhere else.
 type buildContext struct {
+	rollback               bool
 	g                      *scgraph.Graph
 	scJobIDSupplier        func() jobspb.JobID
 	isRevertibilityIgnored bool
@@ -374,82 +379,83 @@ func (sb stageBuilder) build() Stage {
 		}
 		s.EdgeOps = append(s.EdgeOps, e.Op()...)
 	}
-	// Decorate stage with job-related operations.
-	// TODO(ajwerner): Rather than adding this above the opgen layer, it'd be
-	// better to do it as part of graph generation. We could treat the job as
-	// and the job references as elements and track their relationships. The
-	// oddity here is that the job gets both added and removed. In practice, this
-	// may prove to be a somewhat common pattern in other cases: consider the
-	// intermediate index needed when adding and dropping columns as part of the
-	// same transaction.
+	jobOps := sb.computeExtraJobOps(s, after)
+	s.ExtraOps = jobOps
+	return s
+}
+
+// Decorate stage with job-related operations.
+//
+// TODO(ajwerner): Rather than adding this above the opgen layer, it may be
+// better to do it as part of graph generation. We could treat the job as
+// and the job references as elements and track their relationships. The
+// oddity here is that the job gets both added and removed. In practice, this
+// may prove to be a somewhat common pattern in other cases: consider the
+// intermediate index needed when adding and dropping columns as part of the
+// same transaction.
+func (sb stageBuilder) computeExtraJobOps(s Stage, after []scpb.Status) []scop.Op {
 	switch s.Phase {
 	case scop.PreCommitPhase:
 		// If this pre-commit stage is non-terminal, this means there will be at
 		// least one post-commit stage, so we need to create a schema changer job
 		// and update references for the affected descriptors.
 		if !sb.bc.isStateTerminal(after) {
-			s.ExtraOps = append(sb.bc.addJobReferenceOps(), sb.bc.createSchemaChangeJobOp(after))
+			const initialize = true
+			return append(sb.bc.setJobStateOnDescriptorOps(initialize, after),
+				sb.bc.createSchemaChangeJobOp())
 		}
+		return nil
 	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
-		if sb.opType == scop.MutationType {
-			if sb.bc.isStateTerminal(after) {
-				// The terminal mutation stage needs to remove references to the schema
-				// changer job in the affected descriptors.
-				s.ExtraOps = sb.bc.removeJobReferenceOps()
-			}
-			// Post-commit mutation stages all update the progress of the schema
-			// changer job.
-			s.ExtraOps = append(s.ExtraOps, sb.bc.updateJobProgressOp(after, s.Phase > scop.PostCommitPhase))
+		if sb.opType != scop.MutationType {
+			return nil
 		}
+		var ops []scop.Op
+		if sb.bc.isStateTerminal(after) {
+			// The terminal mutation stage needs to remove references to the schema
+			// changer job in the affected descriptors.
+			ops = sb.bc.removeJobReferenceOps()
+		} else {
+			const initialize = false
+			ops = sb.bc.setJobStateOnDescriptorOps(initialize, after)
+		}
+		// If we just moved to a non-cancelable phase, we need to tell the job
+		// that it cannot be canceled. Ideally we'd do this just once.
+		//
+		// TODO(ajwerner): Track the previous stage's phase so we can know when
+		// we need to emit this op. Also, this is buggy, we need to mark the job
+		// as non-cancelable *before* we start to execute the first NonRevertible
+		// phase.
+		ops = append(ops, sb.bc.updateJobProgressOp(s.Phase > scop.PostCommitPhase))
+		return ops
+	default:
+		return nil
 	}
-	return s
 }
 
-func (bc buildContext) createSchemaChangeJobOp(current []scpb.Status) scop.Op {
-	return &scop.CreateDeclarativeSchemaChangerJob{
-		JobID:       bc.scJobIDSupplier(),
-		TargetState: bc.targetState,
-		Current:     current,
+func (bc buildContext) createSchemaChangeJobOp() scop.Op {
+	return &scop.CreateSchemaChangerJob{
+		JobID:         bc.scJobIDSupplier(),
+		Statements:    bc.targetState.Statements,
+		Authorization: bc.targetState.Authorization,
+		DescriptorIDs: screl.AllTargetDescIDs(bc.targetState).Ordered(),
 	}
 }
 
-func (bc buildContext) addJobReferenceOps() []scop.Op {
-	jobID := bc.scJobIDSupplier()
-	return generateOpsForJobIDs(
-		screl.GetDescIDs(bc.targetState),
-		jobID,
-		func(descID descpb.ID, id jobspb.JobID) scop.Op {
-			return &scop.AddJobReference{DescriptorID: descID, JobID: jobID}
-		},
-	)
-}
-
-func (bc buildContext) updateJobProgressOp(current []scpb.Status, isNonCancellable bool) scop.Op {
+func (bc buildContext) updateJobProgressOp(isNonCancellable bool) scop.Op {
 	return &scop.UpdateSchemaChangerJob{
 		JobID:           bc.scJobIDSupplier(),
-		Current:         current,
 		IsNonCancelable: isNonCancellable,
 	}
 }
 
-func (bc buildContext) removeJobReferenceOps() []scop.Op {
+func (bc buildContext) removeJobReferenceOps() (ops []scop.Op) {
 	jobID := bc.scJobIDSupplier()
-	return generateOpsForJobIDs(
-		screl.GetDescIDs(bc.targetState),
-		jobID,
-		func(descID descpb.ID, id jobspb.JobID) scop.Op {
-			return &scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
-		},
-	)
-}
-
-func generateOpsForJobIDs(
-	descIDs []descpb.ID, jobID jobspb.JobID, f func(descID descpb.ID, id jobspb.JobID) scop.Op,
-) []scop.Op {
-	ops := make([]scop.Op, len(descIDs))
-	for i, descID := range descIDs {
-		ops[i] = f(descID, jobID)
-	}
+	screl.AllTargetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
+		ops = append(ops, &scop.RemoveJobStateFromDescriptor{
+			DescriptorID: descID,
+			JobID:        jobID,
+		})
+	})
 	return ops
 }
 
@@ -465,6 +471,59 @@ func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
 		nodes[i] = n
 	}
 	return nodes
+}
+
+func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.Status) []scop.Op {
+	descIDs, states := makeDescriptorStates(
+		bc.scJobIDSupplier(), bc.rollback, bc.targetState, after,
+	)
+	ops := make([]scop.Op, 0, descIDs.Len())
+	descIDs.ForEach(func(descID descpb.ID) {
+		ops = append(ops, &scop.SetJobStateOnDescriptor{
+			DescriptorID: descID,
+			Initialize:   initialize,
+			State:        *states[descID],
+		})
+	})
+	return ops
+}
+
+func makeDescriptorStates(
+	jobID jobspb.JobID, inRollback bool, ts scpb.TargetState, statuses []scpb.Status,
+) (catalog.DescriptorIDSet, map[descpb.ID]*scpb.DescriptorState) {
+	descIDs := screl.AllTargetDescIDs(ts)
+	states := make(map[descpb.ID]*scpb.DescriptorState, descIDs.Len())
+	descIDs.ForEach(func(id descpb.ID) {
+		states[id] = &scpb.DescriptorState{
+			Authorization: ts.Authorization,
+			JobID:         jobID,
+		}
+	})
+	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
+		for i := range state.RelevantStatements {
+			stmt := &state.RelevantStatements[i]
+			if stmt.StatementRank != stmtRank {
+				continue
+			}
+			return
+		}
+		state.RelevantStatements = append(state.RelevantStatements,
+			scpb.DescriptorState_Statement{
+				Statement:     ts.Statements[stmtRank],
+				StatementRank: stmtRank,
+			})
+	}
+	for i, t := range ts.Targets {
+		descID := screl.GetDescID(t.Element())
+		state := states[descID]
+		stmtID := t.Metadata.StatementID
+		noteRelevantStatement(state, stmtID)
+		state.Targets = append(state.Targets, t)
+		state.TargetRanks = append(state.TargetRanks, uint32(i))
+		state.CurrentStatuses = append(state.CurrentStatuses, statuses[i])
+		state.InRollback = inRollback
+	}
+	return descIDs, states
 }
 
 // decorateStages decorates stages with position in plan.

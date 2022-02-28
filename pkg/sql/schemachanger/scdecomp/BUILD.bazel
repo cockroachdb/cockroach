@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scdecomp",
+    srcs = [
+        "decomp.go",
+        "helpers.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/seqexpr",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/schemachanger/scerrors",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "scdecomp_test",
+    srcs = [
+        "decomp_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/schemachanger/sctest",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+    ],
+)

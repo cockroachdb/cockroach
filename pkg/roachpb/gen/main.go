@@ -8,20 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// This file generates batch_generated.go. It can be run via:
-//    go run -tags gen-batch gen/main.go
-
 package main
 
 import (
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
-	"reflect"
+	"path/filepath"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 type variantInfo struct {
@@ -41,35 +41,34 @@ var reqVariants []variantInfo
 var resVariants []variantInfo
 var reqResVariantMapping map[variantInfo]variantInfo
 
-func initVariant(varInstance interface{}) variantInfo {
-	t := reflect.TypeOf(varInstance)
-	f := t.Elem().Field(0) // variants always have 1 field
+func initVariant(ins *inspector.Inspector, varName string) variantInfo {
+	fieldName, msgName := findVariantField(ins, varName)
 	return variantInfo{
-		variantType: t.Elem().Name(),
-		variantName: f.Name,
-		msgType:     f.Type.Elem().Name(),
+		variantType: varName,
+		variantName: fieldName,
+		msgType:     msgName,
 	}
 }
 
-func initVariants() {
-	errVars := (&roachpb.ErrorDetail{}).XXX_OneofWrappers()
+func initVariants(ins *inspector.Inspector) {
+	errVars := findVariantTypes(ins, "ErrorDetail")
 	for _, v := range errVars {
-		errInfo := initVariant(v)
+		errInfo := initVariant(ins, v)
 		errVariants = append(errVariants, errInfo)
 	}
 
-	resVars := (&roachpb.ResponseUnion{}).XXX_OneofWrappers()
+	resVars := findVariantTypes(ins, "ResponseUnion")
 	resVarInfos := make(map[string]variantInfo, len(resVars))
 	for _, v := range resVars {
-		resInfo := initVariant(v)
+		resInfo := initVariant(ins, v)
 		resVariants = append(resVariants, resInfo)
 		resVarInfos[resInfo.variantName] = resInfo
 	}
 
-	reqVars := (&roachpb.RequestUnion{}).XXX_OneofWrappers()
+	reqVars := findVariantTypes(ins, "RequestUnion")
 	reqResVariantMapping = make(map[variantInfo]variantInfo, len(reqVars))
 	for _, v := range reqVars {
-		reqInfo := initVariant(v)
+		reqInfo := initVariant(ins, v)
 		reqVariants = append(reqVariants, reqInfo)
 
 		// The ResponseUnion variants match those in RequestUnion, with the
@@ -85,6 +84,95 @@ func initVariants() {
 		}
 		reqResVariantMapping[reqInfo] = resInfo
 	}
+}
+
+// findVariantTypes leverages the fact that the protobuf generations creates
+// a method called XXX_OneofWrappers for oneof message types. The body of that
+// method is always a single return expression which returns a []interface{}
+// where each of the element in the slice literal are (*<type>)(nil)
+// expressions which can be interpreted using reflection. We'll find that
+// method for the oneof type with the requested name and then fish out the
+// list of variant types from inside that ParenExpr in the CompositeLit
+// underneath that method.
+//
+// The code in question looks like the below snippet, where we would pull
+// "ErrorDetail_NotLeaseholder" one of the returned strings.
+//
+//  // XXX_OneofWrappers is for the internal use of the proto package.
+//  func (*ErrorDetail) XXX_OneofWrappers() []interface{} {
+//  return []interface{}{
+//    (*ErrorDetail_NotLeaseHolder)(nil),
+//    ...
+//
+func findVariantTypes(ins *inspector.Inspector, oneofName string) []string {
+	var variants []string
+	var inFunc bool
+	var inParen bool
+	ins.Nodes([]ast.Node{
+		(*ast.FuncDecl)(nil),
+		(*ast.ParenExpr)(nil),
+		(*ast.Ident)(nil),
+	}, func(node ast.Node, push bool) (proceed bool) {
+		switch n := node.(type) {
+		case *ast.FuncDecl:
+			if n.Name.Name != "XXX_OneofWrappers" {
+				return false
+			}
+			se, ok := n.Recv.List[0].Type.(*ast.StarExpr)
+			if !ok {
+				return false
+			}
+			if se.X.(*ast.Ident).Name != oneofName {
+				return false
+			}
+			inFunc = push
+			return true
+		case *ast.ParenExpr:
+			inParen = push && inFunc
+			return inParen
+		case *ast.Ident:
+			if inParen {
+				variants = append(variants, n.Name)
+			}
+			return false
+		default:
+			return false
+		}
+	})
+	return variants
+}
+
+// findVariantField is used to find the field name and type name of the
+// variant with the name vType. Oneof variant types always have a single
+// field.
+//
+// The code in question looks like the below snippet, where we would return
+// ("NotLeaseHolder", "NotLeaseHolderError").
+//
+//  type ErrorDetail_NotLeaseHolder struct {
+//    NotLeaseHolder *NotLeaseHolderError
+//  }
+//
+func findVariantField(ins *inspector.Inspector, vType string) (fieldName, msgName string) {
+	ins.Preorder([]ast.Node{
+		(*ast.TypeSpec)(nil),
+	}, func(node ast.Node) {
+		n := node.(*ast.TypeSpec)
+		if n.Name.Name != vType {
+			return
+		}
+		st, ok := n.Type.(*ast.StructType)
+		if !ok {
+			return
+		}
+		if len(st.Fields.List) != 1 {
+			panic(fmt.Sprintf("type %v has %d fields", vType, len(st.Fields.List)))
+		}
+		f := st.Fields.List[0]
+		fieldName = f.Names[0].Name
+		msgName = f.Type.(*ast.StarExpr).X.(*ast.Ident).Name
+	})
+	return fieldName, msgName
 }
 
 func genGetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
@@ -133,8 +221,24 @@ func (ru *%[1]s) MustSetInner(r %[2]s) {
 func main() {
 	var filenameFlag = flag.String("filename", "batch_generated.go", "filename path")
 	flag.Parse()
+	fileSet := token.NewFileSet()
+	var files []*ast.File
+	for _, arg := range flag.Args() {
+		expanded, err := filepath.Glob(arg)
+		if err != nil {
+			panic(fmt.Sprintf("failed to expand %s: %v", arg, err))
+		}
+		for _, fp := range expanded {
+			f, err := parser.ParseFile(fileSet, fp, nil, 0)
+			if err != nil {
+				panic(fmt.Sprintf("failed to parse %s: %v", arg, err))
+			}
+			files = append(files, f)
+		}
+	}
 
-	initVariants()
+	ins := inspector.New(files)
+	initVariants(ins)
 
 	f, err := os.Create(*filenameFlag)
 	if err != nil {

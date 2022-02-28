@@ -12,7 +12,9 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -28,7 +30,11 @@ func init() {
 }
 
 func declareKeysTruncateLog(
-	rs ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	prefix := keys.RaftLogPrefix(rs.GetRangeID())
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
@@ -78,13 +84,32 @@ func TruncateLog(
 		return result.Result{}, errors.Wrap(err, "getting term")
 	}
 
-	// Compute the number of bytes freed by this truncation. Note that this will
-	// only make sense for the leaseholder as we base this off its own first
-	// index (other replicas may have other first indexes assuming we're not
-	// still using the legacy truncated state key). In principle, this could be
-	// off either way, though in practice we don't expect followers to have
-	// a first index smaller than the leaseholder's (see #34287), and most of
-	// the time everyone's first index should be the same.
+	// Compute the number of bytes freed by this truncation. Note that using
+	// firstIndex only make sense for the leaseholder as we base this off its
+	// own first index (other replicas may have other first indexes). In
+	// principle, this could be off either way, though in practice we don't
+	// expect followers to have a first index smaller than the leaseholder's
+	// (see #34287), and most of the time everyone's first index should be the
+	// same.
+	// Additionally, it is possible that a write-heavy range has multiple in
+	// flight TruncateLogRequests, and using the firstIndex will result in
+	// duplicate accounting. The ExpectedFirstIndex, populated for clusters at
+	// LooselyCoupledRaftLogTruncation, allows us to avoid this problem.
+	//
+	// We have an additional source of error not mitigated by
+	// ExpectedFirstIndex. There is nothing synchronizing firstIndex with the
+	// state visible in readWriter. The former uses the in-memory state or
+	// fetches directly from the Engine. The latter uses Engine state from some
+	// point in time which can fall anywhere in the time interval starting from
+	// when the readWriter was created up to where we create an MVCCIterator
+	// below.
+	// TODO(sumeer): we can eliminate this error as part of addressing
+	// https://github.com/cockroachdb/cockroach/issues/55461 and
+	// https://github.com/cockroachdb/cockroach/issues/70974 that discuss taking
+	// a consistent snapshot of some Replica state and the engine.
+	if args.ExpectedFirstIndex > firstIndex {
+		firstIndex = args.ExpectedFirstIndex
+	}
 	start := keys.RaftLogKey(rangeID, firstIndex)
 	end := keys.RaftLogKey(rangeID, args.Index)
 
@@ -93,12 +118,8 @@ func TruncateLog(
 	// downstream of Raft.
 	//
 	// Note that any sideloaded payloads that may be removed by this truncation
-	// don't matter; they're not tracked in the raft log delta.
-	//
-	// TODO(tbg): it's difficult to prove that this computation doesn't have
-	// bugs that let it diverge. It might be easier to compute the stats
-	// from scratch, stopping when 4mb (defaultRaftLogTruncationThreshold)
-	// is reached as at that point we'll truncate aggressively anyway.
+	// are not tracked in the raft log delta. The delta will be adjusted below
+	// raft.
 	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
@@ -117,7 +138,10 @@ func TruncateLog(
 	pd.Replicated.State = &kvserverpb.ReplicaState{
 		TruncatedState: tState,
 	}
-
 	pd.Replicated.RaftLogDelta = ms.SysBytes
+	if cArgs.EvalCtx.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).IsActive(
+		clusterversion.LooselyCoupledRaftLogTruncation) {
+		pd.Replicated.RaftExpectedFirstIndex = firstIndex
+	}
 	return pd, nil
 }

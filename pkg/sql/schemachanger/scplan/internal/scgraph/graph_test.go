@@ -84,7 +84,7 @@ func TestGraphRanks(t *testing.T) {
 		status := make([]scpb.Status, len(tc.addNode))
 		for idx := range tc.addNode {
 			ts.Targets[idx] = scpb.MakeTarget(
-				scpb.Status_PUBLIC,
+				scpb.ToPublic,
 				&scpb.Table{
 					TableID: descpb.ID(idx),
 				},

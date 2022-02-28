@@ -25,7 +25,7 @@ exports_files([
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
-# gazelle:build_tags bazel,compose,fast_int_set_small,fast_int_set_large,gss
+# gazelle:build_tags bazel,compose,deadlock,fast_int_set_small,fast_int_set_large,gss,slow
 
 # Enable protobuf generation.
 #
@@ -56,16 +56,6 @@ exports_files([
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
-
-# These packages use github.com/golang/mock to generate mocks. The target
-# generating mocks for a given package necessarily depends on the package's
-# go_library target, which then prevents us from including those mock symbols
-# as part of the package's go_library target. We consequently export a second
-# target, embedding the first but also including the mock symbols. We need to
-# tell gazelle to resolve to this second target instead. See
-# pkg/kv/kvclient/rangefeed/BUILD.bazel for an annotated example.
-#
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
@@ -113,6 +103,7 @@ exports_files([
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
+# gazelle:exclude **/*.pb.go
 # gazelle:exclude **/*.pb.gw.go
 # gazelle:exclude **/*_interval_btree.go
 # gazelle:exclude **/*_interval_btree_test.go
@@ -132,7 +123,6 @@ exports_files([
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
 # gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
-# gazelle:exclude pkg/util/buildutil/crdb_test_dyn.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_off.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_on.go
 # gazelle:exclude pkg/acceptance/compose/gss/psql/*
@@ -209,14 +199,4 @@ nogo(
             "//pkg/testutils/lint/passes/unconvert",
         ] + STATICCHECK_CHECKS,
     }),
-)
-
-go_path(
-    name = "go_path",
-    # TODO(ricky): change back to 'link' when possible, see
-    # https://github.com/cockroachdb/cockroach/issues/75094
-    mode = "copy",
-    deps = [
-        "//pkg/cmd/cockroach-short",
-    ],
 )

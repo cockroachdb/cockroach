@@ -43,6 +43,7 @@ go_library(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/arith",
@@ -107,4 +108,8 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

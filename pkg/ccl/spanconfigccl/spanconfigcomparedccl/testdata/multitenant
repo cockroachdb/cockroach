@@ -18,8 +18,9 @@ initialize tenant=11
 configs version=current offset=43
 ----
 ...
-/Tenant/10                                 range default
-/Tenant/11                                 range default
+/Table/50                                  database system (host)
+/Tenant/10                                 database system (tenant)
+/Tenant/11                                 database system (tenant)
 
 diff offset=50
 ----
@@ -36,16 +37,17 @@ reconcile tenant=11
 configs version=current offset=43 limit=5
 ----
 ...
-/Tenant/10                                 range default
+/Table/50                                  database system (host)
+/Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
 /Tenant/11/Table/4                         database system (tenant)
 /Tenant/11/Table/5                         database system (tenant)
-/Tenant/11/Table/6                         database system (tenant)
 ...
 
 configs version=legacy offset=43
 ----
 ...
+/Table/50                                  range system
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
 
@@ -54,6 +56,7 @@ diff offset=48 limit=10
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
+ /Tenant/10                                 database system (tenant)
  /Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/4                         database system (tenant)
 +/Tenant/11/Table/5                         database system (tenant)
@@ -63,7 +66,6 @@ diff offset=48 limit=10
 +/Tenant/11/Table/12                        database system (tenant)
 +/Tenant/11/Table/13                        database system (tenant)
 +/Tenant/11/Table/14                        database system (tenant)
-+/Tenant/11/Table/15                        database system (tenant)
  ...
 
 # Sanity check that new tenant tables show up correctly.
@@ -80,6 +82,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
+ /Tenant/10                                 database system (tenant)
  /Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/4                         database system (tenant)
 +/Tenant/11/Table/5                         database system (tenant)

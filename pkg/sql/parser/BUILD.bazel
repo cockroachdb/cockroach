@@ -30,6 +30,9 @@ go_library(
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/scanner",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",  # keep
+        "//pkg/sql/sem/tree/treecmp",  # keep
+        "//pkg/sql/sem/tree/treewindow",  # keep
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
@@ -56,6 +59,8 @@ go_test(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/testutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
@@ -111,6 +116,10 @@ genrule(
     exec_tools = [
         ":help-gen-test",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the target to auto-generate help messages from the grammar file.
@@ -124,6 +133,10 @@ genrule(
     cmd = """
       awk -f $(location :help.awk) < $(location :sql.y) > $@
     """,
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 exports_files(

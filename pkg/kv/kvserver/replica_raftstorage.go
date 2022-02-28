@@ -74,7 +74,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	readonly := r.store.Engine().NewReadOnly()
+	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.raftMu.sideloaded == nil {
@@ -280,7 +280,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	if e, ok := r.store.raftEntryCache.Get(r.RangeID, i); ok {
 		return e.Term, nil
 	}
-	readonly := r.store.Engine().NewReadOnly()
+	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)
@@ -877,7 +877,9 @@ func (r *Replica) applySnapshot(
 	}(timeutil.Now())
 
 	unreplicatedSSTFile := &storage.MemFile{}
-	unreplicatedSST := storage.MakeIngestionSSTWriter(unreplicatedSSTFile)
+	unreplicatedSST := storage.MakeIngestionSSTWriter(
+		ctx, r.ClusterSettings(), unreplicatedSSTFile,
+	)
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
@@ -895,7 +897,7 @@ func (r *Replica) applySnapshot(
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
 	if err := r.raftMu.stateLoader.SetRaftReplicaID(
-		ctx, &unreplicatedSST, r.mu.replicaID); err != nil {
+		ctx, &unreplicatedSST, r.replicaID); err != nil {
 		return errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
 	}
 
@@ -1046,7 +1048,7 @@ func (r *Replica) applySnapshot(
 	// we missed the application of a merge) and we are the new leaseholder, we
 	// make sure to update the timestamp cache using the prior read summary to
 	// account for any reads that were served on the right-hand side range(s).
-	if len(subsumedRepls) > 0 && state.Lease.Replica.ReplicaID == r.mu.replicaID && prioReadSum != nil {
+	if len(subsumedRepls) > 0 && state.Lease.Replica.ReplicaID == r.replicaID && prioReadSum != nil {
 		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), *prioReadSum)
 	}
 
@@ -1111,7 +1113,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
-		subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
+		subsumedReplSST := storage.MakeIngestionSSTWriter(
+			ctx, r.ClusterSettings(), subsumedReplSSTFile,
+		)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
@@ -1167,7 +1171,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Compare(keyRanges[i].End) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
-			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
+			subsumedReplSST := storage.MakeIngestionSSTWriter(
+				ctx, r.ClusterSettings(), subsumedReplSSTFile,
+			)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),

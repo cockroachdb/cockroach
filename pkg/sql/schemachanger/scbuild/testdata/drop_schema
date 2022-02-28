@@ -45,188 +45,566 @@ CREATE VIEW sc2.v6 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
 build
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
+- [[AliasType:{DescID: 113}, ABSENT], PUBLIC]
+  details:
+    embeddedTypeT:
+      closedTypeIds:
+      - 112
+      - 113
+      type:
+        arrayContents:
+          family: EnumFamily
+          oid: 100112
+          udtMetadata:
+            arrayTypeOid: 100113
+        arrayElemType: EnumFamily
+        family: ArrayFamily
+        oid: 100113
+    typeId: 113
 - [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
-    familyName: primary
-    pgAttributeNum: 1
     tableId: 107
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
 - [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
     tableId: 107
-    type:
-      family: StringFamily
-      oid: 1043
-      visibleType: 7
-      width: 256
 - [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
-    defaultExpr: nextval(106:::REGCLASS)
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 3
     tableId: 107
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-    usesSequenceIds:
-    - 106
+- [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 108
+- [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 109
+- [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 109
+- [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 110
+- [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 110
+- [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 111
+- [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 111
+- [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 114
+- [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 114
+- [[Column:{DescID: 114, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    tableId: 114
+- [[Column:{DescID: 115, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 115
+- [[Column:{DescID: 115, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 115
+- [[Column:{DescID: 115, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    tableId: 115
 - [[ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 107
 - [[ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 107
 - [[ColumnComment:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 107
-- [[ColumnName:{DescID: 107, ColumnID: 1, Name: id}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 108
+- [[ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 109
+- [[ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 109
+- [[ColumnComment:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 110
+- [[ColumnComment:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 110
+- [[ColumnComment:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 111
+- [[ColumnComment:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 111
+- [[ColumnComment:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 114
+- [[ColumnComment:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 114
+- [[ColumnComment:{DescID: 114, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    comment: __placeholder_comment__
+    tableId: 114
+- [[ColumnComment:{DescID: 115, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 115
+- [[ColumnComment:{DescID: 115, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 115
+- [[ColumnComment:{DescID: 115, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    comment: __placeholder_comment__
+    tableId: 115
+- [[ColumnDefaultExpression:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    embeddedExpr:
+      expr: nextval(106:::REGCLASS)
+      usesSequenceIds:
+      - 106
+    tableId: 107
+- [[ColumnFamily:{DescID: 107, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+  details:
+    name: primary
+    tableId: 107
+- [[ColumnName:{DescID: 107, Name: id, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     name: id
     tableId: 107
-- [[ColumnName:{DescID: 107, ColumnID: 2, Name: name}, ABSENT], PUBLIC]
+- [[ColumnName:{DescID: 107, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     name: name
     tableId: 107
-- [[ColumnName:{DescID: 107, ColumnID: 3, Name: val}, ABSENT], PUBLIC]
+- [[ColumnName:{DescID: 107, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     name: val
     tableId: 107
-- [[ConstraintComment:{DescID: 107, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[ColumnName:{DescID: 108, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
-    constraintName: t1_pkey
-    constraintType: PrimaryKey
-    tableId: 107
-- [[DatabaseSchemaEntry:{DescID: 100, ReferencedDescID: 104}, ABSENT], PUBLIC]
+    columnId: 1
+    name: name
+    tableId: 108
+- [[ColumnName:{DescID: 109, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    databaseId: 100
-    schemaId: 104
-- [[DefaultExpression:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
+    columnId: 1
+    name: n1
+    tableId: 109
+- [[ColumnName:{DescID: 109, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n2
+    tableId: 109
+- [[ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n1
+    tableId: 110
+- [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: name
+    tableId: 110
+- [[ColumnName:{DescID: 111, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n1
+    tableId: 111
+- [[ColumnName:{DescID: 111, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: n2
+    tableId: 111
+- [[ColumnName:{DescID: 114, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: k
+    tableId: 114
+- [[ColumnName:{DescID: 114, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
-    defaultExpr: nextval(106:::REGCLASS)
+    name: n1
+    tableId: 114
+- [[ColumnName:{DescID: 114, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n2
+    tableId: 114
+- [[ColumnName:{DescID: 115, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: k
+    tableId: 115
+- [[ColumnName:{DescID: 115, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    name: n1
+    tableId: 115
+- [[ColumnName:{DescID: 115, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n2
+    tableId: 115
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isRelationBeingDropped: true
     tableId: 107
-    usesSequenceIDs:
-    - 106
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 107
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 107
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 108
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 109
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 109
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 110
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 110
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 114
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 114
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 114
+- [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 115
+- [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 115
+- [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 115
+- [[EnumType:{DescID: 112}, ABSENT], PUBLIC]
+  details:
+    arrayTypeId: 113
+    typeId: 112
 - [[IndexComment:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     indexId: 1
     tableId: 107
-- [[IndexName:{DescID: 107, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[IndexName:{DescID: 107, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: t1_pkey
     tableId: 107
-- [[Locality:{DescID: 106}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
-    descriptorId: 106
-- [[Locality:{DescID: 107}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 107
-- [[Locality:{DescID: 108}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 108
-- [[Locality:{DescID: 109}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 109
-- [[Locality:{DescID: 110}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 110
-- [[Locality:{DescID: 111}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 111
-- [[Locality:{DescID: 114}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 114
-- [[Locality:{DescID: 115}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 115
-- [[Namespace:{DescID: 106, Name: sq1}, ABSENT], PUBLIC]
+    databaseId: 100
+    descriptorId: 104
+    name: sc1
+- [[Namespace:{DescID: 106, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 106
     name: sq1
     schemaId: 104
-- [[Namespace:{DescID: 107, Name: t1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 107, Name: t1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 107
     name: t1
     schemaId: 104
-- [[Namespace:{DescID: 108, Name: v1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 108, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 108
     name: v1
     schemaId: 104
-- [[Namespace:{DescID: 109, Name: v2}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 109, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 109
     name: v2
     schemaId: 104
-- [[Namespace:{DescID: 110, Name: v3}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 110, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 110
     name: v3
     schemaId: 104
-- [[Namespace:{DescID: 111, Name: v4}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 111
     name: v4
     schemaId: 104
-- [[Namespace:{DescID: 112, Name: typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 112, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 112
     name: typ
     schemaId: 104
-- [[Namespace:{DescID: 113, Name: _typ}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 113, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 113
     name: _typ
     schemaId: 104
-- [[Namespace:{DescID: 114, Name: v5}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 114, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 114
     name: v5
     schemaId: 104
-- [[Namespace:{DescID: 115, Name: v6}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 115, Name: v6, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 115
     name: v6
     schemaId: 105
+- [[ObjectParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 106
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 107
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 108
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 109
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 110
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 111
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 112, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 112
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 113
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 114, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  details:
+    objectId: 114
+    parentSchemaId: 104
+- [[ObjectParent:{DescID: 115, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  details:
+    objectId: 115
+    parentSchemaId: 105
+- [[Owner:{DescID: 104}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 104
+    owner: root
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
@@ -251,6 +629,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   details:
     descriptorId: 111
     owner: root
+- [[Owner:{DescID: 112}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 112
+    owner: root
+- [[Owner:{DescID: 113}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 113
+    owner: root
 - [[Owner:{DescID: 114}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
@@ -261,75 +647,27 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     owner: root
 - [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    - 3
-    tableId: 107
-    unique: true
-- [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT], PUBLIC]
-  details:
-    columnID: 3
-    dependedOn: 107
-    tableId: 106
-- [[RelationDependedOnBy:{DescID: 107, ReferencedDescID: 108}, ABSENT], PUBLIC]
-  details:
-    columnID: 2
-    dependedOn: 108
-    tableId: 107
-- [[RelationDependedOnBy:{DescID: 108, ReferencedDescID: 109}, ABSENT], PUBLIC]
-  details:
-    columnID: 1
-    dependedOn: 109
-    tableId: 108
-- [[RelationDependedOnBy:{DescID: 108, ReferencedDescID: 110}, ABSENT], PUBLIC]
-  details:
-    columnID: 1
-    dependedOn: 110
-    tableId: 108
-- [[RelationDependedOnBy:{DescID: 109, ReferencedDescID: 110}, ABSENT], PUBLIC]
-  details:
-    columnID: 1
-    dependedOn: 110
-    tableId: 109
-- [[RelationDependedOnBy:{DescID: 109, ReferencedDescID: 111}, ABSENT], PUBLIC]
-  details:
-    columnID: 1
-    dependedOn: 111
-    tableId: 109
-- [[RelationDependedOnBy:{DescID: 111, ReferencedDescID: 114}, ABSENT], PUBLIC]
-  details:
-    columnID: 1
-    dependedOn: 114
-    tableId: 111
-- [[RelationDependedOnBy:{DescID: 111, ReferencedDescID: 115}, ABSENT], PUBLIC]
-  details:
-    columnID: 1
-    dependedOn: 115
-    tableId: 111
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      - 3
+      tableId: 107
 - [[Schema:{DescID: 104}, ABSENT], PUBLIC]
   details:
-    dependentObjects:
-    - 106
-    - 107
-    - 108
-    - 109
-    - 110
-    - 111
-    - 112
-    - 113
-    - 114
     schemaId: 104
 - [[SchemaComment:{DescID: 104}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
+    schemaId: 104
+- [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    parentDatabaseId: 100
     schemaId: 104
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   details:
@@ -339,193 +677,226 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     tableId: 107
 - [[TableComment:{DescID: 106}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 106
 - [[TableComment:{DescID: 107}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 107
 - [[TableComment:{DescID: 108}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 108
 - [[TableComment:{DescID: 109}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 109
 - [[TableComment:{DescID: 110}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 110
 - [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 111
 - [[TableComment:{DescID: 114}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 114
 - [[TableComment:{DescID: 115}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 115
-- [[Type:{DescID: 112}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
-    typeId: 112
-- [[Type:{DescID: 113}, ABSENT], PUBLIC]
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
   details:
-    typeId: 113
-- [[UserPrivileges:{DescID: 106, Username: admin}, ABSENT], PUBLIC]
+    descriptorId: 104
+    userName: public
+- [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 106, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
-    username: public
-- [[UserPrivileges:{DescID: 106, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 107, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 107, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
-    username: public
-- [[UserPrivileges:{DescID: 107, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 108, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 108, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
-    username: public
-- [[UserPrivileges:{DescID: 108, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 109, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 109, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
-    username: public
-- [[UserPrivileges:{DescID: 109, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 110, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 110, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 110, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
-    username: public
-- [[UserPrivileges:{DescID: 110, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 111, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 111, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
-    username: public
-- [[UserPrivileges:{DescID: 111, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 114, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 112
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 112
+    privileges: 512
+    userName: public
+- [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 112
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 113
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 113, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 113
+    privileges: 512
+    userName: public
+- [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 113
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 114, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 114, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
-    username: public
-- [[UserPrivileges:{DescID: 114, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
     privileges: 2
-    username: root
-- [[UserPrivileges:{DescID: 115, Username: admin}, ABSENT], PUBLIC]
+    userName: root
+- [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 115
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 115, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 115
-    username: public
-- [[UserPrivileges:{DescID: 115, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 115
     privileges: 2
-    username: root
+    userName: root
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   details:
-    tableId: 108
+    usesRelationIds:
+    - 107
+    viewId: 108
 - [[View:{DescID: 109}, ABSENT], PUBLIC]
   details:
-    tableId: 109
+    usesRelationIds:
+    - 108
+    viewId: 109
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   details:
-    tableId: 110
+    usesRelationIds:
+    - 108
+    - 109
+    viewId: 110
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:
-    tableId: 111
+    usesRelationIds:
+    - 109
+    viewId: 111
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   details:
-    tableId: 114
+    usesRelationIds:
+    - 111
+    usesTypeIds:
+    - 112
+    - 113
+    viewId: 114
 - [[View:{DescID: 115}, ABSENT], PUBLIC]
   details:
-    tableId: 115
-- [[ViewDependsOnType:{DescID: 114, ReferencedDescID: 112}, ABSENT], PUBLIC]
-  details:
-    tableId: 114
-    typeId: 112
-- [[ViewDependsOnType:{DescID: 114, ReferencedDescID: 113}, ABSENT], PUBLIC]
-  details:
-    tableId: 114
-    typeId: 113
-- [[ViewDependsOnType:{DescID: 115, ReferencedDescID: 112}, ABSENT], PUBLIC]
-  details:
-    tableId: 115
-    typeId: 112
-- [[ViewDependsOnType:{DescID: 115, ReferencedDescID: 113}, ABSENT], PUBLIC]
-  details:
-    tableId: 115
-    typeId: 113
+    usesRelationIds:
+    - 111
+    usesTypeIds:
+    - 112
+    - 113
+    viewId: 115

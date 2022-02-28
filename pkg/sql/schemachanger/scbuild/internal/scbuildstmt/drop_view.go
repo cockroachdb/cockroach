@@ -11,12 +11,12 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -24,97 +24,68 @@ import (
 
 // DropView implements DROP VIEW.
 func DropView(b BuildCtx, n *tree.DropView) {
-	type viewDropCtx struct {
-		view     catalog.TableDescriptor
-		buildCtx BuildCtx
-	}
-	views := make([]viewDropCtx, 0, len(n.Names))
-	for idx := range n.Names {
-		name := &n.Names[idx]
-		prefix, view := b.ResolveView(name.ToUnresolvedObjectName(), ResolveParams{
+	var toCheckBackrefs []catid.DescID
+	for i := range n.Names {
+		name := &n.Names[i]
+		elts := b.ResolveView(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
+		_, _, view := scpb.FindView(elts)
 		if view == nil {
 			b.MarkNameAsNonExistent(name)
 			continue
 		}
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
-		name.ObjectNamePrefix = prefix.NamePrefix()
-		// We don't support dropping temporary tables.
-		if view.IsTemporary() {
+		name.ObjectNamePrefix = b.NamePrefix(view)
+		// Check what we support dropping.
+		if view.IsTemporary {
 			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary view"))
 		}
-		if view.MaterializedView() && !n.IsMaterialized {
-			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", view.GetName()),
+		if view.IsMaterialized && !n.IsMaterialized {
+			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", name.ObjectName),
 				"use the corresponding MATERIALIZED VIEW command"))
 		}
-		if !view.MaterializedView() && n.IsMaterialized {
-			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", view.GetName()))
+		if !view.IsMaterialized && n.IsMaterialized {
+			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", name.ObjectName))
 		}
-		newCtx := dropViewBasic(b, view)
-		views = append(views, viewDropCtx{
-			view:     view,
-			buildCtx: newCtx,
-		})
+		if n.DropBehavior == tree.DropCascade {
+			dropCascadeDescriptor(b, view.ViewID)
+		} else if dropRestrictDescriptor(b, view.ViewID) {
+			toCheckBackrefs = append(toCheckBackrefs, view.ViewID)
+		}
 		b.IncrementSubWorkID()
+		if view.IsMaterialized {
+			b.IncrementSchemaChangeDropCounter("materialized_view")
+		} else {
+			b.IncrementSchemaChangeDropCounter("view")
+		}
 	}
-	// Validate if the dependent objects need to be dropped, if necessary
-	// this will cascade.
-	for _, viewCtx := range views {
-		dropViewDependents(viewCtx.buildCtx, viewCtx.view, n.DropBehavior)
+	// Check if there are any back-references which would prevent a DROP RESTRICT.
+	for _, viewID := range toCheckBackrefs {
+		backrefs := undroppedBackrefs(b, viewID)
+		if backrefs.IsEmpty() {
+			continue
+		}
+		_, _, ns := scpb.FindNamespace(b.QueryByID(viewID))
+		maybePanicOnDependentView(b, ns, backrefs)
+		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"cannot drop view %s because other objects depend on it", ns.Name))
 	}
 }
 
-// dropTable drops a view and its dependencies, if the cascade behavior is not
-// specified the appropriate error will be generated.
-func dropView(b BuildCtx, view catalog.TableDescriptor, behavior tree.DropBehavior) {
-	dropViewDependents(dropViewBasic(b, view), view, behavior)
-}
-
-// dropTableBasic drops the view and does not validate or deal with
-// any objects that may need to be dealt with when cascading. The BuildCtx for
-// cascaded drops is returned.
-func dropViewBasic(b BuildCtx, view catalog.TableDescriptor) BuildCtx {
-	decomposeTableDescToElements(b, view, scpb.Status_ABSENT)
-	return b.WithNewSourceElementID()
-}
-
-// dropTableDependents drops any dependent objects for the view if possible,
-// if a cascade is not specified an appropriate error is returned.
-func dropViewDependents(b BuildCtx, view catalog.TableDescriptor, behavior tree.DropBehavior) {
-	// Go over the dependencies and generate drop targets
-	// for them. In our case they should only be views.
-	scpb.ForEachRelationDependedOnBy(b, func(_, _ scpb.Status, dep *scpb.RelationDependedOnBy) {
-		if dep.TableID != view.GetID() {
-			return
-		}
-		dependentDesc := b.MustReadTable(dep.DependedOnBy)
-		if !dependentDesc.IsView() {
-			panic(errors.AssertionFailedf("descriptor :%s is not a view", dependentDesc.GetName()))
-		}
-		if behavior != tree.DropCascade &&
-			!checkIfDescOrElementAreDropped(b, dep.DependedOnBy) {
-			name, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(view.GetID()), tree.ResolveRequireViewDesc)
-			onErrPanic(err)
-
-			depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(dep.DependedOnBy), tree.ResolveRequireViewDesc)
-			onErrPanic(err)
-			if dependentDesc.GetParentID() != view.GetParentID() {
-				panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
-					name.Object(), depViewName.FQString()),
-					"you can drop %s instead.", depViewName.Object()))
-			} else {
-				panic(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
-					name.Object(), depViewName.Object()))
-			}
-		}
-		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(
-			b.EvalCtx().Ctx(),
-			dependentDesc,
-			privilege.DROP))
-		// Decompose and recursively attempt to drop.
-		dropView(b, dependentDesc, behavior)
-	})
+func maybePanicOnDependentView(b BuildCtx, ns *scpb.Namespace, backrefs ElementResultSet) {
+	_, _, depView := scpb.FindView(backrefs)
+	if depView == nil {
+		return
+	}
+	_, _, nsDep := scpb.FindNamespace(b.QueryByID(depView.ViewID))
+	if nsDep.DatabaseID != ns.DatabaseID {
+		panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
+			ns.Name, qualifiedName(b, depView.ViewID)),
+			"you can drop %s instead.", nsDep.Name))
+	}
+	panic(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
+		ns.Name, nsDep.Name))
 }

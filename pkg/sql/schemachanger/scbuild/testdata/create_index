@@ -5,163 +5,170 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
-- [[IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id1
     tableId: 104
 - [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    - ASC
-    keyColumnIds:
-    - 1
-    - 2
-    sourceIndexId: 1
-    storingColumnIds:
-    - 3
-    tableId: 104
+    embeddedIndex:
+      indexId: 2
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
 
 build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name) STORING (money)
 ----
-- [[IndexName:{DescID: 104, IndexID: 2, Name: id2}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: id2, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id2
     tableId: 104
 - [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    concurrently: true
-    indexId: 2
-    inverted: true
-    keyColumnDirection:
-    - ASC
-    - ASC
-    keyColumnIds:
-    - 1
-    - 2
-    sourceIndexId: 1
-    storingColumnIds:
-    - 3
-    tableId: 104
+    embeddedIndex:
+      indexId: 2
+      isConcurrently: true
+      isInverted: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
 
-build
+build skip=sql_dependencies
 CREATE INDEX id3
 	ON defaultdb.t1 (id, name)
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-- [[IndexName:{DescID: 104, IndexID: 2, Name: id3}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: id3, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id3
     tableId: 104
-- [[Partitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    fields:
-    - id
     indexId: 2
-    listPartitions:
-    - expr:
-      - "1"
-      name: p1
-    rangePartitions: []
+    partitioning:
+      numColumns: 1
     tableId: 104
 - [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    - ASC
-    keyColumnIds:
-    - 1
-    - 2
-    sourceIndexId: 1
-    storingColumnIds:
-    - 3
-    tableId: 104
+    embeddedIndex:
+      indexId: 2
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
 
 build
 CREATE INDEX id4
-	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
+	ON defaultdb.t1 (id, name) USING HASH STORING (money) WITH (bucket_count=8)
 ----
 - [[Column:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
   details:
     columnId: 4
-    computerExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
-    familyName: primary
-    hidden: true
-    pgAttributeNum: 4
+    isHidden: true
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 23
-      width: 32
-- [[IndexName:{DescID: 104, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[ColumnName:{DescID: 104, Name: crdb_internal_id_name_shard_8, ColumnID: 4}, PUBLIC], ABSENT]
   details:
-    indexId: 1
-    name: t1_pkey
+    columnId: 4
+    name: crdb_internal_id_name_shard_8
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 2, Name: t1_pkey}, PUBLIC], ABSENT]
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    name: t1_pkey
+    columnId: 4
+    computeExpr:
+      expr: mod(fnv32(crdb_internal.datums_to_bytes(id, name)), 8:::INT8)
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 23
+        width: 32
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 3, Name: id4}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: id4, IndexID: 3}, PUBLIC], ABSENT]
   details:
     indexId: 3
     name: id4
     tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[IndexName:{DescID: 104, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    - 3
+    name: t1_pkey
     tableId: 104
-    unique: true
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: t1_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    - 3
-    - 4
+    name: t1_pkey
     tableId: 104
-    unique: true
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      - 3
+      tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      - 3
+      - 4
+      tableId: 104
 - [[SecondaryIndex:{DescID: 104, IndexID: 3}, PUBLIC], ABSENT]
   details:
-    indexId: 3
-    keyColumnDirection:
-    - ASC
-    - ASC
-    keyColumnIds:
-    - 1
-    - 2
-    shardedDescriptor:
-      columnNames:
-      - id
-      - name
-      isSharded: true
-      name: crdb_internal_id_name_shard_8
-      shardBuckets: 8
-    sourceIndexId: 1
-    storingColumnIds:
-    - 3
-    tableId: 104
+    embeddedIndex:
+      indexId: 3
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sharding:
+        columnNames:
+        - id
+        - name
+        isSharded: true
+        name: crdb_internal_id_name_shard_8
+        shardBuckets: 8
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104

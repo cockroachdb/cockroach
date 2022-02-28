@@ -346,7 +346,7 @@ type Context struct {
 
 	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
-	masterCtx    context.Context
+	MasterCtx    context.Context
 
 	heartbeatTimeout time.Duration
 	HeartbeatCB      func()
@@ -485,7 +485,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		RemoteClocks: newRemoteClockMonitor(
 			opts.Clock, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
 		rpcCompression:   enableRPCCompression,
-		masterCtx:        masterCtx,
+		MasterCtx:        masterCtx,
 		metrics:          makeMetrics(),
 		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
 	}
@@ -511,8 +511,8 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			return true
 		})
 	}
-	if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(rpcCtx.masterCtx)
+	if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.MasterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(rpcCtx.MasterCtx)
 	}
 	return rpcCtx
 }
@@ -605,20 +605,6 @@ func (a internalClientAdapter) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
 	return a.server.UpdateSpanConfigs(ctx, req)
-}
-
-// GetSystemSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GetSystemSpanConfigs(
-	ctx context.Context, req *roachpb.GetSystemSpanConfigsRequest, _ ...grpc.CallOption,
-) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	return a.server.GetSystemSpanConfigs(ctx, req)
-}
-
-// UpdateSystemSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) UpdateSystemSpanConfigs(
-	ctx context.Context, req *roachpb.UpdateSystemSpanConfigsRequest, _ ...grpc.CallOption,
-) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	return a.server.UpdateSystemSpanConfigs(ctx, req)
 }
 
 type respStreamClientAdapter struct {
@@ -828,11 +814,11 @@ func (rpcCtx *Context) removeConn(conn *Connection, keys ...connKey) {
 	for _, key := range keys {
 		rpcCtx.conns.Delete(key)
 	}
-	log.Health.Infof(rpcCtx.masterCtx, "closing %+v", keys)
+	log.Health.Infof(rpcCtx.MasterCtx, "closing %+v", keys)
 	if grpcConn := conn.grpcConn; grpcConn != nil {
 		err := grpcConn.Close() // nolint:grpcconnclose
 		if err != nil && !grpcutil.IsClosedConnection(err) {
-			log.Health.Warningf(rpcCtx.masterCtx, "failed to close client connection: %v", err)
+			log.Health.Warningf(rpcCtx.MasterCtx, "failed to close client connection: %v", err)
 		}
 	}
 }
@@ -967,7 +953,7 @@ func (rpcCtx *Context) grpcDialOptions(
 			return dialer.DialContext(ctx, "tcp", target)
 		}
 		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
-		log.VEventf(rpcCtx.masterCtx, 1, "connecting to node %s with simulated latency %dms", target, latency)
+		log.VEventf(rpcCtx.MasterCtx, 1, "connecting to node %s with simulated latency %dms", target, latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
 			latencyMS:  latency,
@@ -1150,7 +1136,7 @@ type delayingHeader struct {
 func (rpcCtx *Context) makeDialCtx(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) context.Context {
-	dialCtx := rpcCtx.masterCtx
+	dialCtx := rpcCtx.MasterCtx
 	var rnodeID interface{} = remoteNodeID
 	if remoteNodeID == 0 {
 		rnodeID = '?'
@@ -1224,7 +1210,7 @@ func (rpcCtx *Context) grpcDialRaw(
 
 	log.Health.Infof(ctx, "dialing")
 	conn, err := grpc.DialContext(ctx, target, dialOpts...)
-	if err != nil && rpcCtx.masterCtx.Err() != nil {
+	if err != nil && rpcCtx.MasterCtx.Err() != nil {
 		// If the node is draining, discard the error (which is likely gRPC's version
 		// of context.Canceled) and return errDialRejected which instructs callers not
 		// to retry.
@@ -1344,7 +1330,7 @@ func (rpcCtx *Context) NewBreaker(name string) *circuit.Breaker {
 	if rpcCtx.BreakerFactory != nil {
 		return rpcCtx.BreakerFactory()
 	}
-	return newBreaker(rpcCtx.masterCtx, name, &rpcCtx.breakerClock)
+	return newBreaker(rpcCtx.MasterCtx, name, &rpcCtx.breakerClock)
 }
 
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed

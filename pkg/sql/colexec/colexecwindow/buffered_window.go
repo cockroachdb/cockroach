@@ -113,7 +113,7 @@ const (
 // buffer all tuples from each partition.
 type bufferedWindower interface {
 	Init(ctx context.Context)
-	Close()
+	Close(context.Context)
 
 	// seekNextPartition is called during the windowSeeking state on the current
 	// batch. It gives windowers a chance to perform any necessary pre-processing,
@@ -357,7 +357,7 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			colexecerror.InternalError(
 				errors.AssertionFailedf("window operator in processing state without buffered rows"))
 		case windowFinished:
-			if err = b.Close(); err != nil {
+			if err = b.Close(b.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -369,16 +369,16 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 	}
 }
 
-func (b *bufferedWindowOp) Close() error {
+func (b *bufferedWindowOp) Close(ctx context.Context) error {
 	if !b.CloserHelper.Close() || b.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
-	if err := b.bufferQueue.Close(b.EnsureCtx()); err != nil {
+	if err := b.bufferQueue.Close(ctx); err != nil {
 		return err
 	}
-	b.windower.Close()
+	b.windower.Close(ctx)
 	return nil
 }
 

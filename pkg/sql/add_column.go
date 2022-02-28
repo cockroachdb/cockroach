@@ -128,7 +128,7 @@ func (p *planner) addColumnImpl(
 
 	n.tableDesc.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
 	if idx != nil {
-		if err := n.tableDesc.AddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
+		if err := n.tableDesc.AddIndexMutation(params.ctx, idx, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings); err != nil {
 			return err
 		}
 	}
@@ -161,7 +161,8 @@ func (p *planner) addColumnImpl(
 
 	// We need to allocate new ID for the created column in order to correctly
 	// assign sequence ownership.
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
 

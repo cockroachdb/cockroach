@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -31,7 +30,7 @@ import (
 // Dependencies contains all the dependencies required by the executor.
 type Dependencies interface {
 	Catalog() Catalog
-	Partitioner() scmutationexec.Partitioner
+	Clock() scmutationexec.Clock
 	TransactionalJobRegistry() TransactionalJobRegistry
 	IndexBackfiller() Backfiller
 	BackfillProgressTracker() BackfillTracker
@@ -50,11 +49,14 @@ type Dependencies interface {
 // This involves reading descriptors, as well as preparing batches of catalog
 // changes.
 type Catalog interface {
-	scmutationexec.CatalogReader
+	scmutationexec.NameResolver
+	scmutationexec.SyntheticDescriptors
+
+	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
+	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
 
 	// MustReadMutableDescriptor the mutable equivalent to
-	// MustReadImmutableDescriptor in scmutationexec.CatalogReader.
-	// This method should be used carefully.
+	// MustReadImmutableDescriptors.
 	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
 
 	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
@@ -88,6 +90,9 @@ type CatalogChangeBatcher interface {
 
 	// ValidateAndRun executes the updates after validating the catalog changes.
 	ValidateAndRun(ctx context.Context) error
+
+	// DeleteZoneConfig deletes the zone config for a descriptor.
+	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.
@@ -107,6 +112,12 @@ type TransactionalJobRegistry interface {
 	// CreateJob creates a job in the current transaction and returns the
 	// id which was assigned to that job, or an error otherwise.
 	CreateJob(ctx context.Context, record jobs.Record) error
+
+	// CheckPausepoint returns a PauseRequestError if the named pause-point is
+	// set.
+	//
+	// See (*jobs.Registry).CheckPausepoint
+	CheckPausepoint(name string) error
 
 	// TODO(ajwerner): Deal with setting the running status to indicate
 	// validating, backfilling, or generally performing metadata changes
@@ -253,13 +264,19 @@ type DescriptorMetadataUpdater interface {
 	DeleteDescriptorComment(id int64, subID int64, commentType keys.CommentType) error
 
 	//UpsertConstraintComment upserts a comment associated with a constraint.
-	UpsertConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType, comment string) error
+	UpsertConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID, comment string) error
 
 	//DeleteConstraintComment deletes a comment associated with a constraint.
-	DeleteConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType) error
+	DeleteConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID) error
 
 	// DeleteDatabaseRoleSettings deletes role settings associated with a database.
-	DeleteDatabaseRoleSettings(ctx context.Context, database catalog.DatabaseDescriptor) error
+	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
+
+	// SwapDescriptorSubComment moves a comment from one sub ID to another.
+	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error
+
+	// DeleteSchedule deletes the given schedule.
+	DeleteSchedule(ctx context.Context, id int64) error
 }
 
 // DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given

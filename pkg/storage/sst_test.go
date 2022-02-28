@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,8 +48,9 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	}
 
 	// Create SST with keys equal to intents at txn2TS.
+	cs := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	sstWriter := MakeBackupSSTWriter(sstFile)
+	sstWriter := MakeBackupSSTWriter(context.Background(), cs, sstFile)
 	defer sstWriter.Close()
 	for _, k := range intents {
 		key := MVCCKey{Key: roachpb.Key(k), Timestamp: txn2TS}
@@ -63,7 +65,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			ctx := context.Background()
-			engine := engineImpl.create()
+			engine := engineImpl.create(Settings(cs))
 			defer engine.Close()
 
 			// Write some committed keys and intents at txn1TS.
@@ -105,11 +107,12 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 		modeCounter            // uint64 counter in first 8 bytes
 		modeRandom             // random values
 
-		sstSize   = 0
-		keyCount  = 500000
-		valueSize = 8
-		valueMode = modeRandom
-		profile   = false // cpuprofile.pprof
+		concurrency = 0 // 0 uses naïve replacement
+		sstSize     = 0
+		keyCount    = 500000
+		valueSize   = 8
+		valueMode   = modeRandom
+		profile     = false // cpuprofile.pprof
 	)
 
 	if sstSize > 0 && keyCount > 0 {
@@ -120,13 +123,15 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 
 	r := rand.New(rand.NewSource(7))
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	writer := MakeIngestionSSTWriter(sstFile)
+	writer := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer writer.Close()
 
 	key := make([]byte, 8)
 	value := make([]byte, valueSize)
-	ts := hlc.Timestamp{WallTime: 1}
+	sstTimestamp := hlc.Timestamp{WallTime: 1}
 	var i uint64
 	for i = 0; (keyCount > 0 && i < keyCount) || (sstSize > 0 && sstFile.Len() < sstSize); i++ {
 		binary.BigEndian.PutUint64(key, i)
@@ -135,11 +140,8 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 		case modeZero:
 		case modeCounter:
 			binary.BigEndian.PutUint64(value, i)
-			ts.WallTime++
 		case modeRandom:
 			r.Read(value)
-			ts.WallTime = r.Int63()
-			ts.Logical = r.Int31()
 		default:
 			b.Fatalf("unknown value mode %d", valueMode)
 		}
@@ -148,7 +150,7 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 		v.SetBytes(value)
 		v.InitChecksum(key)
 
-		require.NoError(b, writer.PutMVCC(MVCCKey{Key: key, Timestamp: ts}, v.RawBytes))
+		require.NoError(b, writer.PutMVCC(MVCCKey{Key: key, Timestamp: sstTimestamp}, v.RawBytes))
 	}
 	writer.Close()
 	b.Logf("%vMB %v keys", sstFile.Len()/1e6, i)
@@ -162,10 +164,12 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 		defer pprof.StopCPUProfile()
 	}
 
+	requestTimestamp := hlc.Timestamp{WallTime: 1634899098417970999, Logical: 9}
+
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		ts := hlc.Timestamp{WallTime: 1634899098417970999, Logical: 9}
-		_, err := UpdateSSTTimestamps(sstFile.Bytes(), hlc.Timestamp{}, ts, 0)
+		_, err := UpdateSSTTimestamps(
+			ctx, st, sstFile.Bytes(), sstTimestamp, requestTimestamp, concurrency)
 		require.NoError(b, err)
 	}
 }

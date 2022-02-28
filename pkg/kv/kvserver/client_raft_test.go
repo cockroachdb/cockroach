@@ -831,6 +831,20 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	}
 }
 
+func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstIndex uint64) {
+	testutils.SucceedsSoon(t, func() error {
+		// Flush the engine to advance durability, which triggers truncation.
+		require.NoError(t, r.Engine().Flush())
+		// FirstIndex has changed.
+		firstIndex, err := r.GetFirstIndex()
+		require.NoError(t, err)
+		if firstIndex != newFirstIndex {
+			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
+		}
+		return nil
+	})
+}
+
 // TestSnapshotAfterTruncationWithUncommittedTail is similar in spirit to
 // TestSnapshotAfterTruncation/differentTerm. However, it differs in that we
 // take care to ensure that the partitioned Replica has a long uncommitted tail
@@ -1009,6 +1023,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		}
 		return nil
 	})
+	waitForTruncationForTesting(t, newLeaderRepl, index+1)
 
 	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()
@@ -2252,7 +2267,7 @@ func TestQuotaPool(t *testing.T) {
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
 		var ba roachpb.BatchRequest
 		ba.Add(putArgs(keyToWrite, value))
-		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 			t.Fatal(err)
 		}
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2273,7 +2288,7 @@ func TestQuotaPool(t *testing.T) {
 		go func() {
 			var ba roachpb.BatchRequest
 			ba.Add(putArgs(keyToWrite, value))
-			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 				ch <- roachpb.NewError(err)
 				return
 			}
@@ -2363,7 +2378,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	value := []byte("value")
 	var ba roachpb.BatchRequest
 	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 		t.Fatal(err)
 	}
 	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -3826,16 +3841,25 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	leaseHolder := tc.GetFirstStoreFromServer(t, 0)
-	key := []byte("a")
-	tc.SplitRangeOrFatal(t, key)
-	tc.AddVotersOrFatal(t, key, tc.Target(1))
+	_, desc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+	key := desc.StartKey.AsRawKey()
+	tc.AddVotersOrFatal(t, key, tc.Targets(1)...)
 
-	// Attempt to remove the replica from first store.
-	expectedErr := "invalid ChangeReplicasTrigger"
-	if _, err := tc.RemoveVoters(key, tc.Target(0)); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("expected %q error trying to remove leaseholder replica; got %v", expectedErr, err)
+	// Remove the replica from first store.
+	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0))
+
+	// Check that lease moved to server 2.
+	leaseInfo := getLeaseInfoOrFatal(t, context.Background(), tc.Servers[1].DB(), key)
+	rangeDesc, err := tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
 	}
+	replica, ok := rangeDesc.GetReplicaDescriptor(tc.Servers[1].GetFirstStoreID())
+	if !ok {
+		t.Fatalf("expected to find replica in server 2")
+	}
+	require.Equal(t, leaseInfo.Lease.Replica, replica)
+	leaseHolder := tc.GetFirstStoreFromServer(t, 1)
 
 	// Expect that we can still successfully do a get on the range.
 	getArgs := getArgs(key)
@@ -4555,10 +4579,11 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	// Test that WaitForReplicaInit times out if the replica exists but is not
 	// initialized.
 	{
-		// Constructing an permanently-uninitialized replica is somewhat difficult.
+		// Constructing a permanently-uninitialized replica is somewhat difficult.
 		// Sending a fake Raft heartbeat for a range ID that the store hasn't seen
 		// before does the trick.
-		var repl44 *kvserver.Replica
+		const unusedRangeID = 1234
+		var repl *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
 			tc.Servers[0].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
@@ -4566,20 +4591,20 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,
 				},
-				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: 44, ToReplicaID: 1}},
+				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
 			}, rpc.DefaultClass)
-			repl44, err = store.GetReplica(44)
+			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})
-		if repl44.IsInitialized() {
-			t.Fatalf("test bug: repl44 is initialized")
+		if repl.IsInitialized() {
+			t.Fatalf("test bug: range %d is initialized", unusedRangeID)
 		}
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
 		_, err = client.WaitForReplicaInit(timeoutCtx, &kvserver.WaitForReplicaInitRequest{
 			StoreRequestHeader: storeHeader,
-			RangeID:            roachpb.RangeID(44),
+			RangeID:            roachpb.RangeID(unusedRangeID),
 		})
 		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
 			t.Fatalf("expected %q error, but got %v", exp, err)

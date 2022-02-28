@@ -77,8 +77,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 CREATE TABLE public.geom_table_negative_values (
    a GEOMETRY(GEOMETRY) NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -92,8 +91,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 CREATE TABLE public.geog_table_negative_values (
    a GEOGRAPHY(GEOMETRY) NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
@@ -871,7 +869,7 @@ POLYGON ((20.012344998976914 -20.012345000286587, 20.012344998976914 -20.0123449
 POLYGON ((90 0, 90 0.000000000163709, 90.000000000327418 0.000000000163709, 90.000000000327418 0, 90 0))
 POLYGON ((90 0, 90 0.0439453125, 90.0439453125 0.0439453125, 90.0439453125 0, 90 0))
 
-statement error pq: st_pointfromgeohash\(\): geohash decode '----': invalid character at index 0
+statement error pq: st_pointfromgeohash\(\): invalid GeoHash: geohash decode '----': invalid character at index 0
 SELECT ST_AsText(ST_PointFromGeoHash('----'))
 
 statement error pq: st_pointfromgeohash\(\): length of GeoHash must be greater than 0
@@ -5061,10 +5059,10 @@ false  false  97  false  false
 
 # Test for 2+ string arguments for Geometry where one side of the arguments
 # raises an error.
-statement error pq: st_intersects\(\): syntax error: invalid keyword at line 1, pos 0
+statement error pq: st_intersects\(\): error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
 
-statement error pq: st_intersects\(\): syntax error: invalid keyword at line 1, pos 0
+statement error pq: st_intersects\(\): error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
 
 query T

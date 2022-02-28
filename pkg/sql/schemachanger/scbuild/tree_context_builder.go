@@ -11,6 +11,8 @@
 package scbuild
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,23 +23,32 @@ var _ scbuildstmt.TreeContextBuilder = buildCtx{}
 
 // SemaCtx implements the scbuildstmt.TreeContextBuilder interface.
 func (b buildCtx) SemaCtx() *tree.SemaContext {
+	return newSemaCtx(b.Dependencies)
+}
+
+func newSemaCtx(d Dependencies) *tree.SemaContext {
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.Annotations = nil
-	semaCtx.SearchPath = b.SessionData().SearchPath
-	semaCtx.IntervalStyleEnabled = b.SessionData().IntervalStyleEnabled
-	semaCtx.DateStyleEnabled = b.SessionData().DateStyleEnabled
-	semaCtx.TypeResolver = b.CatalogReader()
-	semaCtx.TableNameResolver = b.CatalogReader()
-	semaCtx.DateStyle = b.SessionData().GetDateStyle()
-	semaCtx.IntervalStyle = b.SessionData().GetIntervalStyle()
+	semaCtx.SearchPath = d.SessionData().SearchPath
+	semaCtx.IntervalStyleEnabled = d.SessionData().IntervalStyleEnabled
+	semaCtx.DateStyleEnabled = d.SessionData().DateStyleEnabled
+	semaCtx.TypeResolver = d.CatalogReader()
+	semaCtx.TableNameResolver = d.CatalogReader()
+	semaCtx.DateStyle = d.SessionData().GetDateStyle()
+	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
 	return &semaCtx
 }
 
 // EvalCtx implements the scbuildstmt.TreeContextBuilder interface.
 func (b buildCtx) EvalCtx() *tree.EvalContext {
+	return newEvalCtx(b.Context, b.Dependencies)
+}
+
+func newEvalCtx(ctx context.Context, d Dependencies) *tree.EvalContext {
 	return &tree.EvalContext{
-		SessionDataStack:   sessiondata.NewStack(b.SessionData()),
-		Context:            b.Context,
+		ClusterID:          d.ClusterID(),
+		SessionDataStack:   sessiondata.NewStack(d.SessionData()),
+		Context:            ctx,
 		Planner:            &faketreeeval.DummyEvalPlanner{},
 		PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 		SessionAccessor:    &faketreeeval.DummySessionAccessor{},
@@ -45,7 +56,7 @@ func (b buildCtx) EvalCtx() *tree.EvalContext {
 		Sequence:           &faketreeeval.DummySequenceOperators{},
 		Tenant:             &faketreeeval.DummyTenantOperator{},
 		Regions:            &faketreeeval.DummyRegionOperator{},
-		Settings:           b.ClusterSettings(),
-		Codec:              b.Codec(),
+		Settings:           d.ClusterSettings(),
+		Codec:              d.Codec(),
 	}
 }

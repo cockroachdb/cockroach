@@ -14,14 +14,18 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,4 +98,60 @@ func TestServer(t *testing.T) {
 		loc := w.Result().Header.Get("Location")
 		require.Equal(t, "/heap/4/flamegraph?node=3", loc)
 	})
+}
+
+func TestServerConcurrentAccess(t *testing.T) {
+	expectedNodeID := "local"
+	skip.UnderRace(t, "test fails under race due to known race condition with profiles")
+	const (
+		runsPerWorker = 1
+		workers       = ProfileConcurrency
+	)
+	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
+		require.Equal(t, expectedNodeID, req.NodeId)
+		fileName := "heap.profile"
+		if req.Type == serverpb.ProfileRequest_CPU {
+			fileName = "cpu.profile"
+		}
+		b, err := ioutil.ReadFile(testutils.TestDataPath(t, fileName))
+		require.NoError(t, err)
+		return &serverpb.JSONResponse{Data: b}, nil
+	}
+
+	s := NewServer(NewMemStorage(ProfileConcurrency, ProfileExpiry), ProfilerFunc(mockProfile))
+	getProfile := func(profile string, t *testing.T) {
+		t.Helper()
+
+		r := httptest.NewRequest("GET", "/heap/", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+
+		loc := w.Result().Header.Get("Location")
+
+		r = httptest.NewRequest("GET", loc, nil)
+		w = httptest.NewRecorder()
+
+		s.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), "pprof</a></h1>")
+	}
+	var wg sync.WaitGroup
+	profiles := [2]string{"/heap/", "/cpu"}
+	runWorker := func() {
+		defer wg.Done()
+		for i := 0; i < runsPerWorker; i++ {
+			time.Sleep(time.Microsecond)
+			profileID := rand.Intn(len(profiles))
+			getProfile(profiles[profileID], t)
+		}
+	}
+	// Run the workers.
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go runWorker()
+	}
+	wg.Wait()
 }

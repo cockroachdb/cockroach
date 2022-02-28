@@ -19,7 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -61,6 +61,16 @@ import (
 //   Print out the contents of KVAccessor directly, skipping 'offset' entries,
 //   returning up to the specified limit if any.
 //
+// - "protect" [record-id=<int>] [ts=<int>]
+//   cluster                  OR
+//   tenants       id1,id2... OR
+//   descs         id1,id2...
+//   Creates and writes a protected timestamp record with id and ts with an
+//   appropriate ptpb.Target.
+//
+// - "release" [record-id=<int>]
+//   Releases the protected timestamp record with id.
+//
 // TODO(irfansharif): Provide a way to stop reconcilers and/or start them back
 // up again. It would let us add simulate for suspended tenants, and behavior of
 // the reconciler with existing kvaccessor state (populated by an earlier
@@ -86,11 +96,13 @@ func TestDataDriven(t *testing.T) {
 			// Checkpoint noops frequently; speeds this test up.
 			SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
 		}
+		ptsKnobs := &protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
+					ProtectedTS:      ptsKnobs,
 				},
 			},
 		})
@@ -102,7 +114,7 @@ func TestDataDriven(t *testing.T) {
 			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		}
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, nil /* ptsKnobs */)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, ptsKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		systemTenant := spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
@@ -132,7 +144,7 @@ func TestDataDriven(t *testing.T) {
 			case "exec-sql":
 				// Run under an explicit transaction -- we rely on having a
 				// single timestamp for the statements (see
-				// tenant.TimestampAfterLastExec) for ordering guarantees.
+				// tenant.TimestampAfterLastSQLChange) for ordering guarantees.
 				tenant.Exec(fmt.Sprintf("BEGIN; %s; COMMIT;", d.Input))
 
 			case "query-sql":
@@ -160,7 +172,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "mutations":
 				testutils.SucceedsSoon(t, func() error {
-					lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastExec()
+					lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastSQLChange()
 					if lastCheckpoint.Less(lastExec) {
 						return errors.Newf("last checkpoint timestamp (%s) lagging last sql execution (%s)",
 							lastCheckpoint.GoTime(), lastExec.GoTime())
@@ -180,7 +192,7 @@ func TestDataDriven(t *testing.T) {
 					// tenant checkpoints to cross their last execution
 					// timestamp.
 					for _, tenant := range spanConfigTestCluster.Tenants() {
-						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastExec()
+						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastSQLChange()
 						if lastCheckpoint.IsEmpty() {
 							continue // reconciler wasn't started
 						}
@@ -191,19 +203,41 @@ func TestDataDriven(t *testing.T) {
 					}
 					return nil
 				})
-				entries, err := kvAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{keys.EverythingSpan})
+				records, err := kvAccessor.GetSpanConfigRecords(
+					ctx, spanconfig.TestingEntireSpanConfigurationStateTargets(),
+				)
 				require.NoError(t, err)
-				sort.Slice(entries, func(i, j int) bool {
-					return entries[i].Span.Key.Compare(entries[j].Span.Key) < 0
+				sort.Slice(records, func(i, j int) bool {
+					return records[i].Target.Less(records[j].Target)
 				})
 
-				lines := make([]string, len(entries))
-				for i, entry := range entries {
-					lines[i] = fmt.Sprintf("%-42s %s", entry.Span,
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(entry.Config))
+				lines := make([]string, len(records))
+				for i, record := range records {
+					switch {
+					case record.Target.IsSpanTarget():
+						lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSpan(),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config))
+					case record.Target.IsSystemTarget():
+						lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSystemTarget(),
+							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.Config))
+					default:
+						panic("unsupported target type")
+					}
 				}
 				return spanconfigtestutils.MaybeLimitAndOffset(t, d, "...", lines)
 
+			case "protect":
+				var recordID string
+				var protectTS int
+				d.ScanArgs(t, "record-id", &recordID)
+				d.ScanArgs(t, "ts", &protectTS)
+				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
+				tenant.MakeProtectedTimestampRecordAndProtect(ctx, recordID, protectTS, target)
+
+			case "release":
+				var recordID string
+				d.ScanArgs(t, "record-id", &recordID)
+				tenant.ReleaseProtectedTimestampRecord(ctx, recordID)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}

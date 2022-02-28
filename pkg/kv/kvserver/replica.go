@@ -199,6 +199,11 @@ type Replica struct {
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
+	// The ID of the replica within the Raft group. Only set by the constructor,
+	// so it will not change over the lifetime of this replica. If addressed
+	// under a newer replicaID, the replica immediately replicaGCs itself to
+	// make way for the newer incarnation.
+	replicaID roachpb.ReplicaID
 
 	// The start key of a Range remains constant throughout its lifetime (it does
 	// not change through splits or merges). This field carries a copy of
@@ -439,6 +444,12 @@ type Replica struct {
 		// until the first truncation is carried out), but it prevents a large
 		// dormant Raft log from sitting around forever, which has caused problems
 		// in the past.
+		//
+		// Note that both raftLogSize and raftLogSizeTrusted do not include the
+		// effect of pending log truncations (see Replica.pendingLogTruncations).
+		// Hence, they are fine for metrics etc., but not for deciding whether we
+		// should create another pending truncation. For the latter, we compute
+		// the post-pending-truncation size using pendingLogTruncations.
 		raftLogSize int64
 		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
 		// it has been recomputed.
@@ -516,13 +527,6 @@ type Replica struct {
 		applyingEntries bool
 		// The replica's Raft group "node".
 		internalRaftGroup *raft.RawNode
-		// The ID of the replica within the Raft group. This value may never be 0.
-		// It will not change over the lifetime of this replica. If addressed under
-		// a newer replicaID, the replica immediately replicaGCs itself to make
-		// way for the newer incarnation.
-		// TODO(sumeer): since this is initialized in newUnloadedReplica and never
-		// changed, lift this out of the mu struct.
-		replicaID roachpb.ReplicaID
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
@@ -559,7 +563,7 @@ type Replica struct {
 		lastUpdateTimes lastUpdateTimesMap
 
 		// Computed checksum at a snapshot UUID.
-		checksums map[uuid.UUID]ReplicaChecksum
+		checksums map[uuid.UUID]replicaChecksum
 
 		// proposalQuota is the quota pool maintained by the lease holder where
 		// incoming writes acquire quota from a fixed quota pool before going
@@ -636,6 +640,12 @@ type Replica struct {
 		// Historical information about the command that set the closed timestamp.
 		closedTimestampSetter closedTimestampSetterInfo
 	}
+
+	// The raft log truncations that are pending. Access is protected by its own
+	// mutex. All implementation details should be considered hidden except to
+	// the code in raft_log_truncator.go. External code should only use the
+	// computePostTrunc* methods.
+	pendingLogTruncations pendingLogTruncations
 
 	rangefeedMu struct {
 		syncutil.RWMutex
@@ -715,11 +725,7 @@ func (r *Replica) SafeFormat(w redact.SafePrinter, _ rune) {
 // ReplicaID returns the ID for the Replica. This value is fixed for the
 // lifetime of the Replica.
 func (r *Replica) ReplicaID() roachpb.ReplicaID {
-	// The locking of mu is unnecessary. It will be removed when we lift
-	// replicaID out of the mu struct.
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.replicaID
+	return r.replicaID
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
@@ -915,6 +921,18 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.GCThreshold
+}
+
+// ExcludeDataFromBackup returns whether the replica is to be excluded from a
+// backup.
+func (r *Replica) ExcludeDataFromBackup() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.conf.ExcludeDataFromBackup
+}
+
+func (r *Replica) exludeReplicaFromBackupRLocked() bool {
+	return r.mu.conf.ExcludeDataFromBackup
 }
 
 // Version returns the replica version.
@@ -1320,8 +1338,8 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		if !ok {
 			log.Fatalf(ctx, "%+v does not contain local store s%d", r.mu.state.Desc, r.store.StoreID())
 		}
-		if replDesc.ReplicaID != r.mu.replicaID {
-			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.mu.replicaID, r.mu.state.Desc)
+		if replDesc.ReplicaID != r.replicaID {
+			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.mu.state.Desc)
 		}
 	}
 }
@@ -1520,8 +1538,9 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 		return nil
 	}
 	return &roachpb.BatchTimestampBeforeGCError{
-		Timestamp: ts,
-		Threshold: threshold,
+		Timestamp:              ts,
+		Threshold:              threshold,
+		DataExcludedFromBackup: r.exludeReplicaFromBackupRLocked(),
 	}
 }
 
@@ -1677,7 +1696,7 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 		// ID which is above the replica ID of the split then we would not have
 		// written a tombstone but we will have a replica ID that will exceed the
 		// split replica ID.
-		r.mu.replicaID > rightDesc.ReplicaID
+		r.replicaID > rightDesc.ReplicaID
 }
 
 // WatchForMerge is like maybeWatchForMergeLocked, except it expects a merge to

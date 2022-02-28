@@ -15,8 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -26,21 +26,6 @@ import (
 )
 
 var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violated")
-
-// UnsafeSkipSystemConfigTrigger will prevent setting the system config
-// trigger for transactions which write to tables in the system config. The
-// implication of setting this to true is that various subsystems which
-// rely on that trigger, such as zone configs and replication reports, will
-// not work. This can be used to accelerate high-frequency schema changes
-// like during an ORM test suite.
-var UnsafeSkipSystemConfigTrigger = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"sql.catalog.unsafe_skip_system_config_trigger.enabled",
-	"avoid setting the system config trigger in transactions which write to "+
-		"the system config. This will unlock performance at the cost of breaking "+
-		"table splits, zone configuration propagation, and cluster settings",
-	false,
-)
 
 // Txn enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
@@ -60,17 +45,11 @@ func (cf *CollectionFactory) Txn(
 ) error {
 	// Waits for descriptors that were modified, skipping
 	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs []catalog.Descriptor) error {
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
 		// Wait for a single version on leased descriptors.
 		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := false
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
 			// Detect unpublished ones.
-			for _, deletedDesc := range deletedDescs {
-				if deletedDesc.GetID() == ld.ID {
-					waitForNoVersion = true
-					break
-				}
-			}
 			if waitForNoVersion {
 				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
 				if err != nil {
@@ -87,15 +66,19 @@ func (cf *CollectionFactory) Txn(
 	}
 	for {
 		var modifiedDescriptors []lease.IDVersion
-		var deletedDescs []catalog.Descriptor
+		var deletedDescs catalog.DescriptorIDSet
 		var descsCol Collection
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
-			deletedDescs = nil
-			descsCol = cf.MakeCollection(nil)
+			deletedDescs = catalog.DescriptorIDSet{}
+			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */)
 			defer descsCol.ReleaseAll(ctx)
-			if !UnsafeSkipSystemConfigTrigger.Get(&cf.settings.SV) {
-				if err := txn.SetSystemConfigTrigger(cf.leaseMgr.Codec().ForSystemTenant()); err != nil {
+			if !cf.settings.Version.IsActive(
+				ctx, clusterversion.DisableSystemConfigGossipTrigger,
+			) {
+				if err := txn.DeprecatedSetSystemConfigTrigger(
+					cf.leaseMgr.Codec().ForSystemTenant(),
+				); err != nil {
 					return err
 				}
 			}
@@ -187,6 +170,7 @@ func CheckTwoVersionInvariant(
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
+
 	count, err := lease.CountLeases(ctx, ie, descs, txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return false, err

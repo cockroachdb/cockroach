@@ -128,7 +128,6 @@ privs       privs_pkey  false       2             b            N/A        true  
 user root
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true;
 CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
@@ -137,7 +136,7 @@ CREATE TABLE telemetry (
 
 statement ok
 CREATE INVERTED INDEX ON telemetry (z);
-CREATE INDEX ON telemetry (y) USING HASH WITH BUCKET_COUNT = 4
+CREATE INDEX ON telemetry (y) USING HASH WITH (bucket_count=4)
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
@@ -170,8 +169,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                a INT8 NULL,
                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
-                               INDEX create_index_concurrently_idx (a ASC),
-                               FAMILY "primary" (a, rowid)
+                               INDEX create_index_concurrently_idx (a ASC)
 )
 
 query T noticetrace
@@ -192,8 +190,7 @@ SHOW CREATE TABLE create_index_concurrently_tbl
 create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                a INT8 NULL,
                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                               CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
-                               FAMILY "primary" (a, rowid)
+                               CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -234,12 +231,12 @@ CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
 subtest resume-with-diff-tenant-resume-spans
 
 let $schema_changer_state
-SELECT value FROM information_schema.session_variables where variable='experimental_use_new_schema_changer'
+SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
 
 # Intentionally, disable the declarative schema changer for this
 # part of the test, since we are pausing jobs intentionally below.
 statement ok
-SET experimental_use_new_schema_changer = 'off'
+SET use_declarative_schema_changer = 'off'
 
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.adopt = '50ms';
@@ -361,9 +358,9 @@ SET CLUSTER SETTING jobs.registry.interval.cancel = DEFAULT;
 
 # Restore the schema changer state back.
 statement ok
-SET experimental_use_new_schema_changer = $schema_changer_state
+SET use_declarative_schema_changer = $schema_changer_state
 
-subtest test_bucket_count_storage_param
+subtest test_old_bucket_count_syntax
 
 statement ok
 CREATE TABLE t_hash (
@@ -374,10 +371,10 @@ CREATE TABLE t_hash (
 );
 
 statement ok
-CREATE INDEX idx_t_hash_a ON t_hash (a) USING HASH WITH (bucket_count=5);
+CREATE INDEX idx_t_hash_a ON t_hash (a) USING HASH WITH BUCKET_COUNT = 5;
 
 statement ok
-CREATE UNIQUE INDEX idx_t_hash_b ON t_hash (b) USING HASH WITH (bucket_count=5);
+CREATE UNIQUE INDEX idx_t_hash_b ON t_hash (b) USING HASH WITH BUCKET_COUNT = 5;
 
 query T
 SELECT @2 FROM [SHOW CREATE TABLE t_hash]
@@ -389,7 +386,7 @@ CREATE TABLE public.t_hash (
    crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
    crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
    CONSTRAINT t_hash_pkey PRIMARY KEY (pk ASC),
-   INDEX idx_t_hash_a (a ASC) USING HASH WITH BUCKET_COUNT = 5,
-   UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH BUCKET_COUNT = 5,
+   INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
+   UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
    FAMILY fam_0_pk_a_b (pk, a, b)
 )

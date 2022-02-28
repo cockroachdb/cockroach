@@ -50,6 +50,12 @@ const (
 	// txnPending is the normal state for ongoing transactions.
 	txnPending txnState = iota
 
+	// txnRetryableError means that the transaction encountered a
+	// TransactionRetryWithProtoRefreshError, and calls to Send() fail in this
+	// state. It is possible to move back to txnPending by calling
+	// ClearTxnRetryableErr().
+	txnRetryableError
+
 	// txnError means that a batch encountered a non-retriable error. Further
 	// batches except EndTxn(commit=false) will be rejected.
 	txnError
@@ -105,6 +111,11 @@ type TxnCoordSender struct {
 		syncutil.Mutex
 
 		txnState txnState
+
+		// storedRetryableErr is set when txnState == txnRetryableError. This
+		// storedRetryableErr is returned to clients on Send().
+		storedRetryableErr *roachpb.TransactionRetryWithProtoRefreshError
+
 		// storedErr is set when txnState == txnError. This storedErr is returned to
 		// clients on Send().
 		storedErr *roachpb.Error
@@ -686,6 +697,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	switch tc.mu.txnState {
 	case txnPending:
 		// All good.
+	case txnRetryableError:
+		return roachpb.NewError(tc.mu.storedRetryableErr)
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
@@ -712,19 +725,10 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// The transaction heartbeat observed an aborted transaction record and
 		// this was not due to a synchronous transaction commit and transaction
 		// record garbage collection.
-		// See the comment on txnHeartbeater.mu.finalizedStatus for more details.
+		// See the comment on txnHeartbeater.mu.finalObservedStatus for more details.
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
-		if tc.typ == kv.LeafTxn {
-			// Leaf txns return raw retriable errors (which get handled by the
-			// root) rather than TransactionRetryWithProtoRefreshError.
-			return abortedErr
-		}
-		// Root txns handle retriable errors.
-		newTxn := roachpb.PrepareTransactionForRetry(
-			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
-		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			abortedErr.String(), tc.mu.txn.ID, newTxn))
+		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, abortedErr))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
 		return roachpb.NewErrorf(
@@ -815,6 +819,11 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		pErr.String(),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
+
+	// Move to a retryable error state, where all Send() calls fail until the
+	// state is cleared.
+	tc.mu.txnState = txnRetryableError
+	tc.mu.storedRetryableErr = retErr
 
 	// If the ID changed, it means we had to start a new transaction and the
 	// old one is toast. This TxnCoordSender cannot be used any more - future
@@ -1302,6 +1311,18 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (tc *TxnCoordSender) SetReadSeqNum(seq enginepb.TxnSeq) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if seq < 0 || seq > tc.interceptorAlloc.txnSeqNumAllocator.writeSeq {
+		return errors.AssertionFailedf("invalid read seq num < 0 || > writeSeq (%d): %d",
+			tc.interceptorAlloc.txnSeqNumAllocator.writeSeq, seq)
+	}
+	tc.interceptorAlloc.txnSeqNumAllocator.readSeq = seq
+	return nil
+}
+
 // ConfigureStepping is part of the TxnSender interface.
 func (tc *TxnCoordSender) ConfigureStepping(
 	ctx context.Context, mode kv.SteppingMode,
@@ -1358,5 +1379,27 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 			return nil
 		}
 		return tc.maybeCommitWait(ctx, true /* deferred */)
+	}
+}
+
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		tc.mu.storedRetryableErr = nil
+		tc.mu.txnState = txnPending
 	}
 }

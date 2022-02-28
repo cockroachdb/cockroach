@@ -1,0 +1,98 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.sql.sqlbase;
+option go_package = "catpb";
+
+import "gogoproto/gogo.proto";
+
+// UserPrivileges describes the list of privileges available for a given user.
+message UserPrivileges {
+  option (gogoproto.equal) = true;
+  optional string user_proto = 1 [(gogoproto.nullable) = false,
+                                  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  // privileges is a bitfield of 1<<Privilege values.
+  optional uint32 privileges = 2 [(gogoproto.nullable) = false];
+  optional uint32 with_grant_option = 3 [(gogoproto.nullable) = false];
+}
+
+// PrivilegeDescriptor describes a list of users and attached
+// privileges. The list should be sorted by user for fast access.
+message PrivilegeDescriptor {
+  option (gogoproto.equal) = true;
+  repeated UserPrivileges users = 1 [(gogoproto.nullable) = false];
+  optional string owner_proto = 2 [(gogoproto.nullable) = false,
+                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional uint32 version = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.casttype) = "PrivilegeDescVersion"];
+}
+
+// DefaultPrivilegesForRole contains the default privileges for a role.
+// DefaultPrivileges are the set of privileges that an object created by a user
+// should have at creation time.
+// DefaultPrivilegesForRole is further broken down depending on the object type.
+// The object types (AlterDefaultPrivilegesTargetObject) are:
+//   1: Tables
+//   2: Sequences
+//   3: Types
+//   4: Schemas
+// DefaultPrivilegesPerObject are keyed on AlterDefaultPrivilegesTargetObject
+// and it's value is a PrivilegeDescriptor that is only used for
+// the list of UserPrivileges for that object.
+message DefaultPrivilegesForRole {
+  option (gogoproto.equal) = true;
+  // ExplicitRole represents when default privileges are defined for an
+  // explicit role.
+  message ExplicitRole {
+    option (gogoproto.equal) = true;
+    optional string user_proto = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto", (gogoproto.nullable) = false];
+    // These are special cases in Postgres. Public has USAGE on types and
+    // the creator role has ALL privileges by default.
+    // Under the default cases where all these bools are true, the role can be
+    // dropped, however for example alter default privileges revoke SELECT on tables
+    // for the role causes it to "own" default privileges as it is no longer
+    // the "default" case and the role cannot be dropped until the default case
+    // is met.
+    optional bool public_has_usage_on_types = 4 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_tables = 5 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_sequences = 6 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_schemas = 7 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
+  }
+  // ForAllRoles represents when default privileges are defined
+  // using FOR ALL ROLES.
+  message ForAllRolesPseudoRole {
+    option (gogoproto.equal) = true;
+    // If for_all_roles is specified, we do not need flags to track if the
+    // role has privileges on tables/sequences/schemas and types as
+    // for_all_roles is not a real role and cannot have grants.
+    optional bool public_has_usage_on_types = 11 [(gogoproto.nullable) = false];
+  }
+  oneof role {
+    ExplicitRole explicit_role = 12;
+    ForAllRolesPseudoRole for_all_roles = 13;
+  }
+  map<uint32, PrivilegeDescriptor> default_privileges_per_object = 14 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
+}
+
+// DefaultPrivilegeDescriptor describes the set of default privileges for a
+// given role + object type.
+// The DefaultPrivileges list must be sorted for fast access and user lookups.
+message DefaultPrivilegeDescriptor {
+  option (gogoproto.equal) = true;
+  repeated DefaultPrivilegesForRole default_privileges_per_role = 1 [(gogoproto.nullable) = false];
+  enum DefaultPrivilegeDescriptorType {
+    DATABASE = 0;
+    SCHEMA = 1;
+  }
+  optional DefaultPrivilegeDescriptorType type = 2 [(gogoproto.nullable) = false];
+}

@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/doctor",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -29,10 +30,12 @@ go_test(
     srcs = ["doctor_test.go"],
     deps = [
         ":doctor",
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/security",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",

@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -111,16 +112,25 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.table_indexes",
 }
 
+// nodesInfo holds node details pulled from a SQL or storage node.
+// SQL only servers will only return nodesListResponse for all SQL nodes.
+// Storage servers will return both nodesListResponse and nodesStatusResponse
+// for all storage nodes.
+type nodesInfo struct {
+	nodesStatusResponse *serverpb.NodesResponse
+	nodesListResponse   *serverpb.NodesListResponse
+}
+
 // collectClusterData runs the data collection that only needs to
 // occur once for the entire cluster.
 func (zc *debugZipContext) collectClusterData(
 	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
-) (nodeList []statuspb.NodeStatus, livenessByNodeID nodeLivenesses, err error) {
+) (ni nodesInfo, livenessByNodeID nodeLivenesses, err error) {
 	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
 
 	for _, r := range clusterWideZipRequests {
 		if err := zc.runZipRequest(ctx, zc.clusterPrinter, r); err != nil {
-			return nil, nil, err
+			return nodesInfo{}, nil, err
 		}
 	}
 
@@ -130,33 +140,38 @@ func (zc *debugZipContext) collectClusterData(
 			query = override
 		}
 		if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
-			return nil, nil, errors.Wrapf(err, "fetching %s", table)
+			return nodesInfo{}, nil, errors.Wrapf(err, "fetching %s", table)
 		}
 	}
 
 	{
-		var nodes *serverpb.NodesResponse
 		s := zc.clusterPrinter.start("requesting nodes")
 		err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-			nodes, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+			ni, err = zc.nodesInfo(ctx)
 			return err
 		})
-		if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodes, err); cErr != nil {
-			return nil, nil, cErr
+		if ni.nodesStatusResponse != nil {
+			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodesStatusResponse, err); cErr != nil {
+				return nodesInfo{}, nil, cErr
+			}
+		} else {
+			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodesListResponse, err); cErr != nil {
+				return nodesInfo{}, nil, cErr
+			}
 		}
 
-		// In case nodes came up back empty (the Nodes() RPC failed), we
-		// still want to inspect the per-node endpoints on the head
-		// node. As per the above, we were able to connect at least to
-		// that.
-		nodeList = []statuspb.NodeStatus{{Desc: roachpb.NodeDescriptor{
-			NodeID:     firstNodeDetails.NodeID,
-			Address:    firstNodeDetails.Address,
-			SQLAddress: firstNodeDetails.SQLAddress,
-		}}}
-		if nodes != nil {
-			// If the nodes were found, use that instead.
-			nodeList = nodes.Nodes
+		if ni.nodesListResponse == nil {
+			// In case nodes came up back empty (the Nodes()/NodesList() RPC failed), we
+			// still want to inspect the per-node endpoints on the head
+			// node. As per the above, we were able to connect at least to
+			// that.
+			ni.nodesListResponse = &serverpb.NodesListResponse{
+				Nodes: []serverpb.NodeDetails{{
+					NodeID:     int32(firstNodeDetails.NodeID),
+					Address:    firstNodeDetails.Address,
+					SQLAddress: firstNodeDetails.SQLAddress,
+				}},
+			}
 		}
 
 		// We'll want livenesses to decide whether a node is decommissioned.
@@ -167,13 +182,46 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 		if cErr := zc.z.createJSONOrError(s, livenessName+".json", nodes, err); cErr != nil {
-			return nil, nil, cErr
+			return nodesInfo{}, nil, cErr
 		}
 		livenessByNodeID = map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
 		if lresponse != nil {
 			livenessByNodeID = lresponse.Statuses
 		}
 	}
+	return ni, livenessByNodeID, nil
+}
 
-	return nodeList, livenessByNodeID, nil
+// nodesInfo constructs debug data for all nodes for the debug zip output.
+// For SQL only servers, only the NodesListResponse is populated.
+// For regular storage servers, the more detailed NodesResponse is
+// returned along with the nodesListResponse.
+func (zc *debugZipContext) nodesInfo(ctx context.Context) (ni nodesInfo, _ error) {
+	nodesResponse, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+	nodesList := &serverpb.NodesListResponse{}
+	if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
+		// Likely a SQL only server; try the NodesList endpoint.
+		nodesList, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
+	}
+	if err != nil {
+		return nodesInfo{}, err
+	}
+	if nodesResponse != nil {
+		// Build a nodesListResponse from the nodes data. nodesListResponse is needed
+		// further downstream to perform other debug zip related functionality such as
+		// collecting per node debug data. This will only be executed for storage
+		// servers.
+		for _, node := range nodesResponse.Nodes {
+			nodeDetails := serverpb.NodeDetails{
+				NodeID:     int32(node.Desc.NodeID),
+				Address:    node.Desc.Address,
+				SQLAddress: node.Desc.SQLAddress,
+			}
+			nodesList.Nodes = append(nodesList.Nodes, nodeDetails)
+		}
+	}
+	ni.nodesListResponse = nodesList
+	ni.nodesStatusResponse = nodesResponse
+
+	return ni, nil
 }

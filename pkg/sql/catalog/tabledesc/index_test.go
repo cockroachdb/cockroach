@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,7 +51,6 @@ func TestIndexInterface(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	sqlutils.MakeSQLRunner(conn).Exec(t, `
-		SET experimental_enable_hash_sharded_indexes = on;
 		CREATE TABLE d.t (
 			c1 INT,
 			c2 INT,
@@ -62,7 +63,7 @@ func TestIndexInterface(t *testing.T) {
 			INDEX s1 (c4 DESC, c5 DESC),
 			INVERTED INDEX s2 (c6),
 			INDEX s3 (c2, c3) STORING (c5, c6),
-			INDEX s4 (c5) USING HASH WITH BUCKET_COUNT=8,
+			INDEX s4 (c5) USING HASH WITH (bucket_count=8),
 			UNIQUE INDEX s5 (c1, c4) WHERE c4 = 'x',
 			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2)
 		);
@@ -254,13 +255,8 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsDisabled", idx.GetName())
 		require.False(t, idx.IsCreatedExplicitly(),
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
-		if idx.Primary() {
-			require.Equal(t, descpb.IndexDescriptorVersion(0x4), idx.GetVersion(),
-				errMsgFmt, "GetVersion", idx.GetName())
-		} else {
-			require.Equal(t, descpb.IndexDescriptorVersion(0x3), idx.GetVersion(),
-				errMsgFmt, "GetVersion", idx.GetName())
-		}
+		require.Equal(t, descpb.IndexDescriptorVersion(0x4), idx.GetVersion(),
+			errMsgFmt, "GetVersion", idx.GetName())
 		require.False(t, idx.HasOldStoredColumns(),
 			errMsgFmt, "HasOldStoredColumns", idx.GetName())
 		require.Equalf(t, 0, idx.NumCompositeColumns(),
@@ -366,7 +362,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	idx.StoreColumnNames = append([]string{}, name, name, name, name)
 	idx.KeySuffixColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
 	mut.Version++
-	require.NoError(t, validate.Self(mut))
+	require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, mut))
 
 	// Store the corrupted table descriptor.
 	err = db.Put(
@@ -399,7 +395,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	// considered invalid.
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
-	require.EqualError(t, validate.Self(mut), expected)
+	require.EqualError(t, validate.Self(clusterversion.TestingClusterVersion, mut), expected)
 
 	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
 	require.NoError(t, err)
@@ -411,9 +407,6 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-
-	const vp = descpb.LatestPrimaryIndexDescriptorVersion
-	const vnp = descpb.LatestNonPrimaryIndexDescriptorVersion
 
 	// Create a test cluster that will be used to create all kinds of indexes.
 	// We make it hang while finalizing an ALTER PRIMARY KEY to cover the edge
@@ -458,7 +451,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 
 	test := func(desc catalog.TableDescriptor) {
 		require.Equal(t, descpb.PrimaryIndexEncoding, desc.GetPrimaryIndex().GetEncodingType())
-		require.Equal(t, vp, desc.GetPrimaryIndex().GetVersion())
+		require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, desc.GetPrimaryIndex().GetVersion())
 		for _, index := range desc.PublicNonPrimaryIndexes() {
 			require.Equal(t, descpb.SecondaryIndexEncoding, index.GetEncodingType())
 		}
@@ -466,38 +459,63 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 
 		switch desc.GetName() {
 		case "t":
-			require.Equal(t, 6, len(nonPrimaries))
+			require.Equal(t, 10, len(nonPrimaries))
 			for _, np := range nonPrimaries {
 				switch np.GetName() {
 				case "tsec":
 					require.True(t, np.Public())
-					require.Equal(t, vnp, np.GetVersion())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				case "t_c_key":
 					require.True(t, np.Public())
 					require.True(t, np.IsUnique())
-					require.Equal(t, vnp, np.GetVersion())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				case "t_a_key":
 					require.True(t, np.IsMutation())
 					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, vnp, np.GetVersion())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				case "new_primary_key":
 					require.True(t, np.IsMutation())
 					require.Equal(t, descpb.PrimaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, vnp, np.GetVersion())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				case "tsec_rewrite_for_primary_key_change":
 					require.True(t, np.IsMutation())
 					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, vnp, np.GetVersion())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				case "t_c_key_rewrite_for_primary_key_change":
 					require.True(t, np.IsMutation())
 					require.True(t, np.IsUnique())
 					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, vnp, np.GetVersion())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_a_crdb_internal_dpe_key":
+					// Temporary index for new index based on old primary index (t_a_key)
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_b_crdb_internal_dpe_idx":
+					// Temporary index for tsec_rewrite_for_primary_key_change
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_c_crdb_internal_dpe_key":
+					// Temporary index for t_c_key_rewrite_for_primary_key_change
+					require.True(t, np.IsMutation())
+					require.True(t, np.IsUnique())
+					require.Equal(t, descpb.SecondaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
+
+				case "t_d_crdb_internal_dpe_key":
+					// Temporary index for new_primary_key
+					require.True(t, np.IsMutation())
+					require.Equal(t, descpb.PrimaryIndexEncoding, np.GetEncodingType())
+					require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 
 				default:
 					t.Fatalf("unexpected index or index mutation %q", np.GetName())
@@ -511,7 +529,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 			np := nonPrimaries[0]
 			require.False(t, np.IsMutation())
 			require.Equal(t, "vsec", np.GetName())
-			require.Equal(t, vnp, np.GetVersion())
+			require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, np.GetVersion())
 		}
 	}
 
@@ -543,4 +561,69 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	// Resume pending statement execution.
 	waitBeforeContinuing <- struct{}{}
 	wg.Wait()
+}
+
+// TestSecKeyPrimaryIndexWithStoredColumnsVersion tests the
+// TableDescriptorBuilder promote primary index and secondary index to correct
+// version from StrictIndexColumnIDGuaranteesVersion. Also verify StoreColumnIDs
+// and StoreColumnNames of primary index are correctly filled.
+func TestSecKeyPrimaryIndexWithStoredColumnsVersion(t *testing.T) {
+	oldDesc := descpb.TableDescriptor{
+		ID:            2,
+		ParentID:      1,
+		Name:          "foo",
+		FormatVersion: descpb.InterleavedFormatVersion,
+		Columns: []descpb.ColumnDescriptor{
+			{ID: 1, Name: "c1"},
+			{ID: 2, Name: "c2"},
+			{ID: 3, Name: "c3"},
+		},
+		Families: []descpb.ColumnFamilyDescriptor{
+			{ID: 0, Name: "fam_0", ColumnIDs: []descpb.ColumnID{1, 2, 3}, ColumnNames: []string{"c1", "c2", "c3"}},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID: 1, Name: "foo_pkey", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"c1"},
+			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			EncodingType:        descpb.PrimaryIndexEncoding,
+			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+		},
+		Indexes: []descpb.IndexDescriptor{
+			{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
+				KeyColumnNames:      []string{"c2"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				StoreColumnNames:    []string{"c2"},
+				StoreColumnIDs:      []descpb.ColumnID{2},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		},
+		Mutations: []descpb.DescriptorMutation{
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{
+					Index: &descpb.IndexDescriptor{
+						ID:                  3,
+						Name:                "new_idx",
+						Unique:              true,
+						KeyColumnIDs:        []descpb.ColumnID{3},
+						KeyColumnNames:      []string{"c3"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+						EncodingType:        descpb.SecondaryIndexEncoding,
+						ConstraintID:        1,
+					},
+				},
+				Direction: descpb.DescriptorMutation_ADD,
+				State:     descpb.DescriptorMutation_DELETE_ONLY,
+			},
+		},
+	}
+
+	b := tabledesc.NewBuilder(&oldDesc)
+	b.RunPostDeserializationChanges()
+	newDesc := b.BuildExistingMutable().(*tabledesc.Mutable)
+
+	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.PrimaryIndex.Version)
+	require.Equal(t, []string{"c2", "c3"}, newDesc.PrimaryIndex.StoreColumnNames)
+	require.Equal(t, []descpb.ColumnID{2, 3}, newDesc.PrimaryIndex.StoreColumnIDs)
+	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.Indexes[0].Version)
+	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.Mutations[0].GetIndex().Version)
 }

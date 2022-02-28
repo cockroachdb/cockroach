@@ -32,7 +32,7 @@ func init() {
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
-						DescID: this.TableID,
+						DescID: this.ViewID,
 					}
 				}),
 			),
@@ -41,7 +41,25 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.TableID,
+						DescID: this.ViewID,
+					}
+				}),
+				emit(func(this *scpb.View) scop.Op {
+					if len(this.UsesTypeIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveBackReferenceInTypes{
+						BackReferencedDescID: this.ViewID,
+						TypeIDs:              this.UsesTypeIDs,
+					}
+				}),
+				emit(func(this *scpb.View) scop.Op {
+					if len(this.UsesRelationIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveViewBackReferencesInRelations{
+						BackReferencedViewID: this.ViewID,
+						RelationIDs:          this.UsesRelationIDs,
 					}
 				}),
 			),
@@ -52,7 +70,7 @@ func init() {
 				}),
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.CreateGcJobForTable{
-						TableID: this.TableID,
+						TableID: this.ViewID,
 					}
 				}),
 			),

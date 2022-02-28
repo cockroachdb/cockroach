@@ -1,6 +1,6 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "contentionpb",
@@ -8,6 +8,11 @@ go_library(
     embed = [":contentionpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/contentionpb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/uuid",
+    ],
 )
 
 proto_library(
@@ -16,8 +21,10 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
     ],
 )
 
@@ -32,5 +39,17 @@ go_proto_library(
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_test(
+    name = "contentionpb_test",
+    srcs = ["contention_test.go"],
+    embed = [":contentionpb"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
     ],
 )

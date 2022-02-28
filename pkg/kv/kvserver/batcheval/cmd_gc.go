@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -30,6 +32,7 @@ func declareKeysGC(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// Intentionally don't call DefaultDeclareKeys: the key range in the header
 	// is usually the whole range (pending resolution of #7880).
@@ -60,6 +63,33 @@ func GC(
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GCRequest)
 	h := cArgs.Header
+
+	// We do not allow GC requests to bump the GC threshold at the same time that
+	// they GC individual keys. This is because performing both of these actions
+	// at the same time could lead to a race where a read request is allowed to
+	// evaluate without error while also failing to see MVCC versions that were
+	// concurrently GCed, which would be a form of data corruption.
+	//
+	// This race is possible because foreground traffic consults the in-memory
+	// version of the GC threshold (r.mu.state.GCThreshold), which is updated
+	// after (in handleGCThresholdResult), not atomically with, the application of
+	// the GC request's WriteBatch to the LSM (in ApplyToStateMachine). This
+	// allows a read request to see the effect of a GC on MVCC state without
+	// seeing its effect on the in-memory GC threshold.
+	//
+	// The latching above looks like it will help here, but in practice it does
+	// not for two reasons:
+	// 1. the latches do not protect timestamps below the GC request's batch
+	//    timestamp. This means that they only conflict with concurrent writes,
+	//    but not all concurrent reads.
+	// 2. the read could be served off a follower, which could be applying the
+	//    GC request's effect from the raft log. Latches held on the leaseholder
+	//    would have no impact on a follower read.
+	if !args.Threshold.IsEmpty() && len(args.Keys) != 0 &&
+		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
+		return result.Result{}, errors.AssertionFailedf(
+			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
+	}
 
 	// All keys must be inside the current replica range. Keys outside
 	// of this range in the GC request are dropped silently, which is

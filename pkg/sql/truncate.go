@@ -178,7 +178,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if tableDesc.NewSchemaChangeJobID != 0 {
+	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
 			tableDesc.GetName(),
@@ -209,7 +209,8 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	}
 
 	// Create new ID's for all of the indexes in the table.
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 
@@ -323,7 +324,10 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 	for i, m := range desc.AllMutations() {
 		if idx := m.AsIndex(); idx != nil {
 			// Do not allow dropping indexes.
-			if !m.Adding() {
+			//
+			// TODO(ssd): Are we definitely OK to allow
+			// truncate with these temporary drops?
+			if !m.Adding() && !idx.IsTemporaryIndexForBackfill() {
 				return unimplemented.Newf(
 					"TRUNCATE concurrent with ongoing schema change",
 					"cannot perform TRUNCATE on %q which has indexes being dropped", desc.GetName())

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -308,6 +309,14 @@ func NewMonitorWithLimit(
 
 // NewMonitorInheritWithLimit creates a new monitor with a limit local to this
 // monitor with all other attributes inherited from the passed in monitor.
+// Note on metrics and inherited monitors.
+// When using pool to share resource, downstream monitors must not use the
+// same metric objects as pool monitor to avoid reporting the same allocation
+// multiple times. Downstream monitors should use their own metrics as needed
+// by using BytesMonitor.SetMetrics function.
+// Also note that because monitors pre-allocate resources from pool in chunks,
+// those chunks would be reported as used by pool while downstream monitors will
+// not.
 func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *BytesMonitor {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -315,8 +324,8 @@ func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *Byte
 		name,
 		m.resource,
 		limit,
-		m.mu.curBytesCount,
-		m.mu.maxBytesHist,
+		nil, // curCount is not inherited as we don't want to double count allocations
+		nil, // maxHist is not inherited as we don't want to double count allocations
 		m.poolAllocationSize,
 		m.noteworthyUsageBytes,
 		m.settings,
@@ -470,17 +479,25 @@ func (mm *BytesMonitor) Resource() Resource {
 // at once when it completes its work. Internally, BoundAccount amortizes
 // allocations from whichever BoundAccount it is associated with by allocating
 // additional memory and parceling it out (see BoundAccount.reserved). A nil
-// BoundAccount acts as an unlimited account for which growing and shrinking
-// are noops.
+// BoundAccount acts as an unlimited account for which growing and shrinking are
+// noops.
 //
 // See the comments in bytes_usage.go for a fuller picture of how these accounts
 // are used in CockroachDB.
+//
+// A normal BoundAccount is not safe for concurrent use by multiple goroutines,
+// however if the Mu field is set to a non-nil mutex, some methods such as Grow,
+// Shrink, and Resize calls will lock and unlock that mutex making them safe;
+// such methods are identified in their comments.
 type BoundAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as used increases (and vice-versa).
 	reserved int64
 	mon      *BytesMonitor
+
+	// Mu, if non-nil, is used in some methods such as Grow and Shrink.
+	Mu *syncutil.Mutex
 }
 
 // MakeStandaloneBudget creates a BoundAccount suitable for root
@@ -490,9 +507,14 @@ func MakeStandaloneBudget(capacity int64) BoundAccount {
 }
 
 // Used returns the number of bytes currently allocated through this account.
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Used() int64 {
 	if b == nil {
 		return 0
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	return b.used
 }
@@ -584,9 +606,15 @@ func (b *BoundAccount) Close(ctx context.Context) {
 // If one is interested in specifying the new size of the account as a whole (as
 // opposed to resizing one object among many in the account), ResizeTo() should
 // be used.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	delta := newSz - oldSz
 	switch {
@@ -599,9 +627,15 @@ func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 }
 
 // ResizeTo resizes (grows or shrinks) the account to a specified size.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	if newSz == b.used {
 		// Performance optimization to avoid an unnecessary dispatch.
@@ -611,9 +645,15 @@ func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
 }
 
 // Grow is an accessor for b.mon.GrowAccount.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	if b.reserved < x {
 		minExtra := b.mon.roundSize(x)
@@ -628,9 +668,15 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 }
 
 // Shrink releases part of the cumulated allocations by the specified size.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b == nil {
 		return
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	if b.used < delta {
 		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,
@@ -785,12 +831,12 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	}
 }
 
-// ReadAll is like io.ReadAll except it additionally asks the BoundAccount acct
+// ReadAll is like ioctx.ReadAll except it additionally asks the BoundAccount acct
 // permission, if it is non-nil, it grows its buffer while reading. When the
 // caller releases the returned slice it shrink the bound account by its cap.
-func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, error) {
+func ReadAll(ctx context.Context, r ioctx.ReaderCtx, acct *BoundAccount) ([]byte, error) {
 	if acct == nil {
-		b, err := io.ReadAll(r)
+		b, err := ioctx.ReadAll(ctx, r)
 		return b, err
 	}
 
@@ -828,7 +874,7 @@ func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, erro
 		}
 
 		// Read into our buffer until we get an error.
-		n, err := r.Read(b[len(b):cap(b)])
+		n, err := r.Read(ctx, b[len(b):cap(b)])
 		b = b[:len(b)+n]
 		if err != nil {
 			if err == io.EOF {

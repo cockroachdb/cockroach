@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "span",
-    srcs = ["span_builder.go"],
+    srcs = [
+        "span_builder.go",
+        "span_splitter.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/span",
     visibility = ["//visibility:public"],
     deps = [
@@ -12,11 +15,9 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/inverted",
         "//pkg/sql/opt/constraint",
-        "//pkg/sql/opt/exec",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/encoding",
         "@com_github_cockroachdb_errors//:errors",
@@ -26,12 +27,23 @@ go_library(
 go_test(
     name = "span_test",
     size = "small",
-    srcs = ["span_builder_test.go"],
-    embed = [":span"],
+    srcs = [
+        "main_test.go",
+        "span_splitter_test.go",
+    ],
     deps = [
+        ":span",
         "//pkg/keys",
-        "//pkg/settings/cluster",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
     ],
 )

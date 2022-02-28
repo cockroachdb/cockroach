@@ -11,26 +11,10 @@
 package opgen
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
-
-func convertSecondaryIndexColumnDir(
-	secondaryIndex *scpb.SecondaryIndex,
-) []descpb.IndexDescriptor_Direction {
-	// Convert column directions
-	convertedColumnDirs := make([]descpb.IndexDescriptor_Direction, 0, len(secondaryIndex.KeyColumnDirections))
-	for _, columnDir := range secondaryIndex.KeyColumnDirections {
-		switch columnDir {
-		case scpb.SecondaryIndex_DESC:
-			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_DESC)
-		case scpb.SecondaryIndex_ASC:
-			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_ASC)
-		}
-	}
-	return convertedColumnDirs
-}
 
 func init() {
 	opRegistry.register((*scpb.SecondaryIndex)(nil),
@@ -40,22 +24,12 @@ func init() {
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeAddedIndexDeleteOnly{
-						TableID:             this.TableID,
-						IndexID:             this.IndexID,
-						Unique:              this.Unique,
-						KeyColumnIDs:        this.KeyColumnIDs,
-						KeyColumnDirections: convertSecondaryIndexColumnDir(this),
-						KeySuffixColumnIDs:  this.KeySuffixColumnIDs,
-						StoreColumnIDs:      this.StoringColumnIDs,
-						CompositeColumnIDs:  this.CompositeColumnIDs,
-						ShardedDescriptor:   this.ShardedDescriptor,
-						Inverted:            this.Inverted,
-						Concurrently:        this.Concurrently,
-						SecondaryIndex:      true,
+						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
+						IsSecondaryIndex: true,
 					}
 				}),
 			),
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeAddedIndexDeleteAndWriteOnly{
@@ -93,6 +67,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_VALIDATED,
+				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					// Most of this logic is taken from MakeMutationComplete().
 					return &scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly{
@@ -101,7 +76,7 @@ func init() {
 					}
 				}),
 			),
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				revertible(false),
 			),
@@ -116,13 +91,13 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
-					return &scop.MakeIndexAbsent{
+					return &scop.CreateGcJobForIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
-					return &scop.CreateGcJobForIndex{
+					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}

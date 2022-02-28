@@ -101,8 +101,7 @@ message LocalOnlySessionData {
   // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
   // modified for multi-region databases and tables/indexes/partitions.
   bool override_multi_region_zone_config_enabled = 24;
-  // HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
-  bool hash_sharded_indexes_enabled = 25;
+  reserved 25;
   // DisallowFullTableScans indicates whether queries that plan full table scans
   // should be rejected.
   bool disallow_full_table_scans = 26;
@@ -226,6 +225,9 @@ message LocalOnlySessionData {
   // and joins using the same default number of bytes per column instead of
   // column sizes from the AvgSize table statistic.
   bool cost_scans_with_default_col_size = 61;
+  // DefaultTxnQualityOfService indicates the default QoSLevel/WorkPriority of
+  // newly created transactions.
+  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype)="QoSLevel"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

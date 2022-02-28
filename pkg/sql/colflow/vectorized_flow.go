@@ -205,7 +205,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetWaitGroup(),
 		f.GetRowSyncFlowConsumer(),
 		f.GetBatchSyncFlowConsumer(),
-		flowCtx.Cfg.NodeDialer,
+		flowCtx.Cfg.PodNodeDialer,
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
@@ -1037,14 +1037,14 @@ func (s *vectorizedFlowCreator) setupOutput(
 // callbackCloser is a utility struct that implements the Closer interface by
 // calling the provided callback.
 type callbackCloser struct {
-	closeCb func() error
+	closeCb func(context.Context) error
 }
 
 var _ colexecop.Closer = &callbackCloser{}
 
 // Close implements the Closer interface.
-func (c *callbackCloser) Close() error {
-	return c.closeCb()
+func (c *callbackCloser) Close(ctx context.Context) error {
+	return c.closeCb(ctx)
 }
 
 func (s *vectorizedFlowCreator) setupFlow(
@@ -1131,12 +1131,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				for i := range toCloseCopy {
 					func(idx int) {
 						closed := false
-						result.ToClose[idx] = &callbackCloser{closeCb: func() error {
+						result.ToClose[idx] = &callbackCloser{closeCb: func(ctx context.Context) error {
 							if !closed {
 								closed = true
 								atomic.AddInt32(&s.numClosed, 1)
 							}
-							return toCloseCopy[idx].Close()
+							return toCloseCopy[idx].Close(ctx)
 						}}
 					}(i)
 				}

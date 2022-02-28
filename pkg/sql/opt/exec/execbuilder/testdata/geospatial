@@ -3,6 +3,10 @@
 # https://github.com/cockroachdb/cockroach/issues/49582
 # LogicTest: !3node-tenant
 
+# TODO(ssd): index id test dependency cleanup
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false
+
 statement ok
 CREATE TABLE b(
   a int primary key,

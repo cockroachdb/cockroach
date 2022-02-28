@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,14 +56,17 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 	for _, field := range fields {
 		fParams := strings.Split(field, "=")
 		if len(fParams) != 2 {
-			return BufferParams{}, 0, errors.Newf("unknown buffer parameter: %s", fParams)
+			return BufferParams{}, 0, pgerror.Newf(pgcode.InvalidParameterValue, "unknown buffer parameter: %s", fParams)
 		}
 		f, val := fParams[0], fParams[1]
 		switch strings.ToLower(f) {
 		case "quad_segs":
 			valInt, err := strconv.ParseInt(val, 10, 64)
 			if err != nil {
-				return BufferParams{}, 0, errors.Wrapf(err, "invalid int for %s: %s", f, val)
+				return BufferParams{}, 0, pgerror.WithCandidateCode(
+					errors.Wrapf(err, "invalid int for %s: %s", f, val),
+					pgcode.InvalidParameterValue,
+				)
 			}
 			p.p.QuadrantSegments = int(valInt)
 		case "endcap":
@@ -73,7 +78,11 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 			case "square":
 				p.p.EndCapStyle = geos.BufferParamsEndCapStyleSquare
 			default:
-				return BufferParams{}, 0, errors.Newf("unknown endcap: %s (accepted: round, flat, square)", val)
+				return BufferParams{}, 0, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"unknown endcap: %s (accepted: round, flat, square)",
+					val,
+				)
 			}
 		case "join":
 			switch strings.ToLower(val) {
@@ -84,12 +93,19 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 			case "bevel":
 				p.p.JoinStyle = geos.BufferParamsJoinStyleBevel
 			default:
-				return BufferParams{}, 0, errors.Newf("unknown join: %s (accepted: round, mitre, bevel)", val)
+				return BufferParams{}, 0, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"unknown join: %s (accepted: round, mitre, bevel)",
+					val,
+				)
 			}
 		case "mitre_limit", "miter_limit":
 			valFloat, err := strconv.ParseFloat(val, 64)
 			if err != nil {
-				return BufferParams{}, 0, errors.Wrapf(err, "invalid float for %s: %s", f, val)
+				return BufferParams{}, 0, pgerror.WithCandidateCode(
+					errors.Wrapf(err, "invalid float for %s: %s", f, val),
+					pgcode.InvalidParameterValue,
+				)
 			}
 			p.p.MitreLimit = valFloat
 		case "side":
@@ -102,10 +118,10 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 				p.p.SingleSided = true
 				distance *= -1
 			default:
-				return BufferParams{}, 0, errors.Newf("unknown side: %s (accepted: both, left, right)", val)
+				return BufferParams{}, 0, pgerror.Newf(pgcode.InvalidParameterValue, "unknown side: %s (accepted: both, left, right)", val)
 			}
 		default:
-			return BufferParams{}, 0, errors.Newf("unknown field: %s (accepted fields: quad_segs, endcap, join, mitre_limit, side)", f)
+			return BufferParams{}, 0, pgerror.Newf(pgcode.InvalidParameterValue, "unknown field: %s (accepted fields: quad_segs, endcap, join, mitre_limit, side)", f)
 		}
 	}
 	return p, distance, nil
@@ -114,14 +130,16 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 // Buffer buffers a given Geometry by the supplied parameters.
 func Buffer(g geo.Geometry, params BufferParams, distance float64) (geo.Geometry, error) {
 	if params.p.QuadrantSegments < 1 {
-		return geo.Geometry{}, errors.Newf(
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"must request at least 1 quadrant segment, requested %d quadrant segments",
 			params.p.QuadrantSegments,
 		)
 
 	}
 	if params.p.QuadrantSegments > geo.MaxAllowedSplitPoints {
-		return geo.Geometry{}, errors.Newf(
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"attempting to split buffered geometry into too many quadrant segments; requested %d quadrant segments, max %d",
 			params.p.QuadrantSegments,
 			geo.MaxAllowedSplitPoints,

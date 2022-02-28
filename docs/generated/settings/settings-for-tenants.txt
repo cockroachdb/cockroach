@@ -1,5 +1,8 @@
 Setting	Type	Default	Description
-admission.kv.enabled	boolean	true	when true, work performed by the KV layer is subject to admission control
+admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission
+admission.epoch_lifo.epoch_closing_delta_duration	duration	5ms	the delta duration before closing an epoch, for epoch-LIFO admission control ordering
+admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for epoch-LIFO admission control ordering
+admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering
 admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
 admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP
@@ -33,6 +36,7 @@ kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconcili
 kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
+kv.replica_stats.addsst_request_size_factor	integer	50000	the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1
 kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
 kv.transaction.max_refresh_spans_bytes	integer	256000	maximum number of bytes used to track refresh spans in serializable transactions
@@ -49,6 +53,7 @@ server.eventlog.enabled	boolean	true	if set, logged notable events are also stor
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
 server.identity_map.configuration	string		system-identity to database-username mappings
+server.max_connections_per_gateway	integer	-1	the maximum number of non-superuser SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
 server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)
@@ -60,9 +65,9 @@ server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provide
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) 
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)
 server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
-server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
-server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
-server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.lease_transfer_wait	duration	5s	the timeout for a single iteration of the range lease transfer phase of draining (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM
 server.user_login.min_password_length	integer	1	the minimum length accepted for passwords set in cleartext via SQL. Note that a value lower than 1 is ignored: passwords cannot be empty in any case.
@@ -77,7 +82,8 @@ server.web_session.purge.max_deletions_per_cycle	integer	10	the maximum number o
 server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
-sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use
+sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store
+sql.contention.txn_id_cache.max_size	byte size	0 B	the maximum byte size TxnID cache will use (set to 0 to disable)
 sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
@@ -85,7 +91,7 @@ sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to o
 sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	setting to true uses the same size for all columns to compute scan cost
 sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 sql.defaults.datestyle.enabled	boolean	false	default value for datestyle_enabled session setting
-sql.defaults.default_hash_sharded_index_bucket_count	integer	8	used as bucket count if bucket count is not specified in hash sharded index definition
+sql.defaults.default_hash_sharded_index_bucket_count	integer	16	used as bucket count if bucket count is not specified in hash sharded index definition
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
 sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
 sql.defaults.distsql	enumeration	auto	default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]
@@ -93,9 +99,7 @@ sql.defaults.experimental_alter_column_type.enabled	boolean	false	default value 
 sql.defaults.experimental_auto_rehoming.enabled	boolean	false	default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
 sql.defaults.experimental_distsql_planning	enumeration	off	default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
 sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolean	false	default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default
-sql.defaults.experimental_hash_sharded_indexes.enabled	boolean	false	default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default
 sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
-sql.defaults.experimental_new_schema_changer.enabled	enumeration	off	default value for experimental_use_new_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 sql.defaults.experimental_stream_replication.enabled	boolean	false	default value for experimental_stream_replication session setting;enables the ability to setup a replication stream
 sql.defaults.experimental_temporary_tables.enabled	boolean	false	default value for experimental_enable_temp_tables; allows for use of temporary tables by default
 sql.defaults.foreign_key_cascades_limit	integer	10000	default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query
@@ -124,6 +128,7 @@ sql.defaults.transaction_rows_read_err	integer	0	the limit for the number of row
 sql.defaults.transaction_rows_read_log	integer	0	the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.transaction_rows_written_err	integer	0	the limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.transaction_rows_written_log	integer	0	the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
+sql.defaults.use_declarative_schema_changer	enumeration	on	default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 sql.defaults.vectorize	enumeration	on	default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
 sql.defaults.zigzag_join.enabled	boolean	true	default value for enable_zigzag_join session setting; allows use of zig-zag join by default
 sql.distsql.max_running_flows	integer	-128	the value - when positive - used as is, or the value - when negative - multiplied by the number of CPUs on a node, to determine the maximum number of concurrent remote flows that can be run on the node
@@ -167,6 +172,12 @@ sql.trace.log_statement_execute	boolean	false	set to true to enable logging of e
 sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing. Note that enabling this may have a non-trivial negative performance impact.
 sql.trace.stmt.enable_threshold	duration	0s	duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.
 sql.trace.txn.enable_threshold	duration	0s	duration beyond which all transactions are traced (set to 0 to disable). This setting is coarser grained thansql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries).
+sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job
+sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.
+sql.ttl.default_range_concurrency	integer	1	default amount of ranges to process at once during a TTL delete
+sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job
+sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled
+sql.ttl.range_batch_size	integer	100	amount of ranges to fetch at a time for a table during the TTL job
 timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.
@@ -174,4 +185,4 @@ trace.debug.enable	boolean	false	if set, traces for recent requests can be seen 
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	21.2-58	set the active cluster version in the format '<major>.<minor>'
+version	version	21.2-84	set the active cluster version in the format '<major>.<minor>'

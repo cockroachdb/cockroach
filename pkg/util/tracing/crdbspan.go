@@ -30,10 +30,17 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	// tracer is the Tracer that created this span.
 	tracer *Tracer
+	// sp is Span that this crdbSpan is part of.
+	sp *Span
 
-	traceID      tracingpb.TraceID // probabilistically unique
-	spanID       tracingpb.SpanID  // probabilistically unique
+	traceID tracingpb.TraceID // probabilistically unique
+	spanID  tracingpb.SpanID  // probabilistically unique
+	// parentSpanID indicates the parent at the time when this span was created. 0
+	// if this span didn't have a parent. If crdbSpan.mu.parent is set,
+	// parentSpanID corresponds to it. However, if the parent finishes, or if the
+	// parent is a span from a remote node, crdbSpan.mu.parent will be nil.
 	parentSpanID tracingpb.SpanID
 	operation    string // name of operation associated with the span
 
@@ -262,10 +269,11 @@ func (s *crdbSpan) finish() bool {
 			s.mu.finishing = false
 		}
 
-		// If the span is not part of the registry now, it never will be. So, we'll
-		// need to remove it from the registry only if it currently does not have a
-		// parent. We'll also need to manipulate the registry if there are open
-		// children (they'll need to be added to the registry).
+		// If the span was not part of the registry the first time the lock was
+		// acquired, above, it never will be (because we marked it as finished). So,
+		// we'll need to remove it from the registry only if it currently does not
+		// have a parent. We'll also need to manipulate the registry if there are
+		// open children (they'll need to be added to the registry).
 		needRegistryChange = !hasParent || len(s.mu.openChildren) > 0
 
 		// Deal with the orphaned children - make them roots. We call into the
@@ -312,18 +320,13 @@ func (s *crdbSpan) enableRecording(recType RecordingType) {
 	s.mu.recording.recordingType.swap(recType)
 }
 
-func (s *crdbSpan) disableRecording() {
-	if s.recordingType() == RecordingOff {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.recording.recordingType.swap(RecordingOff)
-}
-
 // TraceID is part of the RegistrySpan interface.
 func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
+}
+
+func (s *crdbSpan) SpanID() tracingpb.SpanID {
+	return s.spanID
 }
 
 // GetRecording returns the span's recording.
@@ -847,24 +850,15 @@ func (s *crdbSpan) parentFinished() {
 	s.mu.parent.release()
 }
 
-// SetVerbose is part of the RegistrySpan interface.
-func (s *crdbSpan) SetVerbose(to bool) {
-	if to {
-		s.enableRecording(RecordingVerbose)
-	} else {
-		s.disableRecording()
-	}
+// SetRecordingType is part of the RegistrySpan interface.
+func (s *crdbSpan) SetRecordingType(to RecordingType) {
+	s.mu.recording.recordingType.swap(to)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.mu.openChildren {
-		child.SetVerbose(to)
+		child.SetRecordingType(to)
 	}
-
-	// TODO(andrei): The children that have started while this span was not
-	// recording are not linked into openChildren. The children that are still
-	// open can be found through the registry, so we could go spelunking in there
-	// and link them into the parent.
 }
 
 // withLock calls f while holding s' lock.

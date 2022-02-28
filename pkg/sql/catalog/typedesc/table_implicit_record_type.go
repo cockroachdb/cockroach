@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,7 +40,7 @@ type TableImplicitRecordType struct {
 	// by examining the privileges for the table that the record type corresponds
 	// to, and providing the USAGE privilege if the table had the SELECT
 	// privilege.
-	privs *descpb.PrivilegeDescriptor
+	privs *catpb.PrivilegeDescriptor
 }
 
 var _ catalog.TypeDescriptor = (*TableImplicitRecordType)(nil)
@@ -82,7 +83,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	}
 
 	tablePrivs := descriptor.GetPrivileges()
-	newPrivs := make([]descpb.UserPrivileges, len(tablePrivs.Users))
+	newPrivs := make([]catpb.UserPrivileges, len(tablePrivs.Users))
 	for i := range tablePrivs.Users {
 		newPrivs[i].UserProto = tablePrivs.Users[i].UserProto
 		// A table's record type has USAGE privs if a user has SELECT on the table.
@@ -94,7 +95,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	return &TableImplicitRecordType{
 		desc: descriptor,
 		typ:  typ,
-		privs: &descpb.PrivilegeDescriptor{
+		privs: &catpb.PrivilegeDescriptor{
 			Users:      newPrivs,
 			OwnerProto: tablePrivs.OwnerProto,
 			Version:    tablePrivs.Version,
@@ -102,13 +103,13 @@ func CreateImplicitRecordTypeFromTableDesc(
 	}, nil
 }
 
-// GetName implements the NameKey interface.
+// GetName implements the Namespace interface.
 func (v TableImplicitRecordType) GetName() string { return v.desc.GetName() }
 
-// GetParentID implements the NameKey interface.
+// GetParentID implements the Namespace interface.
 func (v TableImplicitRecordType) GetParentID() descpb.ID { return v.desc.GetParentID() }
 
-// GetParentSchemaID implements the NameKey interface.
+// GetParentSchemaID implements the Namespace interface.
 func (v TableImplicitRecordType) GetParentSchemaID() descpb.ID { return v.desc.GetParentSchemaID() }
 
 // GetID implements the NameEntry interface.
@@ -132,7 +133,7 @@ func (v TableImplicitRecordType) GetDrainingNames() []descpb.NameInfo {
 }
 
 // GetPrivileges implements the Descriptor interface.
-func (v TableImplicitRecordType) GetPrivileges() *descpb.PrivilegeDescriptor {
+func (v TableImplicitRecordType) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return v.privs
 }
 
@@ -327,6 +328,17 @@ func (v TableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
 // GetReferencingDescriptorID implements the TypeDescriptorInterface.
 func (v TableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
 
+// GetPostDeserializationChanges implements the Descriptor interface.
+func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return catalog.PostDeserializationChanges{}
+}
+
 func (v TableImplicitRecordType) panicNotSupported(message string) {
 	panic(errors.AssertionFailedf("implicit table record type for table %q: not supported: %s", v.GetName(), message))
+}
+
+// GetDeclarativeSchemaChangerState implements the Descriptor interface.
+func (v TableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	v.panicNotSupported("GetDeclarativeSchemaChangeState")
+	return nil
 }

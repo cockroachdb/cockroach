@@ -15,7 +15,8 @@ option go_package = "descpb";
 
 import "util/hlc/timestamp.proto";
 import "sql/catalog/catpb/catalog.proto";
-import "sql/catalog/descpb/privilege.proto";
+import "sql/catalog/catpb/privilege.proto";
+import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
 import "gogoproto/gogo.proto";
@@ -93,6 +94,11 @@ message ForeignKeyConstraint {
 
   // These fields were used for foreign keys until 20.1.
   reserved 10, 11, 12, 13;
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 constraint_id = 14 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 }
 
 // UniqueWithoutIndexConstraint is the representation of a unique constraint
@@ -111,6 +117,11 @@ message UniqueWithoutIndexConstraint {
   // unique constraint with Predicate as the expression. Columns are referred to
   // in the expression by their name.
   optional string predicate = 5 [(gogoproto.nullable) = false];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 constraint_id = 6 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -265,62 +276,6 @@ message InterleaveDescriptor {
   repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
 }
 
-// PartitioningDescriptor represents the partitioning of an index into spans
-// of keys addressable by a zone config. The key encoding is unchanged. Each
-// partition may optionally be itself divided into further partitions, called
-// subpartitions.
-message PartitioningDescriptor {
-  option (gogoproto.equal) = true;
-  // List represents a list partitioning, which maps individual tuples to
-  // partitions.
-  message List {
-    option (gogoproto.equal) = true;
-    // Name is the partition name.
-    optional string name = 1 [(gogoproto.nullable) = false];
-    // Values is an unordered set of the tuples included in this partition. Each
-    // tuple is encoded with the EncDatum value encoding. DEFAULT is encoded as
-    // NOT NULL followed by PartitionDefaultVal encoded as a non-sorting
-    // uvarint.
-    repeated bytes values = 2;
-    // Subpartitioning represents a further partitioning of this list partition.
-    optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
-  }
-
-  // Range represents a range partitioning, which maps ranges of tuples to
-  // partitions by specifying exclusive upper bounds. The range partitions in a
-  // PartitioningDescriptor are required to be sorted by UpperBound.
-  message Range {
-    option (gogoproto.equal) = true;
-    // Name is the partition name.
-    optional string name = 1 [(gogoproto.nullable) = false];
-    // FromInclusive is the inclusive lower bound of this range partition. It is
-    // encoded with the EncDatum value encoding. MINVALUE and MAXVALUE are
-    // encoded as NOT NULL followed by a PartitionSpecialValCode encoded as a
-    // non-sorting uvarint.
-    optional bytes from_inclusive = 3;
-    // ToExclusive is the exclusive upper bound of this range partition. It is
-    // encoded in the same way as From.
-    optional bytes to_exclusive = 2;
-  }
-
-  // NumColumns is how large of a prefix of the columns in an index are used in
-  // the function mapping column values to partitions. If this is a
-  // subpartition, this is offset to start from the end of the parent
-  // partition's columns. If NumColumns is 0, then there is no partitioning.
-  optional uint32 num_columns = 1 [(gogoproto.nullable) = false];
-  // NumImplicitColumns specifies the number of columns that implicitly prefix a given index.
-  // This occurs if a user specifies a PARTITION BY which is not a prefix of the given index,
-  // in which case the ColumnIDs are added in front of the index and this field denotes
-  // the number of columns added as a prefix.
-  // If NumImplicitColumns is 0, there are no implicit columns defined for the index."
-  optional uint32 num_implicit_columns = 4 [(gogoproto.nullable)=false];
-
-  // Exactly one of List or Range is required to be non-empty if NumColumns is
-  // non-zero.
-  repeated List list = 2 [(gogoproto.nullable) = false];
-  repeated Range range = 3 [(gogoproto.nullable) = false];
-}
-
 // IndexDescriptor describes an index (primary or secondary).
 //
 // Sample field values on the following table:
@@ -401,8 +356,7 @@ message IndexDescriptor {
   repeated Direction key_column_directions = 8;
 
   // An ordered list of column names which the index stores in addition to the
-  // columns which are explicitly part of the index (STORING clause). Only used
-  // for secondary indexes.
+  // columns which are explicitly part of the index (STORING clause).
   repeated string store_column_names = 5;
 
   // An ordered list of column IDs of which the index key is comprised. This
@@ -465,7 +419,7 @@ message IndexDescriptor {
 
   // Partitioning, if it's not the zero value, describes how this index's data
   // is partitioned into spans of keys each addressable by zone configs.
-  optional PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
+  optional cockroach.sql.catalog.catpb.PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
 
   // Type is the type of index, inverted or forward.
   optional Type type = 16 [(gogoproto.nullable)=false];
@@ -522,6 +476,18 @@ message IndexDescriptor {
   // require more data being stored in each deleted entry and further complicate
   // the merge process. See #75720 for further details.
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
+
+  // CreatedAtNanos, if non-zero, represents an approximate time at which the
+  // index was created.
+  optional int64 created_at_nanos = 25 [(gogoproto.nullable) = false];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints, which is only set for primary keys and unique secondary
+  // indexes.
+  optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+
+  // Next ID: 27
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -603,6 +569,14 @@ message PrimaryKeySwap {
   optional LocalityConfigSwap locality_config_swap = 6;
 }
 
+// ModifyRowLevelTTL is a mutation corresponding to adding or dropping a TTL
+// from a table. This accompanies an ADD or DROP column.
+message ModifyRowLevelTTL {
+  option (gogoproto.equal) = true;
+
+  optional cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 1 [(gogoproto.customname) = "RowLevelTTL"];
+}
+
 // ComputedColumnSwap is a mutation corresponding to the atomic swap phase
 // where Column a' that is computed using Column a is swapped to replace
 // Column a while Column a becomes computed using a'.
@@ -652,6 +626,7 @@ message DescriptorMutation {
     PrimaryKeySwap primaryKeySwap = 9;
     ComputedColumnSwap computedColumnSwap = 10;
     MaterializedViewRefresh materializedViewRefresh = 11;
+    ModifyRowLevelTTL modify_row_level_ttl = 12 [(gogoproto.customname)="ModifyRowLevelTTL"];
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
@@ -973,6 +948,10 @@ message TableDescriptor {
     // of SHOW CREATE TABLE. We no longer them in order to make the output to be
     // round-trippable, but we still set this field for now. See #68031.
     optional bool hidden = 7 [(gogoproto.nullable) = false];
+    // Used within the table descriptor to uniquely identify individual
+    // constraints.
+    optional uint32 constraint_id = 8 [(gogoproto.customname) = "ConstraintID",
+      (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;
@@ -1042,19 +1021,21 @@ message TableDescriptor {
     // The job id for a mutation job is the id in the system.jobs table of the
     // schema change job executing the mutation referenced by mutation_id.
     // This is not a jobspb.JobID to avoid a dependency cycle.
-    optional int64 job_id = 2 [(gogoproto.nullable) = false,
-             (gogoproto.customname) = "JobID"];
+    optional int64 job_id = 2 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "JobID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
   }
 
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
 
-  // The job associated with a schema change job run in the new schema changer
-  // (in sql/schemachanger), if one exists. Only one such job can exist at a
-  // time.
-  optional int64 new_schema_change_job_id = 46 [(gogoproto.nullable) = false,
-                                               (gogoproto.customname) = "NewSchemaChangeJobID"];
+  reserved 46;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 50;
 
   message SequenceOpts {
     option (gogoproto.equal) = true;
@@ -1130,7 +1111,10 @@ message TableDescriptor {
 
   // The job id for a drop job is the id in the system.jobs table of the
   // dropping of this table.
-  optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
+  optional int64 drop_job_id = 32 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "DropJobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   message GCDescriptorMutation {
     option (gogoproto.equal) = true;
@@ -1141,8 +1125,10 @@ message TableDescriptor {
 
     // The job id for a mutation job is the id in the system.jobs table of the
     // schema change job executing the mutation referenced by mutation_id.
-    optional int64 job_id = 3 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "JobID", deprecated = true];
+    optional int64 job_id = 3 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "JobID", deprecated = true,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
   }
 
   // Before 22.1:
@@ -1188,19 +1174,13 @@ message TableDescriptor {
 
   optional cockroach.sql.catalog.catpb.LocalityConfig locality_config = 42;
 
-  // PartitionAllBy is set if PARTITION ALL BY is set on the table.
-  // This means that all indexes implicitly inherit all partitioning
-  // from the PARTITION ALL BY clause.
+  // PartitionAllBy is set if PARTITION ALL BY or LOCALITY REGIONAL BY ROW is
+  // set on the table. This means that all indexes implicitly inherit all
+  // partitioning from the PARTITION ALL BY clause or region configuration.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
 
-  message RowLevelTTL {
-    option (gogoproto.equal) = true;
-
-    // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
-    optional string duration_expr = 1 [(gogoproto.nullable)=false];
-  }
   // RowLevelTTL is set if there is a TTL set on the table.
-  optional RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];
+  optional cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];
 
   // ExcludeDataFromBackup specifies if the table's row data can be excluded
   // from a backup targeting this table. This in turn means that the protected
@@ -1214,7 +1194,11 @@ message TableDescriptor {
   // such a table will result in an empty table on the restoring cluster.
   optional bool exclude_data_from_backup = 48 [(gogoproto.nullable) = false];
 
-  // Next ID: 48
+  // Constraint ID for the next constraint.
+  optional uint32 next_constraint_id = 49 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextConstraintID", (gogoproto.casttype) = "ConstraintID"];
+
+  // Next ID: 51
 }
 
 // SurvivalGoal is the survival goal for a database.
@@ -1298,6 +1282,12 @@ message DatabaseDescriptor {
 
   // DefaultPrivileges contains the default privileges for the database.
   optional DefaultPrivilegeDescriptor default_privileges = 11;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 12;
+
+  // Next field is 13.
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1419,6 +1409,12 @@ message TypeDescriptor {
   }
 
   optional RegionConfig region_config = 16;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 17;
+
+  // Next field is 18.
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured
@@ -1456,6 +1452,12 @@ message SchemaDescriptor {
 
   // DefaultPrivileges contains the default privileges for the database.
   optional DefaultPrivilegeDescriptor default_privileges = 10;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
+
+  // Next field is 12.
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

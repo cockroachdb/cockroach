@@ -234,9 +234,6 @@ CREATE TABLE t.test (k INT);
 
 	// Write the modified descriptor.
 	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
 		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
 	}); err != nil {
 		t.Fatal(err)
@@ -777,12 +774,12 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	childDetachedChild := t1.StartSpan("root.child.detached_child", tracing.WithParent(child), tracing.WithDetachedRecording())
 
 	// Start a remote child span on "node 2".
-	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParent(child.Meta()))
+	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 2" that we finish.
-	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParent(child.Meta()))
+	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
 	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
 
 	// Start another remote child span on "node 2" that we finish. This will have

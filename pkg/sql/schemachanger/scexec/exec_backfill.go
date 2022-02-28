@@ -18,8 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
+	"github.com/cockroachdb/redact"
 )
 
 // TODO(ajwerner): Consider separating out the dependencies for the
@@ -52,11 +53,11 @@ func getTableDescriptorsForBackfills(
 	}
 	tables := make(map[descpb.ID]catalog.TableDescriptor, descIDs.Len())
 	for _, id := range descIDs.Ordered() {
-		desc, err := cat.MustReadImmutableDescriptor(ctx, id)
+		desc, err := cat.MustReadImmutableDescriptors(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		tbl, ok := desc.(catalog.TableDescriptor)
+		tbl, ok := desc[0].(catalog.TableDescriptor)
 		if !ok {
 			return nil, errors.AssertionFailedf("descriptor %d is not a table", id)
 		}
@@ -162,7 +163,8 @@ func maybeScanDestinationIndexes(
 	if !didScan {
 		return false, nil
 	}
-	if err := forEachProgressConcurrently(ctx, progresses, func(
+	const op = "scan destination indexes"
+	if err := forEachProgressConcurrently(ctx, op, progresses, func(
 		ctx context.Context, p *BackfillProgress,
 	) error {
 		if !p.MinimumWriteTimestamp.IsEmpty() {
@@ -184,12 +186,25 @@ func maybeScanDestinationIndexes(
 
 func forEachProgressConcurrently(
 	ctx context.Context,
+	op redact.SafeString,
 	progresses []BackfillProgress,
 	f func(context.Context, *BackfillProgress) error,
 ) error {
-	g, ctx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 	run := func(i int) {
-		g.Go(func() error { return f(ctx, &progresses[i]) })
+		g.GoCtx(func(ctx context.Context) (err error) {
+			defer func() {
+				switch r := recover().(type) {
+				case nil:
+					return
+				case error:
+					err = errors.Wrapf(r, "failed to %s", op)
+				default:
+					err = errors.AssertionFailedf("failed to %s: %v", op, r)
+				}
+			}()
+			return f(ctx, &progresses[i])
+		})
 	}
 	for i := range progresses {
 		run(i)
@@ -222,7 +237,8 @@ func runBackfills(
 	stop := deps.PeriodicProgressFlusher().StartPeriodicUpdates(ctx, tracker)
 	defer func() { _ = stop() }()
 	bf := deps.IndexBackfiller()
-	if err := forEachProgressConcurrently(ctx, progresses, func(
+	const op = "run backfills"
+	if err := forEachProgressConcurrently(ctx, op, progresses, func(
 		ctx context.Context, p *BackfillProgress,
 	) error {
 		return runBackfill(

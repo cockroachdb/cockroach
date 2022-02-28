@@ -10,6 +10,9 @@
 
 package descpb
 
+// IndexFetchSpecVersionInitial is the initial IndexFetchSpec version.
+const IndexFetchSpecVersionInitial = 1
+
 // KeyColumns returns the key columns in the index, excluding any key suffix
 // columns.
 func (s *IndexFetchSpec) KeyColumns() []IndexFetchSpec_KeyColumn {
@@ -18,7 +21,7 @@ func (s *IndexFetchSpec) KeyColumns() []IndexFetchSpec_KeyColumn {
 
 // KeyFullColumns returns the key columns in the index, plus all key suffix
 // columns if that index is not a unique index. It parallels
-// TableDesciptor.IndexFullColumns.
+// TableDescriptor.IndexFullColumns.
 func (s *IndexFetchSpec) KeyFullColumns() []IndexFetchSpec_KeyColumn {
 	if s.IsUniqueIndex {
 		// For unique indexes, the suffix columns are not part of the key (except

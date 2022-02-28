@@ -77,7 +77,7 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 
 	var results resultSet
 	var wg sync.WaitGroup
-	concurrency := ((system.NumCPU()*4 - 1) / r.numNodes) + 1 // arbitrary
+	concurrency := ((system.NumCPU() - 1) / r.numNodes) + 1 // arbitrary
 	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
 	isRewrite := *rewriteFlag
 	for b, cases := range r.r {

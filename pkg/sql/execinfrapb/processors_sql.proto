@@ -19,15 +19,17 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
+import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/join_type.proto";
 import "sql/catalog/descpb/locking.proto";
+import "sql/catalog/descpb/index_fetch.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "sql/inverted/span_expression.proto";
-import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
 // "pre-canned" rows. This is not intended to be used for very large datasets.
@@ -50,21 +52,18 @@ message ValuesCoreSpec {
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) correspond to the
-// specified column IDs.
+// FetchSpec.FetchedColumns.
 message TableReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
-  // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
-  // i.e. table.indexes[index_idx-1]
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
-  optional bool reverse = 3 [(gogoproto.nullable) = false];
-  reserved 4;
-  repeated roachpb.Span spans = 18 [(gogoproto.nullable) = false];
+  optional sqlbase.IndexFetchSpec fetch_spec = 20 [(gogoproto.nullable) = false];
 
-  // Columns identifies the columns that we are decoding; the table reader
-  // produces these columns in this order. When empty, the table reader produces
-  // empty rows.
-  repeated uint32 column_ids = 19 [(gogoproto.customname) = "ColumnIDs",
-                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  // TableModificationTime is the timestamp of the transaction which last
+  // modified the table descriptor.
+  // TODO(radu, otan): take this into account during planning and remove it from
+  // this spec.
+  optional util.hlc.Timestamp table_descriptor_modification_time = 21 [(gogoproto.nullable) = false];
+
+  optional bool reverse = 3 [(gogoproto.nullable) = false];
+  repeated roachpb.Span spans = 18 [(gogoproto.nullable) = false];
 
   // A hint for how many rows the consumer of the table reader output might
   // need. This is used to size the initial KV batches to try to avoid reading
@@ -73,18 +72,6 @@ message TableReaderSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
-
-  // This field used to indicate whether the TableReader is being run as an
-  // exhaustive check (no longer implemented).
-  reserved 6;
-
-  // This field used to be a visibility level of the columns that should be
-  // produced. We now always produce all columns (public and not public).
-  reserved 7;
-
-  // This field used to be an upper bound for the number of rows we will read;
-  // replaced by the parallelize field.
-  reserved 8;
 
   // If set, the TableReader can read all the spans in parallel, without any
   // batch limits. This should only be the case when there is a known upper
@@ -134,19 +121,7 @@ message TableReaderSpec {
   // to BLOCK when locking_stength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
 
-  reserved 13;
-
-  // This field used to indicate whether or not this TableReader is expected to
-  // produce any system columns in its output.
-  reserved 14;
-
-  reserved 15;
-
-  // Indicates an inverted column which may have a different type than the
-  // column stored in the table descriptor. For example, the inverted column in
-  // an inverted index has a different type than the column it indexes in the
-  // base table.
-  optional sqlbase.ColumnDescriptor inverted_column = 16;
+  reserved 1, 2, 4, 6, 7, 8, 13, 14, 15, 16, 19;
 }
 
 // FiltererSpec is the specification for a processor that filters input rows
@@ -189,20 +164,20 @@ message IndexSkipTableReaderSpec {
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
-// values in the input stream (join by lookup). The output always preserves the
-// order of the input rows.
+// values in the input stream (join by lookup). The output can optionally
+// preserve the order of the input rows.
 //
 // The "internal columns" of a JoinReader (see ProcessorSpec) are either:
-//  - the columns of the table, if we are performing an index join (no lookup
-//    columns) or if we are performing a semi or anti join, or
-//  - the concatenation of the columns of the input stream with the table
+//  - the fetched columns (see IndexFetchSpec), if we are performing an index
+//    join (no lookup columns) or if we are performing a semi or anti join, or
+//  - the concatenation of the columns of the input stream with the fetched
 //    columns.
 //
 // Internally, only the values for the columns needed by the post-processing
 // stage are populated.
 //
 // Example:
-// Input stream columns: | a | b |              Table columns: | c | d | e |
+// Input stream columns: | a | b |              Fetched columns: | c | d | e |
 //
 // If performing a lookup join on a = c (lookup columns is [0]):
 //        Internal columns: | a | b | c | d | e |
@@ -232,7 +207,7 @@ message IndexSkipTableReaderSpec {
 //
 // More specifically, consider a lookup join example where the input stream
 // columns are: | a | b | c | d | cont |.
-// The lookup column is | d |. And the table columns are | e | f | with
+// The lookup column is | d |. And the fetched columns are | e | f | with
 // d = e.
 // This join reader can see input of the form
 // a1, b1, c1, d1,   false
@@ -264,11 +239,19 @@ message IndexSkipTableReaderSpec {
 // paired-joins, which is indicated by both
 // OutputGroupContinuationForLeftRow and MaintainOrdering set to true.
 message JoinReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.IndexFetchSpec fetch_spec = 19 [(gogoproto.nullable) = false];
 
-  // If 0, we use the primary index; each row in the input stream has a value
-  // for each primary key. The index must provide all lookup columns.
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  // SplitFamilyIDs indicates that spans which fully constrain the index should
+  // be split into single-family spans for the given families. Unset if
+  // splitting is not possible.
+  //
+  // See span.MakeSplitter for the conditions that must hold for splitting to be
+  // allowed. It is recommended to use span.MakeSplitter() followed by
+  // splitter.FamilyIDs() to populate this field.
+  repeated uint32 split_family_ids = 20 [(gogoproto.customname) = "SplitFamilyIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.FamilyID"];
+
+  reserved 1, 2;
 
   // LookupExpr represents the part of the join condition used to perform the
   // lookup into the index. It should only be set when LookupColumns is empty.
@@ -285,10 +268,10 @@ message JoinReaderSpec {
   //  4. LT,GT,GE,LE between an index var and a constant.
   //
   // Variables in this expression are assigned in the same way as the ON
-  // condition below. Assuming that the left stream has N columns and the right
-  // stream has M columns, in this expression variables @1 to @N refer to
-  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
-  // in the right stream.
+  // condition below. Assuming that the input stream has N columns and the fetch
+  // spec has M fetched columns, in this expression variables @1 to @N refer to
+  // columns of the input stream and variables @(N+1) to @(N+M) refer to fetched
+  // columns.
   //
   // For example, a valid LookupExpr for N=2 and M=2 might be:
   //   @3 IN (10, 20) AND @2 = @4.
@@ -319,19 +302,19 @@ message JoinReaderSpec {
   //
   // LookupColumns contains the column indexes in the input stream that match
   // with the index columns. These are the equality columns of the join. For
-  // example, if there are 3 input columns and 2 index columns, LookupColumns
+  // example, if there are 3 input columns and 2 fetched columns, LookupColumns
   // {0, 2} is equivalent to the LookupExpr @1 = @4 AND @3 = @5.
   //
   // If LookupExpr is empty, LookupColumns can be interpreted as follows:
   //
   // If empty (index join), the start of the input stream schema is assumed to
   // match the index columns. The joinReader will perform an index join and the
-  // "internal columns" will be the columns of the table.
+  // "internal columns" will be the fetched columns.
   //
   // If populated (lookup join), the `joinReader` will perform a lookup join
   // and the "internal columns" will be the concatenation of the input stream
-  // columns followed by the table columns (except for semi/anti join, which
-  // don't output any table columns).
+  // columns followed by the fetched columns (except for semi/anti join, which
+  // don't output any fetched columns).
   // TODO(rytaft): remove this field and use LookupExpr for all cases. This
   // requires ensuring that cases currently using LookupColumns do not regress.
   repeated uint32 lookup_columns = 3 [packed = true];
@@ -341,10 +324,10 @@ message JoinReaderSpec {
   optional bool lookup_columns_are_key = 8 [(gogoproto.nullable) = false];
 
   // "ON" expression (in addition to the conditions in LookupExpr and/or
-  // equality constraints captured by the LookupColumns). Assuming that the left
-  // stream has N columns and the right stream has M columns, in this expression
-  // variables @1 to @N refer to columns of the left stream and variables @(N+1)
-  // to @(N+M) refer to columns in the right stream.
+  // equality constraints captured by the LookupColumns). Assuming that the
+  // input stream has N columns and the fetch spec has M fetched columns, in
+  // this expression variables @1 to @N refer to columns of the input stream and
+  // variables @(N+1) to @(N+M) refer to fetched columns.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   // This used to be used for an extra index filter expression. It was removed
@@ -356,7 +339,7 @@ message JoinReaderSpec {
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 
   // This field used to be a visibility level of the columns that should be
-  // produced. We now always produce all columns (public and not public).
+  // produced. We now produce the columns in the FetchSpec.
   reserved 7;
 
   // Indicates the row-level locking strength to be used by the join. If set to
@@ -376,14 +359,7 @@ message JoinReaderSpec {
   // optimizations.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
 
-  reserved 12;
-  // Indicates whether or not this JoinReader is expected to produce any
-  // system columns in its output.
-  //
-  // This is only used in the special case of index joins, where the final
-  // result of the secondary index joined against the primary index is
-  // expected to contain the materialized system columns.
-  optional bool has_system_columns = 13 [(gogoproto.nullable) = false];
+  reserved 12, 13;
 
   // LeftJoinWithPairedJoiner is used when a left {outer,anti,semi} join is
   // being achieved by pairing two joins, and this is the second join. See
@@ -832,6 +808,14 @@ message AggregatorSpec {
     FINAL_REGR_SXX = 50;
     FINAL_REGR_SXY = 51;
     FINAL_REGR_SYY = 52;
+    FINAL_REGR_AVGX = 53;
+    FINAL_REGR_AVGY = 54;
+    FINAL_REGR_INTERCEPT = 55;
+    FINAL_REGR_R2 = 56;
+    FINAL_REGR_SLOPE = 57;
+    FINAL_COVAR_SAMP = 58;
+    FINAL_CORR = 59;
+    FINAL_SQRDIFF = 60;
   }
 
   enum Type {

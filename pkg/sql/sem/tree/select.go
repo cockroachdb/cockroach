@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -913,44 +914,6 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 	ctx.WriteRune(')')
 }
 
-// WindowFrameMode indicates which mode of framing is used.
-type WindowFrameMode int
-
-const (
-	// RANGE is the mode of specifying frame in terms of logical range (e.g. 100 units cheaper).
-	RANGE WindowFrameMode = iota
-	// ROWS is the mode of specifying frame in terms of physical offsets (e.g. 1 row before etc).
-	ROWS
-	// GROUPS is the mode of specifying frame in terms of peer groups.
-	GROUPS
-)
-
-// Name returns a string representation of the window frame mode to be used in
-// struct names for generated code.
-func (m WindowFrameMode) Name() string {
-	switch m {
-	case RANGE:
-		return "Range"
-	case ROWS:
-		return "Rows"
-	case GROUPS:
-		return "Groups"
-	}
-	return ""
-}
-
-func (m WindowFrameMode) String() string {
-	switch m {
-	case RANGE:
-		return "RANGE"
-	case ROWS:
-		return "ROWS"
-	case GROUPS:
-		return "GROUPS"
-	}
-	return ""
-}
-
 // OverrideWindowDef implements the logic to have a base window definition which
 // then gets augmented by a different window definition.
 func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
@@ -975,64 +938,9 @@ func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
 	return override, nil
 }
 
-// WindowFrameBoundType indicates which type of boundary is used.
-type WindowFrameBoundType int
-
-const (
-	// UnboundedPreceding represents UNBOUNDED PRECEDING type of boundary.
-	UnboundedPreceding WindowFrameBoundType = iota
-	// OffsetPreceding represents 'value' PRECEDING type of boundary.
-	OffsetPreceding
-	// CurrentRow represents CURRENT ROW type of boundary.
-	CurrentRow
-	// OffsetFollowing represents 'value' FOLLOWING type of boundary.
-	OffsetFollowing
-	// UnboundedFollowing represents UNBOUNDED FOLLOWING type of boundary.
-	UnboundedFollowing
-)
-
-// IsOffset returns true if the WindowFrameBoundType is an offset.
-func (ft WindowFrameBoundType) IsOffset() bool {
-	return ft == OffsetPreceding || ft == OffsetFollowing
-}
-
-// Name returns a string representation of the bound type to be used in struct
-// names for generated code.
-func (ft WindowFrameBoundType) Name() string {
-	switch ft {
-	case UnboundedPreceding:
-		return "UnboundedPreceding"
-	case OffsetPreceding:
-		return "OffsetPreceding"
-	case CurrentRow:
-		return "CurrentRow"
-	case OffsetFollowing:
-		return "OffsetFollowing"
-	case UnboundedFollowing:
-		return "UnboundedFollowing"
-	}
-	return ""
-}
-
-func (ft WindowFrameBoundType) String() string {
-	switch ft {
-	case UnboundedPreceding:
-		return "UNBOUNDED PRECEDING"
-	case OffsetPreceding:
-		return "OFFSET PRECEDING"
-	case CurrentRow:
-		return "CURRENT ROW"
-	case OffsetFollowing:
-		return "OFFSET FOLLOWING"
-	case UnboundedFollowing:
-		return "UNBOUNDED FOLLOWING"
-	}
-	return ""
-}
-
 // WindowFrameBound specifies the offset and the type of boundary.
 type WindowFrameBound struct {
-	BoundType  WindowFrameBoundType
+	BoundType  treewindow.WindowFrameBoundType
 	OffsetExpr Expr
 }
 
@@ -1053,71 +961,27 @@ func (node *WindowFrameBounds) HasOffset() bool {
 	return node.StartBound.HasOffset() || (node.EndBound != nil && node.EndBound.HasOffset())
 }
 
-// WindowFrameExclusion indicates which mode of exclusion is used.
-type WindowFrameExclusion int
-
-const (
-	// NoExclusion represents an omitted frame exclusion clause.
-	NoExclusion WindowFrameExclusion = iota
-	// ExcludeCurrentRow represents EXCLUDE CURRENT ROW mode of frame exclusion.
-	ExcludeCurrentRow
-	// ExcludeGroup represents EXCLUDE GROUP mode of frame exclusion.
-	ExcludeGroup
-	// ExcludeTies represents EXCLUDE TIES mode of frame exclusion.
-	ExcludeTies
-)
-
-func (node WindowFrameExclusion) String() string {
-	switch node {
-	case NoExclusion:
-		return "EXCLUDE NO ROWS"
-	case ExcludeCurrentRow:
-		return "EXCLUDE CURRENT ROW"
-	case ExcludeGroup:
-		return "EXCLUDE GROUP"
-	case ExcludeTies:
-		return "EXCLUDE TIES"
-	}
-	return ""
-}
-
-// Name returns a string representation of the exclusion type to be used in
-// struct names for generated code.
-func (node WindowFrameExclusion) Name() string {
-	switch node {
-	case NoExclusion:
-		return "NoExclusion"
-	case ExcludeCurrentRow:
-		return "ExcludeCurrentRow"
-	case ExcludeGroup:
-		return "ExcludeGroup"
-	case ExcludeTies:
-		return "ExcludeTies"
-	}
-	return ""
-}
-
 // WindowFrame represents static state of window frame over which calculations are made.
 type WindowFrame struct {
-	Mode      WindowFrameMode      // the mode of framing being used
-	Bounds    WindowFrameBounds    // the bounds of the frame
-	Exclusion WindowFrameExclusion // optional frame exclusion
+	Mode      treewindow.WindowFrameMode      // the mode of framing being used
+	Bounds    WindowFrameBounds               // the bounds of the frame
+	Exclusion treewindow.WindowFrameExclusion // optional frame exclusion
 }
 
 // Format implements the NodeFormatter interface.
 func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	switch node.BoundType {
-	case UnboundedPreceding:
+	case treewindow.UnboundedPreceding:
 		ctx.WriteString("UNBOUNDED PRECEDING")
-	case OffsetPreceding:
+	case treewindow.OffsetPreceding:
 		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" PRECEDING")
-	case CurrentRow:
+	case treewindow.CurrentRow:
 		ctx.WriteString("CURRENT ROW")
-	case OffsetFollowing:
+	case treewindow.OffsetFollowing:
 		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" FOLLOWING")
-	case UnboundedFollowing:
+	case treewindow.UnboundedFollowing:
 		ctx.WriteString("UNBOUNDED FOLLOWING")
 	default:
 		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
@@ -1125,40 +989,8 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface.
-func (node WindowFrameExclusion) Format(ctx *FmtCtx) {
-	if node == NoExclusion {
-		return
-	}
-	ctx.WriteString("EXCLUDE ")
-	switch node {
-	case ExcludeCurrentRow:
-		ctx.WriteString("CURRENT ROW")
-	case ExcludeGroup:
-		ctx.WriteString("GROUP")
-	case ExcludeTies:
-		ctx.WriteString("TIES")
-	default:
-		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node)))
-	}
-}
-
-// WindowModeName returns the name of the window frame mode.
-func WindowModeName(mode WindowFrameMode) string {
-	switch mode {
-	case RANGE:
-		return "RANGE"
-	case ROWS:
-		return "ROWS"
-	case GROUPS:
-		return "GROUPS"
-	default:
-		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(mode)))
-	}
-}
-
-// Format implements the NodeFormatter interface.
 func (node *WindowFrame) Format(ctx *FmtCtx) {
-	ctx.WriteString(WindowModeName(node.Mode))
+	ctx.WriteString(treewindow.WindowModeName(node.Mode))
 	ctx.WriteByte(' ')
 	if node.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")
@@ -1168,9 +1000,9 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 	} else {
 		ctx.FormatNode(node.Bounds.StartBound)
 	}
-	if node.Exclusion != NoExclusion {
+	if node.Exclusion != treewindow.NoExclusion {
 		ctx.WriteByte(' ')
-		ctx.FormatNode(node.Exclusion)
+		ctx.WriteString(node.Exclusion.String())
 	}
 }
 

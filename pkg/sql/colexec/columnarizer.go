@@ -133,7 +133,7 @@ func newColumnarizer(
 				// Close will call InternalClose(). Note that we don't return
 				// any trailing metadata here because the columnarizers
 				// propagate it in DrainMeta.
-				if err := c.Close(); buildutil.CrdbTestBuild && err != nil {
+				if err := c.Close(c.Ctx); buildutil.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from Columnarizer.Close"))
 				}
@@ -289,7 +289,7 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (c *Columnarizer) Close() error {
+func (c *Columnarizer) Close(context.Context) error {
 	if c.removedFromFlow {
 		return nil
 	}

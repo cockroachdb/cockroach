@@ -13,7 +13,7 @@ go_test(
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
-        "//pkg/keys",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

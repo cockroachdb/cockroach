@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
+	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
@@ -56,12 +58,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob"    // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"          // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule"     // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -79,7 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 
@@ -115,6 +119,7 @@ type Server struct {
 	adminAuthzCheck *adminPrivilegeChecker
 	admin           *adminServer
 	status          *statusServer
+	drain           *drainServer
 	authentication  *authenticationServer
 	migrationServer *migrationServer
 	tsDB            *ts.DB
@@ -130,8 +135,7 @@ type Server struct {
 
 	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 
-	sqlServer    *SQLServer
-	drainSleepFn func(time.Duration)
+	sqlServer *SQLServer
 
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
@@ -435,13 +439,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx, st, nodeDialer, grpcServer.Server, stopper,
 	)
 
-	tsDB := ts.NewDB(db, cfg.Settings)
-	registry.AddMetricStruct(tsDB.Metrics())
-	nodeCountFn := func() int64 {
-		return nodeLiveness.Metrics().LiveNodes.Value()
-	}
-	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
-
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
@@ -488,9 +485,32 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	kvMemoryMonitor.Start(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
+	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(ctx, kvMemoryMonitor, cfg.MemoryPoolSize,
+		cfg.HistogramWindowInterval())
+	if rangeReedBudgetFactory != nil {
+		registry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
+	}
+	// Closer order is important with BytesMonitor.
+	stopper.AddCloser(stop.CloserFn(func() {
+		rangeReedBudgetFactory.Stop(ctx)
+	}))
 	stopper.AddCloser(stop.CloserFn(func() {
 		kvMemoryMonitor.Stop(ctx)
 	}))
+
+	tsDB := ts.NewDB(db, cfg.Settings)
+	registry.AddMetricStruct(tsDB.Metrics())
+	nodeCountFn := func() int64 {
+		return nodeLiveness.Metrics().LiveNodes.Value()
+	}
+	sTS := ts.MakeServer(
+		cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig,
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper,
+	)
+
+	systemConfigWatcher := systemconfigwatcher.New(
+		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
+	)
 
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
@@ -519,6 +539,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
 		KVMemoryMonitor:         kvMemoryMonitor,
+		RangefeedBudgetFactory:  rangeReedBudgetFactory,
+		SystemConfigProvider:    systemConfigWatcher,
 	}
 
 	var spanConfig struct {
@@ -603,31 +625,28 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SQLInstanceID: idContainer.SQLInstanceID,
 	}
 
-	var drainSleepFn = time.Sleep
 	if cfg.TestingKnobs.Server != nil {
-		if cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn != nil {
-			drainSleepFn = cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn
-		}
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
 	tenantUsage := NewTenantUsageServer(st, db, internalExecutor)
 	registry.AddMetricStruct(tenantUsage.Metrics())
 
+	tenantSettingsWatcher := tenantsettingswatcher.New(
+		clock, rangeFeedFactory, stopper, st,
+	)
+
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage, spanConfig.kvAccessor,
+		tenantUsage, tenantSettingsWatcher, spanConfig.kvAccessor,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 
-	systemConfigWatcher := systemconfigwatcher.New(
-		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
-	)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
 	)
@@ -636,7 +655,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
-	sHTTP := newHTTPServer(cfg)
+
+	// These callbacks help us avoid a dependency on gossip in httpServer.
+	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
+		return parseNodeID(g, s)
+	}
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
+		return g.GetNodeIDHTTPAddress(id)
+	}
+	sHTTP := newHTTPServer(cfg.BaseConfig, rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
+
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
@@ -658,16 +686,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		flowScheduler,
 		internalExecutor,
 	)
-
-	contentionRegistry := contention.NewRegistry()
-	// TODO(tbg): don't pass all of Server into this to avoid this hack.
-	sAuth := newAuthenticationServer(lateBoundServer)
-	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
-		if reflect.ValueOf(gw).IsNil() {
-			return nil, errors.Errorf("%d: nil", i)
-		}
-		gw.RegisterService(grpcServer.Server)
-	}
 
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -714,7 +732,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
-		contentionRegistry:       contentionRegistry,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
 		circularJobRegistry:      jobRegistry,
@@ -730,10 +747,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	sAuth := newAuthenticationServer(cfg.Config, sqlServer)
+	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
+		if reflect.ValueOf(gw).IsNil() {
+			return nil, errors.Errorf("%d: nil", i)
+		}
+		gw.RegisterService(grpcServer.Server)
+	}
+
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
 	node.InitLogger(sqlServer.execCfg)
+
+	drain := newDrainServer(cfg.BaseConfig, stopper, grpcServer, sqlServer)
+	drain.setNode(node, nodeLiveness)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
@@ -762,6 +791,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		adminAuthzCheck:        adminAuthzCheck,
 		admin:                  sAdmin,
 		status:                 sStatus,
+		drain:                  drain,
 		authentication:         sAuth,
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
@@ -773,7 +803,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
-		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
@@ -921,8 +950,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
-	// TODO(aditya): This call seems to occur too early, see
-	// https://github.com/cockroachdb/cockroach/issues/75725
 	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
 	s.externalStorageBuilder.init(
 		s.cfg.ExternalIODirConfig,
@@ -1099,11 +1126,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	}
 
-	// NB: This needs to come after `startListenRPCAndSQL`, which determines
-	// what the advertised addr is going to be if nothing is explicitly
-	// provided.
-	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
-
 	if s.cfg.DelayedBootstrapFn != nil {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
@@ -1251,6 +1273,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	onSuccessfulReturnFn()
 
+	// NB: This needs to come after `startListenRPCAndSQL`, which determines
+	// what the advertised addr is going to be if nothing is explicitly
+	// provided.
+	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
+
 	// We're going to need to start gossip before we spin up Node below.
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1259,10 +1286,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+
+	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
+
 	if err := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
+		advHTTPAddrU,
 		*state,
 		initialStart,
 		s.cfg.ClusterName,
@@ -1400,12 +1431,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// endpoints served by gwMux by the HTTP cookie authentication
 	// check.
 	if err := s.http.setupRoutes(ctx,
-		s.authentication,                      /* authnServer */
-		s.adminAuthzCheck,                     /* adminAuthzCheck */
-		gwMux,                                 /* handleRequestsUnauthenticated */
-		http.HandlerFunc(s.status.handleVars), /* handleStatusVarsUnauthenticated */
-		s.debug,                               /* handleDebugUnauthenticated */
-		newAPIV2Server(ctx, s),                /* apiServer */
+		s.authentication,       /* authnServer */
+		s.adminAuthzCheck,      /* adminAuthzCheck */
+		s.recorder,             /* metricSource */
+		s.runtime,              /* runtimeStatsSampler */
+		gwMux,                  /* handleRequestsUnauthenticated */
+		s.debug,                /* handleDebugUnauthenticated */
+		newAPIV2Server(ctx, s), /* apiServer */
 	); err != nil {
 		return err
 	}
@@ -1454,6 +1486,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// started. At this point we know that all startupmigrations have successfully
 	// been run so it is safe to upgrade to the binary's current version.
 	s.startAttemptUpgrade(ctx)
+
+	if err := s.node.tenantSettingsWatcher.Start(ctx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
+		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
+	}
 
 	if err := s.kvProber.Start(ctx, s.stopper); err != nil {
 		return errors.Wrapf(err, "failed to start KV prober")
@@ -1546,4 +1582,25 @@ func (s *Server) RunLocalSQL(
 // Insecure returns true iff the server has security disabled.
 func (s *Server) Insecure() bool {
 	return s.cfg.Insecure
+}
+
+// Drain idempotently activates the draining mode.
+// Note: new code should not be taught to use this method
+// directly. Use the Drain() RPC instead with a suitably crafted
+// DrainRequest.
+//
+// On failure, the system may be in a partially drained
+// state; the client should either continue calling Drain() or shut
+// down the server.
+//
+// The reporter function, if non-nil, is called for each
+// packet of load shed away from the server during the drain.
+//
+// TODO(knz): This method is currently exported for use by the
+// shutdown code in cli/start.go; however, this is a mis-design. The
+// start code should use the Drain() RPC like quit does.
+func (s *Server) Drain(
+	ctx context.Context, verbose bool,
+) (remaining uint64, info redact.RedactableString, err error) {
+	return s.drain.runDrain(ctx, verbose)
 }

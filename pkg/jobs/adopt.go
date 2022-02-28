@@ -141,8 +141,8 @@ COALESCE(last_run, created) + least(
 
 	resumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
 	resumeQueryWhereBase   = `id = $1 AND claim_session_id = $2`
-	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run` +
-		` FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
+		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
@@ -301,7 +301,13 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	if err != nil {
 		return err
 	}
-	job := &Job{id: jobID, registry: r}
+
+	createdBy, err := unmarshalCreatedBy(row[5], row[6])
+	if err != nil {
+		return err
+	}
+
+	job := &Job{id: jobID, registry: r, createdBy: createdBy}
 	job.mu.payload = *payload
 	job.mu.progress = *progress
 	job.sessionID = s.ID()
@@ -347,6 +353,7 @@ func (r *Registry) addAdoptedJob(
 	r.mu.adoptedJobs[jobID] = &adoptedJob{
 		sid:    sessionID,
 		cancel: cancel,
+		isIdle: false,
 	}
 	return false
 }

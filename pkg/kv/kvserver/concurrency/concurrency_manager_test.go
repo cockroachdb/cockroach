@@ -912,7 +912,7 @@ func (c *cluster) collectSpans(
 	h := roachpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
-			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans)
+			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
 		} else {
 			t.Fatalf("unrecognized command %s", req.Method())
 		}
@@ -973,7 +973,7 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 		opName: opName,
 		ctx:    ctx,
 		collect: func() tracing.Recording {
-			return sp.GetRecording(tracing.RecordingVerbose)
+			return sp.GetConfiguredRecording()
 		},
 		cancel: sp.Finish,
 	}
@@ -990,7 +990,7 @@ func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func
 		opName: opName,
 		ctx:    ctx,
 		collect: func() tracing.Recording {
-			return sp.GetRecording(tracing.RecordingVerbose)
+			return sp.GetConfiguredRecording()
 		},
 		cancel: sp.Finish,
 	}

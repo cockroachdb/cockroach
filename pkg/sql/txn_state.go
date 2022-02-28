@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -149,6 +150,8 @@ const (
 //   all the other arguments need to correspond to the attributes of this txn
 //   (unless otherwise specified).
 // tranCtx: A bag of extra execution context.
+// qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
+//   transaction for use in admission queues.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
@@ -158,6 +161,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	readOnly tree.ReadWriteMode,
 	txn *kv.Txn,
 	tranCtx transitionCtx,
+	qualityOfService sessiondatapb.QoSLevel,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -195,7 +199,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.mu.Lock()
 	ts.mu.stmtCount = 0
 	if txn == nil {
-		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero)
+		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
 		ts.mu.txn.SetDebugName(opName)
 		if err := ts.setPriorityLocked(priority); err != nil {
 			panic(err)
@@ -286,6 +290,7 @@ func (ts *txnState) setHistoricalTimestamp(
 	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
 		return err
 	}
+	ts.sqlTimestamp = historicalTimestamp.GoTime()
 	ts.isHistorical = true
 	return nil
 }

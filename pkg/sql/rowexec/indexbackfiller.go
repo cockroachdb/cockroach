@@ -200,6 +200,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		SkipDuplicates:           ib.ContainsInvertedIndex(),
 		BatchTimestamp:           ib.spec.ReadAsOf,
 		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
+		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
 	}
 	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
 	if err != nil {

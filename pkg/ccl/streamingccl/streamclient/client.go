@@ -113,8 +113,7 @@ type Subscription interface {
 	Err() error
 }
 
-// NewStreamClient creates a new stream client based on the stream
-// address.
+// NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -126,7 +125,7 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		return newPGWireReplicationClient(streamURL)
+		return newPartitionedStreamClient(streamURL)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {

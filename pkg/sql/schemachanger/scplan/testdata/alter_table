@@ -2,71 +2,92 @@ create-table
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 ----
 
-ops
-ALTER TABLE defaultdb.foo ADD COLUMN j INT
+create-type
+CREATE TYPE defaultdb.footyp AS ENUM('a')
 ----
-PreCommitPhase stage 1 of 1 with 5 MutationType ops
+
+ops
+ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp;
+----
+PreCommitPhase stage 1 of 1 with 9 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 2
-      ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 2
-      TableID: 104
+      Column:
+        ColumnID: 2
+        TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 2
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 2
           tableId: 104
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8
+      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
-      TargetStatus: 8
+      TargetStatus: 2
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 2
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          ClosedTypeIDs:
+          - 105
+          - 106
+          Type:
+            family: EnumFamily
+            oid: 100105
+            udtMetadata:
+              arrayTypeOid: 100106
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 104
+      TypeIDs:
+      - 105
+      - 106
     *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      ShardedDescriptor: {}
-      StoreColumnIDs:
-      - 2
-      TableID: 104
-      Unique: true
-    *scop.AddJobReference
+      Index:
+        IndexID: 2
+        IsUnique: true
+        KeyColumnDirections:
+        - 0
+        KeyColumnIDs:
+        - 1
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 2
+        TableID: 104
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      - 106
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8
-          statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 4 with 3 MutationType ops
+      Statements:
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 4 with 6 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -74,11 +95,17 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -91,25 +118,25 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 4 of 4 with 7 MutationType ops
+PostCommitPhase stage 4 of 4 with 10 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.SetIndexName
-      IndexID: 2
-      Name: foo_pkey
-      TableID: 104
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 2
+      Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       IndexID: 2
@@ -121,30 +148,48 @@ PostCommitPhase stage 4 of 4 with 7 MutationType ops
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.MakeIndexAbsent
-      IndexID: 1
-      TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 104
-    *scop.RemoveJobReference
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 106
       JobID: 1
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
@@ -153,71 +198,76 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-PreCommitPhase stage 1 of 1 with 5 MutationType ops
+PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 2
-      ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      DefaultExpr: 123:::INT8
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 2
-      TableID: 104
+      Column:
+        ColumnID: 2
+        TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 2
-          defaultExpr: 123:::INT8
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 2
           tableId: 104
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
       Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
-      TargetStatus: 8
+      TargetStatus: 2
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 2
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.AddColumnDefaultExpression
+      Default:
+        ColumnID: 2
+        Expression:
+          Expr: 123:::INT8
+        TableID: 104
     *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      ShardedDescriptor: {}
-      StoreColumnIDs:
-      - 2
-      TableID: 104
-      Unique: true
-    *scop.AddJobReference
+      Index:
+        IndexID: 2
+        IsUnique: true
+        KeyColumnDirections:
+        - 0
+        KeyColumnIDs:
+        - 1
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 2
+        TableID: 104
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
-            ‹123›
-          statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 4 with 3 MutationType ops
+      Statements:
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
+          ‹123›
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 4 with 4 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -225,11 +275,13 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -242,25 +294,25 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 4 of 4 with 7 MutationType ops
+PostCommitPhase stage 4 of 4 with 8 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.SetIndexName
-      IndexID: 2
-      Name: foo_pkey
-      TableID: 104
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 2
+      Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       IndexID: 2
@@ -272,15 +324,19 @@ PostCommitPhase stage 4 of 4 with 7 MutationType ops
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
@@ -288,13 +344,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.MakeIndexAbsent
-      IndexID: 1
-      TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 104
-    *scop.RemoveJobReference
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
@@ -305,111 +361,119 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-PreCommitPhase stage 1 of 1 with 7 MutationType ops
+PreCommitPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 2
-      ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      DefaultExpr: 123:::INT8
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 2
-      TableID: 104
+      Column:
+        ColumnID: 2
+        TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 2
-          defaultExpr: 123:::INT8
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 2
           tableId: 104
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
       Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
-      TargetStatus: 8
-    *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 3
+      TargetStatus: 2
+    *scop.SetAddedColumnType
       ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      DefaultExpr: 456:::INT8
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 3
-      TableID: 104
+        ColumnID: 2
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.AddColumnDefaultExpression
+      Default:
+        ColumnID: 2
+        Expression:
+          Expr: 123:::INT8
+        TableID: 104
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        ColumnID: 3
+        TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 3
-          defaultExpr: 456:::INT8
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 3
           tableId: 104
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
       Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         StatementID: 1
         SubWorkID: 1
-      TargetStatus: 8
+      TargetStatus: 2
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 3
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.AddColumnDefaultExpression
+      Default:
+        ColumnID: 3
+        Expression:
+          Expr: 456:::INT8
+        TableID: 104
     *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      ShardedDescriptor: {}
-      StoreColumnIDs:
-      - 2
-      - 3
-      TableID: 104
-      Unique: true
-    *scop.AddJobReference
+      Index:
+        IndexID: 2
+        IsUnique: true
+        KeyColumnDirections:
+        - 0
+        KeyColumnIDs:
+        - 1
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 2
+        - 3
+        TableID: 104
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
-            ‹123›
-          statementtag: ALTER TABLE
-        - statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT
-            ‹456›
-          statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 4 with 4 MutationType ops
+      Statements:
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
+          ‹123›
+        statementtag: ALTER TABLE
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT
+          ‹456›
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 4 with 5 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -420,11 +484,13 @@ PostCommitPhase stage 1 of 4 with 4 MutationType ops
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -437,27 +503,27 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 4 of 4 with 9 MutationType ops
+PostCommitPhase stage 4 of 4 with 10 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, ColumnID: 3, Name: k}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.SetIndexName
-      IndexID: 2
-      Name: foo_pkey
-      TableID: 104
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 2
+      Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       IndexID: 2
@@ -476,15 +542,19 @@ PostCommitPhase stage 4 of 4 with 9 MutationType ops
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
@@ -492,13 +562,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.MakeIndexAbsent
-      IndexID: 1
-      TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 104
-    *scop.RemoveJobReference
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
@@ -508,72 +578,72 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-PreCommitPhase stage 1 of 1 with 5 MutationType ops
+PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 2
-      ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      ComputerExpr: i + 1:::INT8
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 2
-      TableID: 104
+      Column:
+        ColumnID: 2
+        TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 2
-          computerExpr: i + 1:::INT8
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 2
           tableId: 104
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
       Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
         STORED
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
-      TargetStatus: 8
+      TargetStatus: 2
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 2
+        ComputeExpr:
+          expr: i + 1:::INT8
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
     *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      ShardedDescriptor: {}
-      StoreColumnIDs:
-      - 2
-      TableID: 104
-      Unique: true
-    *scop.AddJobReference
+      Index:
+        IndexID: 2
+        IsUnique: true
+        KeyColumnDirections:
+        - 0
+        KeyColumnIDs:
+        - 1
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 2
+        TableID: 104
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS
-            (‹i› + ‹1›) STORED
-          statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 4 with 3 MutationType ops
+      Statements:
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i›
+          + ‹1›) STORED
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 4 with 4 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -581,11 +651,13 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -598,25 +670,25 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 4 of 4 with 7 MutationType ops
+PostCommitPhase stage 4 of 4 with 8 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, ColumnID: 2, Name: a}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.SetIndexName
-      IndexID: 2
-      Name: foo_pkey
-      TableID: 104
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 2
+      Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       IndexID: 2
@@ -628,15 +700,19 @@ PostCommitPhase stage 4 of 4 with 7 MutationType ops
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
@@ -644,13 +720,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.MakeIndexAbsent
-      IndexID: 1
-      TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 104
-    *scop.RemoveJobReference
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
@@ -666,140 +742,144 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-PreCommitPhase stage 1 of 1 with 9 MutationType ops
+PreCommitPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
-    [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
-    [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 107, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 2
-      ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 2
-      TableID: 104
+      Column:
+        ColumnID: 2
+        TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 2
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 2
           tableId: 104
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
       Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
-      TargetStatus: 8
-    *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 1
-      ShardedDescriptor: {}
-      StoreColumnIDs:
-      - 2
-      TableID: 104
-      Unique: true
-    *scop.MakeAddedColumnDeleteOnly
-      ColumnID: 3
+      TargetStatus: 2
+    *scop.SetAddedColumnType
       ColumnType:
-        family: IntFamily
-        oid: 20
-        width: 64
-      FamilyName: primary
-      Nullable: true
-      PgAttributeNum: 3
-      TableID: 105
+        ColumnID: 2
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.MakeAddedIndexDeleteOnly
+      Index:
+        IndexID: 2
+        IsUnique: true
+        KeyColumnDirections:
+        - 0
+        KeyColumnIDs:
+        - 1
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 2
+        TableID: 104
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        ColumnID: 3
+        TableID: 107
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Column:
           columnId: 3
-          familyName: primary
-          nullable: true
-          pgAttributeNum: 3
-          tableId: 105
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
+          tableId: 107
       Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
       StatementTag: ALTER TABLE
       TargetMetadata:
         SourceElementID: 1
         StatementID: 1
         SubWorkID: 1
-      TargetStatus: 8
+      TargetStatus: 2
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 3
+        IsNullable: true
+        TableID: 107
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
     *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      KeyColumnIDs:
-      - 2
-      ShardedDescriptor: {}
-      StoreColumnIDs:
-      - 1
-      - 3
-      TableID: 105
-      Unique: true
-    *scop.AddJobReference
+      Index:
+        IndexID: 2
+        IsUnique: true
+        KeyColumnDirections:
+        - 0
+        KeyColumnIDs:
+        - 2
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 1
+        - 3
+        TableID: 107
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 107
       JobID: 1
-    *scop.AddJobReference
-      DescriptorID: 105
-      JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
-          statementtag: ALTER TABLE
-        - statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
-          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
-          statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 4 with 5 MutationType ops
+      Statements:
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
+        statementtag: ALTER TABLE
+      - statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 4 with 7 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
-    [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 104
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 105
+      TableID: 107
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 104
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 3
-      TableID: 105
+      TableID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 2 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
-    [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 107, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -808,61 +888,61 @@ PostCommitPhase stage 2 of 4 with 2 BackfillType ops
     *scop.BackfillIndex
       IndexID: 2
       SourceIndexID: 1
-      TableID: 105
+      TableID: 107
 PostCommitPhase stage 3 of 4 with 2 ValidationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
-    [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
+    [[PrimaryIndex:{DescID: 107, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 105
-PostCommitPhase stage 4 of 4 with 13 MutationType ops
+      TableID: 107
+PostCommitPhase stage 4 of 4 with 15 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, ColumnID: 2, Name: a}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], DELETE_AND_WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 105, ColumnID: 3, Name: b}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 105, IndexID: 2, Name: bar_pkey}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 105, IndexID: 1, Name: bar_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
+    [[IndexName:{DescID: 107, Name: bar_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
+    [[ColumnName:{DescID: 107, Name: b, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 107, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 107, Name: bar_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 104
     *scop.SetIndexName
       IndexID: 2
       Name: foo_pkey
       TableID: 104
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
-      TableID: 104
+      TableID: 107
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
-      TableID: 104
+      TableID: 107
     *scop.SetIndexName
       IndexID: 2
       Name: bar_pkey
-      TableID: 105
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
-      TableID: 105
-    *scop.SetIndexName
-      IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
-      TableID: 105
+      TableID: 107
     *scop.MakeAddedPrimaryIndexPublic
       IndexID: 2
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       IndexID: 2
-      TableID: 105
+      TableID: 107
     *scop.SetColumnName
       ColumnID: 2
       Name: a
@@ -870,51 +950,59 @@ PostCommitPhase stage 4 of 4 with 13 MutationType ops
     *scop.SetColumnName
       ColumnID: 3
       Name: b
-      TableID: 105
+      TableID: 107
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 3
-      TableID: 105
+      TableID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
-    [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 104
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
-      TableID: 105
+      TableID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.MakeIndexAbsent
-      IndexID: 1
-      TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
-      TableID: 105
+      TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
-      TableID: 105
-    *scop.RemoveJobReference
+      TableID: 107
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 107
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
-    *scop.RemoveJobReference
-      DescriptorID: 105
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 107
       JobID: 1
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true

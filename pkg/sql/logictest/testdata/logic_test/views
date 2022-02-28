@@ -327,7 +327,7 @@ DROP TABLE v1
 statement error pgcode 42809 "t" is not a view
 DROP VIEW t
 
-statement error cannot drop relation "v1" because view "v6" depends on it
+statement error cannot drop relation "v1" because view "v7" depends on it
 DROP VIEW v1
 
 statement error cannot drop relation "v2" because view "test2.public.v1" depends on it

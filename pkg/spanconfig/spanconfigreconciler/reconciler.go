@@ -119,7 +119,7 @@ func New(
 //
 // TODO(irfansharif): The descriptions above presume holding the entire set of
 // span configs in memory, but we could break away from that by adding
-// pagination + retrieval limit to the GetSpanConfigEntriesFor API. We'd then
+// pagination + retrieval limit to the GetSpanConfigRecords API. We'd then
 // paginate through chunks of the keyspace at a time, do a "full reconciliation
 // pass" over just that chunk, and continue.
 //
@@ -211,20 +211,20 @@ func (f *fullReconciler) reconcile(
 
 	// Translate the entire SQL state to ensure KV reflects the most up-to-date
 	// view of things.
-	var entries []roachpb.SpanConfigEntry
-	entries, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
+	var records []spanconfig.Record
+	records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 
-	updates := make([]spanconfig.Update, len(entries))
-	for i, entry := range entries {
-		updates[i] = spanconfig.Update(entry)
+	updates := make([]spanconfig.Update, len(records))
+	for i, record := range records {
+		updates[i] = spanconfig.Update(record)
 	}
 
 	toDelete, toUpsert := storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, updates...)
 	if len(toDelete) != 0 || len(toUpsert) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+		if err := f.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
 	}
@@ -232,20 +232,20 @@ func (f *fullReconciler) reconcile(
 	// Keep a copy of the current view of the world (i.e. KVAccessor
 	// contents). We could also fetch everything from KV, but making a copy here
 	// is cheaper (and saves an RTT). We'll later mutate
-	// storeWithExistingSpanConfigs to determine what extraneous entries are in
+	// storeWithExistingSpanConfigs to determine what extraneous records are in
 	// KV, in order to delete them. After doing so, we'll issue those same
 	// deletions against this copy in order for it to reflect an up-to-date view
 	// of span configs.
 	storeWithLatestSpanConfigs = storeWithExistingSpanConfigs.Copy(ctx)
 
-	// Delete all updated spans in a store populated with all current entries.
+	// Delete all updated spans in a store populated with all current records.
 	// Because our translation above captures the entire SQL state, deleting all
-	// "updates" will leave behind only the extraneous entries in KV -- we'll
+	// "updates" will leave behind only the extraneous records in KV -- we'll
 	// get rid of them below.
 	var storeWithExtraneousSpanConfigs *spanconfigstore.Store
 	{
 		for _, u := range updates {
-			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Span))
+			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Target))
 		}
 		storeWithExtraneousSpanConfigs = storeWithExistingSpanConfigs
 	}
@@ -270,7 +270,7 @@ func (f *fullReconciler) reconcile(
 func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
-	var tenantSpan roachpb.Span
+	var targets []spanconfig.Target
 	if f.codec.ForSystemTenant() {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
@@ -278,34 +278,54 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		// TODO(irfansharif): Should we include the scratch range here? Some
 		// tests make use of it; we may want to declare configs over it and have
 		// it considered all the same.
-		tenantSpan = roachpb.Span{
+		//
+		// We don't want to request configs that are part of the
+		// SystemSpanConfigSpan, as the host tenant reserves that part of the
+		// keyspace to translate and persist SystemSpanConfigs. At the level of the
+		// reconciler we shouldn't be requesting these configs directly, instead,
+		// they should be targeted through SystemSpanConfigTargets instead.
+		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
 			Key:    keys.EverythingSpan.Key,
+			EndKey: keys.SystemSpanConfigSpan.Key,
+		}))
+		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
+			Key:    keys.TableDataMin,
 			EndKey: keys.TableDataMax,
-		}
+		}))
+
+		// The system tenant also governs all SystemSpanConfigs set on its entire
+		// keyspace (including secondary tenants), on its tenant keyspace, and on
+		// other secondary tenant keyspaces.
+		targets = append(targets,
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()))
+		targets = append(targets,
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 		if f.knobs.ConfigureScratchRange {
-			tenantSpan.EndKey = keys.ScratchRangeMax
+			sp := targets[1].GetSpan()
+			targets[1] = spanconfig.MakeTargetFromSpan(roachpb.Span{Key: sp.Key, EndKey: keys.ScratchRangeMax})
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
 		tenPrefix := keys.MakeTenantPrefix(f.tenID)
-		tenantSpan = roachpb.Span{
+		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
 			Key:    tenPrefix,
 			EndKey: tenPrefix.PrefixEnd(),
-		}
+		}))
+		// Secondary tenants also govern all SystemSpanConfigs set by the tenant on
+		// its entire keyspace.
+		targets = append(targets,
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 	}
-
 	store := spanconfigstore.New(roachpb.SpanConfig{})
 	{
 		// Fully populate the store with KVAccessor contents.
-		entries, err := f.kvAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
-		})
+		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, entry := range entries {
-			store.Apply(ctx, false /* dryrun */, spanconfig.Update(entry))
+		for _, record := range records {
+			store.Apply(ctx, false /* dryrun */, spanconfig.Update(record))
 		}
 	}
 	return store, nil
@@ -314,24 +334,23 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 // deleteExtraneousSpanConfigs deletes all extraneous span configs from KV.
 func (f *fullReconciler) deleteExtraneousSpanConfigs(
 	ctx context.Context, storeWithExtraneousSpanConfigs *spanconfigstore.Store,
-) ([]roachpb.Span, error) {
-	var extraneousSpans []roachpb.Span
-	if err := storeWithExtraneousSpanConfigs.ForEachOverlapping(ctx, keys.EverythingSpan,
-		func(entry roachpb.SpanConfigEntry) error {
-			extraneousSpans = append(extraneousSpans, entry.Span)
-			return nil
-		},
+) ([]spanconfig.Target, error) {
+	var extraneousTargets []spanconfig.Target
+	if err := storeWithExtraneousSpanConfigs.Iterate(func(record spanconfig.Record) error {
+		extraneousTargets = append(extraneousTargets, record.Target)
+		return nil
+	},
 	); err != nil {
 		return nil, err
 	}
 
 	// Delete the extraneous entries, if any.
-	if len(extraneousSpans) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigEntries(ctx, extraneousSpans, nil); err != nil {
+	if len(extraneousTargets) != 0 {
+		if err := f.kvAccessor.UpdateSpanConfigRecords(ctx, extraneousTargets, nil); err != nil {
 			return nil, err
 		}
 	}
-	return extraneousSpans, nil
+	return extraneousTargets, nil
 }
 
 // incrementalReconciler is a single orchestrator for the incremental
@@ -362,15 +381,18 @@ func (r *incrementalReconciler) reconcile(
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
 
-			// Process the DescriptorUpdates and identify all descriptor IDs that
-			// require translation.
+			// Process the SQLUpdates and identify all descriptor IDs that require
+			// translation. If the SQLUpdates includes ProtectedTimestampUpdates then
+			// instruct the translator to generate all records that apply to
+			// spanconfig.SystemTargets as well.
+			var generateSystemSpanConfigurations bool
 			var allIDs descpb.IDs
 			for _, update := range sqlUpdates {
 				if update.IsDescriptorUpdate() {
 					allIDs = append(allIDs, update.GetDescriptorUpdate().ID)
+				} else if update.IsProtectedTimestampUpdate() {
+					generateSystemSpanConfigurations = true
 				}
-				// TODO(adityamaru): Set the bool that tells the translator to emit
-				// SystemSpanConfigs.
 			}
 
 			// TODO(irfansharif): Would it be easier to just have the translator
@@ -383,12 +405,19 @@ func (r *incrementalReconciler) reconcile(
 				return err
 			}
 
-			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs)
+			missingProtectedTimestampTargets, err := r.filterForMissingProtectedTimestampSystemTargets(
+				ctx, sqlUpdates)
 			if err != nil {
 				return err
 			}
 
-			updates := make([]spanconfig.Update, 0, len(missingTableIDs)+len(entries))
+			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
+			if err != nil {
+				return err
+			}
+
+			updates := make([]spanconfig.Update, 0,
+				len(missingTableIDs)+len(missingProtectedTimestampTargets)+len(entries))
 			for _, entry := range entries {
 				// Update span configs for SQL state that changed.
 				updates = append(updates, spanconfig.Update(entry))
@@ -399,12 +428,16 @@ func (r *incrementalReconciler) reconcile(
 					Key:    r.codec.TablePrefix(uint32(missingID)),
 					EndKey: r.codec.TablePrefix(uint32(missingID)).PrefixEnd(),
 				}
-				updates = append(updates, spanconfig.Deletion(tableSpan))
+				updates = append(updates, spanconfig.Deletion(spanconfig.MakeTargetFromSpan(tableSpan)))
+			}
+			for _, missingSystemTarget := range missingProtectedTimestampTargets {
+				updates = append(updates, spanconfig.Deletion(
+					spanconfig.MakeTargetFromSystemTarget(missingSystemTarget)))
 			}
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
 			if len(toDelete) != 0 || len(toUpsert) != 0 {
-				if err := r.kvAccessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+				if err := r.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 					return err
 				}
 			}
@@ -412,6 +445,86 @@ func (r *incrementalReconciler) reconcile(
 			return callback(checkpoint)
 		},
 	)
+}
+
+// filterForMissingProtectedTimestampSystemTargets filters the set of updates
+// returning only the set of "missing" protected timestamp system targets. These
+// correspond to cluster or tenant target protected timestamp records that are
+// no longer found, because they've been released.
+func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
+	ctx context.Context, updates []spanconfig.SQLUpdate,
+) ([]spanconfig.SystemTarget, error) {
+	seen := make(map[spanconfig.SystemTarget]struct{})
+	var missingSystemTargets []spanconfig.SystemTarget
+	tenantPrefix := r.codec.TenantPrefix()
+	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sql.DescsTxn(ctx, r.execCfg,
+		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+			// Construct an in-memory view of the system.protected_ts_records table to
+			// populate the protected timestamp field on the emitted span configs.
+			//
+			// TODO(adityamaru): This does a full table scan of the
+			// `system.protected_ts_records` table. While this is not assumed to be very
+			// expensive given the limited number of concurrent users of the protected
+			// timestamp subsystem, and the internal limits to limit the size of this
+			// table, there is scope for improvement in the future. One option could be
+			// a rangefeed-backed materialized view of the system table.
+			ptsState, err := r.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
+			if err != nil {
+				return errors.Wrap(err, "failed to get protected timestamp state")
+			}
+			ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+			clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
+			missingClusterProtection := len(clusterProtections) == 0
+			for _, update := range updates {
+				if update.IsDescriptorUpdate() {
+					continue // nothing to do
+				}
+
+				ptsUpdate := update.GetProtectedTimestampUpdate()
+				missingSystemTarget := spanconfig.SystemTarget{}
+				if ptsUpdate.IsClusterUpdate() && missingClusterProtection {
+					// For the host tenant a Cluster ProtectedTimestampUpdate corresponds
+					// to the entire keyspace (including secondary tenants).
+					if r.codec.ForSystemTenant() {
+						missingSystemTarget = spanconfig.MakeEntireKeyspaceTarget()
+					} else {
+						// For a secondary tenant a Cluster ProtectedTimestampUpdate
+						// corresponds to the tenants keyspace.
+						missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
+							sourceTenantID)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				if ptsUpdate.IsTenantsUpdate() {
+					if !ptsStateReader.ProtectionExistsForTenant(ptsUpdate.TenantTarget) {
+						missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
+							ptsUpdate.TenantTarget)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				if !missingSystemTarget.IsEmpty() {
+					if _, found := seen[missingSystemTarget]; !found {
+						seen[missingSystemTarget] = struct{}{}
+						missingSystemTargets = append(missingSystemTargets, missingSystemTarget)
+					}
+				}
+			}
+			return nil
+		}); err != nil {
+		return missingSystemTargets, err
+	}
+	return missingSystemTargets, nil
 }
 
 // filterForMissingTableIDs filters the set of updates returning only the set of

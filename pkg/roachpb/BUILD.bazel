@@ -4,13 +4,8 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load(":gen.bzl", "batch_gen")
 
-# NB: If you've come here to resolve a build failure due to a missing
-# dependency, the dependency may be missing from the "bootstrap" target rather
-# than the "roachpb" target. Some input source files are duplicated between the
-# two targets, and Gazelle only infers dependencies for "roachpb" rather than
-# "bootstrap". See pkg/roachpb/gen/BUILD.bazel for more detail on why the
-# "bootstrap" target exists.
 go_library(
     name = "roachpb",
     srcs = [
@@ -61,59 +56,6 @@ go_library(
         "@com_github_golang_mock//gomock",  # keep
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@org_golang_google_grpc//metadata",  # keep
-    ],
-)
-
-# See the BUILD.bazel file in pkg/roachpb/gen for more details. We need to
-# partition the dependencies here to avoid cyclical structures.
-#
-# keep
-go_library(
-    name = "bootstrap",
-    srcs = [
-        "api.go",
-        "app_stats.go",
-        "batch.go",
-        "batch_generated.go",
-        "data.go",
-        "errors.go",
-        "index_usage_stats.go",
-        "metadata.go",
-        "metadata_replicas.go",
-        "method.go",
-        "span_config.go",
-        "tenant.go",
-        "version.go",
-    ],
-    embed = [":roachpb_go_proto"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
-    visibility = [":__subpackages__"],
-    deps = [
-        "//pkg/geo",
-        "//pkg/geo/geopb",
-        "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/storage/enginepb",
-        "//pkg/util",
-        "//pkg/util/bitarray",
-        "//pkg/util/caller",
-        "//pkg/util/duration",
-        "//pkg/util/encoding",
-        "//pkg/util/hlc",
-        "//pkg/util/humanizeutil",
-        "//pkg/util/interval",
-        "//pkg/util/log",
-        "//pkg/util/protoutil",
-        "//pkg/util/timetz",
-        "//pkg/util/tracing",
-        "//pkg/util/uuid",
-        "@com_github_aws_aws_sdk_go//aws",
-        "@com_github_aws_aws_sdk_go//aws/credentials",
-        "@com_github_cockroachdb_apd_v3//:apd",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//errorspb",
-        "@com_github_cockroachdb_errors//extgrpc",
-        "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
 
@@ -215,6 +157,7 @@ proto_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock:lock_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
+        "//pkg/settings:settings_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util:util_proto",
         "//pkg/util/hlc:hlc_proto",
@@ -236,6 +179,7 @@ go_proto_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/readsummary/rspb",
+        "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/hlc",
@@ -257,11 +201,8 @@ stringer(
     typ = "ErrorDetailType",
 )
 
-genrule(
+batch_gen(
     name = "gen-batch-generated",
-    outs = ["batch_generated-gen.go"],
-    cmd = """
-     $(location //pkg/roachpb/gen) --filename=$(location batch_generated-gen.go)
-       """,
-    exec_tools = ["//pkg/roachpb/gen"],
+    src = ":roachpb_go_proto",
+    out = "batch_generated-gen.go",
 )

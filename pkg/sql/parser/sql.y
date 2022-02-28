@@ -37,6 +37,9 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/scanner"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
     "github.com/cockroachdb/errors"
     "github.com/lib/pq/oid"
@@ -79,10 +82,10 @@ func processBinaryQualOp(
   rhs tree.Expr,
 ) (tree.Expr, int) {
   switch op := op.(type) {
-  case tree.BinaryOperator:
+  case treebin.BinaryOperator:
     op.IsExplicitOperator = true
     return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
-  case tree.ComparisonOperator:
+  case treecmp.ComparisonOperator:
     op.IsExplicitOperator = true
     return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
   case tree.UnaryOperator:
@@ -91,8 +94,8 @@ func processBinaryQualOp(
     switch op.Symbol {
     case tree.UnaryComplement:
       return &tree.ComparisonExpr{
-        Operator: tree.ComparisonOperator{
-          Symbol: tree.RegMatch,
+        Operator: treecmp.ComparisonOperator{
+          Symbol: treecmp.RegMatch,
           IsExplicitOperator: true,
         },
         Left: lhs,
@@ -131,24 +134,24 @@ func processUnaryQualOpInternal(
   switch op := op.(type) {
   case tree.UnaryOperator:
     return &tree.UnaryExpr{Operator: op, Expr: expr}, 0
-  case tree.BinaryOperator:
+  case treebin.BinaryOperator:
     // We have some binary operators which have the same symbol as the unary
     // operator, so adjust accordingly.
     switch op.Symbol {
-    case tree.Plus:
+    case treebin.Plus:
       return &tree.UnaryExpr{
         Operator: tree.MakeUnaryOperator(tree.UnaryPlus),
         Expr: expr,
       }, 0
-    case tree.Minus:
+    case treebin.Minus:
       return &tree.UnaryExpr{
         Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
         Expr: expr,
       }, 0
     }
-  case tree.ComparisonOperator:
+  case treecmp.ComparisonOperator:
     switch op.Symbol {
-    case tree.RegMatch:
+    case treecmp.RegMatch:
       return &tree.UnaryExpr{
         Operator: tree.MakeUnaryOperator(tree.UnaryComplement),
         Expr: expr,
@@ -531,8 +534,8 @@ func (u *sqlSymUnion) windowFrameBounds() tree.WindowFrameBounds {
 func (u *sqlSymUnion) windowFrameBound() *tree.WindowFrameBound {
     return u.val.(*tree.WindowFrameBound)
 }
-func (u *sqlSymUnion) windowFrameExclusion() tree.WindowFrameExclusion {
-    return u.val.(tree.WindowFrameExclusion)
+func (u *sqlSymUnion) windowFrameExclusion() treewindow.WindowFrameExclusion {
+    return u.val.(treewindow.WindowFrameExclusion)
 }
 func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
     return u.val.(tree.DistinctOn)
@@ -542,6 +545,21 @@ func (u *sqlSymUnion) dir() tree.Direction {
 }
 func (u *sqlSymUnion) nullsOrder() tree.NullsOrder {
     return u.val.(tree.NullsOrder)
+}
+func (u *sqlSymUnion) alterChangefeedCmd() tree.AlterChangefeedCmd {
+    return u.val.(tree.AlterChangefeedCmd)
+}
+func (u *sqlSymUnion) alterChangefeedCmds() tree.AlterChangefeedCmds {
+    return u.val.(tree.AlterChangefeedCmds)
+}
+func (u *sqlSymUnion) backupKMS() tree.BackupKMS {
+    return u.val.(tree.BackupKMS)
+}
+func (u *sqlSymUnion) alterBackupCmd() tree.AlterBackupCmd {
+    return u.val.(tree.AlterBackupCmd)
+}
+func (u *sqlSymUnion) alterBackupCmds() tree.AlterBackupCmds {
+    return u.val.(tree.AlterBackupCmds)
 }
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
@@ -624,8 +642,8 @@ func (u *sqlSymUnion) window() tree.Window {
 func (u *sqlSymUnion) op() tree.Operator {
     return u.val.(tree.Operator)
 }
-func (u *sqlSymUnion) cmpOp() tree.ComparisonOperator {
-    return u.val.(tree.ComparisonOperator)
+func (u *sqlSymUnion) cmpOp() treecmp.ComparisonOperator {
+    return u.val.(treecmp.ComparisonOperator)
 }
 func (u *sqlSymUnion) intervalTypeMetadata() types.IntervalTypeMetadata {
     return u.val.(types.IntervalTypeMetadata)
@@ -743,6 +761,15 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 func (u *sqlSymUnion) setVar() *tree.SetVar {
     return u.val.(*tree.SetVar)
 }
+func (u *sqlSymUnion) cursorSensitivity() tree.CursorSensitivity {
+    return u.val.(tree.CursorSensitivity)
+}
+func (u *sqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
+    return u.val.(tree.CursorScrollOption)
+}
+func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
+    return u.val.(*tree.FetchCursor)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -762,18 +789,18 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
+%token <str> ASENSITIVE ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
-%token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
 %token <str> CACHE CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
-%token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
+%token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
@@ -792,20 +819,21 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG
+%token <str> FOREIGN FORWARD FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
-%token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_STORAGE
+%token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
-%token <str> INNER INSERT INT INTEGER
+%token <str> INNER INSENSITIVE INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -822,46 +850,47 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
-%token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
-%token <str> RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
+%token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
+%token <str> START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
-%token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
+%token <str> TRANSACTION TRANSACTIONS TRANSFER TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
-%token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
+%token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIRTUAL VISIBLE VOTERS
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
+%token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -897,6 +926,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 
 %type <tree.Statement> alter_stmt
+%type <tree.Statement> alter_changefeed_stmt
+%type <tree.Statement> alter_backup_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
@@ -1096,11 +1127,13 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_transactions_stmt
+%type <tree.Statement> show_transfer_stmt
 %type <tree.Statement> show_types_stmt
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
 %type <tree.Statement> show_full_scans_stmt
+%type <tree.Statement> show_completions_stmt
 
 %type <str> statements_or_queries
 
@@ -1115,6 +1148,14 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.Statement> close_cursor_stmt
 %type <tree.Statement> declare_cursor_stmt
+%type <tree.Statement> fetch_cursor_stmt
+%type <*tree.FetchCursor> fetch_specifier
+%type <bool> opt_hold opt_binary
+%type <tree.CursorSensitivity> opt_sensitivity
+%type <tree.CursorScrollOption> opt_scroll
+%type <int64> opt_forward_backward forward_backward
+%type <int64> next_prior
+
 %type <tree.Statement> reindex_stmt
 
 %type <[]string> opt_incremental
@@ -1142,6 +1183,13 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Expr> alter_column_visible
 %type <tree.Direction> opt_asc_desc
 %type <tree.NullsOrder> opt_nulls_order
+
+%type <tree.AlterChangefeedCmd> alter_changefeed_cmd
+%type <tree.AlterChangefeedCmds> alter_changefeed_cmds
+
+%type <tree.BackupKMS> backup_kms
+%type <tree.AlterBackupCmd> alter_backup_cmd
+%type <tree.AlterBackupCmd> alter_backup_cmds
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1294,7 +1342,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Expr> case_expr case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
-%type <tree.ComparisonOperator> sub_type
+%type <treecmp.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
 %type <tree.AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality opt_compact
@@ -1381,7 +1429,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <*tree.WindowFrame> opt_frame_clause
 %type <tree.WindowFrameBounds> frame_extent
 %type <*tree.WindowFrameBound> frame_bound
-%type <tree.WindowFrameExclusion> opt_frame_exclusion
+%type <treewindow.WindowFrameExclusion> opt_frame_exclusion
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
@@ -1513,8 +1561,9 @@ stmt:
 | refresh_stmt              // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt    // help texts in sub-rule
 | transaction_stmt          // help texts in sub-rule
-| close_cursor_stmt
-| declare_cursor_stmt
+| close_cursor_stmt         // EXTEND WITH HELP: CLOSE
+| declare_cursor_stmt       // EXTEND WITH HELP: DECLARE
+| fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
 | reindex_stmt
 | /* EMPTY */
   {
@@ -1541,6 +1590,8 @@ alter_ddl_stmt:
 | alter_schema_stmt             // EXTEND WITH HELP: ALTER SCHEMA
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
+| alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
+| alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -2706,7 +2757,7 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    incremental_storage: specify a different path to store the incremental backup
+//    incremental_location: specify a different path to store the incremental backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2812,7 +2863,7 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
   }
-| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
   {
   $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
@@ -2981,6 +3032,10 @@ opt_with_schedule_options:
 // RESTORE <targets...> FROM <location...>
 //         [ AS OF SYSTEM TIME <expr> ]
 //         [ WITH <option> [= <value>] [, ...] ]
+// or
+// RESTORE SYSTEM USERS FROM <location...>
+//         [ AS OF SYSTEM TIME <expr> ]
+//         [ WITH <option> [= <value>] [, ...] ]
 //
 // Targets:
 //    TABLE <pattern> [, ...]
@@ -3039,6 +3094,25 @@ restore_stmt:
       From: $6.listOfStringOrPlaceholderOptList(),
       AsOf: $7.asOfClause(),
       Options: *($8.restoreOptions()),
+    }
+  }
+| RESTORE SYSTEM USERS FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+      SystemUsers: true,
+      From: $5.listOfStringOrPlaceholderOptList(),
+      AsOf: $6.asOfClause(),
+      Options: *($7.restoreOptions()),
+    }
+  }
+| RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+      SystemUsers: true,
+      Subdir: $5.expr(),
+      From: $7.listOfStringOrPlaceholderOptList(),
+      AsOf: $8.asOfClause(),
+      Options: *($9.restoreOptions()),
     }
   }
 | RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause
@@ -3145,10 +3219,15 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
 	}
+| TENANT '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
+  }
+
 import_format:
   name
   {
@@ -4295,6 +4374,114 @@ explain_option_list:
     $$.val = append($1.strs(), $3)
   }
 
+// %Help: ALTER CHANGEFEED - alter an existing changefeed
+// %Category: CCL
+// %Text:
+// ALTER CHANGEFEED <job_id> {{ADD|DROP <targets...>} | SET <options...>}...
+alter_changefeed_stmt:
+  ALTER CHANGEFEED a_expr alter_changefeed_cmds
+  {
+    $$.val = &tree.AlterChangefeed{
+      Jobs: $3.expr(),
+      Cmds: $4.alterChangefeedCmds(),
+    }
+  }
+| ALTER CHANGEFEED error // SHOW HELP: ALTER CHANGEFEED
+
+alter_changefeed_cmds:
+  alter_changefeed_cmd
+  {
+    $$.val = tree.AlterChangefeedCmds{$1.alterChangefeedCmd()}
+  }
+| alter_changefeed_cmds alter_changefeed_cmd
+  {
+    $$.val = append($1.alterChangefeedCmds(), $2.alterChangefeedCmd())
+  }
+
+alter_changefeed_cmd:
+  // ALTER CHANGEFEED <job_id> ADD [TABLE] ...
+  ADD changefeed_targets
+  {
+    $$.val = &tree.AlterChangefeedAddTarget{
+      Targets: $2.targetList(),
+    }
+  }
+  // ALTER CHANGEFEED <job_id> DROP [TABLE] ...
+| DROP changefeed_targets
+  {
+    $$.val = &tree.AlterChangefeedDropTarget{
+      Targets: $2.targetList(),
+    }
+  }
+| SET kv_option_list
+  {
+    $$.val = &tree.AlterChangefeedSetOptions{
+      Options: $2.kvOptions(),
+    }
+  }
+| UNSET name_list
+  {
+    $$.val = &tree.AlterChangefeedUnsetOptions{
+      Options: $2.nameList(),
+    }
+  }
+
+// %Help: ALTER BACKUP - alter an existing backup's encryption keys
+// %Category: CCL
+// %Text:
+// ALTER BACKUP <location...>
+//        [ ADD NEW_KMS = <kms...> ]
+//        [ WITH OLD_KMS = <kms...> ]
+// Locations:
+//    "[scheme]://[host]/[path to backup]?[parameters]"
+//
+// KMS:
+//    "[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : add new kms keys to backup
+alter_backup_stmt:
+  ALTER BACKUP string_or_placeholder alter_backup_cmds
+  {
+    $$.val = &tree.AlterBackup {
+      Backup:	$3.expr(),
+      Cmds:	$4.alterBackupCmds(),
+    }
+  }
+| ALTER BACKUP string_or_placeholder IN string_or_placeholder alter_backup_cmds
+	{
+    $$.val = &tree.AlterBackup {
+      Subdir:	$3.expr(),
+      Backup:	$5.expr(),
+      Cmds:	$6.alterBackupCmds(),
+    }
+	}
+| ALTER BACKUP error // SHOW HELP: ALTER BACKUP
+
+alter_backup_cmds:
+	alter_backup_cmd
+	{
+    $$.val = tree.AlterBackupCmds{$1.alterBackupCmd()}
+	}
+|	alter_backup_cmds alter_backup_cmd
+	{
+    $$.val = append($1.alterBackupCmds(), $2.alterBackupCmd())
+	}
+
+alter_backup_cmd:
+	ADD backup_kms
+	{
+    $$.val = &tree.AlterBackupKMS{
+      KMSInfo:	$2.backupKMS(),
+    }
+	}
+
+backup_kms:
+	NEW_KMS '=' string_or_placeholder_opt_list WITH OLD_KMS '=' string_or_placeholder_opt_list
+	{
+    $$.val = tree.BackupKMS{
+      NewKMSURI:	$3.stringOrPlaceholderOptList(),
+      OldKMSURI:	$7.stringOrPlaceholderOptList(),
+    }
+	}
+
 // %Help: PREPARE - prepare a statement for later execution
 // %Category: Misc
 // %Text: PREPARE <name> [ ( <types...> ) ] AS <query>
@@ -5039,8 +5226,8 @@ zone_value:
 // PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
-// SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
-// SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
+// SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
+// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
@@ -5076,21 +5263,215 @@ show_stmt:
 | show_trace_stmt            // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt      // EXTEND WITH HELP: SHOW TRANSACTION
 | show_transactions_stmt     // EXTEND WITH HELP: SHOW TRANSACTIONS
+| show_transfer_stmt         // EXTEND WITH HELP: SHOW TRANSFER
 | show_users_stmt            // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt             // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
 | SHOW error                 // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 | show_full_scans_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
+| show_completions_stmt
 
-// Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
-// since there will be no open cursors.
+// %Help: CLOSE - close SQL cursor
+// %Category: Misc
+// %Text: CLOSE [ ALL | <name> ]
+// %SeeAlso: DECLARE, FETCH
 close_cursor_stmt:
-	CLOSE ALL { }
-| CLOSE cursor_name { return unimplementedWithIssue(sqllex, 41412) }
+	CLOSE ALL
+	{
+	  $$.val = &tree.CloseCursor{
+	    All: true,
+	  }
+	}
+| CLOSE cursor_name
+  {
+	  $$.val = &tree.CloseCursor{
+	    Name: tree.Name($2),
+	  }
+	}
+| CLOSE error // SHOW HELP: CLOSE
 
+// %Help: DECLARE - declare SQL cursor
+// %Category: Misc
+// %Text: DECLARE <name> [ options ] CURSOR p [ WITH | WITHOUT HOLD ] FOR <query>
+// %SeeAlso: CLOSE, FETCH
 declare_cursor_stmt:
-	DECLARE { return unimplementedWithIssue(sqllex, 41412) }
+  // TODO(jordan): the options here should be supported in any order, not just
+  // the fixed one here.
+	DECLARE cursor_name opt_binary opt_sensitivity opt_scroll CURSOR opt_hold FOR select_stmt
+	{
+	  $$.val = &tree.DeclareCursor{
+	    Binary: $3.bool(),
+	    Name: tree.Name($2),
+	    Sensitivity: $4.cursorSensitivity(),
+	    Scroll: $5.cursorScrollOption(),
+	    Hold: $7.bool(),
+	    Select: $9.slct(),
+	  }
+  }
+| DECLARE error // SHOW HELP: DECLARE
+
+opt_binary:
+  BINARY
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_sensitivity:
+  INSENSITIVE
+  {
+    $$.val = tree.Insensitive
+  }
+| ASENSITIVE
+  {
+    $$.val = tree.Asensitive
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.UnspecifiedSensitivity
+  }
+
+opt_scroll:
+  SCROLL
+  {
+    $$.val = tree.Scroll
+  }
+| NO SCROLL
+  {
+    $$.val = tree.NoScroll
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.UnspecifiedScroll
+  }
+
+opt_hold:
+  WITH HOLD
+  {
+    $$.val = true
+  }
+| WITHOUT HOLD
+  {
+    $$.val = false
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+// %Help: FETCH - fetch rows from a SQL cursor
+// %Category: Misc
+// %Text: FETCH [ direction [ FROM | IN ] ] <name>
+// %SeeAlso: CLOSE, DECLARE
+fetch_cursor_stmt:
+  FETCH fetch_specifier
+  {
+    $$.val = $2.fetchCursor()
+  }
+| FETCH error // SHOW HELP: FETCH
+
+fetch_specifier:
+  cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($1),
+      Count: 1,
+    }
+  }
+| from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($2),
+      Count: 1,
+    }
+  }
+| next_prior opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      Count: $1.int64(),
+    }
+  }
+| forward_backward opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      Count: $1.int64(),
+    }
+  }
+| opt_forward_backward signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      Count: $2.int64() * $1.int64(),
+    }
+  }
+| opt_forward_backward ALL opt_from_or_in cursor_name
+  {
+    fetchType := tree.FetchAll
+    count := $1.int64()
+    if count < 0 {
+      fetchType = tree.FetchBackwardAll
+    }
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: fetchType,
+    }
+  }
+| ABSOLUTE signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: tree.FetchAbsolute,
+      Count: $2.int64(),
+    }
+  }
+| RELATIVE signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: tree.FetchRelative,
+      Count: $2.int64(),
+    }
+  }
+| FIRST opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      FetchType: tree.FetchFirst,
+    }
+  }
+| LAST opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      FetchType: tree.FetchLast,
+    }
+  }
+
+next_prior:
+  NEXT  { $$.val = int64(1) }
+| PRIOR { $$.val = int64(-1) }
+
+opt_forward_backward:
+  forward_backward { $$.val = $1.int64() }
+| /* EMPTY */ { $$.val = int64(1) }
+
+forward_backward:
+  FORWARD  { $$.val = int64(1) }
+| BACKWARD { $$.val = int64(-1) }
+
+opt_from_or_in:
+  from_or_in { }
+| /* EMPTY */ { }
+
+from_or_in:
+  FROM { }
+| IN { }
 
 reindex_stmt:
   REINDEX TABLE error
@@ -5746,6 +6127,16 @@ show_syntax_stmt:
   }
 | SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
 
+show_completions_stmt:
+  SHOW COMPLETIONS AT OFFSET ICONST FOR SCONST
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCompletions{
+        Statement: tree.NewStrVal($7),
+        Offset: $5.numVal(),
+    }
+  }
+
 show_last_query_stats_stmt:
   SHOW LAST QUERY STATISTICS query_stats_cols
   {
@@ -5796,6 +6187,20 @@ show_transaction_stmt:
     $$.val = &tree.ShowTransactionStatus{}
   }
 | SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
+
+// %Help: SHOW TRANSFER - display session state for connection migration
+// %Category: Misc
+// %Text: SHOW TRANSFER STATE [ WITH '<transfer_key>' ]
+show_transfer_stmt:
+  SHOW TRANSFER STATE WITH SCONST
+  {
+     $$.val = &tree.ShowTransferState{TransferKey: tree.NewStrVal($5)}
+  }
+| SHOW TRANSFER STATE
+  {
+     $$.val = &tree.ShowTransferState{}
+  }
+| SHOW TRANSFER error // SHOW HELP: SHOW TRANSFER
 
 // %Help: SHOW CREATE - display the CREATE statement for a table, sequence, view, or database
 // %Category: DDL
@@ -7821,6 +8226,14 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOSQLLOGIN
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| VIEWCLUSTERSETTING
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOVIEWCLUSTERSETTING
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
@@ -11176,103 +11589,103 @@ a_expr:
   }
 | a_expr '+' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Plus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Plus), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '-' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Minus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Minus), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '*' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mult), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mult), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '/' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Div), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Div), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FLOORDIV a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.FloorDiv), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FloorDiv), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '%' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mod), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mod), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '^' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Pow), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Pow), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '#' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitxor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitxor), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '&' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitand), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitand), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '|' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitor), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '<' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LT), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '>' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GT), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '?' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.JSONExists), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.JSONExists), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr JSON_SOME_EXISTS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.JSONSomeExists), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.JSONSomeExists), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr JSON_ALL_EXISTS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.JSONAllExists), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.JSONAllExists), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONTAINS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.Contains), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Contains), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONTAINED_BY a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.ContainedBy), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.ContainedBy), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '=' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.EQ), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.EQ), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONCAT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Concat), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr LSHIFT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.LShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.LShift), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr RSHIFT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.RShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.RShift), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHVAL a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchVal), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchVal), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHTEXT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchText), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchText), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHVAL_PATH a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchValPath), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchValPath), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHTEXT_PATH a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchTextPath), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchTextPath), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr REMOVE_PATH a_expr
   {
@@ -11284,7 +11697,7 @@ a_expr:
   }
 | a_expr AND_AND a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.Overlaps), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Overlaps), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
@@ -11292,15 +11705,15 @@ a_expr:
   }
 | a_expr LESS_EQUALS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LE), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr GREATER_EQUALS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GE), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_EQUALS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NE), Left: $1.expr(), Right: $3.expr()}
   }
 | qual_op a_expr %prec CBRT
   {
@@ -11338,7 +11751,7 @@ a_expr:
   }
 | a_expr LIKE a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.Like), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Like), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr LIKE a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11346,7 +11759,7 @@ a_expr:
   }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotLike), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotLike), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr NOT_LA LIKE a_expr ESCAPE a_expr %prec ESCAPE
  {
@@ -11354,7 +11767,7 @@ a_expr:
  }
 | a_expr ILIKE a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.ILike), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.ILike), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr ILIKE a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11362,7 +11775,7 @@ a_expr:
   }
 | a_expr NOT_LA ILIKE a_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotILike), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotILike), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr NOT_LA ILIKE a_expr ESCAPE a_expr %prec ESCAPE
  {
@@ -11370,7 +11783,7 @@ a_expr:
  }
 | a_expr SIMILAR TO a_expr %prec SIMILAR
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.SimilarTo), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.SimilarTo), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr SIMILAR TO a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11378,7 +11791,7 @@ a_expr:
   }
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotSimilarTo), Left: $1.expr(), Right: $5.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotSimilarTo), Left: $1.expr(), Right: $5.expr()}
   }
 | a_expr NOT_LA SIMILAR TO a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11386,24 +11799,24 @@ a_expr:
   }
 | a_expr '~' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.RegMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_REGMATCH a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotRegMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotRegMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr REGIMATCH a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegIMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.RegIMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_REGIMATCH a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotRegIMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotRegIMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr IS NAN %prec IS
   {
     $$.val = &tree.ComparisonExpr{
-      Operator: tree.MakeComparisonOperator(tree.EQ),
+      Operator: treecmp.MakeComparisonOperator(treecmp.EQ),
       Left: $1.expr(),
       Right: tree.NewNumVal(constant.MakeFloat64(math.NaN()), "NaN", false /*negative*/),
     }
@@ -11411,7 +11824,7 @@ a_expr:
 | a_expr IS NOT NAN %prec IS
   {
     $$.val = &tree.ComparisonExpr{
-      Operator: tree.MakeComparisonOperator(tree.NE),
+      Operator: treecmp.MakeComparisonOperator(treecmp.NE),
       Left: $1.expr(),
       Right: tree.NewNumVal(constant.MakeFloat64(math.NaN()), "NaN", false /*negative*/),
     }
@@ -11435,35 +11848,35 @@ a_expr:
 | row OVERLAPS row { return unimplemented(sqllex, "overlaps") }
 | a_expr IS TRUE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
   }
 | a_expr IS NOT TRUE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
   }
 | a_expr IS FALSE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
   }
 | a_expr IS NOT FALSE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
   }
 | a_expr IS UNKNOWN %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.DNull}
   }
 | a_expr IS NOT UNKNOWN %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: tree.DNull}
   }
 | a_expr IS DISTINCT FROM a_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
   }
 | a_expr IS NOT DISTINCT FROM a_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
   }
 | a_expr IS OF '(' type_list ')' %prec IS
   {
@@ -11491,17 +11904,17 @@ a_expr:
   }
 | a_expr IN in_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.In), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.In), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_LA IN in_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotIn), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotIn), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr subquery_op sub_type a_expr %prec CONCAT
   {
     op := $3.cmpOp()
     subOp := $2.op()
-    subOpCmp, ok := subOp.(tree.ComparisonOperator)
+    subOpCmp, ok := subOp.(treecmp.ComparisonOperator)
     if !ok {
       sqllex.Error(fmt.Sprintf("%s %s <array> is invalid because %q is not a boolean operator",
         subOp, op, subOp))
@@ -11553,79 +11966,79 @@ b_expr:
   }
 | b_expr '+' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Plus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Plus), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '-' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Minus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Minus), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '*' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mult), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mult), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '/' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Div), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Div), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr FLOORDIV b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.FloorDiv), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FloorDiv), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '%' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mod), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mod), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '^' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Pow), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Pow), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '#' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitxor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitxor), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '&' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitand), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitand), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '|' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitor), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '<' b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LT), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '>' b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GT), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '=' b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.EQ), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.EQ), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr CONCAT b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Concat), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr LSHIFT b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.LShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.LShift), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr RSHIFT b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.RShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.RShift), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr LESS_EQUALS b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LE), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr GREATER_EQUALS b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GE), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr NOT_EQUALS b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NE), Left: $1.expr(), Right: $3.expr()}
   }
 | qual_op b_expr %prec CBRT
   {
@@ -11647,11 +12060,11 @@ b_expr:
   }
 | b_expr IS DISTINCT FROM b_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
   }
 | b_expr IS NOT DISTINCT FROM b_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
   }
 | b_expr IS OF '(' type_list ')' %prec IS
   {
@@ -12258,7 +12671,7 @@ opt_frame_clause:
   RANGE frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
-      Mode: tree.RANGE,
+      Mode: treewindow.RANGE,
       Bounds: $2.windowFrameBounds(),
       Exclusion: $3.windowFrameExclusion(),
     }
@@ -12266,7 +12679,7 @@ opt_frame_clause:
 | ROWS frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
-      Mode: tree.ROWS,
+      Mode: treewindow.ROWS,
       Bounds: $2.windowFrameBounds(),
       Exclusion: $3.windowFrameExclusion(),
     }
@@ -12274,7 +12687,7 @@ opt_frame_clause:
 | GROUPS frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
-      Mode: tree.GROUPS,
+      Mode: treewindow.GROUPS,
       Bounds: $2.windowFrameBounds(),
       Exclusion: $3.windowFrameExclusion(),
     }
@@ -12289,10 +12702,10 @@ frame_extent:
   {
     startBound := $1.windowFrameBound()
     switch {
-    case startBound.BoundType == tree.UnboundedFollowing:
+    case startBound.BoundType == treewindow.UnboundedFollowing:
       sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
       return 1
-    case startBound.BoundType == tree.OffsetFollowing:
+    case startBound.BoundType == treewindow.OffsetFollowing:
       sqllex.Error("frame starting from following row cannot end with current row")
       return 1
     }
@@ -12303,19 +12716,19 @@ frame_extent:
     startBound := $2.windowFrameBound()
     endBound := $4.windowFrameBound()
     switch {
-    case startBound.BoundType == tree.UnboundedFollowing:
+    case startBound.BoundType == treewindow.UnboundedFollowing:
       sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
       return 1
-    case endBound.BoundType == tree.UnboundedPreceding:
+    case endBound.BoundType == treewindow.UnboundedPreceding:
       sqllex.Error("frame end cannot be UNBOUNDED PRECEDING")
       return 1
-    case startBound.BoundType == tree.CurrentRow && endBound.BoundType == tree.OffsetPreceding:
+    case startBound.BoundType == treewindow.CurrentRow && endBound.BoundType == treewindow.OffsetPreceding:
       sqllex.Error("frame starting from current row cannot have preceding rows")
       return 1
-    case startBound.BoundType == tree.OffsetFollowing && endBound.BoundType == tree.OffsetPreceding:
+    case startBound.BoundType == treewindow.OffsetFollowing && endBound.BoundType == treewindow.OffsetPreceding:
       sqllex.Error("frame starting from following row cannot have preceding rows")
       return 1
-    case startBound.BoundType == tree.OffsetFollowing && endBound.BoundType == tree.CurrentRow:
+    case startBound.BoundType == treewindow.OffsetFollowing && endBound.BoundType == treewindow.CurrentRow:
       sqllex.Error("frame starting from following row cannot have preceding rows")
       return 1
     }
@@ -12328,52 +12741,52 @@ frame_extent:
 frame_bound:
   UNBOUNDED PRECEDING
   {
-    $$.val = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
+    $$.val = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
   }
 | UNBOUNDED FOLLOWING
   {
-    $$.val = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
+    $$.val = &tree.WindowFrameBound{BoundType: treewindow.UnboundedFollowing}
   }
 | CURRENT ROW
   {
-    $$.val = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+    $$.val = &tree.WindowFrameBound{BoundType: treewindow.CurrentRow}
   }
 | a_expr PRECEDING
   {
     $$.val = &tree.WindowFrameBound{
       OffsetExpr: $1.expr(),
-      BoundType: tree.OffsetPreceding,
+      BoundType: treewindow.OffsetPreceding,
     }
   }
 | a_expr FOLLOWING
   {
     $$.val = &tree.WindowFrameBound{
       OffsetExpr: $1.expr(),
-      BoundType: tree.OffsetFollowing,
+      BoundType: treewindow.OffsetFollowing,
     }
   }
 
 opt_frame_exclusion:
   EXCLUDE CURRENT ROW
   {
-    $$.val = tree.ExcludeCurrentRow
+    $$.val = treewindow.ExcludeCurrentRow
   }
 | EXCLUDE GROUP
   {
-    $$.val = tree.ExcludeGroup
+    $$.val = treewindow.ExcludeGroup
   }
 | EXCLUDE TIES
   {
-    $$.val = tree.ExcludeTies
+    $$.val = treewindow.ExcludeTies
   }
 | EXCLUDE NO OTHERS
   {
     // EXCLUDE NO OTHERS is equivalent to omitting the frame exclusion clause.
-    $$.val = tree.NoExclusion
+    $$.val = treewindow.NoExclusion
   }
 | /* EMPTY */
   {
-    $$.val = tree.NoExclusion
+    $$.val = treewindow.NoExclusion
   }
 
 // Supporting nonterminals for expressions.
@@ -12409,15 +12822,15 @@ labeled_row:
 sub_type:
   ANY
   {
-    $$.val = tree.MakeComparisonOperator(tree.Any)
+    $$.val = treecmp.MakeComparisonOperator(treecmp.Any)
   }
 | SOME
   {
-    $$.val = tree.MakeComparisonOperator(tree.Some)
+    $$.val = treecmp.MakeComparisonOperator(treecmp.Some)
   }
 | ALL
   {
-    $$.val = tree.MakeComparisonOperator(tree.All)
+    $$.val = treecmp.MakeComparisonOperator(treecmp.All)
   }
 
 // We combine mathOp and Op from PostgreSQL's gram.y there.
@@ -12432,39 +12845,39 @@ sub_type:
 // Ensure you also update process.*QualOp above when adding to this.
 all_op:
   // exactly from MathOp
-  '+' { $$.val = tree.MakeBinaryOperator(tree.Plus)  }
-| '-' { $$.val = tree.MakeBinaryOperator(tree.Minus) }
-| '*' { $$.val = tree.MakeBinaryOperator(tree.Mult)  }
-| '/' { $$.val = tree.MakeBinaryOperator(tree.Div)   }
-| '%' { $$.val = tree.MakeBinaryOperator(tree.Mod)   }
-| '^' { $$.val = tree.MakeBinaryOperator(tree.Pow) }
-| '<' { $$.val = tree.MakeComparisonOperator(tree.LT) }
-| '>' { $$.val = tree.MakeComparisonOperator(tree.GT) }
-| '=' { $$.val = tree.MakeComparisonOperator(tree.EQ) }
-| LESS_EQUALS    { $$.val = tree.MakeComparisonOperator(tree.LE) }
-| GREATER_EQUALS { $$.val = tree.MakeComparisonOperator(tree.GE) }
-| NOT_EQUALS     { $$.val = tree.MakeComparisonOperator(tree.NE) }
+  '+' { $$.val = treebin.MakeBinaryOperator(treebin.Plus)  }
+| '-' { $$.val = treebin.MakeBinaryOperator(treebin.Minus) }
+| '*' { $$.val = treebin.MakeBinaryOperator(treebin.Mult)  }
+| '/' { $$.val = treebin.MakeBinaryOperator(treebin.Div)   }
+| '%' { $$.val = treebin.MakeBinaryOperator(treebin.Mod)   }
+| '^' { $$.val = treebin.MakeBinaryOperator(treebin.Pow) }
+| '<' { $$.val = treecmp.MakeComparisonOperator(treecmp.LT) }
+| '>' { $$.val = treecmp.MakeComparisonOperator(treecmp.GT) }
+| '=' { $$.val = treecmp.MakeComparisonOperator(treecmp.EQ) }
+| LESS_EQUALS    { $$.val = treecmp.MakeComparisonOperator(treecmp.LE) }
+| GREATER_EQUALS { $$.val = treecmp.MakeComparisonOperator(treecmp.GE) }
+| NOT_EQUALS     { $$.val = treecmp.MakeComparisonOperator(treecmp.NE) }
   // partial set of operators from from Op
-| '?' { $$.val = tree.MakeComparisonOperator(tree.JSONExists) }
-| '&' { $$.val = tree.MakeBinaryOperator(tree.Bitand) }
-| '|' { $$.val = tree.MakeBinaryOperator(tree.Bitor)  }
-| '#' { $$.val = tree.MakeBinaryOperator(tree.Bitxor) }
-| FLOORDIV { $$.val = tree.MakeBinaryOperator(tree.FloorDiv) }
-| CONTAINS { $$.val = tree.MakeComparisonOperator(tree.Contains) }
-| CONTAINED_BY { $$.val = tree.MakeComparisonOperator(tree.ContainedBy) }
-| LSHIFT { $$.val = tree.MakeBinaryOperator(tree.LShift) }
-| RSHIFT { $$.val = tree.MakeBinaryOperator(tree.RShift) }
-| CONCAT { $$.val = tree.MakeBinaryOperator(tree.Concat) }
-| FETCHVAL { $$.val = tree.MakeBinaryOperator(tree.JSONFetchVal) }
-| FETCHTEXT { $$.val = tree.MakeBinaryOperator(tree.JSONFetchText) }
-| FETCHVAL_PATH { $$.val = tree.MakeBinaryOperator(tree.JSONFetchValPath) }
-| FETCHTEXT_PATH { $$.val = tree.MakeBinaryOperator(tree.JSONFetchTextPath) }
-| JSON_SOME_EXISTS { $$.val = tree.MakeComparisonOperator(tree.JSONSomeExists) }
-| JSON_ALL_EXISTS { $$.val = tree.MakeComparisonOperator(tree.JSONAllExists) }
-| NOT_REGMATCH { $$.val = tree.MakeComparisonOperator(tree.NotRegMatch) }
-| REGIMATCH { $$.val = tree.MakeComparisonOperator(tree.RegIMatch) }
-| NOT_REGIMATCH { $$.val = tree.MakeComparisonOperator(tree.NotRegIMatch) }
-| AND_AND { $$.val = tree.MakeComparisonOperator(tree.Overlaps) }
+| '?' { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONExists) }
+| '&' { $$.val = treebin.MakeBinaryOperator(treebin.Bitand) }
+| '|' { $$.val = treebin.MakeBinaryOperator(treebin.Bitor)  }
+| '#' { $$.val = treebin.MakeBinaryOperator(treebin.Bitxor) }
+| FLOORDIV { $$.val = treebin.MakeBinaryOperator(treebin.FloorDiv) }
+| CONTAINS { $$.val = treecmp.MakeComparisonOperator(treecmp.Contains) }
+| CONTAINED_BY { $$.val = treecmp.MakeComparisonOperator(treecmp.ContainedBy) }
+| LSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.LShift) }
+| RSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.RShift) }
+| CONCAT { $$.val = treebin.MakeBinaryOperator(treebin.Concat) }
+| FETCHVAL { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchVal) }
+| FETCHTEXT { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchText) }
+| FETCHVAL_PATH { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchValPath) }
+| FETCHTEXT_PATH { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchTextPath) }
+| JSON_SOME_EXISTS { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONSomeExists) }
+| JSON_ALL_EXISTS { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONAllExists) }
+| NOT_REGMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegMatch) }
+| REGIMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.RegIMatch) }
+| NOT_REGIMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegIMatch) }
+| AND_AND { $$.val = treecmp.MakeComparisonOperator(treecmp.Overlaps) }
 | '~' { $$.val = tree.MakeUnaryOperator(tree.UnaryComplement) }
 | SQRT { $$.val = tree.MakeUnaryOperator(tree.UnarySqrt) }
 | CBRT { $$.val = tree.MakeUnaryOperator(tree.UnaryCbrt) }
@@ -12495,10 +12908,10 @@ qual_op:
 subquery_op:
   all_op
 | qual_op
-| LIKE         { $$.val = tree.MakeComparisonOperator(tree.Like)     }
-| NOT_LA LIKE  { $$.val = tree.MakeComparisonOperator(tree.NotLike)  }
-| ILIKE        { $$.val = tree.MakeComparisonOperator(tree.ILike)    }
-| NOT_LA ILIKE { $$.val = tree.MakeComparisonOperator(tree.NotILike) }
+| LIKE         { $$.val = treecmp.MakeComparisonOperator(treecmp.Like)     }
+| NOT_LA LIKE  { $$.val = treecmp.MakeComparisonOperator(treecmp.NotLike)  }
+| ILIKE        { $$.val = treecmp.MakeComparisonOperator(treecmp.ILike)    }
+| NOT_LA ILIKE { $$.val = treecmp.MakeComparisonOperator(treecmp.NotILike) }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.
@@ -13360,6 +13773,7 @@ unrestricted_name:
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
   ABORT
+| ABSOLUTE
 | ACTION
 | ACCESS
 | ADD
@@ -13368,12 +13782,14 @@ unreserved_keyword:
 | AGGREGATE
 | ALTER
 | ALWAYS
+| ASENSITIVE
 | AT
 | ATTRIBUTE
 | AUTOMATIC
 | AVAILABILITY
 | BACKUP
 | BACKUPS
+| BACKWARD
 | BEFORE
 | BEGIN
 | BINARY
@@ -13394,6 +13810,7 @@ unreserved_keyword:
 | COMMITTED
 | COMPACT
 | COMPLETE
+| COMPLETIONS
 | CONFLICT
 | CONFIGURATION
 | CONFIGURATIONS
@@ -13458,6 +13875,7 @@ unreserved_keyword:
 | FORCE
 | FORCE_INDEX
 | FORCE_ZIGZAG
+| FORWARD
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -13475,6 +13893,7 @@ unreserved_keyword:
 | HASH
 | HIGH
 | HISTOGRAM
+| HOLD
 | HOUR
 | IDENTITY
 | IMMEDIATE
@@ -13483,7 +13902,7 @@ unreserved_keyword:
 | INCLUDING
 | INCREMENT
 | INCREMENTAL
-| INCREMENTAL_STORAGE
+| INCREMENTAL_LOCATION
 | INDEXES
 | INHERITS
 | INJECT
@@ -13542,6 +13961,7 @@ unreserved_keyword:
 | NAN
 | NEVER
 | NEW_DB_NAME
+| NEW_KMS
 | NEXT
 | NO
 | NORMAL
@@ -13560,12 +13980,15 @@ unreserved_keyword:
 | NOSQLLOGIN
 | NOVIEWACTIVITY
 | NOVIEWACTIVITYREDACTED
+| NOVIEWCLUSTERSETTING
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
+| INSENSITIVE
 | OF
 | OFF
 | OIDS
+| OLD_KMS
 | OPERATOR
 | OPT
 | OPTION
@@ -13595,6 +14018,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRESERVE
+| PRIOR
 | PRIORITY
 | PRIVILEGES
 | PUBLIC
@@ -13614,6 +14038,7 @@ unreserved_keyword:
 | REGIONAL
 | REGIONS
 | REINDEX
+| RELATIVE
 | RELEASE
 | RELOCATE
 | RENAME
@@ -13638,6 +14063,7 @@ unreserved_keyword:
 | RUNNING
 | SCHEDULE
 | SCHEDULES
+| SCROLL
 | SETTING
 | SETTINGS
 | STATUS
@@ -13671,6 +14097,7 @@ unreserved_keyword:
 | SQL
 | SQLLOGIN
 | START
+| STATE
 | STATEMENTS
 | STATISTICS
 | STDIN
@@ -13697,6 +14124,7 @@ unreserved_keyword:
 | TRACE
 | TRANSACTION
 | TRANSACTIONS
+| TRANSFER
 | TRIGGER
 | TRUNCATE
 | TRUSTED
@@ -13707,6 +14135,7 @@ unreserved_keyword:
 | UNCOMMITTED
 | UNKNOWN
 | UNLOGGED
+| UNSET
 | UNSPLIT
 | UNTIL
 | UPDATE
@@ -13720,6 +14149,7 @@ unreserved_keyword:
 | VIEW
 | VIEWACTIVITY
 | VIEWACTIVITYREDACTED
+| VIEWCLUSTERSETTING
 | VISIBLE
 | VOTERS
 | WITHIN

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/errors"
@@ -24,44 +25,47 @@ import (
 )
 
 // JobID is the ID of a job.
-type JobID int64
+type JobID = catpb.JobID
 
 // InvalidJobID is the zero value for JobID corresponding to no job.
-const InvalidJobID JobID = 0
-
-// SafeValue implements the redact.SafeValue interface.
-func (j JobID) SafeValue() {}
+const InvalidJobID = catpb.InvalidJobID
 
 // Details is a marker interface for job details proto structs.
 type Details interface{}
 
-var _ Details = BackupDetails{}
-var _ Details = RestoreDetails{}
-var _ Details = SchemaChangeDetails{}
-var _ Details = ChangefeedDetails{}
-var _ Details = CreateStatsDetails{}
-var _ Details = SchemaChangeGCDetails{}
-var _ Details = StreamIngestionDetails{}
-var _ Details = NewSchemaChangeDetails{}
-var _ Details = MigrationDetails{}
-var _ Details = AutoSpanConfigReconciliationDetails{}
-var _ Details = ImportDetails{}
-var _ Details = StreamReplicationDetails{}
+var (
+	_ Details = BackupDetails{}
+	_ Details = RestoreDetails{}
+	_ Details = SchemaChangeDetails{}
+	_ Details = ChangefeedDetails{}
+	_ Details = CreateStatsDetails{}
+	_ Details = SchemaChangeGCDetails{}
+	_ Details = StreamIngestionDetails{}
+	_ Details = NewSchemaChangeDetails{}
+	_ Details = MigrationDetails{}
+	_ Details = AutoSpanConfigReconciliationDetails{}
+	_ Details = ImportDetails{}
+	_ Details = StreamReplicationDetails{}
+	_ Details = RowLevelTTLDetails{}
+)
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
 
-var _ ProgressDetails = BackupProgress{}
-var _ ProgressDetails = RestoreProgress{}
-var _ ProgressDetails = SchemaChangeProgress{}
-var _ ProgressDetails = ChangefeedProgress{}
-var _ ProgressDetails = CreateStatsProgress{}
-var _ ProgressDetails = SchemaChangeGCProgress{}
-var _ ProgressDetails = StreamIngestionProgress{}
-var _ ProgressDetails = NewSchemaChangeProgress{}
-var _ ProgressDetails = MigrationProgress{}
-var _ ProgressDetails = AutoSpanConfigReconciliationDetails{}
-var _ ProgressDetails = StreamReplicationProgress{}
+var (
+	_ ProgressDetails = BackupProgress{}
+	_ ProgressDetails = RestoreProgress{}
+	_ ProgressDetails = SchemaChangeProgress{}
+	_ ProgressDetails = ChangefeedProgress{}
+	_ ProgressDetails = CreateStatsProgress{}
+	_ ProgressDetails = SchemaChangeGCProgress{}
+	_ ProgressDetails = StreamIngestionProgress{}
+	_ ProgressDetails = NewSchemaChangeProgress{}
+	_ ProgressDetails = MigrationProgress{}
+	_ ProgressDetails = AutoSpanConfigReconciliationDetails{}
+	_ ProgressDetails = StreamReplicationProgress{}
+	_ ProgressDetails = RowLevelTTLProgress{}
+)
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -123,6 +127,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeAutoSQLStatsCompaction
 	case *Payload_StreamReplication:
 		return TypeStreamReplication
+	case *Payload_RowLevelTTL:
+		return TypeRowLevelTTL
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -165,6 +171,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	case StreamReplicationProgress:
 		return &Progress_StreamReplication{StreamReplication: &d}
+	case RowLevelTTLProgress:
+		return &Progress_RowLevelTTL{RowLevelTTL: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -202,6 +210,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.AutoSQLStatsCompaction
 	case *Payload_StreamReplication:
 		return *d.StreamReplication
+	case *Payload_RowLevelTTL:
+		return *d.RowLevelTTL
 	default:
 		return nil
 	}
@@ -239,6 +249,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.AutoSQLStatsCompaction
 	case *Progress_StreamReplication:
 		return *d.StreamReplication
+	case *Progress_RowLevelTTL:
+		return *d.RowLevelTTL
 	default:
 		return nil
 	}
@@ -289,13 +301,15 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	case StreamReplicationDetails:
 		return &Payload_StreamReplication{StreamReplication: &d}
+	case RowLevelTTLDetails:
+		return &Payload_RowLevelTTL{RowLevelTTL: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
 }
 
 // ChangefeedTargets is a set of id targets with metadata.
-type ChangefeedTargets map[descpb.ID]ChangefeedTarget
+type ChangefeedTargets map[descpb.ID]ChangefeedTargetTable
 
 // SchemaChangeDetailsFormatVersion is the format version for
 // SchemaChangeDetails.
@@ -324,7 +338,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 16
+const NumJobTypes = 17
 
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
 // parameters from ChangefeedDetails.
@@ -338,6 +352,9 @@ func (m ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, 
 	}
 	return json.Marshal(m)
 }
+
+// DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.
+type DescRewriteMap map[descpb.ID]*DescriptorRewrite
 
 func init() {
 	if len(Type_name) != NumJobTypes {

@@ -17,11 +17,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -186,7 +188,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"
 		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
-			descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
+			catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -221,7 +223,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				ConstraintID:        1,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -237,7 +240,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				StoreColumnNames:    []string{"a"},
 				StoreColumnIDs:      []descpb.ColumnID{1},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				ConstraintID:        2,
 			},
 			[]descpb.IndexDescriptor{
 				{
@@ -248,7 +252,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeySuffixColumnIDs:  []descpb.ColumnID{2},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					ConstraintID:        1,
 				},
 			},
 		},
@@ -262,7 +267,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				ConstraintID:        1,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -276,7 +282,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				ConstraintID:        2,
 			},
 			[]descpb.IndexDescriptor{
 				{
@@ -287,7 +294,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					KeyColumnIDs:        []descpb.ColumnID{2},
 					KeySuffixColumnIDs:  []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					ConstraintID:        1,
 				},
 			},
 		},
@@ -301,7 +309,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				ConstraintID:        1,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -309,7 +318,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
 		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
-			descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
+			catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -344,9 +353,10 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 			"a INT UNIQUE WITHOUT INDEX, b INT PRIMARY KEY",
 			[]descpb.UniqueWithoutIndexConstraint{
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{1},
-					Name:      "unique_a",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{1},
+					Name:         "unique_a",
+					ConstraintID: 2,
 				},
 			},
 		},
@@ -354,9 +364,10 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 			"a INT, b INT, CONSTRAINT c UNIQUE WITHOUT INDEX (b), UNIQUE (a, b)",
 			[]descpb.UniqueWithoutIndexConstraint{
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{2},
-					Name:      "c",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{2},
+					Name:         "c",
+					ConstraintID: 3,
 				},
 			},
 		},
@@ -364,14 +375,16 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 			"a INT, b INT, c INT, UNIQUE WITHOUT INDEX (a, b), UNIQUE WITHOUT INDEX (c)",
 			[]descpb.UniqueWithoutIndexConstraint{
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{1, 2},
-					Name:      "unique_a_b",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{1, 2},
+					Name:         "unique_a_b",
+					ConstraintID: 2,
 				},
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{3},
-					Name:      "unique_c",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{3},
+					Name:         "unique_c",
+					ConstraintID: 3,
 				},
 			},
 		},
@@ -379,7 +392,7 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
 		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
-			descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
+			catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -398,13 +411,13 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
 	ctx := context.Background()
 	desc, err := CreateTestTableDescriptor(ctx, 1, 100, s,
-		descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
+		catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	desc.SetPrimaryIndex(descpb.IndexDescriptor{})
 
-	err = descbuilder.ValidateSelf(desc)
+	err = descbuilder.ValidateSelf(desc, clusterversion.TestingClusterVersion)
 	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}

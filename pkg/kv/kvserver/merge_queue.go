@@ -281,18 +281,14 @@ func (mq *mergeQueue) process(
 	}
 
 	{
-		store := lhsRepl.store
 		// AdminMerge errors if there is a learner or joint config on either
 		// side and AdminRelocateRange removes any on the range it operates on.
-		// For the sake of obviousness, just fix this all upfront.
+		// For the sake of obviousness, just fix this all upfront. The merge is
+		// performed by the LHS leaseholder, so it can easily do this for LHS.
+		// We deal with the RHS, whose leaseholder may be remote, further down.
 		var err error
-		lhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, lhsDesc)
-		if err != nil {
-			log.VEventf(ctx, 2, `%v`, err)
-			return false, err
-		}
-
-		rhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, rhsDesc)
+		lhsDesc, err =
+			lhsRepl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return false, err
@@ -311,21 +307,15 @@ func (mq *mergeQueue) process(
 				)
 		}
 	}
-	for i := range rightRepls {
-		if typ := rightRepls[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
-			return false,
-				errors.AssertionFailedf(
-					`cannot merge because rhs is either in a joint state or has learner replicas: %v`,
-					rightRepls,
-				)
-		}
-	}
 
 	// Range merges require that the set of stores that contain a replica for the
 	// RHS range be equal to the set of stores that contain a replica for the LHS
 	// range. The LHS and RHS ranges' leaseholders do not need to be co-located
-	// and types of the replicas (voting or non-voting) do not matter.
-	if !replicasCollocated(leftRepls, rightRepls) {
+	// and types of the replicas (voting or non-voting) do not matter. Even if
+	// replicas are collocated, the RHS might still be in a joint config, and
+	// calling AdminRelocateRange will fix this.
+	if !replicasCollocated(leftRepls, rightRepls) ||
+		rhsDesc.Replicas().InAtomicReplicationChange() {
 		// TODO(aayush): We enable merges to proceed even when LHS and/or RHS are in
 		// violation of their constraints (by adding or removing replicas on the RHS
 		// as needed). We could instead choose to check constraints conformance of
@@ -337,6 +327,10 @@ func (mq *mergeQueue) process(
 
 		// AdminRelocateRange moves the lease to the first target in the list, so
 		// sort the existing leaseholder there to leave it unchanged.
+		//
+		// TODO(aayush): Remove this logic to move lease to the front for 22.2,
+		// since 22.1 nodes support the new `transferLeaseToFirstVoter` parameter
+		// for `AdminRelocateRange`.
 		lease, _ := lhsRepl.GetLease()
 		for i := range voterTargets {
 			if t := voterTargets[i]; t.NodeID == lease.Replica.NodeID && t.StoreID == lease.Replica.StoreID {
@@ -353,9 +347,26 @@ func (mq *mergeQueue) process(
 			rhsDesc.StartKey,
 			voterTargets,
 			nonVoterTargets,
-			true, /* transferLeaseToFirstVoter */
+			false, /* transferLeaseToFirstVoter */
 		); err != nil {
 			return false, err
+		}
+
+		// Refresh RHS descriptor.
+		rhsDesc, _, _, _, err = mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
+		if err != nil {
+			return false, err
+		}
+		rightRepls = rhsDesc.Replicas().Descriptors()
+	}
+	for i := range rightRepls {
+		if typ := rightRepls[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+			log.Infof(ctx, "RHS Type: %s", typ)
+			return false,
+				errors.AssertionFailedf(
+					`cannot merge because rhs is either in a joint state or has learner replicas: %v`,
+					rightRepls,
+				)
 		}
 	}
 

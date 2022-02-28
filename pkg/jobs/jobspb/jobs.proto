@@ -20,7 +20,6 @@ import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
-import "sql/schemachanger/scpb/scpb.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -219,27 +218,31 @@ message BackupProgress {
 
 }
 
-message RestoreDetails {
-  message DescriptorRewrite {
-    uint32 id = 1 [
-      (gogoproto.customname) = "ID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    uint32 parent_id = 2 [
-      (gogoproto.customname) = "ParentID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    uint32 parent_schema_id = 5 [
-      (gogoproto.customname) = "ParentSchemaID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    // ToExisting represents whether this descriptor is being remapped to a
-    // descriptor that already exists in the cluster.
-    bool to_existing = 3;
+// DescriptorRewrite specifies a remapping from one descriptor ID to another for
+// use in rewritting descriptors themselves or things that reference them such 
+// as is done during RESTORE or IMPORT.
+message DescriptorRewrite {
+  uint32 id = 1 [
+    (gogoproto.customname) = "ID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  uint32 parent_id = 2 [
+    (gogoproto.customname) = "ParentID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  uint32 parent_schema_id = 5 [
+    (gogoproto.customname) = "ParentSchemaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  // ToExisting represents whether this descriptor is being remapped to a
+  // descriptor that already exists in the cluster.
+  bool to_existing = 3;
 
-    // NewDBName represents the new name given to a restored database during a database restore
-    string new_db_name = 4 [(gogoproto.customname) = "NewDBName"];
-  }
+  // NewDBName represents the new name given to a restored database during a database restore
+  string new_db_name = 4 [(gogoproto.customname) = "NewDBName"];
+}
+
+message RestoreDetails {
   message BackupLocalityInfo {
     map<string, string> uris_by_original_locality_kv = 1 [(gogoproto.customname) = "URIsByOriginalLocalityKV"];
   }
@@ -318,8 +321,13 @@ message RestoreDetails {
 
   // DebugPauseOn describes the events that the job should pause itself on for debugging purposes.
   string debug_pause_on = 20;
+  bool restore_system_users = 22;
 
-  // NEXT ID: 22.
+  // PreRewrittenTenantID is the ID of tenants[0] in the backup, aka its old ID;
+  // it is only valid to set this if len(tenants) == 1.
+  roachpb.TenantID pre_rewrite_tenant_id = 23; 
+
+  // NEXT ID: 24.
 }
 
 message RestoreProgress {
@@ -470,14 +478,14 @@ message TypeSchemaChangeProgress {
 
 }
 
-// TypeSchemaChangeDetails is the job detail information for the new schema change job.
+// NewSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
-
-  cockroach.sql.schemachanger.scpb.TargetState target_state = 5 [(gogoproto.nullable) = false];
 
   // BackfillProgress stores the progress for index backfills which may
   // be ongoing.
   repeated BackfillProgress backfill_progress = 4 [(gogoproto.nullable) = false];
+
+  reserved 1, 2, 3, 5;
 }
 
 // BackfillProgress is used to track backfill progress in the declarative
@@ -519,10 +527,7 @@ message BackfillProgress {
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {
-
-  // Current tracks the current state of elements in the same order as in the job
-  // details.
-  repeated cockroach.sql.schemachanger.scpb.Status current = 1;
+  reserved 1;
 }
 
 // AutoSpanConfigReconciliationDetails is the job detail information for the
@@ -695,31 +700,42 @@ message SchemaChangeGCProgress {
   bool ranges_unsplit_done = 4;
 }
 
-message ChangefeedTarget {
+message ChangefeedTargetTable {
   string statement_time_name = 1;
+}
 
-  // TODO(dan): Add partition name, ranges of primary keys.
+message ChangefeedTargetSpecification {
+  enum TargetType {
+    // The primary index of the table with table_id descriptor id.
+    // Fail if there are ever multiple column families.
+    PRIMARY_FAMILY_ONLY = 0;
+
+    // The primary index of the table with table_id descriptor id.
+    // Each column family gets its own record schema and events.
+    EACH_FAMILY = 1;
+
+    // Column family family_name of table table_id.
+    COLUMN_FAMILY = 2;
+
+    // Add TargetTypes for database, secondary index, etc. when implemented
+
+  }
+
+  TargetType type = 1;
+  uint32 table_id = 2 [(gogoproto.customname) = "TableID",
+  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  string family_name = 3;
+  string statement_time_name = 4;
+
 }
 
 message ChangefeedDetails {
-  // Targets contains the user-specified tables and databases to watch, mapping
-  // the descriptor id to the name at the time of changefeed creating. There is
-  // a 1:1 correspondence between unique targets in the original sql query and
-  // entries in this map.
-  //
-  // - A watched table is stored here under its table id
-  // - TODO(dan): A watched database is stored here under its database id
-  // - TODO(dan): A db.* expansion is treated identically to watching the
-  //   database
-  //
-  // Note that the TODOs mean this field currently is guaranteed to only hold
-  // table ids and a cluster version check will be added when this changes.
-  //
+  // Targets contains the user-specified tables to watch, mapping
+  // the descriptor id to the name at the time of changefeed creation.
   // The names at resolution time are included so that table and database
-  // renames can be detected. They are also used to construct an error message
-  // if the descriptor id no longer exists when the jobs is unpaused (which can
-  // happen if it was dropped or truncated).
-  map<uint32, ChangefeedTarget> targets = 6 [
+  // renames can be tolerated and derived topic names remain immutable.
+  //
+  map<uint32, ChangefeedTargetTable> tables = 6 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
     (gogoproto.casttype) = "ChangefeedTargets",
     (gogoproto.nullable) = false
@@ -727,8 +743,10 @@ message ChangefeedDetails {
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+  repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
   reserved 1, 2, 5;
+  reserved "targets";
 }
 
 message ResolvedSpan {
@@ -762,6 +780,12 @@ message ResolvedSpan {
 
 message ResolvedSpans {
   repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
+
+  message Stats {
+    uint64 recent_kv_count = 1;
+  }
+
+  Stats stats = 2 [(gogoproto.nullable) = false];
 }
 
 message ChangefeedProgress {
@@ -846,6 +870,17 @@ message AutoSQLStatsCompactionDetails {
 message AutoSQLStatsCompactionProgress {
 }
 
+message RowLevelTTLDetails {
+  uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  google.protobuf.Timestamp cutoff = 2 [(gogoproto.nullable)=false, (gogoproto.stdtime) = true];
+}
+
+message RowLevelTTLProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -892,6 +927,7 @@ message Payload {
     AutoSpanConfigReconciliationDetails autoSpanConfigReconciliation = 27;
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
     StreamReplicationDetails streamReplication = 33;
+    RowLevelTTLDetails row_level_ttl = 34 [(gogoproto.customname)="RowLevelTTL"];
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -929,6 +965,7 @@ message Progress {
     AutoSpanConfigReconciliationProgress AutoSpanConfigReconciliation = 22;
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
     StreamReplicationProgress streamReplication = 24;
+    RowLevelTTLProgress row_level_ttl = 25 [(gogoproto.customname)="RowLevelTTL"];
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -956,6 +993,7 @@ enum Type {
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
   STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
+  ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
 }
 
 message Job {

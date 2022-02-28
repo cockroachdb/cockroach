@@ -148,10 +148,12 @@ func usesAtomicReplicationChange(ops []roachpb.ReplicationChange) bool {
 	// 4. Voter swapped with non-voter (ADD_VOTER, REMOVE_NON_VOTER,
 	// ADD_NON_VOTER, REMOVE_VOTER)
 	if len(ops) >= 2 {
+		// Either a simple voter rebalance, or its a non-voter promotion.
 		if ops[0].ChangeType == roachpb.ADD_VOTER && ops[1].ChangeType.IsRemoval() {
 			return true
 		}
 	}
+	// Demotion of a voter.
 	if len(ops) == 2 &&
 		ops[0].ChangeType == roachpb.ADD_NON_VOTER && ops[1].ChangeType == roachpb.REMOVE_VOTER {
 		return true
@@ -246,10 +248,9 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 
 	// s5 (LH) ---> s3 (LH)
-	// Lateral movement while at replication factor one. In this case atomic
-	// replication changes cannot be used; we add-then-remove instead.
+	// Lateral movement while at replication factor one.
 	{
-		requireNumAtomic(0, 2, func() {
+		requireNumAtomic(1, 0, func() {
 			relocateAndCheck(t, tc, k, tc.Targets(2), nil /* nonVoterTargets */)
 		})
 	}

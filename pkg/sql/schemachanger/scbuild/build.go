@@ -13,8 +13,13 @@ package scbuild
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +32,7 @@ func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
 ) (_ scpb.CurrentState, err error) {
 	initial = initial.DeepCopy()
-	bs := newBuilderState(initial)
+	bs := newBuilderState(ctx, dependencies, initial)
 	els := newEventLogState(dependencies, initial, n)
 	// TODO(fqazi): The optimizer can end up already modifying the statement above
 	// to fully resolve names. We need to take this into account for CTAS/CREATE
@@ -58,14 +63,19 @@ func Build(
 	els.statements[len(els.statements)-1].RedactedStatement =
 		string(els.astFormatter.FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	ts := scpb.TargetState{
-		Targets:       make([]scpb.Target, len(bs.output)),
+		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
 		Authorization: els.authorization,
 	}
-	current := make([]scpb.Status, len(bs.output))
-	for i, e := range bs.output {
-		ts.Targets[i] = scpb.MakeTarget(e.targetStatus, e.element, &e.metadata)
-		current[i] = e.currentStatus
+	current := make([]scpb.Status, 0, len(bs.output))
+	for _, e := range bs.output {
+		if e.metadata.Size() == 0 {
+			// Exclude targets which weren't explicitly set.
+			// Explicity-set targets have non-zero values in the target metadata.
+			continue
+		}
+		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
+		current = append(current, e.current)
 	}
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
 }
@@ -74,47 +84,70 @@ func Build(
 // These are defined in the scbuildstmts package instead of scbuild to avoid
 // circular import dependencies.
 type (
-	// Dependencies contains all the dependencies required by the builder.
-	Dependencies = scbuildstmt.Dependencies
-
-	// CatalogReader contains all catalog operations required by the builder.
-	CatalogReader = scbuildstmt.CatalogReader
-
-	// AuthorizationAccessor contains all privilege checking operations required
-	// by the builder.
-	AuthorizationAccessor = scbuildstmt.AuthorizationAccessor
-
-	// AstFormatter contains operations for formatting out AST nodes into
-	// SQL statement text.
-	AstFormatter = scbuildstmt.AstFormatter
-
 	// FeatureChecker contains operations for checking if a schema change
 	// feature is allowed by the database administrator.
 	FeatureChecker = scbuildstmt.SchemaFeatureChecker
 )
 
 type elementState struct {
-	element                     scpb.Element
-	targetStatus, currentStatus scpb.Status
-	metadata                    scpb.TargetMetadata
+	element  scpb.Element
+	current  scpb.Status
+	target   scpb.TargetStatus
+	metadata scpb.TargetMetadata
 }
 
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
 type builderState struct {
+	// Dependencies
+	ctx             context.Context
+	clusterSettings *cluster.Settings
+	evalCtx         *tree.EvalContext
+	semaCtx         *tree.SemaContext
+	cr              CatalogReader
+	auth            AuthorizationAccessor
+	createPartCCL   CreatePartitioningCCLCallback
+	hasAdmin        bool
+
 	// output contains the schema change targets that have been planned so far.
 	output []elementState
+
+	descCache   map[catid.DescID]*cachedDesc
+	tempSchemas map[catid.DescID]catalog.SchemaDescriptor
+}
+
+type cachedDesc struct {
+	desc         catalog.Descriptor
+	prefix       tree.ObjectNamePrefix
+	backrefs     catalog.DescriptorIDSet
+	ers          *elementResultSet
+	privileges   map[privilege.Kind]error
+	hasOwnership bool
 }
 
 // newBuilderState constructs a builderState.
-func newBuilderState(initial scpb.CurrentState) *builderState {
-	bs := builderState{output: make([]elementState, len(initial.Current))}
+func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentState) *builderState {
+	bs := builderState{
+		ctx:             ctx,
+		clusterSettings: d.ClusterSettings(),
+		evalCtx:         newEvalCtx(ctx, d),
+		semaCtx:         newSemaCtx(d),
+		cr:              d.CatalogReader(),
+		auth:            d.AuthorizationAccessor(),
+		createPartCCL:   d.IndexPartitioningCCLCallback(),
+		output:          make([]elementState, 0, len(initial.Current)),
+		descCache:       make(map[catid.DescID]*cachedDesc),
+		tempSchemas:     make(map[catid.DescID]catalog.SchemaDescriptor),
+	}
+	var err error
+	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)
+	if err != nil {
+		panic(err)
+	}
+	for _, t := range initial.TargetState.Targets {
+		bs.ensureDescriptor(screl.GetDescID(t.Element()))
+	}
 	for i, t := range initial.TargetState.Targets {
-		bs.output[i] = elementState{
-			element:       t.Element(),
-			targetStatus:  t.TargetStatus,
-			currentStatus: initial.Current[i],
-			metadata:      t.Metadata,
-		}
+		bs.Ensure(initial.Current[i], scpb.AsTargetStatus(t.TargetStatus), t.Element(), t.Metadata)
 	}
 	return &bs
 }
@@ -142,9 +175,7 @@ type eventLogState struct {
 }
 
 // newEventLogState constructs an eventLogState.
-func newEventLogState(
-	d scbuildstmt.Dependencies, initial scpb.CurrentState, n tree.Statement,
-) *eventLogState {
+func newEventLogState(d Dependencies, initial scpb.CurrentState, n tree.Statement) *eventLogState {
 	stmts := initial.Statements
 	els := eventLogState{
 		statements: append(stmts, scpb.Statement{
@@ -172,7 +203,7 @@ func newEventLogState(
 // the builderState backing struct to avoid leaking the latter's internal state.
 type buildCtx struct {
 	context.Context
-	scbuildstmt.Dependencies
+	Dependencies
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
@@ -180,6 +211,16 @@ type buildCtx struct {
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
+
+// Add implements the scbuildstmt.BuildCtx interface.
+func (b buildCtx) Add(element scpb.Element) {
+	b.Ensure(scpb.Status_UNKNOWN, scpb.ToPublic, element, b.TargetMetadata())
+}
+
+// Drop implements the scbuildstmt.BuildCtx interface.
+func (b buildCtx) Drop(element scpb.Element) {
+	b.Ensure(scpb.Status_UNKNOWN, scpb.ToAbsent, element, b.TargetMetadata())
+}
 
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {

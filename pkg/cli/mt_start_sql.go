@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -75,6 +74,9 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, drainSignals...)
+
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -120,7 +122,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	initGEOS(ctx)
 
-	sqlServer, _, _, err := server.StartTenant(
+	sqlServer, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
@@ -164,16 +166,16 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	}
 
 	// TODO(tbg): make the other goodies in `./cockroach start` reusable, such as
-	// logging to files, periodic memory output, heap and goroutine dumps, debug
-	// server, graceful drain. Then use them here.
+	// logging to files, periodic memory output, heap and goroutine dumps.
+	// Then use them here.
 
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, drainSignals...)
-	select {
-	case sig := <-ch:
-		log.Flush()
-		return errors.Newf("received signal %v", sig)
-	case <-stopper.ShouldQuiesce():
-		return nil
-	}
+	errChan := make(chan error, 1)
+	var serverStatusMu serverStatus
+	serverStatusMu.started = true
+
+	return waitForShutdown(
+		func() serverShutdownInterface { return sqlServer },
+		stopper,
+		errChan, signalCh,
+		&serverStatusMu)
 }

@@ -330,6 +330,11 @@ message StoreCapacity {
   // by ranges in the store. The stat is tracked over the time period defined
   // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
+  // read_amplification tracks the current read amplification in the store.
+  // TODO(kvoli): Use of this field will need to be version-gated, to avoid
+  // instances where overlapping node-binary versions within a cluster result
+  // in this this field missing.
+  optional int64 read_amplification = 11 [(gogoproto.nullable) = false];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
@@ -382,6 +387,10 @@ message NodeDescriptor {
   // is also used to accept SQL connections.
   optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "SQLAddress"];
+  // The HTTP address. If empty, will prevent nodes from proxying HTTP
+  // requests to each other.
+  optional util.UnresolvedAddr http_address = 11 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "HTTPAddress"];
 }
 
 // LocalityAddress holds the private address accessible only from other nodes

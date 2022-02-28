@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -46,9 +47,9 @@ func (n *controlSchedulesNode) FastPathResults() (int, bool) {
 	return n.numRows, true
 }
 
-// jobSchedulerEnv returns JobSchedulerEnv.
-func jobSchedulerEnv(params runParams) scheduledjobs.JobSchedulerEnv {
-	if knobs, ok := params.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+// JobSchedulerEnv returns JobSchedulerEnv.
+func JobSchedulerEnv(execCfg *ExecutorConfig) scheduledjobs.JobSchedulerEnv {
+	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
 			return knobs.JobSchedulerEnv
 		}
@@ -58,7 +59,7 @@ func jobSchedulerEnv(params runParams) scheduledjobs.JobSchedulerEnv {
 
 // loadSchedule loads schedule information.
 func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, error) {
-	env := jobSchedulerEnv(params)
+	env := JobSchedulerEnv(params.ExecCfg())
 	schedule := jobs.NewScheduledJob(env)
 
 	// Load schedule expression.  This is needed for resume command, but we
@@ -96,13 +97,15 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 	)
 }
 
-// deleteSchedule deletes specified schedule.
-func deleteSchedule(params runParams, scheduleID int64) error {
-	env := jobSchedulerEnv(params)
-	_, err := params.ExecCfg().InternalExecutor.ExecEx(
-		params.ctx,
+// DeleteSchedule deletes specified schedule.
+func DeleteSchedule(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, scheduleID int64,
+) error {
+	env := JobSchedulerEnv(execCfg)
+	_, err := execCfg.InternalExecutor.ExecEx(
+		ctx,
 		"delete-schedule",
-		params.EvalContext().Txn,
+		txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
@@ -161,7 +164,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
 			}
-			err = deleteSchedule(params, schedule.ScheduleID())
+			err = DeleteSchedule(params.ctx, params.ExecCfg(), params.p.txn, schedule.ScheduleID())
 		default:
 			err = errors.AssertionFailedf("unhandled command %s", n.command)
 		}

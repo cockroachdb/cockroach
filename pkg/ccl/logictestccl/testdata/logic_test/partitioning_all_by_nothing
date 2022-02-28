@@ -3,7 +3,7 @@
 statement ok
 SET experimental_enable_implicit_column_partitioning = true
 
-statement error cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition
+statement error cannot define PARTITION BY on an index if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition
 CREATE TABLE partition_all_by_nothing_with_partition (
   pk INT PRIMARY KEY,
   a INT,

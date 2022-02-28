@@ -25,8 +25,8 @@ import (
 // TestingKnobs groups testing knobs for the Server.
 type TestingKnobs struct {
 	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
-	// automatic version upgrade mechanism.
-	DisableAutomaticVersionUpgrade int32 // accessed atomically
+	// automatic version upgrade mechanism (until the channel is closed).
+	DisableAutomaticVersionUpgrade chan struct{}
 	// DefaultZoneConfigOverride, if set, overrides the default zone config
 	// defined in `pkg/config/zone.go`.
 	DefaultZoneConfigOverride *zonepb.ZoneConfig

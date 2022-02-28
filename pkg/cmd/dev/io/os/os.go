@@ -19,16 +19,31 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recording"
+	"github.com/irfansharif/recorder"
 )
 
-// OS is a convenience wrapper around the stdlib os package. It lets us
-// mock operating system calls in tests.
+// OS is a convenience wrapper around the stdlib os package. It lets us:
+//
+// (a) mock operating system calls in tests, and
+// (b) capture the set of calls that take place during execution
+//
+// We achieve (a) by embedding a Recorder, and either replaying from it if
+// configured to do so, or "doing the real thing" and recording the fact into
+// the Recorder for future playback.
+//
+// For (b), each operation is logged (if configured to do so). These messages
+// can be captured by the caller and compared against what is expected.
 type OS struct {
+	dir    string
 	logger *log.Logger
-	*recording.Recording
+	*recorder.Recorder
+
+	knobs struct { // testing knobs
+		dryrun bool
+	}
 }
 
 // New constructs a new OS handle, configured with the provided options.
@@ -62,10 +77,24 @@ func WithLogger(logger *log.Logger) func(o *OS) {
 	}
 }
 
-// WithRecording configures OS to use the provided recording.
-func WithRecording(r *recording.Recording) func(o *OS) {
+// WithRecorder configures OS to use the provided recorder.
+func WithRecorder(r *recorder.Recorder) func(o *OS) {
 	return func(o *OS) {
-		o.Recording = r
+		o.Recorder = r
+	}
+}
+
+// WithWorkingDir configures OS to use the provided working directory.
+func WithWorkingDir(dir string) func(o *OS) {
+	return func(o *OS) {
+		o.dir = dir
+	}
+}
+
+// WithDryrun configures OS to run in dryrun mode.
+func WithDryrun() func(e *OS) {
+	return func(e *OS) {
+		e.knobs.dryrun = true
 	}
 }
 
@@ -75,15 +104,9 @@ func (o *OS) MkdirAll(path string) error {
 	command := fmt.Sprintf("mkdir %s", path)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.MkdirAll(path, 0755)
+	})
 	return err
 }
 
@@ -92,15 +115,12 @@ func (o *OS) Remove(path string) error {
 	command := fmt.Sprintf("rm %s", path)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
+	_, err := o.Next(command, func() (output string, err error) {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return err
+			return "", err
 		}
-		return nil
-	}
-
-	_, err := o.replay(command)
+		return "", nil
+	})
 	return err
 }
 
@@ -110,15 +130,9 @@ func (o *OS) Symlink(to, from string) error {
 	command := fmt.Sprintf("ln -s %s %s", to, from)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
-		if err := os.Symlink(to, from); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.Symlink(to, from)
+	})
 	return err
 }
 
@@ -128,13 +142,13 @@ func (o OS) Getenv(key string) string {
 	command := fmt.Sprintf("getenv %s", key)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
-		return os.Getenv(key)
+	output, err := o.Next(command, func() (output string, err error) {
+		return os.Getenv(key), nil
+	})
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
-
-	ret, _ := o.replay(command)
-	return ret
+	return output
 }
 
 // Setenv wraps around os.Setenv, which sets the value of the environment
@@ -143,12 +157,9 @@ func (o *OS) Setenv(key, value string) error {
 	command := fmt.Sprintf("export %s=%s", key, value)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
-		return os.Setenv(key, value)
-	}
-
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.Setenv(key, value)
+	})
 	return err
 }
 
@@ -158,13 +169,9 @@ func (o *OS) Readlink(filename string) (string, error) {
 	command := fmt.Sprintf("readlink %s", filename)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
+	return o.Next(command, func() (output string, err error) {
 		return os.Readlink(filename)
-	}
-
-	ret, err := o.replay(command)
-	return ret, err
+	})
 }
 
 // IsDir wraps around os.Stat, which returns the os.FileInfo of the named
@@ -174,17 +181,18 @@ func (o *OS) IsDir(dirname string) (bool, error) {
 	command := fmt.Sprintf("find %s -type d", dirname)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
+	output, err := o.Next(command, func() (output string, err error) {
 		// Do the real thing.
 		stat, err := os.Stat(dirname)
 		if err != nil {
-			return false, err
+			return "", err
 		}
-		return stat.IsDir(), nil
+		return strconv.FormatBool(stat.IsDir()), nil
+	})
+	if err != nil {
+		return false, err
 	}
-
-	res, err := o.replay(command)
-	return err == nil && res != "", err
+	return strconv.ParseBool(strings.TrimSpace(output))
 }
 
 // ReadFile wraps around ioutil.ReadFile, reading a file from disk and
@@ -193,31 +201,31 @@ func (o *OS) ReadFile(filename string) (string, error) {
 	command := fmt.Sprintf("cat %s", filename)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
+	return o.Next(command, func() (output string, err error) {
 		buf, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return "", err
 		}
 		return string(buf), nil
-	}
-
-	ret, err := o.replay(command)
-	return ret, err
+	})
 }
 
 // WriteFile wraps around ioutil.ReadFile, writing the given contents to
 // the given file on disk.
 func (o *OS) WriteFile(filename, contents string) error {
-	command := fmt.Sprintf("echo %s > %s", strings.TrimSpace(contents), filename)
+	var command string
+	{
+		commandContents := contents
+		if len(commandContents) > 10 {
+			commandContents = commandContents[:10] // keeps the logging manageable
+		}
+		command = fmt.Sprintf("echo %q > %s", strings.TrimSpace(commandContents), filename)
+	}
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
-		return ioutil.WriteFile(filename, []byte(contents), 0666)
-	}
-
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", ioutil.WriteFile(filename, []byte(contents), 0666)
+	})
 	return err
 }
 
@@ -231,42 +239,39 @@ func (o *OS) CopyFile(src, dst string) error {
 	command := fmt.Sprintf("cp %s %s", src, dst)
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
+	_, err := o.Next(command, func() (output string, err error) {
 		srcFile, err := os.Open(src)
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer func() { _ = srcFile.Close() }()
 		originalDstFile, err := os.Open(dst)
 		if err != nil && !os.IsNotExist(err) {
-			return err
+			return "", err
 		} else if err == nil {
 			defer func() { _ = originalDstFile.Close() }()
 			srcInfo, err := srcFile.Stat()
 			if err != nil {
-				return err
+				return "", err
 			}
 			dstInfo, err := originalDstFile.Stat()
 			if err != nil {
-				return err
+				return "", err
 			}
 			// If src points to the same file as dst, there's
 			// nothing to be done.
 			if os.SameFile(srcInfo, dstInfo) {
-				return nil
+				return "", nil
 			}
 		}
 		dstFile, err := os.Create(dst)
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer func() { _ = dstFile.Close() }()
 		_, err = io.Copy(dstFile, srcFile)
-		return err
-	}
-
-	_, err := o.replay(command)
+		return "", err
+	})
 	return err
 }
 
@@ -276,12 +281,11 @@ func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 	command := fmt.Sprintf("find %s -name *%s", root, suffix)
 	o.logger.Print(command)
 
-	var ret []string
-	if o.Recording == nil {
-		// Do the real thing.
-		err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
-			// If there's an error walking the tree, throw it away -- there's nothing
-			// interesting we can do with it.
+	output, err := o.Next(command, func() (output string, err error) {
+		var ret []string
+		if err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
+			// If there's an error walking the tree, throw it away -- there's
+			// nothing interesting we can do with it.
 			if err != nil || info.IsDir() {
 				//nolint:returnerrcheck
 				return nil
@@ -290,18 +294,16 @@ func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 				ret = append(ret, path)
 			}
 			return nil
-		})
-		if err != nil {
-			return nil, err
+		}); err != nil {
+			return "", err
 		}
-		return ret, nil
-	}
 
-	lines, err := o.replay(command)
+		return fmt.Sprintf("%s\n", strings.Join(ret, "\n")), nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return strings.Split(strings.TrimSpace(lines), "\n"), nil
+	return strings.Split(strings.TrimSpace(output), "\n"), nil
 }
 
 // CurrentUserAndGroup returns the user and effective group.
@@ -309,41 +311,26 @@ func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
 	command := "id"
 	o.logger.Print(command)
 
-	if o.Recording == nil {
-		// Do the real thing.
-		var currentUser *user.User
-		currentUser, err = user.Current()
+	output, err := o.Next(command, func() (output string, err error) {
+		current, err := user.Current()
 		if err != nil {
-			return
+			return "", err
 		}
-		uid = currentUser.Uid
-		gid = currentUser.Gid
-		return
+		return fmt.Sprintf("%s:%s", current.Uid, current.Gid), nil
+	})
+	if err != nil {
+		return "", "", err
 	}
 
-	output, err := o.replay(command)
-	if err != nil {
-		return
-	}
 	ids := strings.Split(strings.TrimSpace(output), ":")
 	return ids[0], ids[1], nil
 }
 
-// replay replays the specified command, erroring out if it's mismatched with
-// what the recording plays back next. It returns the recorded output.
-func (o *OS) replay(command string) (output string, err error) {
-	found, err := o.Recording.Next(func(op recording.Operation) error {
-		if op.Command != command {
-			return fmt.Errorf("expected %q, got %q", op.Command, command)
-		}
-		output = op.Output
-		return nil
-	})
-	if err != nil {
-		return "", err
+// Next is a thin interceptor for all os activity, running them through
+// testing knobs first.
+func (o *OS) Next(command string, f func() (output string, err error)) (string, error) {
+	if o.knobs.dryrun {
+		return "", nil
 	}
-	if !found {
-		return "", fmt.Errorf("recording for %q not found", command)
-	}
-	return output, nil
+	return o.Recorder.Next(command, f)
 }

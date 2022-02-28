@@ -949,6 +949,12 @@ func (e *WriteTooOldError) Type() ErrorDetailType {
 	return WriteTooOldErrType
 }
 
+// RetryTimestamp returns the timestamp that should be used to retry an
+// operation after encountering a WriteTooOldError.
+func (e *WriteTooOldError) RetryTimestamp() hlc.Timestamp {
+	return e.ActualTimestamp
+}
+
 var _ ErrorDetailInterface = &WriteTooOldError{}
 var _ transactionRestartError = &WriteTooOldError{}
 
@@ -1007,6 +1013,39 @@ func (e *ReadWithinUncertaintyIntervalError) Type() ErrorDetailType {
 
 func (*ReadWithinUncertaintyIntervalError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
+}
+
+// RetryTimestamp returns the timestamp that should be used to retry an
+// operation after encountering a ReadWithinUncertaintyIntervalError.
+func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
+	// If the reader encountered a newer write within the uncertainty interval,
+	// we advance the txn's timestamp just past the uncertain value's timestamp.
+	// This ensures that we read above the uncertain value on a retry.
+	ts := e.ExistingTimestamp.Next()
+	// In addition to advancing past the uncertainty value's timestamp, we also
+	// advance the txn's timestamp up to the local uncertainty limit on the node
+	// which hit the error. This ensures that no future read after the retry on
+	// this node (ignoring lease complications in ComputeLocalUncertaintyLimit
+	// and values with synthetic timestamps) will throw an uncertainty error,
+	// even when reading other keys.
+	//
+	// Note that if the request was not able to establish a local uncertainty
+	// limit due to a missing observed timestamp (for instance, if the request
+	// was evaluated on a follower replica and the txn had never visited the
+	// leaseholder), then LocalUncertaintyLimit will be empty and the Forward
+	// will be a no-op. In this case, we could advance all the way past the
+	// global uncertainty limit, but this time would likely be in the future, so
+	// this would necessitate a commit-wait period after committing.
+	//
+	// In general, we expect the local uncertainty limit, if set, to be above
+	// the uncertainty value's timestamp. So we expect this Forward to advance
+	// ts. However, this is not always the case. The one exception is if the
+	// uncertain value had a synthetic timestamp, so it was compared against the
+	// global uncertainty limit to determine uncertainty (see IsUncertain). In
+	// such cases, we're ok advancing just past the value's timestamp. Either
+	// way, we won't see the same value in our uncertainty interval on a retry.
+	ts.Forward(e.LocalUncertaintyLimit)
+	return ts
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}

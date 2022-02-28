@@ -36,10 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -660,7 +660,10 @@ func newOptTable(
 		zone:     tblZone,
 	}
 
-	// First, determine how many columns we will potentially need.
+	// Determine the primary key columns.
+	pkCols := desc.GetPrimaryIndex().CollectKeyColumnIDs()
+
+	// Determine how many columns we will potentially need.
 	cols := ot.desc.DeletableColumns()
 	numCols := len(ot.desc.AllColumns())
 	// Add one for each inverted index column.
@@ -690,7 +693,10 @@ func newOptTable(
 			kind = cat.DeleteOnly
 			visibility = cat.Inaccessible
 		}
-		if !col.IsVirtual() {
+		// Primary key columns that are virtual in the descriptor are considered
+		// "stored" from the perspective of the optimizer because they are
+		// written to the primary index and all secondary indexes.
+		if !col.IsVirtual() || pkCols.Contains(col.GetID()) {
 			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
@@ -832,31 +838,31 @@ func newOptTable(
 			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedColOrd */)
 		}
 
-		// Add unique constraints for implicitly partitioned unique indexes.
-		if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 {
-			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-				name:         idx.GetName(),
-				table:        ot.ID(),
-				columns:      idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
-				withoutIndex: true,
-				predicate:    idx.GetPredicate(),
-				// TODO(rytaft): will we ever support an unvalidated unique constraint
-				// here?
-				validity: descpb.ConstraintValidity_Validated,
-			})
-		}
-
-		// Add unique constraint for hash sharded indexes.
-		if idx.IsUnique() && idx.IsSharded() {
-			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-				name:                               idx.GetName(),
-				table:                              ot.ID(),
-				columns:                            idx.IndexDesc().KeyColumnIDs[1:],
-				withoutIndex:                       true,
-				predicate:                          idx.GetPredicate(),
-				validity:                           descpb.ConstraintValidity_Validated,
-				uniquenessGuaranteedByAnotherIndex: true,
-			})
+		if idx.IsUnique() {
+			if idx.GetPartitioning().NumImplicitColumns() > 0 {
+				// Add unique constraints for implicitly partitioned unique indexes.
+				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+					name:         idx.GetName(),
+					table:        ot.ID(),
+					columns:      idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex: true,
+					predicate:    idx.GetPredicate(),
+					// TODO(rytaft): will we ever support an unvalidated unique constraint
+					// here?
+					validity: descpb.ConstraintValidity_Validated,
+				})
+			} else if idx.IsSharded() {
+				// Add unique constraint for hash sharded indexes.
+				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+					name:                               idx.GetName(),
+					table:                              ot.ID(),
+					columns:                            idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:                       true,
+					predicate:                          idx.GetPredicate(),
+					validity:                           descpb.ConstraintValidity_Validated,
+					uniquenessGuaranteedByAnotherIndex: true,
+				})
+			}
 		}
 	}
 
@@ -909,7 +915,7 @@ func newOptTable(
 			case types.EnumFamily:
 				// We synthesize an (x IN (v1, v2, v3...)) check for enum types.
 				expr := &tree.ComparisonExpr{
-					Operator: tree.MakeComparisonOperator(tree.In),
+					Operator: treecmp.MakeComparisonOperator(treecmp.In),
 					Left:     &tree.ColumnItem{ColumnName: col.ColName()},
 					Right:    tree.NewDTuple(colType, tree.MakeAllDEnumsInType(colType)...),
 				}
@@ -1237,15 +1243,11 @@ func (oi *optIndex) init(
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
 		oi.storedCols = make([]descpb.ColumnID, 0, tab.ColumnCount()-idx.NumKeyColumns())
-		var pkCols util.FastIntSet
-		for i := 0; i < idx.NumKeyColumns(); i++ {
-			id := idx.GetKeyColumnID(i)
-			pkCols.Add(int(id))
-		}
+		pkCols := idx.CollectKeyColumnIDs()
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
 			if col := tab.Column(i); col.Kind() != cat.Inverted && !col.IsVirtualComputed() {
-				if id := col.ColID(); !pkCols.Contains(int(id)) {
-					oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
+				if id := descpb.ColumnID(col.ColID()); !pkCols.Contains(id) {
+					oi.storedCols = append(oi.storedCols, id)
 				}
 			}
 		}
@@ -1444,9 +1446,13 @@ func (oi *optIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (oi *optIndex) ImplicitPartitioningColumnCount() int {
-	return oi.idx.GetPartitioning().NumImplicitColumns()
+// ImplicitColumnCount is part of the cat.Index interface.
+func (oi *optIndex) ImplicitColumnCount() int {
+	implicitColCnt := oi.idx.GetPartitioning().NumImplicitColumns()
+	if oi.idx.IsSharded() {
+		implicitColCnt++
+	}
+	return implicitColCnt
 }
 
 // GeoConfig is part of the cat.Index interface.
@@ -2216,8 +2222,8 @@ func (oi *optVirtualIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
+// ImplicitColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ImplicitColumnCount() int {
 	return 0
 }
 

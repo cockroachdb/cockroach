@@ -242,10 +242,20 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	assertCreated(true)
 
 	for n := range payloads {
-		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		if _, _, err := ss.TruncateTo(ctx, payloads[n]); err != nil {
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, payloads[n])
+		require.NoError(t, err)
+		freedWhatWasRetained, retainedNothing, err :=
+			ss.BytesIfTruncatedFromTo(ctx, payloads[n], math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retainedNothing)
+		require.Equal(t, freedWhatWasRetained, retained)
+		// Truncate indexes < payloads[n] (payloads is sorted in increasing order).
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, payloads[n])
+		if err != nil {
 			t.Fatalf("%d: %+v", n, err)
 		}
+		require.Equal(t, freedByTruncateTo, freed)
+		require.Equal(t, retainedByTruncateTo, retained)
 		// Index payloads[n] and above are still there (truncation is exclusive)
 		// at both terms.
 		for _, term := range []uint64{lowTerm, highTerm} {
@@ -302,8 +312,13 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			require.NoError(t, ss.Put(ctx, i, highTerm, file(i*highTerm)))
 		}
 		assertCreated(true)
-		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
 		require.NoError(t, err)
+		require.Zero(t, retained)
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retainedByTruncateTo)
+		require.Equal(t, freedByTruncateTo, freed)
 		// Ensure directory is removed when all records are removed.
 		_, err = eng.Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -313,9 +328,16 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertCreated(false)
 
-	// Sanity check that we can call TruncateTo without the directory existing.
-	_, _, err := ss.TruncateTo(ctx, 1)
+	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
+	// without the directory existing.
+	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, 1)
 	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
+	freed, retained, err = ss.TruncateTo(ctx, 1)
+	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
 
 	assertCreated(false)
 
@@ -706,7 +728,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	// Put a sideloaded proposal on the Range.
 	key, val := "don't", "care"
-	origSSTData, _ := MakeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
+	origSSTData, _ := MakeSSTable(ctx, key, val, hlc.Timestamp{}.Add(0, 1))
 	{
 
 		var addReq roachpb.AddSSTableRequest
@@ -782,65 +804,70 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
+		st := tc.store.ClusterSettings()
+		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
-	const count = 10
+		const count = 10
 
-	var indexes []uint64
-	addLastIndex := func() {
-		lastIndex, err := tc.repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
+		var indexes []uint64
+		addLastIndex := func() {
+			lastIndex, err := tc.repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			indexes = append(indexes, lastIndex)
 		}
-		indexes = append(indexes, lastIndex)
-	}
-	for i := 0; i < count; i++ {
+		for i := 0; i < count; i++ {
+			addLastIndex()
+			key := fmt.Sprintf("key-%d", i)
+			val := fmt.Sprintf("val-%d", i)
+			if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
+				t.Fatalf("%d: %+v", i, err)
+			}
+		}
+		// Append an extra entry which, if we truncate it, should definitely also
+		// remove any leftover files (ok, unless the last one is reproposed but
+		// that's *very* unlikely to happen for the last one)
 		addLastIndex()
-		key := fmt.Sprintf("key-%d", i)
-		val := fmt.Sprintf("val-%d", i)
-		if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
-			t.Fatalf("%d: %+v", i, err)
+
+		fmtSideloaded := func() []string {
+			tc.repl.raftMu.Lock()
+			defer tc.repl.raftMu.Unlock()
+			fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
+			sort.Strings(fs)
+			return fs
 		}
-	}
-	// Append an extra entry which, if we truncate it, should definitely also
-	// remove any leftover files (ok, unless the last one is reproposed but
-	// that's *very* unlikely to happen for the last one)
-	addLastIndex()
 
-	fmtSideloaded := func() []string {
-		tc.repl.raftMu.Lock()
-		defer tc.repl.raftMu.Unlock()
-		fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
-		sort.Strings(fs)
-		return fs
-	}
-
-	// Check that when we truncate, the number of on-disk files changes in ways
-	// we expect. Intentionally not too strict due to the possibility of
-	// reproposals, etc; it could be made stricter, but this should give enough
-	// confidence already that we're calling `PurgeTo` correctly, and for the
-	// remainder unit testing on each impl's PurgeTo is more useful.
-	for i := range indexes {
-		const rangeID = 1
-		newFirstIndex := indexes[i] + 1
-		truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
-		log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
-		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
-			t.Fatal(pErr)
+		// Check that when we truncate, the number of on-disk files changes in ways
+		// we expect. Intentionally not too strict due to the possibility of
+		// reproposals, etc; it could be made stricter, but this should give enough
+		// confidence already that we're calling `PurgeTo` correctly, and for the
+		// remainder unit testing on each impl's PurgeTo is more useful.
+		for i := range indexes {
+			const rangeID = 1
+			newFirstIndex := indexes[i] + 1
+			truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
+			log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
+			if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			waitForTruncationForTesting(t, tc.repl, newFirstIndex, looselyCoupled)
+			// Truncation done, so check sideloaded files.
+			sideloadStrings := fmtSideloaded()
+			if minFiles := count - i; len(sideloadStrings) < minFiles {
+				t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
+					indexes[i], i, minFiles, sideloadStrings)
+			}
 		}
-		sideloadStrings := fmtSideloaded()
-		if minFiles := count - i; len(sideloadStrings) < minFiles {
-			t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
-				indexes[i], i, minFiles, sideloadStrings)
+
+		if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {
+			t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
 		}
-	}
-
-	if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {
-		t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
-	}
-
+	})
 }

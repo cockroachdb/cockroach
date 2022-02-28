@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -269,7 +270,7 @@ func (p *_OP_NAME) Next() coldata.Batch {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	cmpOp tree.ComparisonOperator,
+	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	colIdx int,
@@ -289,7 +290,7 @@ func GetSelectionConstOperator(
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
 		// {{range .CmpOps}}
-		case tree._NAME:
+		case treecmp._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
@@ -325,7 +326,7 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	cmpOp tree.ComparisonOperator,
+	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	col1Idx int,
@@ -345,7 +346,7 @@ func GetSelectionOperator(
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
 		// {{range .CmpOps}}
-		case tree._NAME:
+		case treecmp._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:

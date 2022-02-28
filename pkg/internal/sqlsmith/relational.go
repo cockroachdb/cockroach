@@ -13,6 +13,7 @@ package sqlsmith
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -235,7 +236,7 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	for (cond == nil || s.coin()) && len(available) > 0 {
 		v := available[0]
 		available = available[1:]
-		expr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), v[0], v[1])
+		expr := tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), v[0], v[1])
 		if cond == nil {
 			cond = expr
 		} else {
@@ -346,7 +347,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		v := cols[0]
 		cols = cols[1:]
 		expr := tree.NewTypedComparisonExpr(
-			tree.MakeComparisonOperator(tree.EQ),
+			treecmp.MakeComparisonOperator(treecmp.EQ),
 			typedParen(v[0].item, v[0].typ),
 			typedParen(v[1].item, v[1].typ),
 		)
@@ -457,21 +458,21 @@ func (s *Smither) randDropBehavior() tree.DropBehavior {
 	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
-var stringComparisons = []tree.ComparisonOperatorSymbol{
-	tree.Like,
-	tree.NotLike,
-	tree.ILike,
-	tree.NotILike,
-	tree.SimilarTo,
-	tree.NotSimilarTo,
-	tree.RegMatch,
-	tree.NotRegMatch,
-	tree.RegIMatch,
-	tree.NotRegIMatch,
+var stringComparisons = []treecmp.ComparisonOperatorSymbol{
+	treecmp.Like,
+	treecmp.NotLike,
+	treecmp.ILike,
+	treecmp.NotILike,
+	treecmp.SimilarTo,
+	treecmp.NotSimilarTo,
+	treecmp.RegMatch,
+	treecmp.NotRegMatch,
+	treecmp.RegIMatch,
+	treecmp.NotRegIMatch,
 }
 
-func (s *Smither) randStringComparison() tree.ComparisonOperator {
-	return tree.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
+func (s *Smither) randStringComparison() treecmp.ComparisonOperator {
+	return treecmp.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
 }
 
 // makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which

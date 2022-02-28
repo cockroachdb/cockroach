@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,6 +37,7 @@ import (
 )
 
 var noRewindExpected = CmdPos(-1)
+var emptyTxnID = uuid.UUID{}
 
 type testContext struct {
 	manualClock *hlc.ManualClock
@@ -291,7 +293,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.True},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx),
+				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal),
 			expState: stateOpen{ImplicitTxn: fsm.True},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
@@ -316,7 +318,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx),
+				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal),
 			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,

@@ -11,14 +11,19 @@
 package storage_test
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/pebble/sstable"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,12 +54,14 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValu
 }
 
 func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue, ingestion bool) []byte {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	f := &storage.MemFile{}
 	var w storage.SSTWriter
 	if ingestion {
-		w = storage.MakeIngestionSSTWriter(f)
+		w = storage.MakeIngestionSSTWriter(ctx, st, f)
 	} else {
-		w = storage.MakeBackupSSTWriter(f)
+		w = storage.MakeBackupSSTWriter(ctx, st, f)
 	}
 	defer w.Close()
 
@@ -66,6 +73,43 @@ func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue, ingestion bool) []b
 	err := w.Finish()
 	require.NoError(t, err)
 	return f.Data()
+}
+
+func TestMakeIngestionWriterOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name string
+		st   *cluster.Settings
+		want sstable.TableFormat
+	}{
+		{
+			name: "before feature gate",
+			st: cluster.MakeTestingClusterSettingsWithVersions(
+				clusterversion.ByKey(clusterversion.EnablePebbleFormatVersionBlockProperties-1),
+				clusterversion.TestingBinaryMinSupportedVersion,
+				true,
+			),
+			want: sstable.TableFormatRocksDBv2,
+		},
+		{
+			name: "at feature gate",
+			st: cluster.MakeTestingClusterSettingsWithVersions(
+				clusterversion.ByKey(clusterversion.EnablePebbleFormatVersionBlockProperties),
+				clusterversion.TestingBinaryMinSupportedVersion,
+				true,
+			),
+			want: sstable.TableFormatPebblev1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			opts := storage.MakeIngestionWriterOptions(ctx, tc.st)
+			require.Equal(t, tc.want, opts.TableFormat)
+		})
+	}
 }
 
 func BenchmarkWriteSSTable(b *testing.B) {

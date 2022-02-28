@@ -329,6 +329,56 @@ ORDER BY pk LIMIT 5] OFFSET 2
           spans: /"\xc0"-/"\xc0"/PrefixEnd
           limit: 5
 
+# Test that the synthesized UNIQUE WITHOUT INDEX constraints do not cause
+# lookups into redundant arbiters.
+query T
+SELECT * FROM [
+  EXPLAIN INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+  VALUES ('ca-central-1', 7, 7, 8, 9) ON CONFLICT DO NOTHING
+] OFFSET 2
+----
+·
+• insert
+│ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│ auto commit
+│ arbiter constraints: regional_by_row_table_pkey, regional_by_row_table_b_key, uniq_idx
+│
+└── • render
+    │
+    └── • distinct
+        │ distinct on: arbiter_uniq_idx_distinct
+        │ nulls are distinct
+        │
+        └── • render
+            │
+            └── • lookup join (anti)
+                │ table: regional_by_row_table@uniq_idx (partial index)
+                │ lookup condition: (column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+                │ pred: column5 > 0
+                │
+                └── • lookup join (anti)
+                    │ table: regional_by_row_table@regional_by_row_table_b_key
+                    │ equality cols are key
+                    │ lookup condition: (column5 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+                    │
+                    └── • cross join (anti)
+                        │
+                        ├── • values
+                        │     size: 6 columns, 1 row
+                        │
+                        └── • union all
+                            │ limit: 1
+                            │
+                            ├── • scan
+                            │     missing stats
+                            │     table: regional_by_row_table@regional_by_row_table_pkey
+                            │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
+                            │
+                            └── • scan
+                                  missing stats
+                                  table: regional_by_row_table@regional_by_row_table_pkey
+                                  spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
+
 # Tests for locality optimized search.
 
 # Split the table into 3 regions and change the leaseholders to be "local"
@@ -358,7 +408,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
   table: regional_by_row_table@regional_by_row_table_pkey
   spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kN2q2kAQgO_7FMNctWVLfuxFCRQsNtKAVZsEWjBB1uwgqTG73d1QRfLuJcmF9SCHcxQv5-eb-WZOaP5UGGASzsJJCu9hGi--wyr8tZx9iebw9muUpMmP2Tu4bNC0LWXNq_XmuNby79ryTUXw81sYh6B28Bm8HBbTaRKm4CPDWgqa8z0ZDFboYc5QaVmQMVJ3qVPfEIkDBi7DslaN7dI5w0JqwuCEtrQVYYBptycmLkg7LjIUZHlZ9WOvKo2VLvdcH5HhRFbNvjYBqB0DtfMZcAYbBr-RYaJ4V3EyHGfoeI6LectQNvZsYizfEgZey26z9R5hm2WHT-6jjP0HGRe3G59Fm1pqQZrEhWTeXrlpLj9I5YyeNF5f7b_mWTEZJWtDL5rsdmoktjTcYWSjC1pqWfRrhnDRc31CkLFDdTQEUd2X-t_8D3v3wP498OhZ-OMF7LZ5--ZfAAAA___eJXDk
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kF-r00AQxd_9FMM8qazkT32QgHDlmmKgttckoHATwjY7lJjc7Lq7wZaS7y5JHmoliLbcPs6ZOTPnN0c0PxoMMAlX4X0Kr2EZbz7DY_jtYfUhWsPLj1GSJl9Wr-B8QNOuki1viu2h0PJnYfm2Ifj6KYxDUDW8By-HzXKZhCn4yLCVgtb8iQwGj-hhzlBpWZIxUg_ScRyIxB4Dl2HVqs4Ocs6wlJowOKKtbEMYYDrciYkL0o6LDAVZXjXj2tlId7NqoWo6IMN72XRPrQlA1QxU7TPgDLYMviPDRPGh42R4l6HjOS7mPUPZ2VM4Y_mOMPB6dhmAdyOALNu_c58Lwr8dRHk5xCl710otSJM4y533M5hr-UYqZ_HH4Pxp_3_-F5NRsjX0T5vdIRqJHU0cRna6pActy_HMVG5G3ygIMnbqLqYiasfW-Jvfzd41Zv8a8-Kv5rdnZrfP-xe_AgAA__9014gb
 
 statement ok
 SET vectorize=on
@@ -418,7 +468,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
       table: regional_by_row_table@regional_by_row_table_pkey
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kt-L00AQx9_9K4Z5UlnJj1aQgHByplio7dkEFC6hbLNDWZtk190N3lHyv0uShzNSe3c9-rgz8-l85tsc0P4qMcIkXsTXKbyF2Xr1FW7jHzeLT_MlvP48T9Lk2-INjAcM7aSqebnZ3m-M-r1xfFsSfP8Sr2PQe_gIQQ6r2SyJUwiRYa0ELXlFFqNbDDBnqI0qyFplutKhH5iLO4x8hrLWjevKOcNCGcLogE66kjDCtNuzJi7IeD4yFOS4LPufPap0pY2suLlHhteqbKraRqD3DPQ-ZMAZbBn8RIaJ5l3HyzDL7j74GXqB52PeMlSNe7Cxju8Io6Bl5xkHFzIuzjd-EG1qZQQZEiPJvD1y01K9U9oL_xk8vjo8N6zJJcK6eiSoyROCsmQkL-HZeU3HBy1kJR0E_1XxnxPcmqxWtaUn_SV-50hiR8NdVjWmoBujin7N8Fz1XF8QZN3QDYfHvO5b_Uf1Nxy8BA5PwtPT8OQl8PQk_H4E-23evvoTAAD__82-s3M=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kl-L00AUxd_9FJf7pDKSP60gAWFlTbFQ27UJKGxCmGYuJSbNjDMT3KXku0uShzUSu7td6OP988s952SOaH5VGGAUrsLrGN7CYrv5Crfhj5vVp-UaXn9eRnH0bfUGxgua9oWseZXt7jMtf2eW7yqC71_CbQiqhI_gpbBZLKIwBh8Z1lLQmh_IYHCLHqYMlZY5GSN11zr2C0txh4HLsKhVY7t2yjCXmjA4oi1sRRhg3N3ZEhekHRcZCrK8qPrPTkq6muxmqqR7ZHgtq-ZQmwBUyUCVPgPOYMfgJzKMFO8mToJJcvfBTdDxHBfTlqFs7INAY_meMPBadp4J73Im8vNNPGhvaqkFaRIj3Wk7YXMt30nl-P8sTp_2z81vdqH8rh7JbvaE7Azpglfw7AjnY4-r4lBY8P4rxX1OllsyStaGnvSX3E4jiT0NvoxsdE43Wub9maHc9FzfEGTsMPWHYln3o_6d_Q17L4H9k_D8NDx7CTw_Cb8fwW6btq_-BAAA___NQ8qq
 
 query T
 EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
@@ -439,7 +489,7 @@ SET vectorize=off
 query T
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
 ----
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0keFr1EAQxb_7VwwDpa2sJBu_SEBoaSMG47VeDhR64di7Hc71kt11d4MtR_53SSLUSCOo-HHemzf5vewR_dcaUyyzIrtawXN4s7x5D3fZp9viMl_A2XVersoPxTlMFxztldGi3mwfNs582wSxrQk-vs2WGdgDvAZewWUJgRoLZ-L8hyOgyN9lcHpyrcTeiebkFBlqI2khGvKY3iHHiqF1ZkfeG9dLx2Ehl_eYxgyVtm3o5YrhzjjC9IhBhZowxVXPsCQhyUUxMpQUhKqHs0_iXlinGuEekOGVqdtG-xTsgYE9JAwEgy2DL8iwtKJ3ojWu1_ev4jVGPIpBaAkcTPhMDquOoWnDI5kPYk-Y8o79HT3_H_QXI_ksbTJL-wjpySlRQ6uNk-RITjir7olaC_PC2CiZFipUowLwWZT4T37ckrw12tMvLHOXK4Yk9zT28qZ1O7p1Zjd8ZhxvhtwgSPJhdJNxyPVgDS_7c5j_Szj5bfjlJBx3VffsewAAAP__tYozcQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8keFr1EAQxb_7VwwDpa2sJBu_SEBoaSMG47VeDhR64di7Hc71kt11d4MtR_53uUQ4IxdBBT_Oe_Mm75fdo_9aY4plVmQ3C3gOb-Z37-Eh-3RfXOczuLjNy0X5obiE8YKjrTJa1Kv108qZb6sg1jXBx7fZPAO7g9fAK7guIVBj4UJc_nAEFPm7DM7PbpXYOtGcnSNDbSTNREMe0wfkWDG0zmzIe-MO0r5fyOUjpjFDpW0bDnLFcGMcYbrHoEJNmOLi0GFOQpKLYmQoKQhV92dP1r06qa7sjp6Q4Y2p20b7FOyOgd0lDASDNYMvyLC04uBES1wuH1_FS4x4FIPQEjiY8JkcVh1D04ZjWR_EljDlHfs7IP6fgK4GmEmAZBLg2NuTU6KGVhsnyZEcVa-6E6Qz88LYKBkzFqpRAfhklfhP_uWcvDXa0y9dpi5XDEluaeDypnUbundm039mGO_6XC9I8mFwk2HIdW_1j_1zmP9LOPlt-OUoHHdV9-x7AAAA__-eCkLr
 
 statement ok
 RESET vectorize
@@ -624,7 +674,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0, /Table/112/1/"\x80"/10/0, /Table/112/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0, /Table/111/1/"\x80"/10/0, /Table/111/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 
 # Semi join with locality optimized search disabled.
 query T
@@ -654,7 +704,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0, /Table/112/1/"\x80"/10/0, /Table/112/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0, /Table/111/1/"\x80"/10/0, /Table/111/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10]
 
 # Inner join with locality optimized search disabled.
@@ -750,7 +800,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * 
               table: child@child_pkey
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k_Frm0AUx3_fX_F4vyQZN3Iax8pBwNAaZnHaJcIKjRSnj9bNeO48ISXkfx9qoDEsYW3pb96779f7fN-922L1J0eBS8dzLkP4CPNF8A3unNsbb-b6MLxyl-HyuzeCviB5zPIUfnx1Fg4M_SAE57YRwrAvK2NFhd7ryvsshSkk983HaAQz_wqGSVc0-CiCYD5fOiGYyLCQKfnxmioUd2hgxLBUMqGqkqopbVuBm25QcIZZUda6KUcME6kIxRZ1pnNCgWH8M6cFxSmpMUeGKek4y9vfthnsUmXrWD0hw0uZ1-uiEtAwsT0nMlyWcVMdr3C12lzwFY4NPuYQFykYIPUjKYx2DGWtnzEqHT8QCmPHXodqvBXV3mOeRDNPoj0TVaSyOIe6kColRWkPKtr9I4MvP8lybPbpvWydaTBOovCXdOlaZsW-SZP-MeFTSQI8Zx7CzA9duA5cHxl2M3jQPE_K33UJv2RWgCwEDO0JTME29xNpWzCFzcDiAyGEbXBu8C8jZBjUWoBtMNs8GWTyyiDWewVpXvBmcHEYhcFmkPSy_Wc46yXhFlSVsqjoaGJO3X_EkNIH6qavkrVK6EbJpD2mWwatry2kVOlu1-wWbtFutY_t0Gy8xWyeNU96Zn5snpw1W-fN1lnz5yNztPvwNwAA___s6c7r
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fro04Qxt__P8Uwb5L82SOr8biyULC0hrN4ppcIV2gkWHdovdpdb1VIKfnuh5qjMVwCzd29UXd2Hvf3DM--YvkjR4ELL_AuI_gfpvPZF7jzbm-CCz-E4ZW_iBZfgxH0G9LHLJfw7bM392AYziLwbptGGPbbisSQqrZ9xSqTcA7pqvkYjeAivIJh2hUtPophNp0uvAhsZKi0pDB5phLFHVoYMyyMTqkstWlKr22DL9coOMNMFXXVlGOGqTaE4hWrrMoJBUbJfU5zSiSZMUeGkqoky9vfth7c9rkqnugFGV7qvH5WpYAGi21RkeGiSJrqeInL5fqML3Fs8TGHREmwQFePZDDeMNR19UZSVskDobA27DRa6y_QulvSg3T2Qbo3qJJMluRQK20kGZI9rnjzGxuh_qCLsd03EGTPWQXWQRT-nkFd60xt5zTpHxO9FCQg8KYRXISRD9czP0SGXRLd7vVrgIHWT3UB33WmQCsBQ3cC5-Da22y6DpzDeuDwgRDCtTi3-KfR7tyLbu5G3q8MPWRaHTQ3OdGc8y_NNfd7PTjbtcdgPUh7fk807LzH8JzKQquS9pJ1KCcxQ5IP1KW01LVJ6cbotD2mW85aXVuQVFbdrt0tfNVutfdyV2z9idg-Kp70xHxfPDkqdo6LnaPij3viePPfzwAAAP__dhHiVw==
 
 statement ok
 SET vectorize=on
@@ -783,7 +833,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
@@ -801,7 +851,7 @@ Scan /Table/112/1/"\x80"/20/0, /Table/112/1/"\xc0"/20/0
 fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/111/1/"@"/20/0
 Scan /Table/111/1/"\x80"/20/0, /Table/111/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 
 # Semi join with locality optimized search enabled.
 query T
@@ -827,7 +877,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk2Fr2z4Qxt__P8Vxb5L80YjsBFYEAZfWYS5u0sWGFRpTPPtovTmSJ8mQEvLdh-1A47B0dH1nnZ7n9POj0w7NrxIFRn7oX8XwP8xXy1t48O_vwstgAcPrIIqjr-EI-oLsuShz-PbFX_ng3zcaGPYVVapJ2oOkeixymEH22HyM4HJxDcOsqzl8lMByPo_8GFxkKFVOi3RDBsUDOpgwrLTKyBilm9KuFQT5FgVnWMiqtk05YZgpTSh2aAtbEgqM0-8lrSjNSY85MszJpkXZtm3pvUoXm1S_IMMrVdYbaQQ0TOyAiQyjKm2q4zWu19sLvsaxw8ccUpmDA8o-k8Zkz1DV9hXD2PSJUDh79m-ozkdRvQPmWTT3LNorkSFdpCXUUumcNOU9qGT_h39YqE-qGrt9-rDYFBacsyj8PSndqEIeQpr0j4lfKhIQ-vMYIv82gJtlsECG3QgehRcq9bOu4IcqJCgpYOhNYAaee5hIbwoz2A6mfCCE8BzOHf55hAxXtFGWoPyru3kw28HFsZ_BdpD1GjYdl7UV4DnMc89GM3lPNCsylZKGTq7pXOgJQ8qfqLtyo2qd0Z1WWXtMt1y2vraQk7HdrtstAtlutRN-bHY-YnbfNE96Zn5qnrxpnp6Yk_1_vwMAAP__Es-NVg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAQx9_3KY57STI0IjuBFUHApXWYi5t0sWGFxgTXOlKvjuTJNqSEfPdhO6NxWDq67cW2TveXfve_8w6LHxkKDFzfvQrhI0wX81t4cO_v_EtvBv1rLwiDr_4AugnJU5pJ-PbFXbjg3tc50O9m5LEhVR5S8lUqYQLJqv4YwOXsGvpJG7P4IIL5dBq4IdjIUGlJs3hDBYoHtDBimBudUFFoU4d2TYIntyg4w1TlVVmHI4aJNoRih2VaZoQCw_gxowXFksyQI0NJZZxmzbENvdM8V_kzvSDDK51VG1UIqLHYgRQZBnlcR4dLXC63F3yJQ4sPOcRKggW6fCKD0Z6hrspXkqKM14TC2rO_o7X-A61zID1LZ5-le4UqyKRxBpXSRpIh2eGK9r8pY6Y_6Xxodwvw001agnUWhb_HqBudqoNPo-414UtOAnx3GkLg3npwM_dmyLAdRKd9_TLQ1_q5yuG7ThVoJaDvjGACjn2YTWcME9j2xrwnhHAszi3-eYAMF7TRJUH2R3X962x7F8d6Btte0jlwcNzJvO2kkY8rQ-tUq7N2jd5j14KKXKuCTlp3rhERQ5Jraseg0JVJ6M7opLmmXc4bXROQVJTtrt0uPNVsNYN_LLb-RWy_KR51xPxUPHpTPD4RR_sPPwMAAP__OaSYJA==
 
 statement ok
 SET vectorize=on
@@ -859,7 +909,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/112/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/111/1/"@"/10/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10]
 
 statement ok
@@ -878,7 +928,7 @@ Scan /Table/112/1/"\x80"/20/0, /Table/112/1/"\xc0"/20/0
 fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/111/1/"@"/20/0
 Scan /Table/111/1/"\x80"/20/0, /Table/111/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/?/? -> <undecoded>
+fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20]
 
 # Inner join with locality optimized search enabled.
@@ -905,7 +955,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQx9_3KY57STs0ItuFFUHApXWYS2Z3TmCDxhTPPlptjuRJMmSEfPcRO9A4LB1d36yTfqef_5I2aH_VKHAezaLrBbyHaZZ-hvvo293sKk7g7CaeL-ZfZucwXFA-ybqCOEmiDG7TOIGmMKQcpAk0D7KCCZQP3cfXT1EWQdnXPJ5DOp3OowX4yFDpipJiRRbFPXqYM2yMLslabXalTbcgrtYoOEOpmtbtyjnDUhtCsUEnXU0ocFF8rymjoiIz5siwIlfIumvbiYaNkavC_EaG17puV8qKTontLZHhvCl21fESl8v1JV_i2ONjDoWqwAPtnshgvmWoW_esYV3xSCi8Lfs_Ve-tquFe86Saf1Lt2ciSkUUNrdKmIkPVQCrf_uUfEv1BN2N_aD-TK-nAO6nCX5PSrZZqH1Iw3Ka_ZwcpzbT-2TbwQ0sFWgk4CwOYQOifw1VyA2fhBUxgPbrgIyFE6HHu8Y_nyDCjlXYE9T_p3SNYjy4PeQbrUTlouOuYtk5A6LHQZ2FwMobgNTFkZButLB0dyamAc4ZUPVJ_vFa3pqQ7o8tum36YdlxXqMi6ftbvB7HqprrbfAh7b4H9F-FgAPNjOHgRvjiC8-27PwEAAP__HASCuw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk2Fr2zwQgL-_v-K4L2leNCLbhRVBwKV1mEtmd05gg8YE1zpSr47kyTJkhPz3ETujcVg6uu2LbZ30SI_uzlusv5UocBZMg5s5_A-TJP4ID8GX--l1GMHFbTibzz5Nh9BfkD8VpYQwioIE7uIwgiozpCzEEVTLQsIY8mX78flDkASQdzGHpxBPJrNgDi4yVFpSlK2pRvGADqYMK6Nzqmtt9qFtuyCUGxScYaGqxu7DKcNcG0KxRVvYklDgPHssKaFMkhlxZCjJZkXZbtuK-u1zWT3Td2R4o8tmrWrRWrGDKDKcVdk-OlrgYrG54gscOXzEIVMSHND2iQymO4a6sS8mtc1WhMLZsT-zdf6BrX8wPWvnnrV7karJFFkJjdJGkiHZ80p3v7hGpN_pauT2LzAt1oUF56wKf0ui7nShDnny-sd03eZ3r5-Zmmr93FTwVRcKtBJw4XswBt8dwnV0Cxf-JYxhM7jkAyGE73Du8PdDZJjQWluC8rf0_nfYDK6OeQabQd7bcHhcsqormZGPS0OrQitkGDdWgO8w32W-dzZP3lvylFBdaVXTSc3OVSBlSHJFXf1r3Zic7o3O22O6YdxybUBSbbtZtxuEqp1qO_4Ydv4Gdl-FvR7MT2HvVfjyBE53__0IAAD__5JOkJo=
 
 statement ok
 SET vectorize=on
@@ -983,7 +1033,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQx9_3KY57STs0ItuBFUHApXVYimd3jscGjSmefbTeHMuTZEgJ-e4jcqBxWDq6vkUn_U6__HXeoP5do8BFEAZXKbyHWRJ_hrvg-214OY_g7Hq-SBdfwnMYHigeq7qEMJilcBPPI2hzRY2BOIL2viphCsW9_fHtU5AEUPQ1h2cQz2aLIAUXGTaypChfkUZxhw5mDFslC9Jaql1pYw_MyzUKzrBq2s7syhnDQipCsUFTmZpQYJr_qCmhvCQ15siwJJNXtW1rPf1WVatcPSHDK1l3q0YLq8T2lshw0ea76niJy-X6gi9x7PAxh7wpwQFpHklhtmUoO_OsoU3-QCicLfs_Veetqv5e86Sae1Lt2UiTqvIaukaqkhSVA6ls-5f_EMkPsh27Q_uwWlUGnJMq_DUp3ciq2YfkDa9Jn1oS_dzFX9MgsdOHDPv5O0gvlPJX18JPWTUgGwFnvgdT8N1zuIyu4cyfwBTWowkfCSF8h3OHfzxHhgmtpCGo_0nvvo316OKQZ7AeFYOGu45xZwT4DvNd5nsn4_FeE09CupWNpqOnOhV8xpDKB-qfXctOFXSrZGGv6Zex5WyhJG36XbdfzBu7Zaf8EHbeArsvwt4A5sew9yI8OYKz7bs_AQAA__9CUokA
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk2Fr2zwQgL-_v-K4L2leNCI7hRVBwaV1WIpnd47HBo0JrnW0Xh3Jk2VIKfnvI3JH67B0dNuXxDrpkR7dnR6x_V6jwEUYhecZ_A-zNPkI1-HXq-hsHsPRxXyRLT5FYxguKO-qWkIUzjK4TOYxNIUhZSGJoVlVEk6hXLmPLx_CNISyj3k8h2Q2W4QZ-MhQaUlxsaYWxTV6mDNsjC6pbbXZhR7dgrncoOAMK9V0dhfOGZbaEIpHtJWtCQVmxU1NKRWSzIQjQ0m2qGq3rfMM3O-quacHZHiu626tWuGs2JMoMlw0xS46WeJyuTnhS5x4fMKhUBI80PaODOZbhrqzzyatLW4Jhbdlf2br_QPb4Mn0oJ1_0O5ZqiVTFTV0ShtJhuTAK9_-4hqxfqebiT-8QFStKwveQRX-lkRd6ko95Wk6PCZ7aEj03Zd8zsLU9SAy7Lsw6P9-ZjDS-r5r4JuuFGgl4CiYwikE_hjO4gs4Co7hFDajYz4SQgQe5x5_P0aGKa21Jah_S-9eyWZ08pJnsBmVgw3HL0vZ9KU08mZl6LbSChkmnRUQeCzwWTA9mL_pW_KXUtto1dJeLQ9VJmdI8pb6vmh1Z0q6Mrp0x_TDxHEuIKm1_azfD-bKTbmX8BL2_gb2X4WnA5jvw9NX4eM9ON_-9yMAAP__uiqW3w==
 
 statement ok
 SET vectorize=on
@@ -1834,45 +1884,39 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│           │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
+│           │ equality cols are key
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
-│               │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
-│               │ equality cols are key
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           └── • cross join
+│               │ estimated row count: 3
 │               │
-│               └── • cross join
-│                   │ estimated row count: 3
-│                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
+            │ equality: (lookup_join_const_col_@48, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+            │ equality cols are key
+            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
             │
-            └── • lookup join
-                │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
-                │ equality: (lookup_join_const_col_@48, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ equality cols are key
-                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+            └── • cross join
+                │ estimated row count: 3
                 │
-                └── • cross join
-                    │ estimated row count: 3
-                    │
-                    ├── • values
-                    │     size: 1 column, 3 rows
-                    │
-                    └── • scan buffer
-                          label: buffer 1
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
@@ -1915,43 +1959,37 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│           │ equality: (lookup_join_const_col_@30, v_comp) = (crdb_region,v)
+│           │ equality cols are key
+│           │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
-│               │ equality: (lookup_join_const_col_@30, v_comp) = (crdb_region,v)
-│               │ equality cols are key
-│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│           └── • cross join
 │               │
-│               └── • cross join
-│                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
+            │ equality: (lookup_join_const_col_@44, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+            │ equality cols are key
+            │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
             │
-            └── • lookup join
-                │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
-                │ equality: (lookup_join_const_col_@44, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ equality cols are key
-                │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+            └── • cross join
                 │
-                └── • cross join
-                    │
-                    ├── • values
-                    │     size: 1 column, 3 rows
-                    │
-                    └── • scan buffer
-                          label: buffer 1
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 statement ok
 INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)
@@ -2012,76 +2050,67 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+│           │ equality: (lookup_join_const_col_@36, v_comp) = (crdb_region,v)
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
-│               │ equality: (lookup_join_const_col_@36, v_comp) = (crdb_region,v)
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           └── • cross join
+│               │ estimated row count: 3
 │               │
-│               └── • cross join
-│                   │ estimated row count: 3
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ estimated row count: 1
+│                   │ filter: column2 > 0
 │                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • filter
-│                       │ estimated row count: 1
-│                       │ filter: column2 > 0
-│                       │
-│                       └── • scan buffer
-│                             label: buffer 1
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
+│           │ equality: (lookup_join_const_col_@50, v_comp) = (crdb_region,v)
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
-│               │ equality: (lookup_join_const_col_@50, v_comp) = (crdb_region,v)
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           └── • cross join
+│               │ estimated row count: 3
 │               │
-│               └── • cross join
-│                   │ estimated row count: 3
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ estimated row count: 1
+│                   │ filter: v_comp > 0
 │                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • filter
-│                       │ estimated row count: 1
-│                       │ filter: v_comp > 0
-│                       │
-│                       └── • scan buffer
-│                             label: buffer 1
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
+            │ equality: (lookup_join_const_col_@64, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
             │
-            └── • lookup join
-                │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
-                │ equality: (lookup_join_const_col_@64, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+            └── • cross join
+                │ estimated row count: 3
                 │
-                └── • cross join
-                    │ estimated row count: 3
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • filter
+                    │ estimated row count: 1
+                    │ filter: v_comp > 0
                     │
-                    ├── • values
-                    │     size: 1 column, 3 rows
-                    │
-                    └── • filter
-                        │ estimated row count: 1
-                        │ filter: v_comp > 0
-                        │
-                        └── • scan buffer
-                              label: buffer 1
+                    └── • scan buffer
+                          label: buffer 1
 
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
@@ -2124,70 +2153,61 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+│           │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
+│           │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
-│               │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
-│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│           └── • cross join
 │               │
-│               └── • cross join
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ filter: column2 > 0
 │                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • filter
-│                       │ filter: column2 > 0
-│                       │
-│                       └── • scan buffer
-│                             label: buffer 1
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
+│           │ equality: (lookup_join_const_col_@48, v_comp) = (crdb_region,v)
+│           │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
-│               │ equality: (lookup_join_const_col_@48, v_comp) = (crdb_region,v)
-│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+│           └── • cross join
 │               │
-│               └── • cross join
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ filter: v_comp > 0
 │                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • filter
-│                       │ filter: v_comp > 0
-│                       │
-│                       └── • scan buffer
-│                             label: buffer 1
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
+            │ equality: (lookup_join_const_col_@62, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+            │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
             │
-            └── • lookup join
-                │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
-                │ equality: (lookup_join_const_col_@62, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
+            └── • cross join
                 │
-                └── • cross join
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • filter
+                    │ filter: v_comp > 0
                     │
-                    ├── • values
-                    │     size: 1 column, 3 rows
-                    │
-                    └── • filter
-                        │ filter: v_comp > 0
-                        │
-                        └── • scan buffer
-                              label: buffer 1
+                    └── • scan buffer
+                          label: buffer 1
 
 statement ok
 INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)
@@ -2234,7 +2254,7 @@ ALTER TABLE t65064 INJECT STATISTICS '[
   }
 ]';
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
 ----
 ·
@@ -2265,3 +2285,509 @@ query I
 SELECT * FROM t73024
 ----
 100
+
+##############################################
+# Locality optimized scans with LIMIT clause #
+##############################################
+# In this section we are checking explains and tracing results of queries
+# similar to those in pkg/sql/opt/xform/testdata/rules/scan and
+# pkg/ccl/logictestccl/testdata/logic_test/regional_by_row, where rule firing
+# and query results are checked.
+
+statement ok
+SET database = multi_region_test_db
+
+# LIMIT clause enables locality optimized scan on a REGIONAL BY ROW table
+query T
+SELECT * FROM [
+EXPLAIN SELECT
+    pk, pk2, a, b, crdb_region
+FROM
+    regional_by_row_table
+LIMIT
+    1]
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@regional_by_row_table_pkey
+│     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+│     limit: 1
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@regional_by_row_table_pkey
+      spans: [/'ca-central-1' - /'us-east-1']
+      limit: 1
+
+# Test partitioning on an index column
+statement ok
+CREATE TABLE regional_by_row_table_as4 (
+    pk
+        INT8 PRIMARY KEY,
+    a
+        INT8,
+    crdb_region_col
+        crdb_internal_region
+        AS (
+            CASE
+            WHEN (a % 3) = 0 THEN 'ap-southeast-2'
+            WHEN (a % 3) = 1 THEN 'ca-central-1'
+            ELSE 'us-east-1'
+            END
+        ) VIRTUAL
+        NOT NULL,
+    INDEX a_idx (a),
+    FAMILY (pk, a)
+)
+    LOCALITY REGIONAL BY ROW AS crdb_region_col
+
+statement ok
+INSERT
+INTO
+    regional_by_row_table_as4
+SELECT
+    g, g
+FROM
+    ROWS FROM (generate_series(1, 1000)) AS g (g)
+
+statement ok
+SET vectorize = "on"
+
+statement ok nodeidx=0
+SET database = multi_region_test_db;
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN 1 AND 100
+        LIMIT
+            10
+    );
+SET TRACING = off
+
+# If the rows are found in the local region, the other regions are not
+# searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/?/3/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/6/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/9/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/12/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/15/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/18/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/21/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/24/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/27/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/30/? -> <undecoded>
+output row: [10]
+
+statement ok
+SET vectorize = off
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN 1 AND 100
+        LIMIT
+            10
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/3/3 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/6/6 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/9/9 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/12/12 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/15/15 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/18/18 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/21/21 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/24/24 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/27/27 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/30/30 -> <undecoded>
+output row: [10]
+
+statement ok
+SET vectorize = "on"
+
+# Locality optimized scan with an IN list
+query T
+SELECT
+    *
+FROM
+    [
+        EXPLAIN (OPT)
+            SELECT
+                count(*)
+            FROM
+                (
+                    SELECT
+                        *
+                    FROM
+                        regional_by_row_table_as4@a_idx
+                    WHERE
+                        a
+                        IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18,
+                            18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
+                    LIMIT
+                        5
+                )
+    ]
+OFFSET
+    2
+----
+ │    ├── scan regional_by_row_table_as4@a_idx
+ │    │    ├── constraint: /11/10/9
+ │    │    │    ├── [/'ap-southeast-2'/1 - /'ap-southeast-2'/2]
+ │    │    │    ├── [/'ap-southeast-2'/4 - /'ap-southeast-2'/6]
+ │    │    │    ├── [/'ap-southeast-2'/8 - /'ap-southeast-2'/8]
+ │    │    │    ├── [/'ap-southeast-2'/10 - /'ap-southeast-2'/12]
+ │    │    │    ├── [/'ap-southeast-2'/14 - /'ap-southeast-2'/19]
+ │    │    │    ├── [/'ap-southeast-2'/22 - /'ap-southeast-2'/25]
+ │    │    │    ├── [/'ap-southeast-2'/28 - /'ap-southeast-2'/28]
+ │    │    │    ├── [/'ap-southeast-2'/30 - /'ap-southeast-2'/30]
+ │    │    │    ├── [/'ap-southeast-2'/33 - /'ap-southeast-2'/34]
+ │    │    │    └── [/'ap-southeast-2'/39 - /'ap-southeast-2'/40]
+ │    │    ├── limit: 5
+ │    │    └── flags: force-index=a_idx
+ │    └── scan regional_by_row_table_as4@a_idx
+ │         ├── constraint: /16/15/14
+ │         │    ├── [/'ca-central-1'/1 - /'ca-central-1'/2]
+ │         │    ├── [/'ca-central-1'/4 - /'ca-central-1'/6]
+ │         │    ├── [/'ca-central-1'/8 - /'ca-central-1'/8]
+ │         │    ├── [/'ca-central-1'/10 - /'ca-central-1'/12]
+ │         │    ├── [/'ca-central-1'/14 - /'ca-central-1'/19]
+ │         │    ├── [/'ca-central-1'/22 - /'ca-central-1'/25]
+ │         │    ├── [/'ca-central-1'/28 - /'ca-central-1'/28]
+ │         │    ├── [/'ca-central-1'/30 - /'ca-central-1'/30]
+ │         │    ├── [/'ca-central-1'/33 - /'ca-central-1'/34]
+ │         │    ├── [/'ca-central-1'/39 - /'ca-central-1'/40]
+ │         │    ├── [/'us-east-1'/1 - /'us-east-1'/2]
+ │         │    ├── [/'us-east-1'/4 - /'us-east-1'/6]
+ │         │    ├── [/'us-east-1'/8 - /'us-east-1'/8]
+ │         │    ├── [/'us-east-1'/10 - /'us-east-1'/12]
+ │         │    ├── [/'us-east-1'/14 - /'us-east-1'/19]
+ │         │    ├── [/'us-east-1'/22 - /'us-east-1'/25]
+ │         │    ├── [/'us-east-1'/28 - /'us-east-1'/28]
+ │         │    ├── [/'us-east-1'/30 - /'us-east-1'/30]
+ │         │    ├── [/'us-east-1'/33 - /'us-east-1'/34]
+ │         │    └── [/'us-east-1'/39 - /'us-east-1'/40]
+ │         ├── limit: 5
+ │         └── flags: force-index=a_idx
+ └── aggregations
+      └── count-rows
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18,
+                18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
+        LIMIT
+            5
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/?/6/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/12/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/15/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/18/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/24/? -> <undecoded>
+output row: [5]
+
+statement ok
+SET vectorize = off
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18,
+                18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
+        LIMIT
+            5
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/6/6 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/12/12 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/15/15 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/18/18 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/24/24 -> <undecoded>
+output row: [5]
+
+statement ok
+SET vectorize = "on"
+
+# Locality optimized scan with multiple range predicates
+query T
+SELECT
+    *
+FROM
+    [
+        EXPLAIN (OPT)
+            SELECT
+                count(*)
+            FROM
+                (
+                    SELECT
+                        *
+                    FROM
+                        regional_by_row_table_as4@a_idx
+                    WHERE
+                        a BETWEEN -1 AND 10
+                        OR a BETWEEN 100 AND 110
+                        OR a BETWEEN 990 AND 1010
+                    LIMIT
+                        9
+                )
+    ]
+OFFSET
+    2
+----
+ │    ├── scan regional_by_row_table_as4@a_idx
+ │    │    ├── constraint: /11/10/9
+ │    │    │    ├── [/'ap-southeast-2'/-1 - /'ap-southeast-2'/10]
+ │    │    │    ├── [/'ap-southeast-2'/100 - /'ap-southeast-2'/110]
+ │    │    │    └── [/'ap-southeast-2'/990 - /'ap-southeast-2'/1010]
+ │    │    ├── limit: 9
+ │    │    └── flags: force-index=a_idx
+ │    └── scan regional_by_row_table_as4@a_idx
+ │         ├── constraint: /16/15/14
+ │         │    ├── [/'ca-central-1'/-1 - /'ca-central-1'/10]
+ │         │    ├── [/'ca-central-1'/100 - /'ca-central-1'/110]
+ │         │    ├── [/'ca-central-1'/990 - /'ca-central-1'/1010]
+ │         │    ├── [/'us-east-1'/-1 - /'us-east-1'/10]
+ │         │    ├── [/'us-east-1'/100 - /'us-east-1'/110]
+ │         │    └── [/'us-east-1'/990 - /'us-east-1'/1010]
+ │         ├── limit: 9
+ │         └── flags: force-index=a_idx
+ └── aggregations
+      └── count-rows
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN -1 AND 10
+            OR a BETWEEN 100 AND 110
+            OR a BETWEEN 990 AND 1010
+        LIMIT
+            9
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/?/3/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/6/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/9/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/102/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/105/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/108/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/990/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/993/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/996/? -> <undecoded>
+output row: [9]
+
+statement ok
+SET vectorize = off
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN -1 AND 10
+            OR a BETWEEN 100 AND 110
+            OR a BETWEEN 990 AND 1010
+        LIMIT
+            9
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/3/3 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/6/6 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/9/9 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/102/102 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/105/105 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/108/108 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/990/990 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/993/993 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/996/996 -> <undecoded>
+output row: [9]
+
+statement ok
+RESET vectorize
+
+# REGIONAL BY ROW AS table with an explicit crdb_internal_region check
+# constraint.
+statement ok
+CREATE TABLE regional_by_row_table_as1 (
+  pk int PRIMARY KEY,
+  a int,
+  b int,
+  crdb_region_col1 crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN pk <= 10 THEN 'ca-central-1'
+      ELSE 'us-east-1'
+    END
+  ) VIRTUAL CHECK(crdb_region_col1 BETWEEN 'ap-southeast-2' AND 'us-east-1'),
+  crdb_region_col crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN pk <= 1 THEN 'ca-central-1'
+      ELSE 'us-east-1'
+    END
+  ) VIRTUAL,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col1
+
+statement ok
+INSERT INTO regional_by_row_table_as1 (pk) VALUES (1), (2), (3), (10), (20)
+
+# An extra crdb_region check constraint should still allow locality optimized scan.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as1 LIMIT 3] OFFSET 2
+----
+·
+• render
+│
+└── • union all
+    │ limit: 3
+    │
+    ├── • scan
+    │     missing stats
+    │     table: regional_by_row_table_as1@regional_by_row_table_as1_pkey
+    │     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+    │     limit: 3
+    │
+    └── • scan
+          missing stats
+          table: regional_by_row_table_as1@regional_by_row_table_as1_pkey
+          spans: [/'ca-central-1' - /'us-east-1']
+          limit: 3

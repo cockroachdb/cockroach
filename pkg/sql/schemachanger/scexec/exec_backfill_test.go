@@ -77,10 +77,10 @@ func TestExecBackfill(t *testing.T) {
 				keySuffixColumnIDs = append(keySuffixColumnIDs, id)
 			}
 		}
-		require.NoError(t, mut.AddIndexMutation(&descpb.IndexDescriptor{
+		require.NoError(t, mut.DeprecatedAddIndexMutation(&descpb.IndexDescriptor{
 			Name:                name,
 			ID:                  id,
-			Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			KeyColumnNames:      columns,
 			KeyColumnDirections: dirs,
 			KeyColumnIDs:        columnIDs,
@@ -106,9 +106,9 @@ func TestExecBackfill(t *testing.T) {
 		return tab
 	}
 	getTableDescriptor := func(ctx context.Context, t *testing.T, deps *sctestdeps.TestState, id descpb.ID) catalog.TableDescriptor {
-		desc, err := deps.Catalog().MustReadImmutableDescriptor(ctx, id)
+		descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, id)
 		require.NoError(t, err)
-		tab, ok := desc.(catalog.TableDescriptor)
+		tab, ok := descs[0].(catalog.TableDescriptor)
 		require.True(t, ok)
 		return tab
 	}
@@ -131,8 +131,9 @@ func TestExecBackfill(t *testing.T) {
 			descs.UpsertDescriptorEntry(mut)
 			mc, bt, bf, deps := setupTestDeps(t, tdb, descs.Catalog)
 			defer mc.Finish()
-			desc, err := deps.Catalog().MustReadImmutableDescriptor(ctx, mut.GetID())
+			read, err := deps.Catalog().MustReadImmutableDescriptors(ctx, mut.GetID())
 			require.NoError(t, err)
+			desc := read[0]
 
 			backfill := scexec.Backfill{
 				TableID:       tab.GetID(),

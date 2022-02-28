@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -60,6 +61,15 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	_, v, err := getSessionVar(name, false /* missingOk */)
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := settings.Lookup(name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant()); ok {
+		p.BufferClientNotice(
+			ctx,
+			errors.WithHint(
+				pgnotice.Newf("setting custom variable %q", name),
+				"did you mean SET CLUSTER SETTING?",
+			),
+		)
 	}
 
 	var typedValues []tree.TypedExpr

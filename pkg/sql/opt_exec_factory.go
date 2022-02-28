@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -140,12 +141,13 @@ func generateScanSpans(
 	index catalog.Index,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
-	sb := span.MakeBuilder(evalCtx, codec, tabDesc, index)
-	defer sb.Release()
+	var sb span.Builder
+	sb.Init(evalCtx, codec, tabDesc, index)
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
-	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
+	splitter := span.MakeSplitter(tabDesc, index, params.NeededCols)
+	return sb.SpansFromConstraint(params.IndexConstraint, splitter)
 }
 
 func (ef *execFactory) constructVirtualScan(
@@ -1086,7 +1088,7 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		}
 		if len(wi.Ordering) == 0 {
 			frame := p.funcs[i].frame
-			if frame.Mode == tree.RANGE && frame.Bounds.HasOffset() {
+			if frame.Mode == treewindow.RANGE && frame.Bounds.HasOffset() {
 				// Execution requires a single column to order by when there is
 				// a RANGE mode frame with at least one 'offset' bound.
 				return nil, errors.AssertionFailedf("a RANGE mode frame with an offset bound must have an ORDER BY column")
@@ -1729,16 +1731,14 @@ func (ef *execFactory) ConstructDeleteRange(
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
-	defer sb.Release()
+	var sb span.Builder
+	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
 	}
 
-	// Setting the "forDelete" flag includes all column families in case where a
-	// single record is deleted.
-	spans, err := sb.SpansFromConstraint(indexConstraint, needed, true /* forDelete */)
+	spans, err := sb.SpansFromConstraint(indexConstraint, span.NoopSplitter())
 	if err != nil {
 		return nil, err
 	}

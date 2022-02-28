@@ -181,6 +181,14 @@ type BaseConfig struct {
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
+
+	// EnableWebSessionAuthentication enables session-based authentication for
+	// the Admin API's HTTP endpoints.
+	EnableWebSessionAuthentication bool
+
+	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
+	// which a feature unique to the demo shell.
+	EnableDemoLoginEndpoint bool
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -192,17 +200,19 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 		clusterID: &base.ClusterIDContainer{},
 		serverID:  &base.NodeIDContainer{},
 	}
+	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 	baseCfg := BaseConfig{
-		Tracer:             tr,
-		idProvider:         idsProvider,
-		IDContainer:        idsProvider.serverID,
-		ClusterIDContainer: idsProvider.clusterID,
-		AmbientCtx:         log.MakeServerAmbientContext(tr, idsProvider),
-		Config:             new(base.Config),
-		Settings:           st,
-		MaxOffset:          MaxOffsetType(base.DefaultMaxClockOffset),
-		DefaultZoneConfig:  zonepb.DefaultZoneConfig(),
-		StorageEngine:      storage.DefaultStorageEngine,
+		Tracer:                         tr,
+		idProvider:                     idsProvider,
+		IDContainer:                    idsProvider.serverID,
+		ClusterIDContainer:             idsProvider.clusterID,
+		AmbientCtx:                     log.MakeServerAmbientContext(tr, idsProvider),
+		Config:                         new(base.Config),
+		Settings:                       st,
+		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
+		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
+		StorageEngine:                  storage.DefaultStorageEngine,
+		EnableWebSessionAuthentication: !disableWebLogin,
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
@@ -321,28 +331,18 @@ type KVConfig struct {
 	// in a timely fashion, typically 30s after the server starts listening.
 	DelayedBootstrapFn func()
 
-	// EnableWebSessionAuthentication enables session-based authentication for
-	// the Admin API's HTTP endpoints.
-	EnableWebSessionAuthentication bool
-
-	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
-	// which a feature unique to the demo shell.
-	EnableDemoLoginEndpoint bool
-
 	enginesCreated bool
 }
 
 // MakeKVConfig returns a KVConfig with default values.
 func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
-	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 	kvCfg := KVConfig{
-		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
-		CacheSize:                      DefaultCacheSize,
-		ScanInterval:                   defaultScanInterval,
-		ScanMinIdleTime:                defaultScanMinIdleTime,
-		ScanMaxIdleTime:                defaultScanMaxIdleTime,
-		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: !disableWebLogin,
+		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfig(),
+		CacheSize:               DefaultCacheSize,
+		ScanInterval:            defaultScanInterval,
+		ScanMinIdleTime:         defaultScanMinIdleTime,
+		ScanMaxIdleTime:         defaultScanMaxIdleTime,
+		EventLogEnabled:         defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
@@ -707,7 +707,7 @@ func (cfg *Config) FilterGossipBootstrapAddresses(ctx context.Context) []util.Un
 
 // RequireWebSession indicates whether the server should require authentication
 // sessions when serving admin API requests.
-func (cfg *Config) RequireWebSession() bool {
+func (cfg *BaseConfig) RequireWebSession() bool {
 	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
 }
 

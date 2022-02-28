@@ -559,8 +559,8 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 2129466852  t6_pkey            3082627813    0        0          1546506610  2631952481  0            0
 2129466855  t6_expr_idx        3082627813    0        0          1546506610  2631952481  0            0
 2129466854  t6_expr_expr1_idx  3082627813    0        0          1546506610  2631952481  0            0
-2129466849  t6_expr_key        3082627813    0        0          1546506610  2631952481  0            0
-2129466848  t6_expr_idx1       3082627813    0        0          1546506610  2631952481  0            0
+2129466848  t6_expr_key        3082627813    0        0          1546506610  2631952481  0            0
+2129466850  t6_expr_idx1       3082627813    0        0          1546506610  2631952481  0            0
 121         mv1                3082627813    100121   0          1546506610  0           0            0
 784389845   mv1_pkey           3082627813    0        0          1546506610  2631952481  0            0
 
@@ -727,9 +727,9 @@ attrelid    relname            attname                   atttypid  attstattarget
 2129466852  t6_pkey            rowid                     20        0              8       6       0         -1
 2129466855  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
 2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      7       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       8       0         -1
-2129466849  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      9       0         -1
-2129466848  t6_expr_idx1       crdb_internal_idx_expr_4  16        0              1       10      0         -1
+2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr    20        0              8       5       0         -1
+2129466848  t6_expr_key        crdb_internal_idx_expr_1  25        0              -1      7       0         -1
+2129466850  t6_expr_idx1       crdb_internal_idx_expr_2  16        0              1       8       0         -1
 121         mv1                ?column?                  20        0              8       1       0         -1
 121         mv1                rowid                     20        0              8       2       0         -1
 784389845   mv1_pkey           rowid                     20        0              8       2       0         -1
@@ -796,9 +796,9 @@ t6                 rowid                     -1         NULL      NULL        NU
 t6_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_key        crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_idx1       crdb_internal_idx_expr_4  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_expr1_idx  crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_key        crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx1       crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -865,9 +865,9 @@ t6                 rowid                     false         true        0        
 t6_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
-t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
-t6_expr_key        crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
-t6_expr_idx1       crdb_internal_idx_expr_4  false         true        0            NULL    NULL        NULL
+t6_expr_expr1_idx  crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
+t6_expr_key        crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
+t6_expr_idx1       crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
 mv1_pkey           rowid                     false         true        0            NULL    NULL        NULL
@@ -927,7 +927,7 @@ WHERE n.nspname = 'public'
 ----
 relname            attname                   typname   attcollation  collname
 t1                 d                         varchar   3403232968    default
-t6_expr_key        crdb_internal_idx_expr_3  text      3403232968    default
+t6_expr_key        crdb_internal_idx_expr_1  text      3403232968    default
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  text      3403232968    default
 t6                 c                         text      3403232968    default
 t5                 c                         text      3403232968    default
@@ -992,8 +992,8 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 2129466852  public      t6         t6_pkey            NULL
 2129466855  public      t6         t6_expr_idx        NULL
 2129466854  public      t6         t6_expr_expr1_idx  NULL
-2129466849  public      t6         t6_expr_key        NULL
-2129466848  public      t6         t6_expr_idx1       NULL
+2129466848  public      t6         t6_expr_key        NULL
+2129466850  public      t6         t6_expr_idx1       NULL
 784389845   public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
@@ -1016,8 +1016,8 @@ crdb_oid    tablename  indexname          indexdef
 2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
 2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-2129466849  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-2129466848  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
+2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
+2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
 784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
@@ -1115,6 +1115,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2621181446  15        6         false        false         false           false         false           true        false         false       true       false           8 2 3 11 10 9  0 3403232968 0             0 0 0        2 2 2        NULL      status IN ('running'::STRING, 'reverting'::STRING, 'pending'::STRING, 'pause-requested'::STRING, 'cancel-requested'::STRING)  3
 2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2880917710  50        2         true         true          false           true          false           true        false         false       true       false           1 2            0 3403232968               0 0          2 2          NULL      NULL                                                                                                                          2
 3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
 3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
@@ -1200,6 +1201,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2621181446  0                           3
 2667577107  0                           1
 2834522046  0                           1
+2880917710  0                           1
+2880917710  0                           2
 3094258317  0                           1
 3094258317  0                           2
 3353994584  0                           1
@@ -1268,7 +1271,7 @@ oid         conname        connamespace  contype  condef
 108480825   uwi_b_c        3082627813    u        UNIQUE WITHOUT INDEX (b, c)
 192087236   fk_b_c         3082627813    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
 296187876   check_c        3082627813    c        CHECK ((c != ''::STRING))
-1002858067  t6_expr_key    3082627813    u        UNIQUE (lower(c) ASC)
+1002858066  t6_expr_key    3082627813    u        UNIQUE (lower(c) ASC)
 1034567609  uwi_b_partial  3082627813    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
 1568726274  index_key      3082627813    u        UNIQUE (b ASC, c ASC)
 1568726275  t1_a_key       3082627813    u        UNIQUE (a ASC)
@@ -1292,7 +1295,7 @@ check_b        c        false          false        true          114       0   
 uwi_b_c        u        false          false        true          116       0         0
 fk_b_c         f        false          false        true          117       0         0
 check_c        c        false          false        true          114       0         0
-t6_expr_key    u        false          false        true          120       0         2129466849
+t6_expr_key    u        false          false        true          120       0         2129466848
 uwi_b_partial  u        false          false        true          116       0         0
 index_key      u        false          false        true          110       0         3687884464
 t1_a_key       u        false          false        true          110       0         3687884465
@@ -1357,7 +1360,7 @@ check_b        true        0            true          {2}
 uwi_b_c        true        0            true          NULL
 fk_b_c         true        0            true          {2,3}
 check_c        true        0            true          {3}
-t6_expr_key    true        0            true          {9}
+t6_expr_key    true        0            true          {7}
 uwi_b_partial  true        0            true          NULL
 index_key      true        0            true          {3,4}
 t1_a_key       true        0            true          {2}
@@ -3860,7 +3863,7 @@ objoid      classoid    objsubid  description
 4294967127  4294967129  0         pg_config was created for compatibility and is currently unimplemented
 4294967126  4294967129  0         table constraints (incomplete - see also information_schema.table_constraints)
 4294967125  4294967129  0         encoding conversions (empty - unimplemented)
-4294967124  4294967129  0         pg_cursors was created for compatibility and is currently unimplemented
+4294967124  4294967129  0         contains currently active SQL cursors created with DECLARE
 4294967123  4294967129  0         available databases (incomplete)
 4294967122  4294967129  0         contains the default values that have been configured for session variables
 4294967121  4294967129  0         default ACLs; these are the privileges that will be assigned to newly created objects
@@ -4064,6 +4067,7 @@ default_table_access_method                           heap                NULL  
 default_tablespace                                    ·                   NULL      NULL        NULL        string
 default_transaction_isolation                         serializable        NULL      NULL        NULL        string
 default_transaction_priority                          normal              NULL      NULL        NULL        string
+default_transaction_quality_of_service                regular             NULL      NULL        NULL        string
 default_transaction_read_only                         off                 NULL      NULL        NULL        string
 default_transaction_use_follower_reads                off                 NULL      NULL        NULL        string
 default_with_oids                                     off                 NULL      NULL        NULL        string
@@ -4082,11 +4086,9 @@ enable_zigzag_join                                    on                  NULL  
 escape_string_warning                                 on                  NULL      NULL        NULL        string
 experimental_distsql_planning                         off                 NULL      NULL        NULL        string
 experimental_enable_auto_rehoming                     off                 NULL      NULL        NULL        string
-experimental_enable_hash_sharded_indexes              off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning      off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                       off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints  on                  NULL      NULL        NULL        string
-experimental_use_new_schema_changer                   off                 NULL      NULL        NULL        string
 extra_float_digits                                    0                   NULL      NULL        NULL        string
 force_savepoint_restart                               off                 NULL      NULL        NULL        string
 foreign_key_cascades_limit                            10000               NULL      NULL        NULL        string
@@ -4150,6 +4152,7 @@ transaction_rows_read_log                             0                   NULL  
 transaction_rows_written_err                          0                   NULL      NULL        NULL        string
 transaction_rows_written_log                          0                   NULL      NULL        NULL        string
 transaction_status                                    NoTxn               NULL      NULL        NULL        string
+use_declarative_schema_changer                        on                  NULL      NULL        NULL        string
 vectorize                                             on                  NULL      NULL        NULL        string
 xmloption                                             content             NULL      NULL        NULL        string
 
@@ -4179,6 +4182,7 @@ default_table_access_method                           heap                NULL  
 default_tablespace                                    ·                   NULL  user     NULL      ·                   ·
 default_transaction_isolation                         serializable        NULL  user     NULL      default             default
 default_transaction_priority                          normal              NULL  user     NULL      normal              normal
+default_transaction_quality_of_service                regular             NULL  user     NULL      regular             regular
 default_transaction_read_only                         off                 NULL  user     NULL      off                 off
 default_transaction_use_follower_reads                off                 NULL  user     NULL      off                 off
 default_with_oids                                     off                 NULL  user     NULL      off                 off
@@ -4197,11 +4201,9 @@ enable_zigzag_join                                    on                  NULL  
 escape_string_warning                                 on                  NULL  user     NULL      on                  on
 experimental_distsql_planning                         off                 NULL  user     NULL      off                 off
 experimental_enable_auto_rehoming                     off                 NULL  user     NULL      off                 off
-experimental_enable_hash_sharded_indexes              off                 NULL  user     NULL      off                 off
 experimental_enable_implicit_column_partitioning      off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                       off                 NULL  user     NULL      off                 off
 experimental_enable_unique_without_index_constraints  on                  NULL  user     NULL      off                 off
-experimental_use_new_schema_changer                   off                 NULL  user     NULL      off                 off
 extra_float_digits                                    0                   NULL  user     NULL      0                   2
 force_savepoint_restart                               off                 NULL  user     NULL      off                 off
 foreign_key_cascades_limit                            10000               NULL  user     NULL      10000               10000
@@ -4265,6 +4267,7 @@ transaction_rows_read_log                             0                   NULL  
 transaction_rows_written_err                          0                   NULL  user     NULL      0                   0
 transaction_rows_written_log                          0                   NULL  user     NULL      0                   0
 transaction_status                                    NoTxn               NULL  user     NULL      NoTxn               NoTxn
+use_declarative_schema_changer                        on                  NULL  user     NULL      on                  on
 vectorize                                             on                  NULL  user     NULL      on                  on
 xmloption                                             content             NULL  user     NULL      content             content
 
@@ -4289,6 +4292,7 @@ default_table_access_method                           NULL    NULL     NULL     
 default_tablespace                                    NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation                         NULL    NULL     NULL     NULL        NULL
 default_transaction_priority                          NULL    NULL     NULL     NULL        NULL
+default_transaction_quality_of_service                NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only                         NULL    NULL     NULL     NULL        NULL
 default_transaction_use_follower_reads                NULL    NULL     NULL     NULL        NULL
 default_with_oids                                     NULL    NULL     NULL     NULL        NULL
@@ -4307,11 +4311,9 @@ enable_zigzag_join                                    NULL    NULL     NULL     
 escape_string_warning                                 NULL    NULL     NULL     NULL        NULL
 experimental_distsql_planning                         NULL    NULL     NULL     NULL        NULL
 experimental_enable_auto_rehoming                     NULL    NULL     NULL     NULL        NULL
-experimental_enable_hash_sharded_indexes              NULL    NULL     NULL     NULL        NULL
 experimental_enable_implicit_column_partitioning      NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables                       NULL    NULL     NULL     NULL        NULL
 experimental_enable_unique_without_index_constraints  NULL    NULL     NULL     NULL        NULL
-experimental_use_new_schema_changer                   NULL    NULL     NULL     NULL        NULL
 extra_float_digits                                    NULL    NULL     NULL     NULL        NULL
 force_savepoint_restart                               NULL    NULL     NULL     NULL        NULL
 foreign_key_cascades_limit                            NULL    NULL     NULL     NULL        NULL
@@ -4377,6 +4379,7 @@ transaction_rows_read_log                             NULL    NULL     NULL     
 transaction_rows_written_err                          NULL    NULL     NULL     NULL        NULL
 transaction_rows_written_log                          NULL    NULL     NULL     NULL        NULL
 transaction_status                                    NULL    NULL     NULL     NULL        NULL
+use_declarative_schema_changer                        NULL    NULL     NULL     NULL        NULL
 vectorize                                             NULL    NULL     NULL     NULL        NULL
 xmloption                                             NULL    NULL     NULL     NULL        NULL
 
@@ -5199,12 +5202,9 @@ SET DATABASE = test;
 subtest 58945
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE t_hash (
   a INT,
-  INDEX t_hash_a_idx (a DESC) USING HASH WITH BUCKET_COUNT=8
+  INDEX t_hash_a_idx (a DESC) USING HASH WITH (bucket_count=8)
 );
 
 query T colnames

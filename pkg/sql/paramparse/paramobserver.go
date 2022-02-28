@@ -12,8 +12,10 @@ package paramparse
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -99,12 +101,12 @@ type TableStorageParamObserver struct {
 	setAutomaticColumn bool
 }
 
+var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
+
 // NewTableStorageParamObserver returns a new TableStorageParamObserver.
 func NewTableStorageParamObserver(tableDesc *tabledesc.Mutable) *TableStorageParamObserver {
 	return &TableStorageParamObserver{tableDesc: tableDesc}
 }
-
-var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
 
 // runPostChecks implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) runPostChecks() error {
@@ -184,7 +186,7 @@ var tableParams = map[string]tableParam{
 			if setTrue && po.tableDesc.RowLevelTTL == nil {
 				// Set the base struct, but do not populate it.
 				// An error from runPostChecks will appear if the requisite fields are not set.
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			if !setTrue && po.tableDesc.RowLevelTTL != nil {
 				return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
@@ -192,7 +194,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
+			po.tableDesc.RowLevelTTL = nil
+			return nil
 		},
 	},
 	`ttl_automatic_column`: {
@@ -205,12 +208,12 @@ var tableParams = map[string]tableParam{
 				po.setAutomaticColumn = true
 			}
 			if !setTrue && po.tableDesc.RowLevelTTL != nil {
-				return unimplemented.NewWithIssue(75428, "unsetting TTL automatic column not yet implemented")
+				return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
 			}
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			return unimplemented.NewWithIssue(75428, "unsetting TTL automatic column not yet implemented")
+			return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
 		},
 	},
 	`ttl_expire_after`: {
@@ -230,7 +233,8 @@ var tableParams = map[string]tableParam{
 				if !ok || d == nil {
 					return pgerror.Newf(
 						pgcode.InvalidParameterValue,
-						`value of "ttl_expire_after" must be an interval`,
+						`value of "%s" must be an interval`,
+						key,
 					)
 				}
 			}
@@ -238,13 +242,14 @@ var tableParams = map[string]tableParam{
 			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
 				return pgerror.Newf(
 					pgcode.InvalidParameterValue,
-					`value of "ttl_expire_after" must be at least zero`,
+					`value of "%s" must be at least zero`,
+					key,
 				)
 			}
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
-			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
+			po.tableDesc.RowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
@@ -253,8 +258,135 @@ var tableParams = map[string]tableParam{
 					pgcode.InvalidParameterValue,
 					`resetting "ttl_expire_after" is not permitted`,
 				),
-				"use `RESET (ttl_automatic_column)` to remove the automatic column or use `RESET (ttl)` to remove TTL from the table",
+				"use `RESET (ttl)` to remove TTL from the table",
 			)
+		},
+	},
+	`ttl_select_batch_size`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLBatchSize(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.SelectBatchSize = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.SelectBatchSize = 0
+			}
+			return nil
+		},
+	},
+	`ttl_delete_batch_size`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLBatchSize(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.DeleteBatchSize = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DeleteBatchSize = 0
+			}
+			return nil
+		},
+	},
+	`ttl_range_concurrency`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRangeConcurrency(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.RangeConcurrency = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.RangeConcurrency = 0
+			}
+			return nil
+		},
+	},
+	`ttl_delete_rate_limit`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.DeleteRateLimit = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DeleteRateLimit = 0
+			}
+			return nil
+		},
+	},
+	`ttl_job_cron`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			str, err := DatumAsString(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLCronExpr(key, str); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.DeletionCron = str
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DeletionCron = ""
+			}
+			return nil
+		},
+	},
+	`ttl_pause`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			b, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			po.tableDesc.RowLevelTTL.Pause = b
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL.Pause = false
+			return nil
 		},
 	},
 	`exclude_data_from_backup`: {
@@ -342,6 +474,12 @@ func (po *TableStorageParamObserver) onSet(
 	key string,
 	datum tree.Datum,
 ) error {
+	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL settings while another schema change on the table is being processed",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}
@@ -350,6 +488,12 @@ func (po *TableStorageParamObserver) onSet(
 
 // onReset implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL settings while another schema change on the table is being processed",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onReset(po, evalCtx, key)
 	}

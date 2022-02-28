@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -186,6 +187,138 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	return res[0].(*tree.CreateTable)
 }
 
+func parseCreateStatement(createStmtSQL string) (*tree.CreateTable, error) {
+	var p parser.Parser
+	stmts, err := p.Parse(createStmtSQL)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, errors.Errorf("parsed CreateStatement string yielded more than one parsed statment")
+	}
+	tableStmt, ok := stmts[0].AST.(*tree.CreateTable)
+	if !ok {
+		return nil, errors.Errorf("AST could not be cast to *tree.CreateTable")
+	}
+	return tableStmt, nil
+}
+
+// generateInsertStmtVals generates random data for a string builder thats
+// used after the VALUES keyword in an INSERT statement.
+func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool) string {
+	var valBuilder strings.Builder
+	valBuilder.WriteString("(")
+	comma := ""
+	for j := 0; j < len(colTypes); j++ {
+		valBuilder.WriteString(comma)
+		var d tree.Datum
+		if rand.Intn(10) < 4 {
+			// 40% of the time, use a corner case value
+			d = randInterestingDatum(rng, colTypes[j])
+		}
+		if colTypes[j] == types.RegType {
+			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
+			// at least before linking and user defined types are added.
+			d = tree.NewDOid(tree.DInt(rand.Intn(len(types.OidToType))))
+		}
+		if d == nil {
+			d = RandDatum(rng, colTypes[j], nullable[j])
+		}
+		valBuilder.WriteString(tree.AsStringWithFlags(d, tree.FmtParsable))
+		comma = ", "
+	}
+	valBuilder.WriteString(")")
+	return valBuilder.String()
+}
+
+// TODO(butler): develop new helper function PopulateDatabaseWithRandData which calls
+// PopulateTableWithRandData on each table in the order of the fk
+// dependency graph.
+
+// PopulateTableWithRandData populates the provided table by executing exactly
+// `numInserts` statements. numRowsInserted <= numInserts because inserting into
+// an arbitrary table can fail for reasons which include:
+//  - UNIQUE or CHECK constraint violation. RandDatum is naive to these constraints.
+//  - Out of range error for a computed INT2 or INT4 column.
+//
+// If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
+// handle this table's schema. Consider increasing numInserts or filing a bug.
+func PopulateTableWithRandData(
+	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
+) (numRowsInserted int, err error) {
+	var createStmtSQL string
+	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tableName))
+	err = res.Scan(&createStmtSQL)
+	if err != nil {
+		return 0, errors.Wrapf(err, "table does not exist in db")
+	}
+	createStmt, err := parseCreateStatement(createStmtSQL)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to determine table schema")
+	}
+
+	// Find columns subject to a foreign key constraint
+	var hasFK = map[string]bool{}
+	for _, def := range createStmt.Defs {
+		if fk, ok := def.(*tree.ForeignKeyConstraintTableDef); ok {
+			for _, col := range fk.FromCols {
+				hasFK[col.String()] = true
+			}
+		}
+	}
+
+	// Populate helper objects for insert statement creation and error out if a
+	// column's constraints will make it impossible to execute random insert
+	// statements.
+
+	colTypes := make([]*types.T, 0)
+	nullable := make([]bool, 0)
+	var colNameBuilder strings.Builder
+	comma := ""
+	for _, def := range createStmt.Defs {
+		if col, ok := def.(*tree.ColumnTableDef); ok {
+			if _, ok := hasFK[col.Name.String()]; ok {
+				// Given that this function only populates an individual table without
+				// considering other tables in the database, populating a column with a
+				// foreign key reference with actual data can be nearly impossible. To
+				// make inserts pass more frequently, this function skips populating
+				// columns with a foreign key reference. Sadly, if these columns with
+				// FKs are also NOT NULL, 0 rows will get inserted.
+
+				// TODO(butler): get the unique values from each foreign key reference and
+				// populate the column by sampling the FK's unique values.
+				if col.Nullable.Nullability == tree.Null {
+					continue
+				}
+			}
+			if col.Computed.Computed || col.Hidden {
+				// Cannot insert values into hidden or computed columns, so skip adding
+				// them to the list of columns to insert data into.
+				continue
+			}
+			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type.(*types.T)))
+			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
+
+			colNameBuilder.WriteString(comma)
+			colNameBuilder.WriteString(col.Name.String())
+			comma = ", "
+		}
+	}
+
+	for i := 0; i < numInserts; i++ {
+		insertVals := generateInsertStmtVals(rng, colTypes, nullable)
+		insertStmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
+			tableName,
+			colNameBuilder.String(),
+			insertVals)
+		_, err := db.Exec(insertStmt)
+		if err == nil {
+			numRowsInserted++
+		}
+	}
+	return numRowsInserted, nil
+}
+
 // GenerateRandInterestingTable takes a gosql.DB connection and creates
 // a table with all the types in randInterestingDatums and rows of the
 // interesting datums.
@@ -269,7 +402,7 @@ func randComputedColumnTableDef(
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = (rng.Intn(2) == 0)
 
-	expr, typ, nullability := randExpr(rng, normalColDefs, true /* nullOk */)
+	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */)
 	newDef.Computed.Expr = expr
 	newDef.Type = typ
 	newDef.Nullable.Nullability = nullability
@@ -290,6 +423,25 @@ func randIndexTableDefFromCols(
 
 	cols := cpy[:nCols]
 
+	// Expression indexes do not currently support references to computed
+	// columns, so we only make expressions with non-computed columns. Also,
+	// duplicate expressions in an index are not allowed, so columns are removed
+	// from the list of eligible columns when they are referenced in an
+	// expression. This ensures that no two expressions reference the same
+	// columns, therefore no expressions can be duplicated.
+	eligibleExprIndexRefs := nonComputedColumnTableDefs(columnTableDefs)
+	removeColsFromExprIndexRefCols := func(cols map[tree.Name]struct{}) {
+		i := 0
+		for j := range eligibleExprIndexRefs {
+			eligibleExprIndexRefs[i] = eligibleExprIndexRefs[j]
+			name := eligibleExprIndexRefs[j].Name
+			if _, ok := cols[name]; !ok {
+				i++
+			}
+		}
+		eligibleExprIndexRefs = eligibleExprIndexRefs[:i]
+	}
+
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
@@ -299,13 +451,13 @@ func randIndexTableDefFromCols(
 		}
 
 		// Replace the column with an expression 10% of the time.
-		if allowExpressions && rng.Intn(10) == 0 {
+		if allowExpressions && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
 			var expr tree.Expr
-			// Expression indexes do not currently support references to
-			// computed columns, so only make expressions with non-computed
-			// columns. Do not allow NULL in expressions to avoid expressions
-			// that have an ambiguous type.
-			expr, semType, _ = randExpr(rng, nonComputedColumnTableDefs(columnTableDefs), false /* nullOk */)
+			// Do not allow NULL in expressions to avoid expressions that have
+			// an ambiguous type.
+			var referencedCols map[tree.Name]struct{}
+			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
+			removeColsFromExprIndexRefCols(referencedCols)
 			elem.Expr = expr
 			elem.Column = ""
 		}
@@ -397,6 +549,63 @@ func TestingMakePrimaryIndexKeyForTenant(
 
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), index.GetID())
 	key, _, err := rowenc.EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+// TestingMakeSecondaryIndexKey creates a key prefix that corresponds to
+// a secondary index; it is intended for tests.
+//
+// It is exported because it is used by tests outside of this package.
+//
+// The value types must match the secondary key columns,
+// supported types are: - Datum
+//  - bool (converts to DBool)
+//  - int (converts to DInt)
+//  - string (converts to DString)
+func TestingMakeSecondaryIndexKey(
+	desc catalog.TableDescriptor, index catalog.Index, codec keys.SQLCodec, vals ...interface{},
+) (roachpb.Key, error) {
+	if len(vals) > index.NumKeyColumns() {
+		return nil, errors.Errorf("got %d values, index %s has %d columns", len(vals), index.GetName(), index.NumKeyColumns())
+	}
+
+	datums := make([]tree.Datum, len(vals))
+	for i, v := range vals {
+		switch v := v.(type) {
+		case bool:
+			datums[i] = tree.MakeDBool(tree.DBool(v))
+		case int:
+			datums[i] = tree.NewDInt(tree.DInt(v))
+		case string:
+			datums[i] = tree.NewDString(v)
+		case tree.Datum:
+			datums[i] = v
+		default:
+			return nil, errors.Errorf("unexpected value type %T", v)
+		}
+		// Check that the value type matches.
+		colID := index.GetKeyColumnID(i)
+		col, _ := desc.FindColumnWithID(colID)
+		if col != nil && col.Public() {
+			colTyp := datums[i].ResolvedType()
+			if t := colTyp.Family(); t != col.GetType().Family() {
+				return nil, errors.Errorf("column %d of type %s, got value of type %s", i, col.GetType().Family(), t)
+			}
+		}
+	}
+	// Create the ColumnID to index in datums slice map needed by
+	// MakeIndexKeyPrefix.
+	var colIDToRowIndex catalog.TableColMap
+	for i := range vals {
+		colIDToRowIndex.Set(index.GetKeyColumnID(i), i)
+	}
+
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), index.GetID())
+	key, _, err := rowenc.EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+
 	if err != nil {
 		return nil, err
 	}

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -69,6 +70,7 @@ func initCLIDefaults() {
 	setUserfileContextDefaults()
 	setCertContextDefaults()
 	setDebugRecoverContextDefaults()
+	setDebugSendKVBatchContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -126,6 +128,16 @@ func setServerContextDefaults() {
 	// Attempt to default serverCfg.MemoryPoolSize to 25% if possible.
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLConfig.MemoryPoolSize = bytes
+	}
+
+	// Attempt to set serverCfg.TimeSeriesServerConfig.QueryMemoryMax to
+	// the default (64MiB) or 1% of system memory, whichever is greater.
+	if bytes, _ := memoryPercentResolver(1); bytes != 0 {
+		if bytes > ts.DefaultQueryMemoryMax {
+			serverCfg.TimeSeriesServerConfig.QueryMemoryMax = bytes
+		} else {
+			serverCfg.TimeSeriesServerConfig.QueryMemoryMax = ts.DefaultQueryMemoryMax
+		}
 	}
 }
 

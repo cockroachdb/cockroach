@@ -23,13 +23,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -74,6 +76,7 @@ tables are queried either from a live cluster or from an unzipped debug.zip.
 }
 
 type doctorFn = func(
+	version *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
@@ -82,19 +85,27 @@ type doctorFn = func(
 
 func makeZipDirCommand(fn doctorFn) *cobra.Command {
 	return &cobra.Command{
-		Use:   "zipdir <debug_zip_dir>",
+		Use:   "zipdir <debug_zip_dir> [version]",
 		Short: "run doctor tool on data from an unzipped debug.zip",
 		Long: `
 Run the doctor tool on system data from an unzipped debug.zip. This command
-requires the path of the unzipped 'debug' directory as its argument.
+requires the path of the unzipped 'debug' directory as its argument. A version
+can be optionally specified, which will be used enable / disable validation
+that may not exist on downlevel versions.
 `,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			descs, ns, jobs, err := fromZipDir(args[0])
+			var version *clusterversion.ClusterVersion
+			if len(args) == 2 {
+				version = &clusterversion.ClusterVersion{
+					Version: roachpb.MustParseVersion(args[1]),
+				}
+			}
 			if err != nil {
 				return err
 			}
-			return fn(descs, ns, jobs, os.Stdout)
+			return fn(version, descs, ns, jobs, os.Stdout)
 		},
 	}
 }
@@ -118,7 +129,7 @@ Run the doctor tool system data from a live cluster specified by --url.
 				if err != nil {
 					return err
 				}
-				return fn(descs, ns, jobs, os.Stdout)
+				return fn(nil, descs, ns, jobs, os.Stdout)
 			}),
 	}
 }
@@ -137,6 +148,7 @@ var doctorRecreateClusterCmd = makeClusterCommand(runDoctorRecreate)
 var doctorRecreateZipDirCmd = makeZipDirCommand(runDoctorRecreate)
 
 func runDoctorRecreate(
+	_ *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
@@ -146,14 +158,26 @@ func runDoctorRecreate(
 }
 
 func runDoctorExamine(
+	version *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) (err error) {
+	if version == nil {
+		version = &clusterversion.ClusterVersion{
+			Version: clusterversion.DoctorBinaryVersion,
+		}
+	}
 	var valid bool
 	valid, err = doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, debugCtx.verbose, out)
+		context.Background(),
+		*version,
+		descTable,
+		namespaceTable,
+		jobsTable,
+		debugCtx.verbose,
+		out)
 	if err != nil {
 		return err
 	}
@@ -174,15 +198,10 @@ func fromCluster(
 	jobsTable doctor.JobsTable,
 	retErr error,
 ) {
-	maybePrint := func(stmt string) string {
-		if debugCtx.verbose {
-			fmt.Println("querying " + stmt)
-		}
-		return stmt
-	}
+	ctx := context.Background()
 	if timeout != 0 {
-		stmt := fmt.Sprintf(`SET statement_timeout = '%s'`, timeout)
-		if err := sqlConn.Exec(maybePrint(stmt), nil); err != nil {
+		if err := sqlConn.Exec(ctx,
+			`SET statement_timeout = $1`, timeout.String()); err != nil {
 			return nil, nil, nil, err
 		}
 	}
@@ -190,7 +209,7 @@ func fromCluster(
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
 	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp FROM system.descriptor LIMIT 1"
-	_, err := sqlConn.QueryRow(maybePrint(checkColumnExistsStmt), nil)
+	_, err := sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -204,7 +223,7 @@ FROM system.descriptor ORDER BY id`
 	}
 	descTable = make([]doctor.DescriptorTableRow, 0)
 
-	if err := selectRowsMap(sqlConn, maybePrint(stmt), make([]driver.Value, 3), func(vals []driver.Value) error {
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 3), func(vals []driver.Value) error {
 		var row doctor.DescriptorTableRow
 		if id, ok := vals[0].(int64); ok {
 			row.ID = id
@@ -240,7 +259,7 @@ FROM system.descriptor ORDER BY id`
 	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
 
 	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 1`
-	_, err = sqlConn.QueryRow(maybePrint(checkColumnExistsStmt), nil)
+	_, err = sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.1, table system.namespace does not have this column.
 	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -254,7 +273,7 @@ FROM system.namespace`
 	}
 
 	namespaceTable = make([]doctor.NamespaceTableRow, 0)
-	if err := selectRowsMap(sqlConn, maybePrint(stmt), make([]driver.Value, 4), func(vals []driver.Value) error {
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		var row doctor.NamespaceTableRow
 		if parentID, ok := vals[0].(int64); ok {
 			row.ParentID = descpb.ID(parentID)
@@ -285,7 +304,7 @@ FROM system.namespace`
 	stmt = `SELECT id, status, payload, progress FROM system.jobs`
 	jobsTable = make(doctor.JobsTable, 0)
 
-	if err := selectRowsMap(sqlConn, maybePrint(stmt), make([]driver.Value, 4), func(vals []driver.Value) error {
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		md := jobs.JobMetadata{}
 		md.ID = jobspb.JobID(vals[0].(int64))
 		md.Status = jobs.Status(vals[1].(string))
@@ -470,7 +489,7 @@ func tableMap(in io.Reader, fn func(string) error) error {
 func selectRowsMap(
 	conn clisqlclient.Conn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
 ) error {
-	rows, err := conn.Query(stmt, nil)
+	rows, err := conn.Query(context.Background(), stmt)
 	if err != nil {
 		return errors.Wrapf(err, "query '%s'", stmt)
 	}

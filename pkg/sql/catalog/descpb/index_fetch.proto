@@ -17,7 +17,6 @@ import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 import "sql/catalog/descpb/structured.proto";
 
-
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
 message IndexFetchSpec {
@@ -69,21 +68,28 @@ message IndexFetchSpec {
                                            (gogoproto.casttype) = "ColumnID"];
   }
 
-  // TODO(radu): add versioning once this goes over the wire.
-  //optional uint32 version = 1 [(gogoproto.nullable) = false];
+  // Version is used to allow providing backward compatibility if this spec
+  // changes. The intention is that one day this proto will be passed to KV scan
+  // requests, in which case the DistSQL versioning will not suffice.
+  optional uint32 version = 1 [(gogoproto.nullable) = false];
 
-  optional string table_name = 2 [(gogoproto.nullable) = false];
-  optional uint32 table_id = 3 [(gogoproto.nullable) = false,
+  optional uint32 table_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "TableID",
                                 (gogoproto.casttype) = "ID"];
-  optional string index_name = 4 [(gogoproto.nullable) = false];
+  optional string table_name = 3 [(gogoproto.nullable) = false];
 
-  optional bool is_secondary_index = 5 [(gogoproto.nullable) = false];
-  optional bool is_unique_index = 6 [(gogoproto.nullable) = false];
+  optional uint32 index_id = 4 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "IndexID",
+                                (gogoproto.casttype) = "IndexID"];
+
+  optional string index_name = 5 [(gogoproto.nullable) = false];
+
+  optional bool is_secondary_index = 6 [(gogoproto.nullable) = false];
+  optional bool is_unique_index = 7 [(gogoproto.nullable) = false];
 
   // EncodingType represents what sort of k/v encoding is used to store the
   // table data.
-  optional uint32 encoding_type = 7 [(gogoproto.nullable) = false,
+  optional uint32 encoding_type = 8 [(gogoproto.nullable) = false,
                                      (gogoproto.casttype) = "IndexDescriptorEncodingType"];
 
   // NumKeySuffixColumns is the number of suffix columns (corresponding to a
@@ -94,31 +100,31 @@ message IndexFetchSpec {
   // If the index is unique, the suffix columns are encoded (using key encoding)
   // into the KV value. If one of the indexed columns is NULL, the key will
   // also contain the suffix column values.
-  optional uint32 num_key_suffix_columns = 8 [(gogoproto.nullable) = false];
+  optional uint32 num_key_suffix_columns = 9 [(gogoproto.nullable) = false];
 
   // MaxKeysPerRow is the maximum number of keys per row in this index. It is
   // used for various optimizations.
-  optional uint32 max_keys_per_row = 9 [(gogoproto.nullable) = false];
+  optional uint32 max_keys_per_row = 10 [(gogoproto.nullable) = false];
 
   // KeyPrefixLength is the length of the key prefix that encodes the table and
   // index ID.
-  optional uint32 key_prefix_length = 10 [(gogoproto.nullable) = false];
+  optional uint32 key_prefix_length = 11 [(gogoproto.nullable) = false];
 
-  optional uint32 max_family_id = 11 [(gogoproto.nullable) = false,
+  optional uint32 max_family_id = 12 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "MaxFamilyID",
                                       (gogoproto.casttype) = "FamilyID"];
 
   // FamilyDefaultColumns contains the default column IDs for families with a
   // default column. This is used to decode values that use the single column
   // optimization (where the column ID is omitted).
-  repeated FamilyDefaultColumn family_default_columns = 12 [(gogoproto.nullable) = false];
+  repeated FamilyDefaultColumn family_default_columns = 13 [(gogoproto.nullable) = false];
 
   // KeyAndSuffixColumns contains all the key and suffix columns, in order.
-  repeated KeyColumn key_and_suffix_columns = 13 [(gogoproto.nullable) = false];
+  repeated KeyColumn key_and_suffix_columns = 14 [(gogoproto.nullable) = false];
 
   // FetchedColumns contains all the columns we are producing values for. The
   // fetched columns can overlap with the key columns.
   //
   // Any other column IDs present in the fetched KVs will be ignored.
-  repeated Column fetched_columns = 14 [(gogoproto.nullable) = false];
+  repeated Column fetched_columns = 15 [(gogoproto.nullable) = false];
 }

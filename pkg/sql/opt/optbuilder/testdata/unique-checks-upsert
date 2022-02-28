@@ -18,8 +18,8 @@ build
 UPSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -105,8 +105,8 @@ build
 UPSERT INTO uniq (k, v, w) VALUES (1, 1, 1), (2, 2, 2)
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -198,8 +198,8 @@ build
 UPSERT INTO uniq (k, w, x) VALUES (1, NULL, 1), (2, NULL, NULL)
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -291,8 +291,8 @@ build
 UPSERT INTO uniq SELECT k, v, w FROM other
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
  ├── canary column: uniq.k:18
  ├── fetch columns: uniq.k:18 uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
  ├── insert-mapping:
@@ -385,8 +385,8 @@ build
 INSERT INTO uniq VALUES (100, 1), (200, 1) ON CONFLICT (k) DO UPDATE SET w = excluded.w + 1
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
  ├── canary column: uniq.k:12
  ├── fetch columns: uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
  ├── insert-mapping:
@@ -481,8 +481,8 @@ build
 INSERT INTO uniq SELECT k, v FROM other ON CONFLICT (k) DO UPDATE SET w = uniq.k + 1
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
  ├── canary column: uniq.k:18
  ├── fetch columns: uniq.k:18 uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
  ├── insert-mapping:
@@ -576,8 +576,8 @@ build
 INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (w) DO UPDATE SET w = 10
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter constraints: unique_w
+ ├── columns: <none>
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -673,8 +673,8 @@ build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (x, y) DO UPDATE SET v = 10
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter constraints: unique_x_y
+ ├── columns: <none>
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -903,8 +903,8 @@ build
 INSERT INTO uniq_overlaps_pk VALUES (100, 10, 1, 1), (200, 20, 2, 2) ON CONFLICT (a) DO UPDATE SET a = 10
 ----
 upsert uniq_overlaps_pk
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── canary column: uniq_overlaps_pk.a:11
  ├── fetch columns: uniq_overlaps_pk.a:11 uniq_overlaps_pk.b:12 uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
  ├── insert-mapping:
@@ -1007,8 +1007,8 @@ build
 INSERT INTO uniq_overlaps_pk VALUES (1, 2, 3, 4) ON CONFLICT (c, d) DO UPDATE SET b = 10
 ----
 upsert uniq_overlaps_pk
- ├── columns: <none>
  ├── arbiter constraints: unique_c_d
+ ├── columns: <none>
  ├── canary column: uniq_overlaps_pk.a:11
  ├── fetch columns: uniq_overlaps_pk.a:11 uniq_overlaps_pk.b:12 uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
  ├── insert-mapping:
@@ -1103,8 +1103,8 @@ build
 UPSERT INTO uniq_hidden_pk (a, b, d) VALUES (1, 1, 1), (2, 2, 2)
 ----
 upsert uniq_hidden_pk
- ├── columns: <none>
  ├── arbiter indexes: uniq_hidden_pk_pkey
+ ├── columns: <none>
  ├── canary column: uniq_hidden_pk.rowid:17
  ├── fetch columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17
  ├── insert-mapping:
@@ -1296,8 +1296,8 @@ build
 INSERT INTO uniq_hidden_pk VALUES (1, 2, 3, 4) ON CONFLICT (a, b, d) DO UPDATE SET a = 10
 ----
 upsert uniq_hidden_pk
- ├── columns: <none>
  ├── arbiter constraints: unique_a_b_d
+ ├── columns: <none>
  ├── canary column: uniq_hidden_pk.rowid:17
  ├── fetch columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17
  ├── insert-mapping:
@@ -1427,8 +1427,8 @@ build
 UPSERT INTO uniq_fk_parent (a) VALUES (1)
 ----
 upsert uniq_fk_parent
- ├── columns: <none>
  ├── arbiter indexes: uniq_fk_parent_pkey
+ ├── columns: <none>
  ├── canary column: uniq_fk_parent.rowid:8
  ├── fetch columns: uniq_fk_parent.a:7 uniq_fk_parent.rowid:8
  ├── insert-mapping:
@@ -1537,8 +1537,8 @@ build
 INSERT INTO t VALUES (1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
 ----
 upsert t
- ├── columns: <none>
  ├── arbiter constraints: i2
+ ├── columns: <none>
  ├── canary column: t.rowid:8
  ├── fetch columns: t.i:7 t.rowid:8
  ├── insert-mapping:
@@ -1610,8 +1610,8 @@ build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT ON CONSTRAINT unique_w DO UPDATE SET v=1
 ----
 upsert uniq
- ├── columns: <none>
  ├── arbiter constraints: unique_w
+ ├── columns: <none>
  ├── canary column: uniq.k:13
  ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  ├── insert-mapping:
@@ -1777,8 +1777,8 @@ build
 INSERT INTO uniq_partial VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 10
 ----
 upsert uniq_partial
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── canary column: uniq_partial.k:10
  ├── fetch columns: uniq_partial.k:10 uniq_partial.a:11 uniq_partial.b:12
  ├── insert-mapping:
@@ -1859,7 +1859,7 @@ error (42P10): there is no unique or exclusion constraint matching the ON CONFLI
 build
 INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT ON CONSTRAINT unique_a DO UPDATE SET a = 2
 ----
-error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
+error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so it cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 exec-ddl
 CREATE TABLE uniq_partial_constraint_and_index (
@@ -1879,8 +1879,8 @@ INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO UPDATE SET a = 10
 ----
 upsert uniq_partial_constraint_and_index
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
+ ├── columns: <none>
  ├── canary column: uniq_partial_constraint_and_index.k:10
  ├── fetch columns: uniq_partial_constraint_and_index.k:10 uniq_partial_constraint_and_index.a:11 uniq_partial_constraint_and_index.b:12
  ├── insert-mapping:
@@ -1959,8 +1959,8 @@ INSERT INTO uniq_constraint_and_partial_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 10
 ----
 upsert uniq_constraint_and_partial_index
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── canary column: uniq_constraint_and_partial_index.k:10
  ├── fetch columns: uniq_constraint_and_partial_index.k:10 uniq_constraint_and_partial_index.a:11 uniq_constraint_and_partial_index.b:12
  ├── insert-mapping:
@@ -2057,8 +2057,8 @@ build
 UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
 ----
 upsert uniq_computed_pk
- ├── columns: <none>
  ├── arbiter indexes: uniq_computed_pk_pkey
+ ├── columns: <none>
  ├── canary column: uniq_computed_pk.c_i_expr:18
  ├── fetch columns: uniq_computed_pk.i:15 uniq_computed_pk.s:16 uniq_computed_pk.d:17 uniq_computed_pk.c_i_expr:18 uniq_computed_pk.c_s:19 uniq_computed_pk.c_d:20 uniq_computed_pk.c_d_expr:21
  ├── insert-mapping:

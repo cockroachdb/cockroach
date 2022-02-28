@@ -162,7 +162,7 @@ func TestBumpClusterVersion(t *testing.T) {
 						BinaryVersionOverride: test.activeClusterVersion.Version,
 						// We're bumping cluster versions manually ourselves. We
 						// want avoid racing with the auto-upgrade process.
-						DisableAutomaticVersionUpgrade: 1,
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
 					},
 				},
 			})

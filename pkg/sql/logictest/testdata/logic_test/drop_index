@@ -301,8 +301,7 @@ fk1  CREATE TABLE public.fk1 (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
      CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
-     INDEX i2 (x ASC),
-     FAMILY "primary" (x, rowid)
+     INDEX i2 (x ASC)
 )
 
 # test that notices are generated on index drops
@@ -327,7 +326,7 @@ DROP INDEX t_secondary CASCADE;
 ALTER TABLE t DROP COLUMN b;
 INSERT INTO t SELECT a + 1 FROM t;
 
-statement error pgcode 23505 duplicate key value got decoding error: column \"b\" \(2\) is not public
+statement error pgcode 23505 duplicate key value violates unique constraint "t_secondary"\nDETAIL: Key \(b\)=\(0\.0\) already exists
 UPSERT INTO t SELECT a + 1 FROM t;
 
 statement ok

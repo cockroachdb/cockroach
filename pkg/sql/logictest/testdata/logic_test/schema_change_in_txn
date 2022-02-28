@@ -282,8 +282,7 @@ b  CREATE TABLE public.b (
    CONSTRAINT b_pkey PRIMARY KEY (rowid ASC),
    CONSTRAINT b_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.parent(id),
    INDEX foo (parent_id ASC),
-   UNIQUE INDEX bar (parent_id ASC),
-   FAMILY "primary" (parent_id, rowid, d)
+   UNIQUE INDEX bar (parent_id ASC)
 )
 
 # table b is not visible to the transaction #17949
@@ -735,15 +734,15 @@ SELECT * FROM customers@j_idx
 
 query TT
 SELECT status,
-       regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as description
+       regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as desc
   FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' ORDER BY job_id DESC LIMIT 1
 ----
 failed  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5; ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4; ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3; ALTER TABLE test.public.customers ADD COLUMN m CHAR; ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a'; CREATE INDEX j_idx ON test.public.customers (j); CREATE INDEX l_idx ON test.public.customers (l); CREATE INDEX m_idx ON test.public.customers (m); CREATE UNIQUE INDEX i_idx ON test.public.customers (i); CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
 
 query TT
 SELECT status,
-       regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as description
-  FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY job_id DESC LIMIT 1
+       regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as descr
+  FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for ROLL%' ORDER BY job_id DESC LIMIT 1
 ----
 running  GC for ROLLBACK of ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5; ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4; ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3; ALTER TABLE test.public.customers ADD COLUMN m CHAR; ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a'; CREATE INDEX j_idx ON test.public.customers (j); CREATE INDEX l_idx ON test.public.customers (l); CREATE INDEX m_idx ON test.public.customers (m); CREATE UNIQUE INDEX i_idx ON test.public.customers (i); CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
 
@@ -1465,8 +1464,8 @@ COMMIT
 statement ok
 DROP TABLE t
 
-# Test that DROP INDEX on an index with dependent foreign keys is correctly
-# rolled back when there is an error
+# Test that DROP INDEX on an index with dependent foreign keys doesn't
+# leave table in inconsistent state.
 subtest 38733
 
 statement ok
@@ -1492,7 +1491,7 @@ BEGIN
 statement ok
 DROP INDEX y_b_idx CASCADE;
 
-# This will fail, causing the previous DROP INDEX to also be rolled back
+# This will fail, but DROP INDEX won't be rolled back
 statement ok
 CREATE UNIQUE INDEX ON y (b);
 
@@ -1518,7 +1517,7 @@ BEGIN
 statement ok
 DROP INDEX x_b_key CASCADE;
 
-# This will fail, causing the previous DROP INDEX to also be rolled back
+# This will fail, but the previous DROP INDEX won't be rolled back
 statement ok
 CREATE UNIQUE INDEX ON x (c);
 
@@ -1530,8 +1529,15 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM x
 ----
-x  x_b_key  UNIQUE       UNIQUE (b ASC)       true
 x  x_pkey   PRIMARY KEY  PRIMARY KEY (a ASC)  true
+
+# Verify that table y is in a consistent state (otherwise, SHOW
+# CONSTRAINTS would fail with an error). The foreign constraint here
+# hasn't been rolled back because the index hasn't been rolled back.
+query TTTTB
+SHOW CONSTRAINTS FROM y
+----
+y  y_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true
 
 statement ok
 DROP TABLE x, y

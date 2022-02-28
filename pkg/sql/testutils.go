@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -32,10 +33,7 @@ import (
 // Will fail on complex tables where that operation requires e.g. looking up
 // other tables.
 func CreateTestTableDescriptor(
-	ctx context.Context,
-	parentID, id descpb.ID,
-	schema string,
-	privileges *descpb.PrivilegeDescriptor,
+	ctx context.Context, parentID, id descpb.ID, schema string, privileges *catpb.PrivilegeDescriptor,
 ) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
@@ -65,7 +63,6 @@ func CreateTestTableDescriptor(
 			&sessiondata.SessionData{
 				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 					EnableUniqueWithoutIndexConstraints: true,
-					HashShardedIndexesEnabled:           true,
 				},
 			}, /* sessionData */
 			tree.PersistencePermanent,
@@ -75,6 +72,7 @@ func CreateTestTableDescriptor(
 		desc, err := NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */
+			st,
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
@@ -144,8 +142,13 @@ func (dsp *DistSQLPlanner) Exec(
 	)
 	defer recv.Release()
 
+	distributionType := DistributionType(DistributionTypeNone)
+	if distribute {
+		distributionType = DistributionTypeSystemTenantOnly
+	}
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distribute)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distributionType)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()

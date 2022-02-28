@@ -12,7 +12,12 @@ go_library(
     embed = [":sessiondatapb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/security"],
+    deps = [
+        "//pkg/security",
+        "//pkg/util/admission",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",  # keep
+    ],
 )
 
 proto_library(

@@ -1,0 +1,131 @@
+parse
+ALTER CHANGEFEED 123 ADD foo
+----
+ALTER CHANGEFEED 123 ADD foo
+ALTER CHANGEFEED (123) ADD (foo) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo -- literals removed
+ALTER CHANGEFEED 123 ADD _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 DROP foo
+----
+ALTER CHANGEFEED 123 DROP foo
+ALTER CHANGEFEED (123) DROP (foo) -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo -- literals removed
+ALTER CHANGEFEED 123 DROP _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar
+----
+ALTER CHANGEFEED 123 ADD foo  DROP bar -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  DROP (bar) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  DROP bar -- literals removed
+ALTER CHANGEFEED 123 ADD _  DROP _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 DROP foo ADD bar
+----
+ALTER CHANGEFEED 123 DROP foo  ADD bar -- normalized!
+ALTER CHANGEFEED (123) DROP (foo)  ADD (bar) -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo  ADD bar -- literals removed
+ALTER CHANGEFEED 123 DROP _  ADD _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar
+----
+ALTER CHANGEFEED 123 ADD foo, bar
+ALTER CHANGEFEED (123) ADD (foo), (bar) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo, bar -- literals removed
+ALTER CHANGEFEED 123 ADD _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 DROP foo, bar ADD baz, qux
+----
+ALTER CHANGEFEED 123 DROP foo, bar  ADD baz, qux -- normalized!
+ALTER CHANGEFEED (123) DROP (foo), (bar)  ADD (baz), (qux) -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo, bar  ADD baz, qux -- literals removed
+ALTER CHANGEFEED 123 DROP _, _  ADD _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar ADD baz, qux DROP quux
+----
+ALTER CHANGEFEED 123 ADD foo  DROP bar  ADD baz, qux  DROP quux -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  DROP (bar)  ADD (baz), (qux)  DROP (quux) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  DROP bar  ADD baz, qux  DROP quux -- literals removed
+ALTER CHANGEFEED 123 ADD _  DROP _  ADD _, _  DROP _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 SET foo = 'bar'
+----
+ALTER CHANGEFEED 123 SET foo = 'bar'
+ALTER CHANGEFEED (123) SET foo = ('bar') -- fully parenthesized
+ALTER CHANGEFEED _ SET foo = '_' -- literals removed
+ALTER CHANGEFEED 123 SET _ = 'bar' -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 ADD foo SET bar = 'baz', qux = 'quux'
+----
+ALTER CHANGEFEED 123 ADD foo  SET bar = 'baz', qux = 'quux' -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  SET bar = ('baz'), qux = ('quux') -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  SET bar = '_', qux = '_' -- literals removed
+ALTER CHANGEFEED 123 ADD _  SET _ = 'baz', _ = 'quux' -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 DROP foo SET bar = 'baz', qux = 'quux'
+----
+ALTER CHANGEFEED 123 DROP foo  SET bar = 'baz', qux = 'quux' -- normalized!
+ALTER CHANGEFEED (123) DROP (foo)  SET bar = ('baz'), qux = ('quux') -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo  SET bar = '_', qux = '_' -- literals removed
+ALTER CHANGEFEED 123 DROP _  SET _ = 'baz', _ = 'quux' -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 SET foo = 'bar' ADD baz DROP qux
+----
+ALTER CHANGEFEED 123 SET foo = 'bar'  ADD baz  DROP qux -- normalized!
+ALTER CHANGEFEED (123) SET foo = ('bar')  ADD (baz)  DROP (qux) -- fully parenthesized
+ALTER CHANGEFEED _ SET foo = '_'  ADD baz  DROP qux -- literals removed
+ALTER CHANGEFEED 123 SET _ = 'bar'  ADD _  DROP _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo SET bar = 'baz', qux = 'quux' DROP corge
+----
+ALTER CHANGEFEED 123 ADD foo  SET bar = 'baz', qux = 'quux'  DROP corge -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  SET bar = ('baz'), qux = ('quux')  DROP (corge) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  SET bar = '_', qux = '_'  DROP corge -- literals removed
+ALTER CHANGEFEED 123 ADD _  SET _ = 'baz', _ = 'quux'  DROP _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 UNSET foo
+----
+ALTER CHANGEFEED 123 UNSET foo
+ALTER CHANGEFEED (123) UNSET foo -- fully parenthesized
+ALTER CHANGEFEED _ UNSET foo -- literals removed
+ALTER CHANGEFEED 123 UNSET _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo UNSET bar, baz
+----
+ALTER CHANGEFEED 123 ADD foo  UNSET bar, baz -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  UNSET bar, baz -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  UNSET bar, baz -- literals removed
+ALTER CHANGEFEED 123 ADD _  UNSET _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 UNSET foo, bar ADD baz DROP qux
+----
+ALTER CHANGEFEED 123 UNSET foo, bar  ADD baz  DROP qux -- normalized!
+ALTER CHANGEFEED (123) UNSET foo, bar  ADD (baz)  DROP (qux) -- fully parenthesized
+ALTER CHANGEFEED _ UNSET foo, bar  ADD baz  DROP qux -- literals removed
+ALTER CHANGEFEED 123 UNSET _, _  ADD _  DROP _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar SET baz = 'qux' UNSET quux, corge
+----
+ALTER CHANGEFEED 123 ADD foo  DROP bar  SET baz = 'qux'  UNSET quux, corge -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  DROP (bar)  SET baz = ('qux')  UNSET quux, corge -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  DROP bar  SET baz = '_'  UNSET quux, corge -- literals removed
+ALTER CHANGEFEED 123 ADD _  DROP _  SET _ = 'qux'  UNSET _, _ -- identifiers removed

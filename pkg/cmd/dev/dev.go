@@ -25,6 +25,11 @@ type dev struct {
 	cli  *cobra.Command
 	os   *os.OS
 	exec *exec.Exec
+
+	knobs struct { // testing knobs
+		skipDoctorCheck bool
+		devBinOverride  string
+	}
 }
 
 func makeDevCmd() *dev {
@@ -128,8 +133,8 @@ Typical usage:
 	var debugVar bool
 	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
 	ret.cli.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		isDoctor := cmd.Name() == "doctor"
-		if !isTesting && !isDoctor {
+		skipDoctorCheck := cmd.Name() == "doctor" || cmd.Name() == "merge-test-xmls"
+		if !skipDoctorCheck {
 			if err := ret.checkDoctorStatus(cmd.Context()); err != nil {
 				return err
 			}

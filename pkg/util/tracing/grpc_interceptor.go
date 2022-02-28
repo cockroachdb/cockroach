@@ -90,6 +90,9 @@ func setGRPCErrorTag(sp *Span, err error) {
 // BatchMethodName is the method name of Internal.Batch RPC.
 const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
 
+// SendKVBatchMethodName is the method name for adminServer.SendKVBatch.
+const SendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
+
 // SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
 const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
 const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
@@ -101,7 +104,9 @@ const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
 // interceptors deal with it. Others (DistSQL.FlowStream) are simply exempt from
 // tracing because it's not worth it.
 func methodExcludedFromTracing(method string) bool {
-	return method == BatchMethodName || method == SetupFlowMethodName ||
+	return method == BatchMethodName ||
+		method == SendKVBatchMethodName ||
+		method == SetupFlowMethodName ||
 		method == flowStreamMethodName
 }
 
@@ -142,7 +147,7 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ctx,
 			info.FullMethod,
-			WithRemoteParent(spanMeta),
+			WithRemoteParentFromSpanMeta(spanMeta),
 			WithServerSpanKind,
 		)
 		defer serverSpan.Finish()
@@ -188,7 +193,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ss.Context(),
 			info.FullMethod,
-			WithRemoteParent(spanMeta),
+			WithRemoteParentFromSpanMeta(spanMeta),
 			WithServerSpanKind,
 		)
 		defer serverSpan.Finish()

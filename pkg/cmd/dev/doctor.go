@@ -38,6 +38,10 @@ const (
 )
 
 func (d *dev) checkDoctorStatus(ctx context.Context) error {
+	if d.knobs.skipDoctorCheck {
+		return nil
+	}
+
 	dir, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -214,7 +218,7 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 
 	if !noCache {
 		d.log.Println("doctor: setting up cache")
-		err = d.setUpCache(ctx)
+		bazelRcLine, err := d.setUpCache(ctx)
 		if err != nil {
 			return err
 		}
@@ -223,18 +227,20 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 			return err
 		}
 		bazelRcContents, err := d.os.ReadFile(filepath.Join(homeDir, ".bazelrc"))
-		if err != nil || !strings.Contains(bazelRcContents, "--remote_cache=") {
-			log.Printf("Did you remember to add the --remote_cache=... line to your ~/.bazelrc?")
+		if err != nil || !strings.Contains(bazelRcContents, bazelRcLine) {
+			log.Printf("Please add the string `%s` to your ~/.bazelrc:\n", bazelRcLine)
+			log.Printf("    echo \"%s\" >> ~/.bazelrc", bazelRcLine)
 			success = false
 		}
 	}
 
-	if success {
-		if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
-			return err
-		}
-		log.Println("You are ready to build :)")
-		return nil
+	if !success {
+		return errors.New("please address the errors described above and try again")
 	}
-	return errors.New("please address the errors described above and try again")
+
+	if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
+		return err
+	}
+	log.Println("You are ready to build :)")
+	return nil
 }

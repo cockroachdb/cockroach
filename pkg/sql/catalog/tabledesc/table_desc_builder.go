@@ -33,7 +33,7 @@ type TableDescriptorBuilder interface {
 type tableDescriptorBuilder struct {
 	original                   *descpb.TableDescriptor
 	maybeModified              *descpb.TableDescriptor
-	changes                    PostDeserializationTableDescriptorChanges
+	changes                    catalog.PostDeserializationChanges
 	skipFKsWithNoMatchingTable bool
 	isUncommittedVersion       bool
 }
@@ -43,17 +43,8 @@ var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // table descriptors.
 func NewBuilder(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	return newBuilder(desc)
-}
-
-// NewBuilderForUncommittedVersion is like NewBuilder but ensures that the
-// uncommitted version flag is set in the built descriptor.
-// This should be used when constructing a new copy of an immutable from an
-// existing descriptor which may have a new version.
-func NewBuilderForUncommittedVersion(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	b := newBuilder(desc)
-	b.isUncommittedVersion = true
-	return b
+	return newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
 }
 
 // NewBuilderForFKUpgrade should be used when attempting to upgrade the
@@ -64,7 +55,8 @@ func NewBuilderForUncommittedVersion(desc *descpb.TableDescriptor) TableDescript
 func NewBuilderForFKUpgrade(
 	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
 ) TableDescriptorBuilder {
-	b := newBuilder(desc)
+	b := newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
 	b.skipFKsWithNoMatchingTable = skipFKsWithNoMatchingTable
 	return b
 }
@@ -83,9 +75,15 @@ func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
 	return b.BuildImmutableTable()
 }
 
-func newBuilder(desc *descpb.TableDescriptor) *tableDescriptorBuilder {
+func newBuilder(
+	desc *descpb.TableDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.TableDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
 }
 
@@ -97,19 +95,27 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
 func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() {
+	prevChanges := tdb.changes
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes = maybeFillInDescriptor(tdb.maybeModified)
+	prevChanges.ForEach(func(change catalog.PostDeserializationChangeType) {
+		tdb.changes.Add(change)
+	})
+
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
-	tdb.changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
+	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(
 		descLookupFn,
 		tdb.skipFKsWithNoMatchingTable,
 		tdb.maybeModified,
 	)
+	if upgradedFK {
+		tdb.changes.Add(catalog.UpgradedForeignKeyRepresentation)
+	}
 	return err
 }
 
@@ -125,7 +131,7 @@ func (tdb *tableDescriptorBuilder) BuildImmutableTable() catalog.TableDescriptor
 		desc = tdb.original
 	}
 	imm := makeImmutable(desc)
-	imm.postDeserializationChanges = tdb.changes
+	imm.changes = tdb.changes
 	imm.isUncommittedVersion = tdb.isUncommittedVersion
 	return imm
 }
@@ -143,8 +149,8 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 	}
 	return &Mutable{
 		wrapper: wrapper{
-			TableDescriptor:            *tdb.maybeModified,
-			postDeserializationChanges: tdb.changes,
+			TableDescriptor: *tdb.maybeModified,
+			changes:         tdb.changes,
 		},
 		ClusterVersion: *tdb.original,
 	}
@@ -164,8 +170,8 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
 	}
 	return &Mutable{
 		wrapper: wrapper{
-			TableDescriptor:            *desc,
-			postDeserializationChanges: tdb.changes,
+			TableDescriptor: *desc,
+			changes:         tdb.changes,
 		},
 	}
 }
@@ -190,24 +196,29 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
 	desc *descpb.TableDescriptor,
-) (changes PostDeserializationTableDescriptorChanges) {
-	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
-
-	changes.FixedIndexEncodingType = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
-	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
+) (changes catalog.PostDeserializationChanges) {
+	set := func(change catalog.PostDeserializationChangeType, cond bool) {
+		if cond {
+			changes.Add(change)
+		}
+	}
+	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(desc))
+	set(catalog.FixedIndexEncodingType, maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex))
+	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(desc))
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
-		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
-		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
+		set(catalog.UpgradedIndexFormatVersion,
+			maybeUpgradeSecondaryIndexFormatVersion(idx))
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
-			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
+			set(catalog.UpgradedIndexFormatVersion,
+				maybeUpgradeSecondaryIndexFormatVersion(idx))
 		}
 	}
-	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
-	changes.RemovedDefaultExprFromComputedColumn = maybeRemoveDefaultExprFromComputedColumns(desc)
+	set(catalog.UpgradedNamespaceName, maybeUpgradeNamespaceName(desc))
+	set(catalog.RemovedDefaultExprFromComputedColumn,
+		maybeRemoveDefaultExprFromComputedColumns(desc))
 
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
 	// TODO(richardjcai): Remove this case in 22.2.
@@ -222,8 +233,9 @@ func maybeFillInDescriptor(
 		desc.GetName(),
 	)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)
-	changes.UpgradedPrivileges = fixedPrivileges || addedGrantOptions
-	changes.RemovedDuplicateIDsInRefs = maybeRemoveDuplicateIDsInRefs(desc)
+	set(catalog.UpgradedPrivileges, fixedPrivileges || addedGrantOptions)
+	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
+	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	return changes
 }
 
@@ -354,7 +366,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				OnDelete:            ref.OnDelete,
 				OnUpdate:            ref.OnUpdate,
 				Match:               ref.Match,
+				ConstraintID:        desc.GetNextConstraintID(),
 			}
+			desc.NextConstraintID++
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 		}
 		changed = true
@@ -412,6 +426,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					OnDelete:            forwardFK.OnDelete,
 					OnUpdate:            forwardFK.OnUpdate,
 					Match:               forwardFK.Match,
+					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			} else {
 				// We have an old (not upgraded yet) table, with a matching forward
@@ -427,8 +442,10 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					OnDelete:            originIndex.ForeignKey.OnDelete,
 					OnUpdate:            originIndex.ForeignKey.OnUpdate,
 					Match:               originIndex.ForeignKey.Match,
+					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			}
+			desc.NextConstraintID++
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
 		}
 		changed = true
@@ -458,6 +475,10 @@ func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) (wasUpgraded bool) 
 	return wasUpgraded
 }
 
+// FamilyPrimaryName is the name of the "primary" family, which is autogenerated
+// the family clause is not specified.
+const FamilyPrimaryName = "primary"
+
 func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 	var primaryIndexColumnIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
@@ -465,7 +486,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 	}
 
 	desc.Families = []descpb.ColumnFamilyDescriptor{
-		{ID: 0, Name: "primary"},
+		{ID: 0, Name: FamilyPrimaryName},
 	}
 	desc.NextFamilyID = desc.Families[0].ID + 1
 	addFamilyForCol := func(col *descpb.ColumnDescriptor) {
@@ -500,7 +521,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 }
 
 // maybeUpgradePrimaryIndexFormatVersion tries to promote a primary index to
-// version LatestPrimaryIndexDescriptorVersion whenever possible.
+// version PrimaryIndexWithStoredColumnsVersion whenever possible.
 func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
 	// Always set the correct encoding type for the primary index.
 	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
@@ -545,12 +566,12 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	}
 	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
 	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
-	desc.PrimaryIndex.Version = descpb.LatestPrimaryIndexDescriptorVersion
+	desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 	return true
 }
 
 // maybeUpgradeSecondaryIndexFormatVersion tries to promote a secondary index to
-// version LatestNonPrimaryIndexDescriptorVersion whenever possible.
+// version PrimaryIndexWithStoredColumnsVersion whenever possible.
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
@@ -559,6 +580,9 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:
 		break
+	case descpb.StrictIndexColumnIDGuaranteesVersion:
+		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		return true
 	default:
 		return false
 	}
@@ -573,7 +597,7 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	if set.Contains(0) {
 		return false
 	}
-	idx.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
+	idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 	return true
 }
 
@@ -649,4 +673,88 @@ func cleanedIDs(input []descpb.ID) []descpb.ID {
 		return nil
 	}
 	return s
+}
+
+// maybeAddConstraintIDs ensures that all constraints have an ID associated with
+// them.
+func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	// Only assign constraint IDs to physical tables.
+	if !desc.IsTable() {
+		return false
+	}
+	initialConstraintID := desc.NextConstraintID
+	// Maps index IDs to indexes for one which have
+	// a constraint ID assigned.
+	constraintIndexes := make(map[descpb.IndexID]*descpb.IndexDescriptor)
+	if desc.NextConstraintID == 0 {
+		desc.NextConstraintID = 1
+	}
+	nextConstraintID := func() descpb.ConstraintID {
+		id := desc.GetNextConstraintID()
+		desc.NextConstraintID++
+		return id
+	}
+	// Loop over all constraints and assign constraint IDs.
+	if desc.PrimaryIndex.ConstraintID == 0 {
+		desc.PrimaryIndex.ConstraintID = nextConstraintID()
+		constraintIndexes[desc.PrimaryIndex.ID] = &desc.PrimaryIndex
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.Unique && idx.ConstraintID == 0 {
+			idx.ConstraintID = nextConstraintID()
+			constraintIndexes[idx.ID] = idx
+		}
+	}
+	for i := range desc.Checks {
+		check := desc.Checks[i]
+		if check.ConstraintID == 0 {
+			check.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.InboundFKs {
+		fk := &desc.InboundFKs[i]
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.UniqueWithoutIndexConstraints {
+		unique := desc.UniqueWithoutIndexConstraints[i]
+		if unique.ConstraintID == 0 {
+			unique.ConstraintID = nextConstraintID()
+		}
+	}
+	// Update mutations to add the constraint ID. In the case of a PK swap
+	// we may need to maintain the same constraint ID.
+	for _, mutation := range desc.GetMutations() {
+		if idx := mutation.GetIndex(); idx != nil &&
+			idx.ConstraintID == 0 &&
+			mutation.Direction == descpb.DescriptorMutation_ADD &&
+			idx.Unique {
+			idx.ConstraintID = nextConstraintID()
+			constraintIndexes[idx.ID] = idx
+		} else if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+			for idx := range pkSwap.NewIndexes {
+				oldIdx, firstOk := constraintIndexes[pkSwap.OldIndexes[idx]]
+				newIdx := constraintIndexes[pkSwap.NewIndexes[idx]]
+				if !firstOk {
+					continue
+				}
+				newIdx.ConstraintID = oldIdx.ConstraintID
+			}
+		} else if constraint := mutation.GetConstraint(); constraint != nil {
+			nextID := nextConstraintID()
+			constraint.UniqueWithoutIndexConstraint.ConstraintID = nextID
+			constraint.ForeignKey.ConstraintID = nextID
+			constraint.Check.ConstraintID = nextID
+		}
+
+	}
+	return desc.NextConstraintID != initialConstraintID
 }

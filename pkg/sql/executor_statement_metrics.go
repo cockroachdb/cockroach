@@ -39,6 +39,7 @@ type EngineMetrics struct {
 	SQLServiceLatency     *metric.Histogram
 	SQLTxnLatency         *metric.Histogram
 	SQLTxnsOpen           *metric.Gauge
+	SQLActiveStatements   *metric.Gauge
 
 	// TxnAbortCount counts transactions that were aborted, either due
 	// to non-retriable errors, or retriable errors when the client-side
@@ -163,6 +164,7 @@ func (ex *connExecutor) recordStatementSummary(
 		FullScan:     flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		Failed:       stmtErr != nil,
 		Database:     planner.SessionData().Database,
+		PlanHash:     planner.instrumentation.planGist.Hash(),
 	}
 
 	// We only populate the transaction fingerprint ID field if we are in an
@@ -204,6 +206,7 @@ func (ex *connExecutor) recordStatementSummary(
 		Nodes:           getNodesFromPlanner(planner),
 		StatementType:   stmt.AST.StatementType(),
 		Plan:            planner.instrumentation.PlanForStats(ctx),
+		PlanGist:        planner.instrumentation.planGist.String(),
 		StatementError:  stmtErr,
 	}
 

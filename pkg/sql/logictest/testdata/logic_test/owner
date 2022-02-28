@@ -209,7 +209,7 @@ statement ok
 REVOKE ALL ON DATABASE test FROM testuser;
 REVOKE ALL ON TABLE d.t FROM testuser;
 
-statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of table d.public.t\nowner of table test.public.t
 DROP ROLE testuser
 
 # Cannot drop object due to owned objects message should only show the owned
@@ -253,5 +253,5 @@ REVOKE ALL ON TABLE d.s.t FROM testuser;
 
 user testuser
 
-statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t.*\n.*owner of table d.s.t.*\n.*owner of schema s.*\n.*owner of type d.public._?typ.*\n.*owner of type d.public._?typ
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of schema s
 DROP ROLE testuser

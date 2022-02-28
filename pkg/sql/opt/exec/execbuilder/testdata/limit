@@ -340,9 +340,6 @@ vectorized: true
 
 # Regression test for #55156: split hash-sharded index scan.
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE IF NOT EXISTS user_checklist_items (
     tenant_id UUID,
     location_id UUID,
@@ -358,8 +355,8 @@ CREATE TABLE IF NOT EXISTS user_checklist_items (
     create_date TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (tenant_id, location_id, checklist_item_id, user_id)
 );
-CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem ON user_checklist_items (tenant_id, user_id, date_should_be_completed, location_name, title, order_item, checklist_item_id) USING HASH WITH BUCKET_COUNT = 8;
-CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_locationid_configurationmaintenanceid_configurationmaintenanceitemid_dateshouldbecompleted ON user_checklist_items (tenant_id, location_id, configuration_maintenance_id, configuration_maintenance_item_id, date_should_be_completed) USING HASH WITH BUCKET_COUNT = 8;
+CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem ON user_checklist_items (tenant_id, user_id, date_should_be_completed, location_name, title, order_item, checklist_item_id) USING HASH WITH (bucket_count=8);
+CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_locationid_configurationmaintenanceid_configurationmaintenanceitemid_dateshouldbecompleted ON user_checklist_items (tenant_id, location_id, configuration_maintenance_id, configuration_maintenance_item_id, date_should_be_completed) USING HASH WITH (bucket_count=8);
 
 statement ok
 ALTER TABLE user_checklist_items INJECT STATISTICS

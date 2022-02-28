@@ -71,10 +71,9 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
 		},
-		// Sentry and the errors library use go/build to determine
+		// The errors library uses go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/sentry-go",
 		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
 	)
 }
@@ -140,51 +139,61 @@ func TestClusterNameFlag(t *testing.T) {
 	}
 }
 
-func TestSQLMemoryPoolFlagValue(t *testing.T) {
+func TestMemoryPoolFlagValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Avoid leaking configuration changes after the test ends.
-	defer initCLIDefaults()
-
-	f := startCmd.Flags()
-
-	// Check absolute values.
-	testCases := []struct {
-		value    string
-		expected int64
+	for _, tc := range []struct {
+		flag   string
+		config *int64
 	}{
-		{"100MB", 100 * 1000 * 1000},
-		{".5GiB", 512 * 1024 * 1024},
-		{"1.3", 1},
-	}
-	for _, c := range testCases {
-		args := []string{"--max-sql-memory", c.value}
-		if err := f.Parse(args); err != nil {
-			t.Fatal(err)
-		}
-		if c.expected != serverCfg.MemoryPoolSize {
-			t.Errorf("expected %d, but got %d", c.expected, serverCfg.MemoryPoolSize)
-		}
-	}
+		{flag: "--max-sql-memory", config: &serverCfg.MemoryPoolSize},
+		{flag: "--max-tsdb-memory", config: &serverCfg.TimeSeriesServerConfig.QueryMemoryMax},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			// Avoid leaking configuration changes after the test ends.
+			defer initCLIDefaults()
 
-	for _, c := range []string{".30", "0.3"} {
-		args := []string{"--max-sql-memory", c}
-		if err := f.Parse(args); err != nil {
-			t.Fatal(err)
-		}
+			f := startCmd.Flags()
 
-		// Check fractional values.
-		maxMem, err := status.GetTotalMemory(context.Background())
-		if err != nil {
-			t.Logf("total memory unknown: %v", err)
-			return
-		}
-		expectedLow := (maxMem * 28) / 100
-		expectedHigh := (maxMem * 32) / 100
-		if serverCfg.MemoryPoolSize < expectedLow || serverCfg.MemoryPoolSize > expectedHigh {
-			t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.MemoryPoolSize)
-		}
+			// Check absolute values.
+			testCases := []struct {
+				value    string
+				expected int64
+			}{
+				{"100MB", 100 * 1000 * 1000},
+				{".5GiB", 512 * 1024 * 1024},
+				{"1.3", 1},
+			}
+			for _, c := range testCases {
+				args := []string{tc.flag, c.value}
+				if err := f.Parse(args); err != nil {
+					t.Fatal(err)
+				}
+				if c.expected != *tc.config {
+					t.Errorf("expected %d, but got %d", c.expected, tc.config)
+				}
+			}
+
+			for _, c := range []string{".30", "0.3"} {
+				args := []string{tc.flag, c}
+				if err := f.Parse(args); err != nil {
+					t.Fatal(err)
+				}
+
+				// Check fractional values.
+				maxMem, err := status.GetTotalMemory(context.Background())
+				if err != nil {
+					t.Logf("total memory unknown: %v", err)
+					return
+				}
+				expectedLow := (maxMem * 28) / 100
+				expectedHigh := (maxMem * 32) / 100
+				if *tc.config < expectedLow || *tc.config > expectedHigh {
+					t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, *tc.config)
+				}
+			}
+		})
 	}
 }
 

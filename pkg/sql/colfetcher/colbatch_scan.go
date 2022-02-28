@@ -17,8 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -181,7 +179,6 @@ func NewColBatchScan(
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	helper *colexecargs.ExprHelper,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
@@ -191,12 +188,7 @@ func NewColBatchScan(
 		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
 	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
-	table := flowCtx.TableDescriptor(&spec.Table)
-	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
-	tableArgs, err := populateTableArgs(
-		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
-		spec.ColumnIDs, invertedColumn, helper,
-	)
+	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -224,8 +216,8 @@ func NewColBatchScan(
 		// we have to increase the min bound.
 		// Otherwise, we would have table data which would not correspond to the correct
 		// schema.
-		if aost.Timestamp.Less(table.GetModificationTime()) {
-			ts = table.GetModificationTime()
+		if aost.Timestamp.Less(spec.TableDescriptorModificationTime) {
+			ts = spec.TableDescriptorModificationTime
 		}
 		bsHeader = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
@@ -281,8 +273,12 @@ func (s *ColBatchScan) Release() {
 }
 
 // Close implements the colexecop.Closer interface.
-func (s *ColBatchScan) Close() error {
-	s.cf.Close(s.EnsureCtx())
+func (s *ColBatchScan) Close(context.Context) error {
+	// Note that we're using the context of the ColBatchScan rather than the
+	// argument of Close() because the ColBatchScan derives its own tracing
+	// span.
+	ctx := s.EnsureCtx()
+	s.cf.Close(ctx)
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil

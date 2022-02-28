@@ -81,8 +81,8 @@ eexpect "1 row"
 eexpect root@
 end_test
 
-# Finally terminate with Ctrl+C
-interrupt
+# Finally terminate with Ctrl+D
+send_eof
 eexpect eof
 
 stop_server $argv

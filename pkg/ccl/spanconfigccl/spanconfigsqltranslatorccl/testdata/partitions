@@ -1,0 +1,150 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.person (
+    name STRING,
+    country STRING,
+    birth_date DATE,
+    PRIMARY KEY (country, birth_date, name)
+)
+    PARTITION BY LIST (country) (
+            PARTITION australia
+                VALUES IN ('AU', 'NZ')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_au VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_au VALUES FROM ('1995-01-01') TO (maxvalue)
+                    ),
+            PARTITION north_america
+                VALUES IN ('US', 'CA')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_na VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_na VALUES FROM ('1995-01-01') TO (maxvalue)
+                    ),
+            PARTITION default
+                VALUES IN (default)
+        );
+----
+
+translate database=db table=person
+----
+/Table/10{6-7}                             range default
+
+exec-sql
+ALTER PARTITION default OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER PARTITION australia OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 2;
+ALTER PARTITION north_america OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 3;
+----
+
+translate database=db table=person
+----
+/Table/106{-/1}                            range default
+/Table/106/1{-/"AU"}                       ttl_seconds=1
+/Table/106/1/"AU"{-/PrefixEnd}             ttl_seconds=2
+/Table/106/1/"{AU"/PrefixEnd-CA"}          ttl_seconds=1
+/Table/106/1/"CA"{-/PrefixEnd}             ttl_seconds=3
+/Table/106/1/"{CA"/PrefixEnd-NZ"}          ttl_seconds=1
+/Table/106/1/"NZ"{-/PrefixEnd}             ttl_seconds=2
+/Table/106/1/"{NZ"/PrefixEnd-US"}          ttl_seconds=1
+/Table/106/1/"US"{-/PrefixEnd}             ttl_seconds=3
+/Table/106/{1/"US"/PrefixEnd-2}            ttl_seconds=1
+/Table/10{6/2-7}                           range default
+
+exec-sql
+ALTER PARTITION old_au OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 4;
+ALTER PARTITION yung_au OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 5;
+ALTER PARTITION old_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 6;
+ALTER PARTITION yung_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 7;
+----
+
+translate database=db table=person
+----
+/Table/106{-/1}                            range default
+/Table/106/1{-/"AU"}                       ttl_seconds=1
+/Table/106/1/"AU"{-/9131}                  ttl_seconds=4
+/Table/106/1/"AU"/{9131-PrefixEnd}         ttl_seconds=5
+/Table/106/1/"{AU"/PrefixEnd-CA"}          ttl_seconds=1
+/Table/106/1/"CA"{-/9131}                  ttl_seconds=6
+/Table/106/1/"CA"/{9131-PrefixEnd}         ttl_seconds=7
+/Table/106/1/"{CA"/PrefixEnd-NZ"}          ttl_seconds=1
+/Table/106/1/"NZ"{-/9131}                  ttl_seconds=4
+/Table/106/1/"NZ"/{9131-PrefixEnd}         ttl_seconds=5
+/Table/106/1/"{NZ"/PrefixEnd-US"}          ttl_seconds=1
+/Table/106/1/"US"{-/9131}                  ttl_seconds=6
+/Table/106/1/"US"/{9131-PrefixEnd}         ttl_seconds=7
+/Table/106/{1/"US"/PrefixEnd-2}            ttl_seconds=1
+/Table/10{6/2-7}                           range default
+
+exec-sql
+CREATE TABLE db.list_default_then_range (
+    N1 INT,
+    N2 INT,
+    PRIMARY KEY (N1, N2)
+) PARTITION BY LIST (N1) (
+    PARTITION P1N1 VALUES IN (default)
+        PARTITION BY RANGE (N2) (
+            PARTITION P1N1N2 VALUES FROM (minvalue) TO (10),
+            PARTITION P2N1N2 VALUES FROM (10) TO (maxvalue)
+        )
+);
+ALTER PARTITION P1N1 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 4;
+ALTER PARTITION P1N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 5;
+ALTER PARTITION P2N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 6;
+----
+
+translate database=db table=list_default_then_range
+----
+/Table/107{-/1}                            range default
+/Table/107/1{-/10}                         ttl_seconds=5
+/Table/107/{1/10-2}                        ttl_seconds=6
+/Table/10{7/2-8}                           range default
+
+exec-sql
+CREATE TABLE db.list_multi_column_partitions(i INT, j INT, PRIMARY KEY (i, j)) PARTITION BY LIST (i, j) (
+  PARTITION six_and_seven VALUES IN ((6, 7)),
+  PARTITION default VALUES IN ((default, default))
+);
+----
+
+translate database=db table=list_multi_column_partitions
+----
+/Table/10{8-9}                             range default
+
+exec-sql
+ALTER TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 3;
+ALTER PARTITION default OF TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER PARTITION six_and_seven OF TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+translate database=db table=list_multi_column_partitions
+----
+/Table/108{-/1}                            ttl_seconds=3
+/Table/108/1{-/6/7}                        ttl_seconds=1
+/Table/108/1/6/{7-8}                       ttl_seconds=2
+/Table/108/{1/6/8-2}                       ttl_seconds=1
+/Table/10{8/2-9}                           ttl_seconds=3
+
+exec-sql
+CREATE TABLE db.partition_by_list(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION one_and_five    VALUES IN (1, 5),
+  PARTITION four_and_three  VALUES IN (4, 3),
+  PARTITION everything_else VALUES IN (6, default)
+);
+ALTER TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER PARTITION one_and_five OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 2;
+ALTER PARTITION four_and_three OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 3;
+ALTER PARTITION everything_else OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 4;
+----
+
+translate database=db table=partition_by_list
+----
+/Table/109{-/1}                            ttl_seconds=1
+/Table/109/1{-/1}                          ttl_seconds=4
+/Table/109/1/{1-2}                         ttl_seconds=2
+/Table/109/1/{2-3}                         ttl_seconds=4
+/Table/109/1/{3-4}                         ttl_seconds=3
+/Table/109/1/{4-5}                         ttl_seconds=3
+/Table/109/1/{5-6}                         ttl_seconds=2
+/Table/109/1/{6-7}                         ttl_seconds=4
+/Table/109/{1/7-2}                         ttl_seconds=4
+/Table/109/{2-PrefixEnd}                   ttl_seconds=1

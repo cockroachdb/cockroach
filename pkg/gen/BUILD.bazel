@@ -1,75 +1,38 @@
-load(":gen.bzl", "go_proto_srcs", "hoist_files")
+load(":gen.bzl", "bindata", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
 
-hoist_files(
-    name = "go_proto",
-    data = [":go_proto_srcs"],
-    tags = ["no-remote-exec"],
+bindata()
+
+execgen()
+
+gomock()
+
+go_proto()
+
+stringer()
+
+optgen()
+
+misc()
+
+docs()
+
+gen(
+    name = "gen",
+    srcs = [
+        ":code",
+        ":docs",
+    ],
 )
 
-#  bazel query 'kind(go_proto_library, //pkg/...)' | sort | awk '{ printf("\"%s\",\n", $0) }'
-
-go_proto_srcs(
-    name = "go_proto_srcs",
+gen(
+    name = "code",
     srcs = [
-        "//pkg/acceptance/cluster:cluster_go_proto",
-        "//pkg/blobs/blobspb:blobspb_go_proto",
-        "//pkg/build:build_go_proto",
-        "//pkg/ccl/backupccl:backupccl_go_proto",
-        "//pkg/ccl/baseccl:baseccl_go_proto",
-        "//pkg/ccl/sqlproxyccl/tenant:tenant_go_proto",
-        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
-        "//pkg/ccl/streamingccl/streampb:streampb_go_proto",
-        "//pkg/ccl/utilccl/licenseccl:licenseccl_go_proto",
-        "//pkg/clusterversion:clusterversion_go_proto",
-        "//pkg/config:config_go_proto",
-        "//pkg/config/zonepb:zonepb_go_proto",
-        "//pkg/geo/geoindex:geoindex_go_proto",
-        "//pkg/geo/geopb:geopb_go_proto",
-        "//pkg/gossip:gossip_go_proto",
-        "//pkg/jobs/jobspb:jobspb_go_proto",
-        "//pkg/kv/kvnemesis:kvnemesis_go_proto",
-        "//pkg/kv/kvserver:kvserver_go_proto",
-        "//pkg/kv/kvserver/closedts/ctpb:ctpb_go_proto",
-        "//pkg/kv/kvserver/concurrency/lock:lock_go_proto",
-        "//pkg/kv/kvserver/kvserverpb:kvserverpb_go_proto",
-        "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_go_proto",
-        "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_go_proto",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_go_proto",
-        "//pkg/kv/kvserver/readsummary/rspb:rspb_go_proto",
-        "//pkg/roachpb:roachpb_go_proto",
-        "//pkg/rpc:rpc_go_proto",
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
-        "//pkg/server/serverpb:serverpb_go_proto",
-        "//pkg/server/status/statuspb:statuspb_go_proto",
-        "//pkg/sql/catalog/catpb:catpb_go_proto",
-        "//pkg/sql/catalog/descpb:descpb_go_proto",
-        "//pkg/sql/contentionpb:contentionpb_go_proto",
-        "//pkg/sql/execinfrapb:execinfrapb_go_proto",
-        "//pkg/sql/inverted:inverted_go_proto",
-        "//pkg/sql/pgwire/pgerror:pgerror_go_proto",
-        "//pkg/sql/protoreflect/test:protoreflecttest_go_proto",
-        "//pkg/sql/rowenc/rowencpb:rowencpb_go_proto",
-        "//pkg/sql/schemachanger/scpb:scpb_go_proto",
-        "//pkg/sql/sessiondatapb:sessiondatapb_go_proto",
-        "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats_go_proto",
-        "//pkg/sql/stats:stats_go_proto",
-        "//pkg/sql/types:types_go_proto",
-        "//pkg/startupmigrations/leasemanager:leasemanager_go_proto",
-        "//pkg/storage/enginepb:enginepb_go_proto",
-        "//pkg/testutils/grpcutils:grpcutils_go_proto",
-        "//pkg/ts/catalog:catalog_go_proto",
-        "//pkg/ts/tspb:tspb_go_proto",
-        "//pkg/util:util_go_proto",
-        "//pkg/util/duration:duration_go_proto",
-        "//pkg/util/hlc:hlc_go_proto",
-        "//pkg/util/log/eventpb:eventpb_go_proto",
-        "//pkg/util/log/logpb:logpb_go_proto",
-        "//pkg/util/metric:metric_go_proto",
-        "//pkg/util/optional:optional_go_proto",
-        "//pkg/util/protoutil:protoutil_go_proto",
-        "//pkg/util/timeutil/pgdate:pgdate_go_proto",
-        "//pkg/util/tracing/tracingpb:tracingpb_go_proto",
-        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        ":bindata",
+        ":execgen",
+        ":go_proto",
+        ":gomock",
+        ":misc",
+        ":optgen",
+        ":stringer",
     ],
 )

@@ -525,6 +525,7 @@ func TestLint(t *testing.T) {
 			`[^[:alnum:]]telemetry\.Count\(`,
 			"--",
 			"sql",
+			":!sql/importer",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -2192,6 +2193,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("CODEOWNERS", func(t *testing.T) {
+		skip.UnderBazel(t, "doesn't work under bazel")
 		co, err := codeowners.DefaultLoadCodeOwners()
 		require.NoError(t, err)
 		const verbose = false

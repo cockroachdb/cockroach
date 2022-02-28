@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,6 +42,7 @@ type JobRegistry interface {
 	UpdateJobWithTxn(
 		ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
 	) error
+	CheckPausepoint(name string) error
 }
 
 // NewExecutorDependencies returns an scexec.Dependencies implementation built
@@ -55,9 +58,10 @@ func NewExecutorDependencies(
 	backfillTracker scexec.BackfillTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
-	partitioner scmutationexec.Partitioner,
+	clock scmutationexec.Clock,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
+	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
 ) scexec.Dependencies {
@@ -70,15 +74,16 @@ func NewExecutorDependencies(
 			indexValidator:     indexValidator,
 			eventLogger:        eventLogger,
 			schemaChangerJobID: schemaChangerJobID,
+			kvTrace:            kvTrace,
 		},
 		backfiller:              backfiller,
 		backfillTracker:         backfillTracker,
 		commentUpdaterFactory:   commentUpdaterFactory,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
-		partitioner:             partitioner,
 		user:                    user,
 		sessionData:             sessionData,
+		clock:                   clock,
 	}
 }
 
@@ -91,6 +96,7 @@ type txnDeps struct {
 	eventLogger        scexec.EventLogger
 	deletedDescriptors catalog.DescriptorIDSet
 	schemaChangerJobID jobspb.JobID
+	kvTrace            bool
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
@@ -113,10 +119,10 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 
 var _ scexec.Catalog = (*txnDeps)(nil)
 
-// MustReadImmutableDescriptor implements the scmutationexec.CatalogReader interface.
-func (d *txnDeps) MustReadImmutableDescriptor(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
+// MustReadImmutableDescriptors implements the scmutationexec.CatalogReader interface.
+func (d *txnDeps) MustReadImmutableDescriptors(
+	ctx context.Context, ids ...descpb.ID,
+) ([]catalog.Descriptor, error) {
 	flags := tree.CommonLookupFlags{
 		Required:       true,
 		RequireMutable: false,
@@ -124,7 +130,7 @@ func (d *txnDeps) MustReadImmutableDescriptor(
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
-	return d.descsCollection.GetImmutableDescriptorByID(ctx, d.txn, id, flags)
+	return d.descsCollection.GetImmutableDescriptorsByID(ctx, d.txn, flags, ids...)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
@@ -223,21 +229,40 @@ var _ scexec.CatalogChangeBatcher = (*catalogChangeBatcher)(nil)
 func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
-	return b.descsCollection.WriteDescToBatch(ctx, false /* kvTrace */, desc, b.batch)
+	return b.descsCollection.WriteDescToBatch(ctx, b.kvTrace, desc, b.batch)
 }
 
 // DeleteName implements the scexec.CatalogWriter interface.
 func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
-	b.batch.Del(catalogkeys.EncodeNameKey(b.codec, nameInfo))
+	marshalledKey := catalogkeys.EncodeNameKey(b.codec, nameInfo)
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "Del %s", marshalledKey)
+	}
+	b.batch.Del(marshalledKey)
 	return nil
 }
 
 // DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	b.batch.Del(catalogkeys.MakeDescMetadataKey(b.codec, id))
+	marshalledKey := catalogkeys.MakeDescMetadataKey(b.codec, id)
+	b.batch.Del(marshalledKey)
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "Del %s", marshalledKey)
+	}
 	b.deletedDescriptors.Add(id)
+	b.descsCollection.AddDeletedDescriptor(id)
+	return nil
+}
+
+// DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+	zoneKeyPrefix := config.MakeZoneKeyPrefix(b.codec, id)
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+	}
+	b.batch.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	return nil
 }
 
@@ -256,6 +281,10 @@ var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
 
 func (d *txnDeps) MakeJobID() jobspb.JobID {
 	return d.jobRegistry.MakeJobID()
+}
+
+func (d *txnDeps) CheckPausepoint(name string) error {
+	return d.jobRegistry.CheckPausepoint(name)
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {
@@ -313,7 +342,7 @@ func (d *txnDeps) SetResumeSpans(
 
 type execDeps struct {
 	txnDeps
-	partitioner             scmutationexec.Partitioner
+	clock                   scmutationexec.Clock
 	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
 	backfiller              scexec.Backfiller
 	backfillTracker         scexec.BackfillTracker
@@ -323,16 +352,15 @@ type execDeps struct {
 	sessionData             *sessiondata.SessionData
 }
 
+func (d *execDeps) Clock() scmutationexec.Clock {
+	return d.clock
+}
+
 var _ scexec.Dependencies = (*execDeps)(nil)
 
 // Catalog implements the scexec.Dependencies interface.
 func (d *execDeps) Catalog() scexec.Catalog {
 	return d
-}
-
-// Partitioner implements the scexec.Dependencies interface.
-func (d *execDeps) Partitioner() scmutationexec.Partitioner {
-	return d.partitioner
 }
 
 // IndexBackfiller implements the scexec.Dependencies interface.
@@ -438,4 +466,17 @@ func (n noopPeriodicProgressFlusher) StartPeriodicUpdates(
 	ctx context.Context, tracker scexec.BackfillProgressFlusher,
 ) (stop func() error) {
 	return func() error { return nil }
+}
+
+type constantClock struct {
+	ts time.Time
+}
+
+// NewConstantClock constructs a new clock for use in execution.
+func NewConstantClock(ts time.Time) scmutationexec.Clock {
+	return constantClock{ts: ts}
+}
+
+func (c constantClock) ApproximateTime() time.Time {
+	return c.ts
 }

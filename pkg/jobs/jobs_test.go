@@ -1751,10 +1751,21 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("job with created by fields", func(t *testing.T) {
 		createdByType := "internal_test"
 
+		resumerJob := make(chan *jobs.Job, 1)
+		jobs.RegisterConstructor(
+			jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+				return jobs.FakeResumer{
+					OnResume: func(ctx context.Context) error {
+						resumerJob <- j
+						return nil
+					},
+				}
+			})
+
 		jobID := registry.MakeJobID()
 		record := jobs.Record{
-			Details:   jobspb.RestoreDetails{},
-			Progress:  jobspb.RestoreProgress{},
+			Details:   jobspb.BackupDetails{},
+			Progress:  jobspb.BackupProgress{},
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
 		}
 		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
@@ -1764,6 +1775,11 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, loadedJob.CreatedBy())
 		require.Equal(t, job.CreatedBy(), loadedJob.CreatedBy())
+		registry.TestingNudgeAdoptionQueue()
+		resumedJob := <-resumerJob
+		require.NotNil(t, resumedJob.CreatedBy())
+		require.Equal(t, job.CreatedBy(), resumedJob.CreatedBy())
+
 	})
 }
 
@@ -2471,7 +2487,7 @@ func TestStartableJobMixedVersion(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
-				DisableAutomaticVersionUpgrade: 1,
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},
 	})
@@ -3417,7 +3433,11 @@ func TestPausepoints(t *testing.T) {
 				return registry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, rec)
 			}))
 			require.NoError(t, sj.Start(ctx))
-			require.NoError(t, sj.AwaitCompletion(ctx))
+			if tc.expected == jobs.StatusSucceeded {
+				require.NoError(t, sj.AwaitCompletion(ctx))
+			} else {
+				require.Error(t, sj.AwaitCompletion(ctx))
+			}
 			status, err := sj.TestingCurrentStatus(ctx, nil)
 			// Map pause-requested to paused to avoid races.
 			if status == jobs.StatusPauseRequested {

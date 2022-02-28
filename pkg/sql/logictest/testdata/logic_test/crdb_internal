@@ -153,7 +153,7 @@ pg_collation                     false
 pg_config                        true
 pg_constraint                    false
 pg_conversion                    true
-pg_cursors                       true
+pg_cursors                       false
 pg_database                      false
 pg_db_role_setting               false
 pg_default_acl                   false
@@ -396,10 +396,10 @@ SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  column_id  column_name  column_type  nullable  default_expr  hidden
 
-query ITITTBBB colnames
+query ITITTBBBT colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted  is_sharded
+descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted  is_sharded created_at
 
 query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''

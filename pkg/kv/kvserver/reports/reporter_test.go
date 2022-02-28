@@ -19,13 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -58,16 +60,17 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)
-	// Speed up the generation of the
-	_, err := db.Exec("set cluster setting kv.replication_reports.interval = '1ms'")
-	require.NoError(t, err)
+	tdb := sqlutils.MakeSQLRunner(db)
+	// Speed up the generation of the reports.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 
 	// Create a table and a zone config for it.
 	// The zone will be configured with a constraints that can't be satisfied
 	// because there are not enough nodes in the requested region.
-	_, err = db.Exec("create table t(x int primary key); " +
+	tdb.Exec(t, "create table t(x int primary key); "+
 		"alter table t configure zone using constraints='[+region=r1]'")
-	require.NoError(t, err)
 
 	// Get the id of the newly created zone.
 	r := db.QueryRow("select zone_id from crdb_internal.zones where table_name = 't'")
@@ -90,8 +93,7 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	})
 
 	// Now change the constraint asking for t to be placed in r2. This time it can be satisfied.
-	_, err = db.Exec("alter table t configure zone using constraints='[+region=r2]'")
-	require.NoError(t, err)
+	tdb.Exec(t, "alter table t configure zone using constraints='[+region=r2]'")
 
 	// Wait for the violation to clear.
 	testutils.SucceedsSoon(t, func() error {
@@ -163,9 +165,11 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
 	// Speed up the generation of the reports.
-	_, err := db.Exec("set cluster setting kv.replication_reports.interval = '1ms'")
-	require.NoError(t, err)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 
 	// Since we're using ReplicationManual, all the ranges will start with a
 	// single replica on node 1. So, the node's dc and the node's region are
@@ -236,10 +240,9 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	// only for creating the zone; we don't actually care about the configuration.
 	// Also do a split by hand. With manual replication, we're not getting the
 	// split for the table automatically.
-	_, err = db.Exec("create table t(x int primary key); " +
-		"alter table t configure zone using num_replicas=3; " +
+	tdb.Exec(t, "create table t(x int primary key); "+
+		"alter table t configure zone using num_replicas=3; "+
 		"alter table t split at values (0);")
-	require.NoError(t, err)
 	// Get the id of the newly created zone.
 	r := db.QueryRow("select zone_id from crdb_internal.zones where table_name = 't'")
 	var zoneID int
@@ -249,18 +252,16 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	require.NoError(t, checkCritical(db, zoneID, "region=r1", "region=r1,dc=dc1"))
 
 	// Upreplicate to 2 dcs. Now they're both critical.
-	_, err = db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1)")
-	require.NoError(t, err)
+	tdb.Exec(t, "ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1)")
+
 	require.NoError(t, checkCritical(db, zoneID, "region=r1", "region=r1,dc=dc1", "region=r1,dc=dc2"))
 
 	// Upreplicate to one more dc. Now no dc is critical, only the region.
-	_, err = db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)")
-	require.NoError(t, err)
+	tdb.Exec(t, "ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)")
 	require.NoError(t, checkCritical(db, zoneID, "region=r1"))
 
 	// Move two replicas to the other region. Now that region is critical.
-	_, err = db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,4,5], 1)")
-	require.NoError(t, err)
+	tdb.Exec(t, "ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,4,5], 1)")
 	require.NoError(t, checkCritical(db, zoneID, "region=r2"))
 }
 
@@ -313,31 +314,30 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)
-	// Speed up the generation of the
-	_, err := db.Exec("set cluster setting kv.replication_reports.interval = '1ms'")
-	require.NoError(t, err)
+	tdb := sqlutils.MakeSQLRunner(db)
+	// Speed up the generation of the reports.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 
 	// Create a table with a dummy zone config. Configuring the zone is useful
 	// only for creating the zone; we don't actually care about the configuration.
 	// Also do a split by hand. With manual replication, we're not getting the
 	// split for the table automatically.
-	_, err = db.Exec("create table t(x int primary key); " +
-		"alter table t configure zone using num_replicas=3; " +
+	tdb.Exec(t, "create table t(x int primary key); "+
+		"alter table t configure zone using num_replicas=3; "+
 		"alter table t split at values (0);")
-	require.NoError(t, err)
 	// Get the id of the newly created zone.
 	r := db.QueryRow("select zone_id from crdb_internal.zones where table_name = 't'")
 	var zoneID int
 	require.NoError(t, r.Scan(&zoneID))
 
 	// Upreplicate the range.
-	_, err = db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)")
-	require.NoError(t, err)
+	tdb.Exec(t, "ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)")
 	require.NoError(t, checkZoneReplication(db, zoneID, 1, 0, 0, 0))
 
 	// Over-replicate.
-	_, err = db.Exec("ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3,4], 1)")
-	require.NoError(t, err)
+	tdb.Exec(t, "ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3,4], 1)")
 	require.NoError(t, checkZoneReplication(db, zoneID, 1, 0, 1, 0))
 
 	// TODO(andrei): I'd like to downreplicate to one replica and then stop that
@@ -423,7 +423,7 @@ func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	cfg := s.GossipI().(*gossip.Gossip).GetSystemConfig()
+	cfg := s.ExecutorConfig().(sql.ExecutorConfig).SystemConfig.GetSystemConfig()
 	dummyNodeChecker := func(id roachpb.NodeID) bool { return true }
 
 	v := makeReplicationStatsVisitor(ctx, cfg, dummyNodeChecker)
@@ -486,9 +486,10 @@ func TestZoneChecker(t *testing.T) {
 		newZoneKey     ZoneKey
 	}
 	// NB: IDs need to be beyond MaxSystemConfigDescID, otherwise special logic
-	// kicks in for mapping keys to zones.
-	dbID := 50
-	t1ID := 51
+	// kicks in for mapping keys to zones. They also need to not overlap with any
+	// system table IDs.
+	dbID := int(bootstrap.TestingMinUserDescID())
+	t1ID := dbID + 1
 	t1 := table{name: "t1",
 		partitions: []partition{
 			{

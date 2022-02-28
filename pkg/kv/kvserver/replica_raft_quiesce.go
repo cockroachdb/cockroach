@@ -402,10 +402,10 @@ func shouldReplicaQuiesce(
 func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 	ctx context.Context, status *raft.Status, lagging laggingReplicaSet,
 ) bool {
-	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.mu.replicaID, r.raftMu.lastToReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, r.raftMu.lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
-			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
+			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.replicaID)
 		}
 		return false
 	}
@@ -413,7 +413,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 	r.quiesceLocked(ctx, lagging)
 
 	for id, prog := range status.Progress {
-		if roachpb.ReplicaID(id) == r.mu.replicaID {
+		if roachpb.ReplicaID(id) == r.replicaID {
 			continue
 		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
@@ -444,7 +444,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			curLagging = nil
 		}
 		msg := raftpb.Message{
-			From:   uint64(r.mu.replicaID),
+			From:   uint64(r.replicaID),
 			To:     id,
 			Type:   raftpb.MsgHeartbeat,
 			Term:   status.Term,

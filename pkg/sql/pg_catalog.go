@@ -32,12 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -624,10 +624,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence = relPersistenceTemporary
 		}
 		var relOptions tree.Datum = tree.DNull
-		if ttl := table.GetRowLevelTTL(); ttl != nil {
+		if storageParams := table.GetStorageParams(false /* spaceBetweenEqual */); len(storageParams) > 0 {
 			relOptionsArr := tree.NewDArray(types.String)
-			if err := relOptionsArr.Append(tree.NewDString(fmt.Sprintf("ttl_expire_after=%s", ttl.DurationExpr))); err != nil {
-				return err
+			for _, storageParam := range storageParams {
+				if err := relOptionsArr.Append(tree.NewDString(storageParam)); err != nil {
+					return err
+				}
 			}
 			relOptions = relOptionsArr
 		}
@@ -1196,7 +1198,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		f := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+		f := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
 			objectTypes := tree.GetAlterDefaultPrivilegesTargetObjects()
 			for _, objectType := range objectTypes {
 				privs, ok := defaultPrivilegesForRole.DefaultPrivilegesPerObject[objectType]
@@ -1541,7 +1543,36 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case keys.ConstraintCommentType:
-				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				tableDesc, err := p.Descriptors().GetImmutableTableByID(
+					ctx,
+					p.txn,
+					descpb.ID(tree.MustBeDInt(objID)),
+					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+				if err != nil {
+					return err
+				}
+				schema, err := p.Descriptors().GetImmutableSchemaByID(
+					ctx,
+					p.txn,
+					tableDesc.GetParentSchemaID(),
+					tree.CommonLookupFlags{
+						Required: true,
+					})
+				if err != nil {
+					return err
+				}
+				constraints, err := tableDesc.GetConstraintInfo()
+				if err != nil {
+					return err
+				}
+				var constraint descpb.ConstraintDetail
+				for _, constraintToCheck := range constraints {
+					if constraintToCheck.ConstraintID == descpb.ConstraintID(tree.MustBeDInt(objSubID)) {
+						constraint = constraintToCheck
+						break
+					}
+				}
+				objID = getOIDFromConstraint(constraint, dbContext.GetID(), schema.GetName(), tableDesc)
 				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			case keys.IndexCommentType:
@@ -1561,6 +1592,55 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 		}
 		return nil
 	},
+}
+
+func getOIDFromConstraint(
+	constraint descpb.ConstraintDetail,
+	dbID descpb.ID,
+	schemaName string,
+	tableDesc catalog.TableDescriptor,
+) *tree.DOid {
+	hasher := makeOidHasher()
+	tableID := tableDesc.GetID()
+	var oid *tree.DOid
+	if constraint.CheckConstraint != nil {
+		oid = hasher.CheckConstraintOid(
+			dbID,
+			schemaName,
+			tableID,
+			constraint.CheckConstraint)
+	} else if constraint.FK != nil {
+		oid = hasher.ForeignKeyConstraintOid(
+			dbID,
+			schemaName,
+			tableID,
+			constraint.FK,
+		)
+	} else if constraint.UniqueWithoutIndexConstraint != nil {
+		oid = hasher.UniqueWithoutIndexConstraintOid(
+			dbID,
+			schemaName,
+			tableID,
+			constraint.UniqueWithoutIndexConstraint,
+		)
+	} else if constraint.Index != nil {
+		if constraint.Index.ID == tableDesc.GetPrimaryIndexID() {
+			oid = hasher.PrimaryKeyConstraintOid(
+				dbID,
+				schemaName,
+				tableID,
+				constraint.Index,
+			)
+		} else {
+			oid = hasher.UniqueConstraintOid(
+				dbID,
+				schemaName,
+				tableID,
+				constraint.Index.ID,
+			)
+		}
+	}
+	return oid
 }
 
 var pgCatalogSharedDescriptionTable = virtualSchemaTable{
@@ -2023,7 +2103,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			// n.b. the In operator cannot be included in this list because it isn't
 			// a generalized operator. It is a special syntax form, because it only
 			// permits parenthesized subqueries or row expressions on the RHS.
-			if cmpOp == tree.In {
+			if cmpOp == treecmp.In {
 				continue
 			}
 			for _, overload := range overloads {
@@ -2031,7 +2111,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
 					return err
 				}
-				if inverse, ok := cmpOp.Inverse(); ok {
+				if inverse, ok := tree.CmpOpInverse(cmpOp); ok {
 					if err := addOp(inverse.String(), infixKind, params, returnType); err != nil {
 						return err
 					}
@@ -3502,12 +3582,28 @@ var pgCatalogHbaFileRulesTable = virtualSchemaTable{
 }
 
 var pgCatalogCursorsTable = virtualSchemaTable{
-	comment: "pg_cursors was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogCursors,
+	comment: `contains currently active SQL cursors created with DECLARE
+https://www.postgresql.org/docs/14/view-pg-cursors.html`,
+	schema: vtable.PgCatalogCursors,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for name, c := range p.sqlCursors.list() {
+			tz, err := tree.MakeDTimestampTZ(c.created, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				tree.NewDString(name),        /* name */
+				tree.NewDString(c.statement), /* statement */
+				tree.DBoolFalse,              /* is_holdable */
+				tree.DBoolFalse,              /* is_binary */
+				tree.DBoolFalse,              /* is_scrollable */
+				tz,                           /* creation_date */
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogStatSlruTable = virtualSchemaTable{
@@ -4376,9 +4472,4 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
-}
-
-// MakeConstraintOidBuilder constructs an OID builder.
-func MakeConstraintOidBuilder() descmetadata.ConstraintOidBuilder {
-	return makeOidHasher()
 }

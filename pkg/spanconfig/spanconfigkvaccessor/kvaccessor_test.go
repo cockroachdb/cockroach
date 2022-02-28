@@ -34,20 +34,28 @@ import (
 // 		span [a,e)
 // 		span [a,b)
 // 		span [b,c)
+//		system-target {cluster}
+//		system-target {source=1,target=20}
+//		system-target {source=1,target=1}
+//		system-target {source=20,target=20}
+// 		system-target {source=1, all-tenant-keyspace-targets-set}
 //      ----
 //
 // 		kvaccessor-update
 // 		delete [c,e)
 // 		upsert [c,d):C
 // 		upsert [d,e):D
+// 		delete {source=1,target=1}
+// 		upsert {source=1,target=1}:A
+// 		upsert {cluster}:F
 //      ----
 //
-// They tie into GetSpanConfigEntriesFor and UpdateSpanConfigEntries
-// respectively. For kvaccessor-get, each listed span is added to the set of
-// spans being read. For kvaccessor-update, the lines prefixed with "delete"
-// count towards the spans being deleted, and for "upsert" they correspond to
-// the span config entries being upserted. See
-// spanconfigtestutils.Parse{Span,Config,SpanConfigEntry} for more details.
+// They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
+// respectively. For kvaccessor-get, each listed target is added to the set of
+// targets being read. For kvaccessor-update, the lines prefixed with "delete"
+// count towards the targets being deleted, and for "upsert" they correspond to
+// the span config records being upserted. See
+// spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more details.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -69,20 +77,22 @@ func TestDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "kvaccessor-get":
-				spans := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
-				entries, err := accessor.GetSpanConfigEntriesFor(ctx, spans)
+				targets := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
+				records, err := accessor.GetSpanConfigRecords(ctx, targets)
 				if err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 
 				var output strings.Builder
-				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigEntry(entry)))
+				for _, record := range records {
+					output.WriteString(fmt.Sprintf(
+						"%s\n", spanconfigtestutils.PrintSpanConfigRecord(t, record),
+					))
 				}
 				return output.String()
 			case "kvaccessor-update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				if err := accessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+				if err := accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"

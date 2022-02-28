@@ -249,8 +249,8 @@ func calcBehindCount(
 // A "Query" is a BatchRequest (regardless of its contents) arriving at the
 // leaseholder with a gateway node set in the header (i.e. excluding requests
 // that weren't sent through a DistSender, which in practice should be
-// practically none). Also return the amount of time over which the stat was
-// accumulated.
+// practically none). See Replica.getBatchRequestQPS() for how this is
+// accounted for.
 func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
 	return r.leaseholderStats.avgQPS()
 }
@@ -280,7 +280,10 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// operation or even every operation which occurs after the Raft log exceeds
 	// RaftLogQueueStaleSize. The logic below queues the replica for possible
 	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
-	// have been written to the Raft log.
+	// have been written to the Raft log. Note that it does not matter if some
+	// of the bytes in raftLogLastCheckSize are already part of pending
+	// truncations since this comparison is looking at whether the raft log has
+	// grown sufficiently.
 	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.mu.raftLogLastCheckSize = r.mu.raftLogSize

@@ -18,9 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -176,7 +176,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// Because index joins discard input rows, we do not have to maintain a
 				// reference to input tuples after span generation. So, we can discard
 				// the input batch reference on each iteration.
-				endIdx := s.findEndIndex(len(spans) > 0)
+				endIdx := s.findEndIndex(rowCount > 0)
 				rowCount += endIdx - s.startIdx
 				s.spanAssembler.ConsumeBatch(s.batch, s.startIdx, endIdx)
 				s.startIdx = endIdx
@@ -429,10 +429,8 @@ func NewColIndexJoin(
 	kvFetcherMemAcc *mon.BoundAccount,
 	streamerBudgetAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
-	post *execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
 ) (*ColIndexJoin, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
@@ -449,19 +447,16 @@ func NewColIndexJoin(
 		return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
 	}
 
-	table := flowCtx.TableDescriptor(&spec.Table)
-	index := table.ActiveIndexes()[spec.IndexIdx]
-	tableArgs, neededColumns, err := populateTableArgsLegacy(
-		ctx, flowCtx, table, index, nil, /* invertedCol */
-		spec.HasSystemColumns, post, helper,
-	)
+	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
 	if err != nil {
 		return nil, err
 	}
 
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 
-	useStreamer := row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) && !spec.MaintainOrdering
+	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
+		row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) &&
+		!spec.MaintainOrdering
 	if useStreamer {
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
@@ -492,7 +487,7 @@ func NewColIndexJoin(
 	}
 
 	spanAssembler := colexecspan.NewColSpanAssembler(
-		flowCtx.Codec(), allocator, table, index, inputTypes, neededColumns,
+		flowCtx.Codec(), allocator, &spec.FetchSpec, spec.SplitFamilyIDs, inputTypes,
 	)
 
 	op := &ColIndexJoin{
@@ -589,7 +584,7 @@ func (s *ColIndexJoin) Release() {
 }
 
 // Close implements the colexecop.Closer interface.
-func (s *ColIndexJoin) Close() error {
+func (s *ColIndexJoin) Close(context.Context) error {
 	s.closeInternal()
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
@@ -601,7 +596,11 @@ func (s *ColIndexJoin) Close() error {
 // closeInternal is a subset of Close() which doesn't finish the operator's
 // span.
 func (s *ColIndexJoin) closeInternal() {
-	s.cf.Close(s.EnsureCtx())
+	// Note that we're using the context of the ColIndexJoin rather than the
+	// argument of Close() because the ColIndexJoin derives its own tracing
+	// span.
+	ctx := s.EnsureCtx()
+	s.cf.Close(ctx)
 	if s.spanAssembler != nil {
 		// spanAssembler can be nil if Release() has already been called.
 		s.spanAssembler.Close()

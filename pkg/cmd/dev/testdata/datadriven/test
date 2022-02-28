@@ -1,0 +1,86 @@
+exec
+dev test pkg/util/tracing
+----
+bazel test pkg/util/tracing:all --test_env=GOTRACEBACK=all --test_output errors
+
+exec
+dev test pkg/util/tracing/...
+----
+bazel test pkg/util/tracing/...:all --test_env=GOTRACEBACK=all --test_output errors
+
+exec
+dev test pkg/util/tracing -f TestStartChild*
+----
+bazel test pkg/util/tracing:all --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_sharding_strategy=disabled --test_output errors
+
+exec
+dev test pkg/util/tracing -f TestStartChild* -v --show-logs
+----
+bazel test pkg/util/tracing:all --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_sharding_strategy=disabled --test_arg -test.v --test_arg -show-logs --test_output all
+
+exec
+dev test pkg/util/tracing -f TestStartChild* --ignore-cache
+----
+bazel test pkg/util/tracing:all --nocache_test_results --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_sharding_strategy=disabled --test_output errors
+
+exec
+dev test --stress pkg/util/tracing --filter TestStartChild* --cpus=12 --timeout=25s
+----
+bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled pkg/util/tracing:all --test_env=GOTRACEBACK=all --test_timeout=85 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=25s -p=12' '--test_filter=TestStartChild*' --test_sharding_strategy=disabled --test_output streamed
+
+exec
+dev test //pkg/testutils --timeout=10s
+----
+bazel test pkg/testutils:all --test_env=GOTRACEBACK=all --test_timeout=10 --test_output errors
+
+exec
+dev test pkg/util/tracing -- -s
+----
+bazel test pkg/util/tracing:all --test_env=GOTRACEBACK=all --test_output errors -s
+
+exec
+dev test ./pkg/roachpb
+----
+bazel test pkg/roachpb:all --test_env=GOTRACEBACK=all --test_output errors
+
+exec
+dev test pkg/roachpb:string_test
+----
+bazel test pkg/roachpb:string_test --test_env=GOTRACEBACK=all --test_output errors
+
+exec
+dev test //pkg/testutils
+----
+bazel test pkg/testutils:all --test_env=GOTRACEBACK=all --test_output errors
+
+exec
+dev test //pkg/testutils pkg/util/limit
+----
+bazel test pkg/testutils:all pkg/util/limit:all --test_env=GOTRACEBACK=all --test_output errors
+
+exec
+dev test pkg/spanconfig --count 5 --race
+----
+bazel test --config=race pkg/spanconfig:all --test_env=GOTRACEBACK=all --test_arg -test.count=5 --test_output errors
+
+exec
+dev test pkg/cmd/dev -f TestDataDriven/test --rewrite -v
+----
+bazel info workspace --color=no
+bazel test pkg/cmd/dev:all --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=crdb-checkout --test_arg -rewrite --sandbox_writable_path=crdb-checkout/pkg/cmd/dev --test_filter=TestDataDriven/test --test_sharding_strategy=disabled --test_arg -test.v --test_output all
+
+exec
+dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule=raft=1
+----
+bazel test pkg/server:all --test_env=GOTRACEBACK=all --test_filter=TestSpanStatsResponse --test_sharding_strategy=disabled --test_arg -test.v --test_arg -test.count=5 --test_arg -vmodule=raft=1 --test_output all
+
+exec
+dev test --short
+----
+bazel test pkg/...:all --test_env=GOTRACEBACK=all --test_arg -test.short --test_output errors
+
+exec
+dev test pkg/kv/kvserver -f TestStoreRangeSplitMergeGeneration --test-args '-test.memprofile=mem.out'
+----
+bazel info workspace --color=no
+bazel test pkg/kv/kvserver:all --test_env=GOTRACEBACK=all --test_filter=TestStoreRangeSplitMergeGeneration --test_sharding_strategy=disabled --test_arg -test.outputdir=crdb-checkout --sandbox_writable_path=crdb-checkout --test_arg -test.memprofile=mem.out --test_output errors

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -81,7 +82,7 @@ func writeMutation(
 ) {
 	tableDesc.Mutations = append(tableDesc.Mutations, m)
 	tableDesc.Version++
-	if err := descbuilder.ValidateSelf(tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.Put(
@@ -971,4 +972,134 @@ func TestRunWithoutLoop(t *testing.T) {
 	require.Equal(t, int64(0), r.metrics.AdoptIterations.Count())
 	require.Equal(t, int64(N), atomic.LoadInt64(&ran))
 	require.Equal(t, int64(N/2), atomic.LoadInt64(&failure))
+}
+
+func TestJobIdleness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	intervalOverride := time.Millisecond
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// Ensure no other jobs are created and adoptions and cancellations are quick
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				ManagerDisableJobCreation: true,
+			},
+			JobsTestingKnobs: &TestingKnobs{
+				IntervalOverrides: TestingIntervalOverrides{
+					Adopt:  &intervalOverride,
+					Cancel: &intervalOverride,
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	r := s.JobRegistry().(*Registry)
+
+	resumeStartChan := make(chan struct{})
+	resumeErrChan := make(chan error)
+	defer close(resumeErrChan)
+	RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+		return FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				resumeStartChan <- struct{}{}
+				return <-resumeErrChan
+			},
+		}
+	})
+
+	currentlyIdle := r.MetricsStruct().JobMetrics[jobspb.TypeImport].CurrentlyIdle
+
+	createJob := func() *Job {
+		jobID := r.MakeJobID()
+		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := r.CreateJobWithTxn(ctx, Record{
+				Details:  jobspb.ImportDetails{},
+				Progress: jobspb.ImportProgress{},
+			}, jobID, txn)
+			return err
+		}))
+		job, err := r.LoadJob(ctx, jobID)
+		require.NoError(t, err)
+		<-resumeStartChan
+		return job
+	}
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	waitUntilStatus := func(t *testing.T, jobID jobspb.JobID, status Status) {
+		tdb.CheckQueryResultsRetry(t,
+			fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", jobID),
+			[][]string{{string(status)}})
+	}
+
+	t.Run("MarkIdle", func(t *testing.T) {
+		job1 := createJob()
+		job2 := createJob()
+
+		require.False(t, r.TestingIsJobIdle(job1.ID()))
+
+		r.MarkIdle(job1, true)
+		r.MarkIdle(job2, true)
+		require.True(t, r.TestingIsJobIdle(job1.ID()))
+		require.Equal(t, int64(2), currentlyIdle.Value())
+
+		// Repeated calls should not increase metric
+		r.MarkIdle(job1, true)
+		r.MarkIdle(job1, true)
+		require.Equal(t, int64(2), currentlyIdle.Value())
+
+		r.MarkIdle(job1, false)
+		require.Equal(t, int64(1), currentlyIdle.Value())
+		require.False(t, r.TestingIsJobIdle(job1.ID()))
+		r.MarkIdle(job2, false)
+		require.Equal(t, int64(0), currentlyIdle.Value())
+
+		// Let the jobs complete
+		resumeErrChan <- nil
+		resumeErrChan <- nil
+	})
+
+	t.Run("idleness disabled on state updates", func(t *testing.T) {
+		for _, test := range []struct {
+			name   string
+			update func(jobID jobspb.JobID)
+		}{
+			{"pause", func(jobID jobspb.JobID) {
+				resumeErrChan <- MarkPauseRequestError(errors.Errorf("pause error"))
+				waitUntilStatus(t, jobID, StatusPaused)
+			}},
+			{"succeeded", func(jobID jobspb.JobID) {
+				resumeErrChan <- nil
+				waitUntilStatus(t, jobID, StatusSucceeded)
+			}},
+			{"failed", func(jobID jobspb.JobID) {
+				resumeErrChan <- errors.Errorf("error")
+				waitUntilStatus(t, jobID, StatusFailed)
+			}},
+			{"cancel", func(jobID jobspb.JobID) {
+				resumeErrChan <- errJobCanceled
+				waitUntilStatus(t, jobID, StatusCanceled)
+			}},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				job := createJob()
+
+				require.Equal(t, int64(0), currentlyIdle.Value())
+				r.MarkIdle(job, true)
+				require.Equal(t, int64(1), currentlyIdle.Value())
+
+				test.update(job.ID())
+
+				testutils.SucceedsSoon(t, func() error {
+					if r.TestingIsJobIdle(job.ID()) {
+						return errors.Errorf("waiting for job to unmark idle")
+					}
+					return nil
+				})
+				require.Equal(t, int64(0), currentlyIdle.Value())
+			})
+		}
+	})
+
 }

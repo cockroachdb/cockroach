@@ -69,7 +69,7 @@ func (s *Store) Send(
 		ba = newBa
 	}
 
-	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -174,10 +174,6 @@ func (s *Store) Send(
 			return nil, roachpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
-			repl.mu.RLock()
-			replicaID := repl.mu.replicaID
-			repl.mu.RUnlock()
-
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
 			// process of getting our snapshot. If we returned
@@ -193,7 +189,7 @@ func (s *Store) Send(
 				Replica: roachpb.ReplicaDescriptor{
 					NodeID:    repl.store.nodeDesc.NodeID,
 					StoreID:   repl.store.StoreID(),
-					ReplicaID: replicaID,
+					ReplicaID: repl.replicaID,
 				},
 			})
 		}

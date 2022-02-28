@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -63,20 +64,29 @@ func init() {
 type Connector struct {
 	log.AmbientContext
 
+	tenantID        roachpb.TenantID
 	rpcContext      *rpc.Context
 	rpcRetryOptions retry.Options
 	rpcDialTimeout  time.Duration // for testing
 	rpcDial         singleflight.Group
 	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
-	startupC        chan struct{}
 
 	mu struct {
 		syncutil.RWMutex
 		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
 		systemConfig         *config.SystemConfig
-		systemConfigChannels []chan<- struct{}
+		systemConfigChannels map[chan<- struct{}]struct{}
+	}
+
+	settingsMu struct {
+		syncutil.Mutex
+
+		allTenantOverrides map[string]settings.EncodedValue
+		specificOverrides  map[string]settings.EncodedValue
+		// notifyCh receives an event when there are changes to overrides.
+		notifyCh chan struct{}
 	}
 }
 
@@ -117,14 +127,23 @@ var _ spanconfig.KVAccessor = (*Connector)(nil)
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
 func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	cfg.AmbientCtx.AddLogTag("tenant-connector", nil)
-	return &Connector{
+	if cfg.TenantID.IsSystem() {
+		panic("TenantID not set")
+	}
+	c := &Connector{
+		tenantID:        cfg.TenantID,
 		AmbientContext:  cfg.AmbientCtx,
 		rpcContext:      cfg.RPCContext,
 		rpcRetryOptions: cfg.RPCRetryOptions,
 		defaultZoneCfg:  cfg.DefaultZoneConfig,
 		addrs:           addrs,
-		startupC:        make(chan struct{}),
 	}
+
+	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
+	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
+	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
+	return c
 }
 
 // connectorFactory implements kvtenant.ConnectorFactory.
@@ -140,26 +159,49 @@ func (connectorFactory) NewConnector(
 // connect to a KV node. Start returns once the connector has determined the
 // cluster's ID and set Connector.rpcContext.ClusterID.
 func (c *Connector) Start(ctx context.Context) error {
-	startupC := c.startupC
+	gossipStartupCh := make(chan struct{})
+	settingsStartupCh := make(chan struct{})
 	bgCtx := c.AnnotateCtx(context.Background())
-	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector", func(ctx context.Context) {
+
+	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-gossip", func(ctx context.Context) {
 		ctx = c.AnnotateCtx(ctx)
 		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		c.runGossipSubscription(ctx)
+		c.runGossipSubscription(ctx, gossipStartupCh)
 	}); err != nil {
 		return err
 	}
-	// Synchronously block until the first GossipSubscription event.
-	select {
-	case <-startupC:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+
+	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-settings", func(ctx context.Context) {
+		ctx = c.AnnotateCtx(ctx)
+		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		c.runTenantSettingsSubscription(ctx, settingsStartupCh)
+	}); err != nil {
+		return err
 	}
+
+	// Block until we receive the first GossipSubscription event and the initial
+	// setting overrides.
+	for gossipStartupCh != nil || settingsStartupCh != nil {
+		select {
+		case <-gossipStartupCh:
+			log.Infof(ctx, "kv connector gossip subscription started")
+			gossipStartupCh = nil
+		case <-settingsStartupCh:
+			log.Infof(ctx, "kv connector tenant settings started")
+			settingsStartupCh = nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
-func (c *Connector) runGossipSubscription(ctx context.Context) {
+// runGossipSubscription listens for gossip subscription events. It closes the
+// given channel once the ClusterID gossip key has been handled.
+// Exits when the context is done.
+func (c *Connector) runGossipSubscription(ctx context.Context, startupCh chan struct{}) {
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
@@ -198,9 +240,9 @@ func (c *Connector) runGossipSubscription(ctx context.Context) {
 
 			// Signal that startup is complete once the ClusterID gossip key has
 			// been handled.
-			if c.startupC != nil && e.PatternMatched == gossip.KeyClusterID {
-				close(c.startupC)
-				c.startupC = nil
+			if startupCh != nil && e.PatternMatched == gossip.KeyClusterID {
+				close(startupCh)
+				startupCh = nil
 			}
 		}
 	}
@@ -212,7 +254,7 @@ var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, ro
 	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Connector).updateNodeAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
-	gossip.KeySystemConfig: (*Connector).updateSystemConfig,
+	gossip.KeyDeprecatedSystemConfig: (*Connector).updateSystemConfig,
 }
 
 var gossipSubsPatterns = func() []string {
@@ -257,9 +299,6 @@ func (c *Connector) updateNodeAddress(ctx context.Context, key string, content r
 	// nothing ever removes them from Gossip.nodeDescs. Fix this.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.mu.nodeDescs == nil {
-		c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
-	}
 	c.mu.nodeDescs[desc.NodeID] = desc
 }
 
@@ -287,7 +326,7 @@ func (c *Connector) updateSystemConfig(ctx context.Context, key string, content 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.mu.systemConfig = cfg
-	for _, c := range c.mu.systemConfigChannels {
+	for c := range c.mu.systemConfigChannels {
 		select {
 		case c <- struct{}{}:
 		default:
@@ -307,20 +346,24 @@ func (c *Connector) GetSystemConfig() *config.SystemConfig {
 
 // RegisterSystemConfigChannel implements the config.SystemConfigProvider
 // interface.
-func (c *Connector) RegisterSystemConfigChannel() <-chan struct{} {
+func (c *Connector) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister func()) {
 	// Create channel that receives new system config notifications. The channel
 	// has a size of 1 to prevent connector from having to block on it.
 	ch := make(chan struct{}, 1)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.mu.systemConfigChannels = append(c.mu.systemConfigChannels, ch)
+	c.mu.systemConfigChannels[ch] = struct{}{}
 
 	// Notify the channel right away if we have a config.
 	if c.mu.systemConfig != nil {
 		ch <- struct{}{}
 	}
-	return ch
+	return ch, func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.mu.systemConfigChannels, ch)
+	}
 }
 
 // RangeLookup implements the kvcoord.RangeDescriptorDB interface.
@@ -421,35 +464,38 @@ func (c *Connector) TokenBucket(
 	return nil, ctx.Err()
 }
 
-// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
-func (c *Connector) GetSpanConfigEntriesFor(
-	ctx context.Context, spans []roachpb.Span,
-) (entries []roachpb.SpanConfigEntry, _ error) {
+// GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
+func (c *Connector) GetSpanConfigRecords(
+	ctx context.Context, targets []spanconfig.Target,
+) (records []spanconfig.Record, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
-			Spans: spans,
+			Targets: spanconfig.TargetsToProtos(targets),
 		})
 		if err != nil {
 			return err
 		}
 
-		entries = resp.SpanConfigEntries
+		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		if err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return entries, nil
+	return records, nil
 }
 
-// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
+// UpdateSpanConfigRecords implements the spanconfig.KVAccessor
 // interface.
-func (c *Connector) UpdateSpanConfigEntries(
-	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+func (c *Connector) UpdateSpanConfigRecords(
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
 		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: toDelete,
-			ToUpsert: toUpsert,
+			ToDelete: spanconfig.TargetsToProtos(toDelete),
+			ToUpsert: spanconfig.RecordsToEntries(toUpsert),
 		})
 		return err
 	})
@@ -458,39 +504,6 @@ func (c *Connector) UpdateSpanConfigEntries(
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
-}
-
-// GetSystemSpanConfigEntries implements the spanconfig.KVAccessor interface.
-func (c *Connector) GetSystemSpanConfigEntries(
-	ctx context.Context,
-) (entries []roachpb.SystemSpanConfigEntry, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		resp, err := c.GetSystemSpanConfigs(ctx, &roachpb.GetSystemSpanConfigsRequest{})
-		if err != nil {
-			return err
-		}
-
-		entries = resp.SystemSpanConfigEntries
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return entries, nil
-}
-
-// UpdateSystemSpanConfigEntries implements the spanconfig.KVAccessor interface.
-func (c *Connector) UpdateSystemSpanConfigEntries(
-	ctx context.Context,
-	toDelete []roachpb.SystemSpanConfigTarget,
-	toUpsert []roachpb.SystemSpanConfigEntry,
-) error {
-	return c.withClient(ctx, func(ctx context.Context, c *client) error {
-		_, err := c.UpdateSystemSpanConfigs(ctx, &roachpb.UpdateSystemSpanConfigsRequest{
-			ToDelete: toDelete,
-			ToUpsert: toUpsert,
-		})
-		return err
-	})
 }
 
 // withClient is a convenience wrapper that executes the given closure while

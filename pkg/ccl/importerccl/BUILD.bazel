@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "importerccl_test",
+    srcs = [
+        "ccl_test.go",
+        "main_test.go",
+    ],
+    data = [
+        "//pkg/sql/importer:testdata",
+        "@cockroach//c-deps:libgeos",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/ccl/kvccl",
+        "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/ccl/partitionccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/cloud/impl:cloudimpl",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/importer",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -24,10 +24,13 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/partition",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",
@@ -77,6 +80,10 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ ops $(locations :ops)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the generator for the enumeration of rulenames.
@@ -93,6 +100,10 @@ genrule(
           $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the generator for the stringification of rulenames.
@@ -123,5 +134,9 @@ genrule(
     exec_tools = [
         "@go_sdk//:bin/go",
         "@com_github_cockroachdb_tools//cmd/stringer",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )

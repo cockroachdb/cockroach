@@ -1,28 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "commenter",
-    srcs = [
-        "comment_updater.go",
-        "comment_updater_factory.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/commenter",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/keys",
-        "//pkg/kv",
-        "//pkg/security",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
-        "//pkg/sql/sqlutil",
-    ],
-)
-
-go_library(
     name = "descmetadata",
     srcs = [
         "metadata_updater.go",
@@ -35,11 +13,9 @@ go_library(
         "//pkg/kv",
         "//pkg/security",
         "//pkg/settings",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

@@ -15,7 +15,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"path"
 	"sort"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -73,6 +74,11 @@ const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 
+	// backupProgressDirectory is the directory where all 22.1 and beyond
+	// CHECKPOINT files will be stored as we no longer want to overwrite
+	// them.
+	backupProgressDirectory = "progress"
+
 	// DateBasedIncFolderName is the date format used when creating sub-directories
 	// storing incremental backups for auto-appendable backups.
 	// It is exported for testing backup inspection tooling.
@@ -86,6 +92,10 @@ const (
 	// latestFileName is the name of a file in the collection which contains the
 	// path of the most recently taken full backup in the backup collection.
 	latestFileName = "LATEST"
+
+	// latestHistoryDirectory is the directory where all 22.1 and beyond
+	// LATEST files will be stored as we no longer want to overwrite it.
+	latestHistoryDirectory = "latest"
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
@@ -171,7 +181,7 @@ func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (b
 		}
 		return false, err
 	}
-	r.Close()
+	r.Close(ctx)
 	return true, nil
 }
 
@@ -197,7 +207,7 @@ func decompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte
 		return nil, err
 	}
 	defer r.Close()
-	return mon.ReadAll(ctx, r, mem)
+	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r), mem)
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
@@ -213,11 +223,21 @@ func readBackupManifest(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, int64, error) {
-	r, err := exportStore.ReadFile(ctx, filename)
-	if err != nil {
-		return BackupManifest{}, 0, err
+	// The backup manifest should only be found in the base directory,
+	// unlike the checkpoints which can be found in both the base and
+	// progress directory depending on the version.
+	var r ioctx.ReadCloserCtx
+	var err error
+	if filename != backupManifestName {
+		if r, err = readLatestCheckpointFile(ctx, exportStore, filename); err != nil {
+			return BackupManifest{}, 0, err
+		}
+	} else {
+		if r, err = exportStore.ReadFile(ctx, filename); err != nil {
+			return BackupManifest{}, 0, err
+		}
 	}
-	defer r.Close()
+	defer r.Close(ctx)
 	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
 		return BackupManifest{}, 0, err
@@ -226,11 +246,16 @@ func readBackupManifest(
 		mem.Shrink(ctx, int64(cap(descBytes)))
 	}()
 
-	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
+	var checksumFile ioctx.ReadCloserCtx
+	if filename != backupManifestName {
+		checksumFile, err = readLatestCheckpointFile(ctx, exportStore, filename+backupManifestChecksumSuffix)
+	} else {
+		checksumFile, err = exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
+	}
 	if err == nil {
 		// If there is a checksum file present, check that it matches.
-		defer checksumFile.Close()
-		checksumFileData, err := ioutil.ReadAll(checksumFile)
+		defer checksumFile.Close(ctx)
+		checksumFileData, err := ioctx.ReadAll(ctx, checksumFile)
 		if err != nil {
 			return BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
 		}
@@ -324,7 +349,7 @@ func readBackupPartitionDescriptor(
 	if err != nil {
 		return BackupPartitionDescriptor{}, 0, err
 	}
-	defer r.Close()
+	defer r.Close(ctx)
 	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
 		return BackupPartitionDescriptor{}, 0, err
@@ -382,8 +407,8 @@ func readTableStatistics(
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-	statsBytes, err := ioutil.ReadAll(r)
+	defer r.Close(ctx)
+	statsBytes, err := ioctx.ReadAll(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -405,6 +430,8 @@ func readTableStatistics(
 	return &tableStats, err
 }
 
+// TODO (Aditya): Restructure manifest reading/writing so that checkpoint
+// manifest and actual manifests are no longer shared.
 func writeBackupManifest(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -436,8 +463,17 @@ func writeBackupManifest(
 		}
 	}
 
-	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
-		return err
+	// The backup manifest should only be written to the base directory,
+	// unlike the checkpoints which can be written to both the base and
+	// progress directory depending on the version.
+	if filename != backupManifestName {
+		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename, descBuf); err != nil {
+			return err
+		}
+	} else {
+		if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
+			return err
+		}
 	}
 
 	// Write the checksum file after we've successfully wrote the manifest.
@@ -445,8 +481,15 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
-		return errors.Wrap(err, "writing manifest checksum")
+
+	if filename != backupManifestName {
+		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename+backupManifestChecksumSuffix, checksum); err != nil {
+			return errors.Wrap(err, "writing manifest checksum")
+		}
+	} else {
+		if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+			return errors.Wrap(err, "writing manifest checksum")
+		}
 	}
 
 	return nil
@@ -699,13 +742,21 @@ func FindPriorBackups(
 func checkForLatestFileInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) (bool, error) {
-	_, err := store.ReadFile(ctx, latestFileName)
+	r, err := findLatestFile(ctx, store)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, pgerror.WithCandidateCode(err, pgcode.Io)
+		}
+
+		r, err = store.ReadFile(ctx, latestFileName)
+	}
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
 		}
 		return false, pgerror.WithCandidateCode(err, pgcode.Io)
 	}
+	r.Close(ctx)
 	return true, nil
 }
 
@@ -1037,23 +1088,62 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
+// readEncryptionOptions takes in a backup location and tries to find
+// and return all encryption option files in the backup. A backup
+// normally only creates one encryption option file, but if the user
+// uses ALTER BACKUP to add new keys, a new encryption option file
+// will be placed side by side with the old one. Since the old file
+// is still valid, as we never want to modify or delete an existing
+// backup, we return both new and old files.
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
-) (*jobspb.EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
+) ([]jobspb.EncryptionInfo, error) {
+	files, err := getEncryptionInfoFiles(ctx, src)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
-	defer r.Close()
-	encInfoBytes, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+	var encInfo []jobspb.EncryptionInfo
+	// The user is more likely to pass in a KMS URI that was used to
+	// encrypt the backup recently, so we iterate the ENCRYPTION-INFO
+	// files from latest to oldest.
+	for i := len(files) - 1; i >= 0; i-- {
+		r, err := src.ReadFile(ctx, files[i])
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find or read encryption information")
+		}
+		defer r.Close(ctx)
+
+		encInfoBytes, err := ioctx.ReadAll(ctx, r)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find or read encryption information")
+		}
+		var currentEncInfo jobspb.EncryptionInfo
+		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
+			return nil, err
+		}
+		encInfo = append(encInfo, currentEncInfo)
 	}
-	var encInfo jobspb.EncryptionInfo
-	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
-		return nil, err
+	return encInfo, nil
+}
+
+func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
+	var files []string
+	// Look for all files in dest that start with "/ENCRYPTION-INFO"
+	// and return them.
+	err := dest.List(ctx, "", "", func(p string) error {
+		paths := strings.Split(p, "/")
+		p = paths[len(paths)-1]
+		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
+			files = append(files, p)
+		}
+
+		return nil
+	})
+	if len(files) < 1 {
+		return nil, errors.New("no ENCRYPTION-INFO files found")
 	}
-	return &encInfo, nil
+
+	return files, err
 }
 
 func writeEncryptionInfoIfNotExists(
@@ -1061,7 +1151,7 @@ func writeEncryptionInfoIfNotExists(
 ) error {
 	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		// If the file already exists, then we don't need to create a new one.
 		return nil
 	}
@@ -1102,7 +1192,7 @@ func checkForPreviousBackup(
 	redactedURI := RedactURIForErrorMessage(defaultURI)
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
 			redactedURI, backupManifestName)
@@ -1114,9 +1204,9 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
+	r, err = readLatestCheckpointFile(ctx, exportStore, backupManifestCheckpointName)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
 			redactedURI, backupManifestCheckpointName)
@@ -1156,4 +1246,45 @@ func ListFullBackupsInCollection(
 		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
 	}
 	return backupPaths, nil
+}
+
+// readLatestCheckpointFile returns an ioctx.ReaderCloserCtx of the latest
+// checkpoint file.
+func readLatestCheckpointFile(
+	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
+) (ioctx.ReadCloserCtx, error) {
+	// First try reading from the progress directory. If the backup is from
+	// an older version, it may not exist there yet so try reading
+	// in the base directory if the first attempt fails.
+	r, err := exportStore.ReadFile(ctx, backupProgressDirectory+"/"+filename)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return nil, err
+		}
+
+		return exportStore.ReadFile(ctx, filename)
+	}
+	return r, nil
+}
+
+// writeNewCheckpointFile writes a new BACKUP-CHECKPOINT file to both the base
+// directory and latest-history directory, depending on cluster version.
+func writeNewCheckpointFile(
+	ctx context.Context,
+	settings *cluster.Settings,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	descBuf []byte,
+) error {
+	// If the cluster is still running on a mixed version, we want to write
+	// to the base directory as well the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+		if err != nil {
+			return err
+		}
+	}
+
+	return cloud.WriteFile(ctx, exportStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
 }

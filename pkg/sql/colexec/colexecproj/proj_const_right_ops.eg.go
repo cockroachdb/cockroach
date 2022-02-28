@@ -21,13 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -912,14 +914,11 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 
 type projBitandDatumDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -1903,14 +1902,11 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 
 type projBitorDatumDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -2894,14 +2890,11 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 
 type projBitxorDatumDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -4001,14 +3994,11 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 
 type projPlusInt16DatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -4632,14 +4622,11 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 
 type projPlusInt32DatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -5263,14 +5250,11 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 
 type projPlusInt64DatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -5818,14 +5802,11 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 
 type projPlusIntervalDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -5961,14 +5942,11 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 
 type projPlusDatumIntervalConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg duration.Duration
 }
 
 func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -6106,14 +6084,11 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 
 type projPlusDatumInt16ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int16
 }
 
 func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -6251,14 +6226,11 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 
 type projPlusDatumInt32ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int32
 }
 
 func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -6396,14 +6368,11 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 
 type projPlusDatumInt64ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int64
 }
 
 func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -7521,14 +7490,11 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 
 type projMinusInt16DatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -8152,14 +8118,11 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 
 type projMinusInt32DatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -8783,14 +8746,11 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 
 type projMinusInt64DatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -9330,14 +9290,11 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 
 type projMinusIntervalDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -9919,14 +9876,11 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 
 type projMinusDatumDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -10046,14 +10000,11 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 
 type projMinusDatumIntervalConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg duration.Duration
 }
 
 func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -10191,14 +10142,11 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 
 type projMinusDatumBytesConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg []byte
 }
 
 func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -10334,14 +10282,11 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 
 type projMinusDatumInt16ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int16
 }
 
 func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -10479,14 +10424,11 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 
 type projMinusDatumInt32ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int32
 }
 
 func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -10624,14 +10566,11 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 
 type projMinusDatumInt64ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int64
 }
 
 func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -23609,14 +23548,11 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 
 type projConcatDatumDatumConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -24816,14 +24752,11 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 
 type projLShiftDatumInt16ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int16
 }
 
 func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -24961,14 +24894,11 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 
 type projLShiftDatumInt32ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int32
 }
 
 func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -25106,14 +25036,11 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 
 type projLShiftDatumInt64ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int64
 }
 
 func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -26331,14 +26258,11 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 
 type projRShiftDatumInt16ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int16
 }
 
 func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -26476,14 +26400,11 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 
 type projRShiftDatumInt32ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int32
 }
 
 func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -26621,14 +26542,11 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 
 type projRShiftDatumInt64ConstOp struct {
 	projConstOpBase
-	execgen.BinaryOverloadHelper
+	colexecbase.BinaryOverloadHelper
 	constArg int64
 }
 
 func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`.
 	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
@@ -56394,9 +56312,9 @@ func GetProjectionRConstOperator(
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := inputTypes[colIdx], constType
 	switch op := op.(type) {
-	case tree.BinaryOperator:
+	case treebin.BinaryOperator:
 		switch op.Symbol {
-		case tree.Bitand:
+		case treebin.Bitand:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -56490,13 +56408,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.Bitor:
+		case treebin.Bitor:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -56590,13 +56508,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.Bitxor:
+		case treebin.Bitxor:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -56690,13 +56608,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.Plus:
+		case treebin.Plus:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -56781,7 +56699,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56827,7 +56745,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56874,7 +56792,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56946,7 +56864,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56964,7 +56882,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntFamily:
@@ -56974,14 +56892,14 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projPlusDatumInt32ConstOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -56989,13 +56907,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.Minus:
+		case treebin.Minus:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -57080,7 +56998,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57126,7 +57044,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57173,7 +57091,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57245,7 +57163,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57302,7 +57220,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntervalFamily:
@@ -57313,7 +57231,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.BytesFamily:
@@ -57324,7 +57242,7 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.([]byte),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntFamily:
@@ -57334,14 +57252,14 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projMinusDatumInt32ConstOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -57349,13 +57267,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.Mult:
+		case treebin.Mult:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -57622,7 +57540,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.Div:
+		case treebin.Div:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -57829,7 +57747,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.FloorDiv:
+		case treebin.FloorDiv:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -57997,7 +57915,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.Mod:
+		case treebin.Mod:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -58165,7 +58083,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.Pow:
+		case treebin.Pow:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -58333,7 +58251,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.Concat:
+		case treebin.Concat:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BytesFamily:
 				switch leftType.Width() {
@@ -58382,13 +58300,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.LShift:
+		case treebin.LShift:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -58481,14 +58399,14 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projLShiftDatumInt32ConstOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -58496,13 +58414,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.RShift:
+		case treebin.RShift:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -58595,14 +58513,14 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projRShiftDatumInt32ConstOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -58610,13 +58528,13 @@ func GetProjectionRConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
 							}
-							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
 				}
 			}
-		case tree.JSONFetchVal:
+		case treebin.JSONFetchVal:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -58658,7 +58576,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchText:
+		case treebin.JSONFetchText:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -58700,7 +58618,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchValPath:
+		case treebin.JSONFetchValPath:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -58720,7 +58638,7 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchTextPath:
+		case treebin.JSONFetchTextPath:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -58741,13 +58659,13 @@ func GetProjectionRConstOperator(
 				}
 			}
 		}
-	case tree.ComparisonOperator:
+	case treecmp.ComparisonOperator:
 		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
 			switch op.Symbol {
-			case tree.EQ:
+			case treecmp.EQ:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -59058,7 +58976,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
-			case tree.NE:
+			case treecmp.NE:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -59369,7 +59287,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
-			case tree.LT:
+			case treecmp.LT:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -59680,7 +59598,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
-			case tree.LE:
+			case treecmp.LE:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -59991,7 +59909,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
-			case tree.GT:
+			case treecmp.GT:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -60302,7 +60220,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
-			case tree.GE:
+			case treecmp.GE:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {

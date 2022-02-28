@@ -540,10 +540,8 @@ func formatPebbleMetamorphicIssue(
 			s := f.testMessage[i+len(seedHeader):]
 			s = strings.TrimSpace(s)
 			s = strings.TrimSpace(s[:strings.Index(s, "\n")])
-
-			repro = fmt.Sprintf("dev test @com_github_cockroachdb_pebble//internal/metamorphic:metamorphic_test "+
-				"-f TestMeta --stress --stress-args='-p 1' -- --define gotags=bazel,invariants --test_timeout=11000 "+
-				`--test_arg -seed --test_arg %s --test_arg -ops --test_arg "uniform:5000-25000"`, s)
+			repro = fmt.Sprintf("go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' "+
+				`-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s -ops "uniform:5000-10000"`, s)
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{

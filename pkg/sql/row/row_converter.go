@@ -148,18 +148,9 @@ func GenerateInsertRow(
 
 	// Verify the column constraints.
 	//
-	// We would really like to use enforceLocalColumnConstraints() here,
-	// but this is not possible because of some brain damage in the
-	// Insert() constructor, which causes insertCols to contain
-	// duplicate columns descriptors: computed columns are listed twice,
-	// one will receive a NULL value and one will receive a comptued
-	// value during execution. It "works out in the end" because the
-	// latter (non-NULL) value overwrites the earlier, but
-	// enforceLocalColumnConstraints() does not know how to reason about
-	// this.
-	//
-	// In the end it does not matter much, this code is going away in
-	// favor of the (simpler, correct) code in the CBO.
+	// During mutations (INSERT, UPDATE, UPSERT), this is checked by
+	// sql.enforceLocalColumnConstraints. These checks are required for IMPORT
+	// statements.
 
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.WritableColumns() {
@@ -267,7 +258,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// TODO(postamar): give the tree.EvalContext a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
-	descsCol := cf.MakeCollection(descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
+	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)

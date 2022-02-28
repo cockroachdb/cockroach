@@ -18,17 +18,17 @@ import (
 // MakeClusterTarget returns a target, which when used in a Record, will
 // protect the entire keyspace of the cluster.
 func MakeClusterTarget() *Target {
-	return &Target{&Target_Cluster{Cluster: &Target_ClusterTarget{}}}
+	return &Target{Union: &Target_Cluster{Cluster: &Target_ClusterTarget{}}}
 }
 
 // MakeTenantsTarget returns a target, which when used in a Record, will
 // protect the keyspace of all tenants in ids.
 func MakeTenantsTarget(ids []roachpb.TenantID) *Target {
-	return &Target{&Target_Tenants{Tenants: &Target_TenantsTarget{IDs: ids}}}
+	return &Target{Union: &Target_Tenants{Tenants: &Target_TenantsTarget{IDs: ids}}}
 }
 
 // MakeSchemaObjectsTarget returns a target, which when used in a Record,
 // will protect the keyspace of all schema objects (database/table).
 func MakeSchemaObjectsTarget(ids descpb.IDs) *Target {
-	return &Target{&Target_SchemaObjects{SchemaObjects: &Target_SchemaObjectsTarget{IDs: ids}}}
+	return &Target{Union: &Target_SchemaObjects{SchemaObjects: &Target_SchemaObjectsTarget{IDs: ids}}}
 }

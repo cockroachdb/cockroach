@@ -48,7 +48,7 @@ const (
 // rather than reporting to some external sink, the caller's "owner"
 // must propagate the trace data back across process boundaries towards
 // the root of the trace span tree; see WithParent
-// and WithRemoteParent, respectively.
+// and WithRemoteParentFromSpanMeta, respectively.
 //
 // Additionally, the internal span type also supports turning on, stopping,
 // and restarting its data collection (see Span.StartRecording), and this is
@@ -163,6 +163,8 @@ func (sp *Span) IsNoop() bool {
 //
 // Exported methods on Span are supposed to call this and short-circuit if true
 // is returrned.
+//
+// Note that a nil or no-op span will return true.
 func (sp *Span) detectUseAfterFinish() bool {
 	if sp == nil {
 		return true
@@ -173,7 +175,7 @@ func (sp *Span) detectUseAfterFinish() bool {
 	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
 	// In test builds, we panic on span use after Finish. This is in preparation
 	// of span pooling, at which point use-after-Finish would become corruption.
-	if alreadyFinished && sp.Tracer().PanicOnUseAfterFinish() {
+	if alreadyFinished && sp.i.tracer.PanicOnUseAfterFinish() {
 		var finishStack string
 		if sp.finishStack == "" {
 			finishStack = "<stack not captured. Set debugUseAfterFinish>"
@@ -223,6 +225,7 @@ func (sp *Span) decRef() bool {
 
 // Tracer exports the tracer this span was created using.
 func (sp *Span) Tracer() *Tracer {
+	sp.detectUseAfterFinish()
 	return sp.i.Tracer()
 }
 
@@ -235,6 +238,7 @@ func (sp *Span) Redactable() bool {
 	if sp == nil || sp.i.isNoop() {
 		return false
 	}
+	sp.detectUseAfterFinish()
 	return sp.Tracer().Redactable()
 }
 
@@ -251,11 +255,11 @@ func (sp *Span) finishInternal() {
 	if sp == nil || sp.IsNoop() || sp.detectUseAfterFinish() {
 		return
 	}
-	atomic.StoreInt32(&sp.finished, 1)
-	sp.i.Finish()
 	if sp.Tracer().debugUseAfterFinish {
 		sp.finishStack = string(debug.Stack())
 	}
+	atomic.StoreInt32(&sp.finished, 1)
+	sp.i.Finish()
 	// Release the reference that the span held to itself. Unless we're racing
 	// with the finishing of the parent or one of the children, this one will be
 	// the last reference, and the span will be made available for re-allocation.
@@ -267,9 +271,32 @@ func (sp *Span) finishInternal() {
 // would be forced to collect the recording before finishing and so the span
 // would appear to be unfinished in the recording (it's illegal to collect the
 // recording after the span finishes, except by using this method).
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
 func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
+	rec := Recording(nil)
+	if sp.RecordingType() != RecordingOff {
+		rec = sp.i.GetRecording(recType, true /* finishing */)
+	}
 	// Reach directly into sp.i to pass the finishing argument.
-	rec := sp.i.GetRecording(recType, true /* finishing */)
+	sp.finishInternal()
+	return rec
+}
+
+// FinishAndGetConfiguredRecording is like FinishAndGetRecording, except that
+// the type of recording returned is the type that the span was configured to
+// record.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
+func (sp *Span) FinishAndGetConfiguredRecording() Recording {
+	rec := Recording(nil)
+	recType := sp.RecordingType()
+	if recType != RecordingOff {
+		rec = sp.i.GetRecording(recType, true /* finishing */)
+	}
+	// Reach directly into sp.i to pass the finishing argument.
 	sp.finishInternal()
 	return rec
 }
@@ -277,6 +304,9 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
 //
 // recType indicates the type of information to be returned: structured info or
 // structured + verbose info. The caller can ask for either regardless of the
@@ -300,6 +330,25 @@ func (sp *Span) GetRecording(recType RecordingType) Recording {
 	if sp.detectUseAfterFinish() {
 		return nil
 	}
+	if sp.RecordingType() == RecordingOff {
+		return nil
+	}
+	return sp.i.GetRecording(recType, false /* finishing */)
+}
+
+// GetConfiguredRecording is like GetRecording, except the type of recording it
+// returns is the one that the span has been previously configured with.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
+func (sp *Span) GetConfiguredRecording() Recording {
+	if sp.detectUseAfterFinish() {
+		return nil
+	}
+	recType := sp.RecordingType()
+	if recType == RecordingOff {
+		return nil
+	}
 	return sp.i.GetRecording(recType, false /* finishing */)
 }
 
@@ -313,39 +362,31 @@ func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 // Meta returns the information which needs to be propagated across process
-// boundaries in order to derive child spans from this Span. This may return
-// nil, which is a valid input to WithRemoteParent, if the Span has been
-// optimized out.
+// boundaries in order to derive child spans from this Span. This may return an
+// empty SpanMeta (which is a valid input to WithRemoteParentFromSpanMeta) if
+// the Span has been optimized out.
 func (sp *Span) Meta() SpanMeta {
-	// It shouldn't be done in practice, but it is allowed to call Meta on
-	// a finished span.
+	if sp.detectUseAfterFinish() {
+		return SpanMeta{}
+	}
 	return sp.i.Meta()
 }
 
-// SetVerbose toggles verbose recording on the Span, which must not be a noop
-// span (see the WithForceRealSpan option).
-//
-// With 'true', future calls to Record are actually recorded, and any future
-// descendants of this Span will do so automatically as well. This does not
-// apply to past derived Spans, which may in fact be noop spans.
-//
-// When set to 'false', Record will cede to add data to the recording (though
-// they may still be collected, should the Span have been set up with an
-// auxiliary trace sink). This does not apply to Spans derived from this one
-// when it was verbose.
-func (sp *Span) SetVerbose(to bool) {
+// SetRecordingType sets the recording mode of the span and its children,
+// recursively. Setting it to RecordingOff disables further recording.
+// Everything recorded so far remains in memory.
+func (sp *Span) SetRecordingType(to RecordingType) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
-	// We allow toggling verbosity on and off for a finished span. This shouldn't
-	// matter either way as a finished span drops all new data, but if we
-	// prevented the toggling we could end up in weird states since IsVerbose()
-	// won't reflect what the caller asked for.
-	sp.i.SetVerbose(to)
+	sp.i.SetRecordingType(to)
 }
 
 // RecordingType returns the range's current recording mode.
 func (sp *Span) RecordingType() RecordingType {
+	if sp.detectUseAfterFinish() {
+		return RecordingOff
+	}
 	return sp.i.RecordingType()
 }
 
@@ -397,7 +438,15 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {
+	if sp.detectUseAfterFinish() {
+		return 0
+	}
 	return sp.i.TraceID()
+}
+
+// SpanID retrieves a span's ID.
+func (sp *Span) SpanID() tracingpb.SpanID {
+	return sp.i.SpanID()
 }
 
 // OperationName returns the name of this span assigned when the span was
@@ -409,6 +458,7 @@ func (sp *Span) OperationName() string {
 	if sp.IsNoop() {
 		return "noop"
 	}
+	sp.detectUseAfterFinish()
 	return sp.i.crdb.operation
 }
 
@@ -416,6 +466,9 @@ func (sp *Span) OperationName() string {
 // that case, trying to create a child span will result in the would-be child
 // being a root span.
 func (sp *Span) IsSterile() bool {
+	if sp.detectUseAfterFinish() {
+		return true
+	}
 	return sp.i.sterile
 }
 
@@ -497,7 +550,6 @@ func (sp *Span) reset(
 		})
 	}
 
-	atomic.StoreInt32(&sp.finished, 0)
 	c := sp.i.crdb
 	sp.i = spanInner{
 		tracer:   sp.i.tracer,
@@ -509,6 +561,7 @@ func (sp *Span) reset(
 
 	c.traceID = traceID
 	c.spanID = spanID
+	c.parentSpanID = 0
 	c.operation = operation
 	c.startTime = startTime
 	c.logTags = logTags

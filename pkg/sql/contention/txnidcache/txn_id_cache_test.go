@@ -173,7 +173,7 @@ func TestTransactionIDCache(t *testing.T) {
 	sqlServer := testServer.SQLServer().(*sql.Server)
 	txnIDCache := sqlServer.GetTxnIDCache()
 
-	txnIDCache.Flush()
+	txnIDCache.DrainWriteBuffer()
 	t.Run("resolved_txn_id_cache_record", func(t *testing.T) {
 		testutils.SucceedsWithin(t, func() error {
 			for txnID, expectedTxnFingerprintID := range expectedTxnIDToUUIDMapping {
@@ -196,7 +196,7 @@ func TestTransactionIDCache(t *testing.T) {
 
 		// Execute additional queries to ensure we are overflowing the size limit.
 		testConn.Exec(t, "SELECT 1")
-		txnIDCache.Flush()
+		txnIDCache.DrainWriteBuffer()
 
 		testutils.SucceedsWithin(t, func() error {
 			sizePostEviction := txnIDCache.Size()
@@ -209,7 +209,7 @@ func TestTransactionIDCache(t *testing.T) {
 	})
 
 	t.Run("provisional_txn_id_cache_record", func(t *testing.T) {
-		testConn.Exec(t, "RESET CLUSTER SETTING sql.contention.txn_id_cache.max_size")
+		testConn.Exec(t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '10MB'")
 		callCaptured := uint32(0)
 
 		injector.setHook(func(
@@ -218,7 +218,7 @@ func TestTransactionIDCache(t *testing.T) {
 			txnFingerprintID roachpb.TransactionFingerprintID) {
 			if strings.Contains(sessionData.ApplicationName, appName) {
 				if txnFingerprintID != roachpb.InvalidTransactionFingerprintID {
-					txnIDCache.Flush()
+					txnIDCache.DrainWriteBuffer()
 
 					testutils.SucceedsWithin(t, func() error {
 						existingTxnFingerprintID, ok := txnIDCache.Lookup(txnID)

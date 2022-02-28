@@ -23,19 +23,30 @@ import (
 )
 
 func TestQueryBasic(t *testing.T) {
-	mkType := func(id descpb.ID) *scpb.Target {
-		t := scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Type{TypeID: id}, nil /* metadata */)
+	mkSeq := func(id descpb.ID) *scpb.Target {
+		t := scpb.MakeTarget(
+			scpb.ToPublic,
+			&scpb.Sequence{SequenceID: id},
+			nil, /* metadata */
+		)
 		return &t
 	}
-	mkTypeRef := func(typID, descID descpb.ID) *scpb.Target {
-		t := scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.ViewDependsOnType{
-			TypeID:  typID,
-			TableID: descID,
-		}, nil /* metadata */)
+	mkFK := func(seqID, tblID descpb.ID) *scpb.Target {
+		t := scpb.MakeTarget(
+			scpb.ToPublic,
+			&scpb.ForeignKeyConstraint{
+				TableID:           tblID,
+				ReferencedTableID: seqID},
+			nil, /* metadata */
+		)
 		return &t
 	}
 	mkTable := func(id descpb.ID) *scpb.Target {
-		t := scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: id}, nil /* metadata */)
+		t := scpb.MakeTarget(
+			scpb.ToPublic,
+			&scpb.Table{TableID: id},
+			nil, /* metadata */
+		)
 		return &t
 	}
 	concatNodes := func(nodes ...[]*screl.Node) []*screl.Node {
@@ -52,34 +63,34 @@ func TestQueryBasic(t *testing.T) {
 		}
 		return ret
 	}
-	mkTableTypeRef := func(typID, tabID descpb.ID) []*scpb.Target {
+	mkTargets := func(seqID, tabID descpb.ID) []*scpb.Target {
 		return []*scpb.Target{
-			mkType(typID),
+			mkSeq(seqID),
 			mkTable(tabID),
-			mkTypeRef(typID, tabID),
+			mkFK(seqID, tabID),
 		}
 	}
 	var (
 		tableEl, tableTarget, tableNode rel.Var = "table-el", "table-target", "table-node"
 		refEl, refTarget, refNode       rel.Var = "ref-el", "ref-target", "ref-node"
-		typeEl, typeTarget, typeNode    rel.Var = "type-el", "type-target", "type-node"
-		tableID, typeID, dir, status    rel.Var = "table-id", "type-id", "dir", "status"
+		seqEl, seqTarget, seqNode       rel.Var = "seq-el", "seq-target", "seq-node"
+		tableID, seqID, dir, status     rel.Var = "table-id", "seq-id", "dir", "status"
 		pathJoinQuery                           = screl.MustQuery(
 			tableEl.Type((*scpb.Table)(nil)),
-			refEl.Type((*scpb.ViewDependsOnType)(nil)),
-			typeEl.Type((*scpb.Type)(nil)),
+			refEl.Type((*scpb.ForeignKeyConstraint)(nil)),
+			seqEl.Type((*scpb.Sequence)(nil)),
 
 			tableEl.AttrEqVar(screl.DescID, tableID),
 			refEl.AttrEqVar(screl.DescID, tableID),
-			refEl.AttrEqVar(screl.ReferencedDescID, typeID),
-			typeEl.AttrEqVar(screl.DescID, typeID),
+			refEl.AttrEqVar(screl.ReferencedDescID, seqID),
+			seqEl.AttrEqVar(screl.DescID, seqID),
 
 			screl.JoinTargetNode(tableEl, tableTarget, tableNode),
 			screl.JoinTargetNode(refEl, refTarget, refNode),
-			screl.JoinTargetNode(typeEl, typeTarget, typeNode),
+			screl.JoinTargetNode(seqEl, seqTarget, seqNode),
 
-			dir.Entities(screl.TargetStatus, tableTarget, refTarget, typeTarget),
-			status.Entities(screl.CurrentStatus, tableNode, refNode, typeNode),
+			dir.Entities(screl.TargetStatus, tableTarget, refTarget, seqTarget),
+			status.Entities(screl.CurrentStatus, tableNode, refNode, seqNode),
 		)
 	)
 	type queryExpectations struct {
@@ -93,40 +104,40 @@ func TestQueryBasic(t *testing.T) {
 	}{
 		{
 			nodes: concatNodes(
-				mkNodes(scpb.Status_ABSENT, mkTableTypeRef(1, 2)...),
-				mkNodes(scpb.Status_PUBLIC, mkTableTypeRef(1, 2)...),
-				mkNodes(scpb.Status_ABSENT, mkTableTypeRef(3, 4)...),
+				mkNodes(scpb.Status_ABSENT, mkTargets(1, 2)...),
+				mkNodes(scpb.Status_PUBLIC, mkTargets(1, 2)...),
+				mkNodes(scpb.Status_ABSENT, mkTargets(3, 4)...),
 				mkNodes(scpb.Status_PUBLIC,
-					mkType(5),
+					mkSeq(5),
 					mkTable(6),
-					mkTypeRef(6, 5)),
+					mkFK(6, 5)),
 			),
 			queries: []queryExpectations{
 				{
 					query: pathJoinQuery,
-					nodes: []rel.Var{tableNode, typeNode},
+					nodes: []rel.Var{tableNode, seqNode},
 					exp: []string{`
 [[Table:{DescID: 2}, PUBLIC], ABSENT]
-[[Type:{DescID: 1}, PUBLIC], ABSENT]`, `
+[[Sequence:{DescID: 1}, PUBLIC], ABSENT]`, `
 [[Table:{DescID: 2}, PUBLIC], PUBLIC]
-[[Type:{DescID: 1}, PUBLIC], PUBLIC]`, `
+[[Sequence:{DescID: 1}, PUBLIC], PUBLIC]`, `
 [[Table:{DescID: 4}, PUBLIC], ABSENT]
-[[Type:{DescID: 3}, PUBLIC], ABSENT]`,
+[[Sequence:{DescID: 3}, PUBLIC], ABSENT]`,
 					},
 				},
 				{
 					query: pathJoinQuery,
-					nodes: []rel.Var{tableNode, typeNode, refNode},
+					nodes: []rel.Var{tableNode, seqNode, refNode},
 					exp: []string{`
 [[Table:{DescID: 2}, PUBLIC], ABSENT]
-[[Type:{DescID: 1}, PUBLIC], ABSENT]
-[[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, PUBLIC], ABSENT]`, `
+[[Sequence:{DescID: 1}, PUBLIC], ABSENT]
+[[ForeignKeyConstraint:{DescID: 2, ConstraintID: 0, ReferencedDescID: 1}, PUBLIC], ABSENT]`, `
 [[Table:{DescID: 2}, PUBLIC], PUBLIC]
-[[Type:{DescID: 1}, PUBLIC], PUBLIC]
-[[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, PUBLIC], PUBLIC]`, `
+[[Sequence:{DescID: 1}, PUBLIC], PUBLIC]
+[[ForeignKeyConstraint:{DescID: 2, ConstraintID: 0, ReferencedDescID: 1}, PUBLIC], PUBLIC]`, `
 [[Table:{DescID: 4}, PUBLIC], ABSENT]
-[[Type:{DescID: 3}, PUBLIC], ABSENT]
-[[ViewDependsOnType:{DescID: 4, ReferencedDescID: 3}, PUBLIC], ABSENT]`,
+[[Sequence:{DescID: 3}, PUBLIC], ABSENT]
+[[ForeignKeyConstraint:{DescID: 4, ConstraintID: 0, ReferencedDescID: 3}, PUBLIC], ABSENT]`,
 					},
 				},
 			},

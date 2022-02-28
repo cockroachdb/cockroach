@@ -42,6 +42,7 @@ default_table_access_method                           heap
 default_tablespace                                    ·
 default_transaction_isolation                         serializable
 default_transaction_priority                          normal
+default_transaction_quality_of_service                regular
 default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
 default_with_oids                                     off
@@ -60,11 +61,9 @@ enable_zigzag_join                                    on
 escape_string_warning                                 on
 experimental_distsql_planning                         off
 experimental_enable_auto_rehoming                     off
-experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_temp_tables                       off
 experimental_enable_unique_without_index_constraints  off
-experimental_use_new_schema_changer                   off
 extra_float_digits                                    0
 force_savepoint_restart                               off
 foreign_key_cascades_limit                            10000
@@ -128,6 +127,7 @@ transaction_rows_read_log                             0
 transaction_rows_written_err                          0
 transaction_rows_written_log                          0
 transaction_status                                    NoTxn
+use_declarative_schema_changer                        on
 vectorize                                             on
 xmloption                                             content
 
@@ -235,6 +235,7 @@ SELECT * FROM [SHOW TABLES FROM system]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality
 public       descriptor                       table  NULL   0                    NULL
+public       tenant_settings                  table  NULL   0                    NULL
 public       span_configurations              table  NULL   0                    NULL
 public       sql_instances                    table  NULL   0                    NULL
 public       tenant_usage                     table  NULL   0                    NULL
@@ -276,6 +277,7 @@ SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality  comment
 public       descriptor                       table  NULL   0                    NULL      ·
+public       tenant_settings                  table  NULL   0                    NULL      ·
 public       span_configurations              table  NULL   0                    NULL      ·
 public       sql_instances                    table  NULL   0                    NULL      ·
 public       tenant_usage                     table  NULL   0                    NULL      ·
@@ -460,6 +462,12 @@ file      lexer.go
 function  Error
 detail    source SQL: foo ^
 
+# Test the SHOW TRANSFER STATE statement.
+statement error pgcode 0A000 cannot use SHOW TRANSFER STATE as a statement source
+SELECT * FROM [SHOW TRANSFER STATE]
+
+statement error pgcode 0A000 cannot use SHOW TRANSFER STATE as a statement source
+SELECT * FROM [SHOW TRANSFER STATE WITH 'foo-bar']
 
 # Test the SHOW INDEXES FROM DATABASE COMMAND
 statement ok

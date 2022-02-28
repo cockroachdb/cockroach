@@ -13,7 +13,7 @@ state limit=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
-/System{tse-/Max}                          range system
+/System{tse-/SystemSpanConfigKeys}         range system
 ...
 
 # Adding an explicit zone configuration for the timeseries range should work
@@ -48,8 +48,8 @@ mutations
 ----
 delete /System/{NodeLivenessMax-tsd}
 upsert /System/{NodeLivenessMax-tsd}       range default
-delete /System{tse-/Max}
-upsert /System{tse-/Max}                   range default
+delete /System{tse-/SystemSpanConfigKeys}
+upsert /System{tse-/SystemSpanConfigKeys}  range default
 
 state limit=5
 ----
@@ -57,7 +57,7 @@ state limit=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          ttl_seconds=42
-/System{tse-/Max}                          range default
+/System{tse-/SystemSpanConfigKeys}         range default
 ...
 
 # Ensure that discarding other named zones behave as expected (reparenting them
@@ -80,7 +80,7 @@ state limit=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          range default
-/System{tse-/Max}                          range default
+/System{tse-/SystemSpanConfigKeys}         range default
 ...
 
 
@@ -106,8 +106,8 @@ delete /System/{NodeLivenessMax-tsd}
 upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=50
 delete /System{/tsd-tse}
 upsert /System{/tsd-tse}                   ttl_seconds=50
-delete /System{tse-/Max}
-upsert /System{tse-/Max}                   ttl_seconds=50
+delete /System{tse-/SystemSpanConfigKeys}
+upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=50
 delete /Table/10{6-7}
 upsert /Table/10{6-7}                      ttl_seconds=50
 
@@ -117,13 +117,14 @@ state limit=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              ttl_seconds=50
 /System{/tsd-tse}                          ttl_seconds=50
-/System{tse-/Max}                          ttl_seconds=50
+/System{tse-/SystemSpanConfigKeys}         ttl_seconds=50
 ...
 
 state offset=46
 ----
 ...
 /Table/4{7-8}                              database system (host)
+/Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             ttl_seconds=50
 
 # Make sure future descendants observe the same.
@@ -139,6 +140,7 @@ state offset=46
 ----
 ...
 /Table/4{7-8}                              database system (host)
+/Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             ttl_seconds=50
 /Table/10{7-8}                             ttl_seconds=50
 
@@ -150,8 +152,8 @@ mutations
 ----
 delete /System/{NodeLivenessMax-tsd}
 upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=100
-delete /System{tse-/Max}
-upsert /System{tse-/Max}                   ttl_seconds=100
+delete /System{tse-/SystemSpanConfigKeys}
+upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=100
 
 state limit=5
 ----
@@ -159,5 +161,5 @@ state limit=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              ttl_seconds=100
 /System{/tsd-tse}                          ttl_seconds=50
-/System{tse-/Max}                          ttl_seconds=100
+/System{tse-/SystemSpanConfigKeys}         ttl_seconds=100
 ...

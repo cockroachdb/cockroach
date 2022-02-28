@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -94,14 +95,16 @@ var webSessionTimeout = settings.RegisterDurationSetting(
 ).WithPublic()
 
 type authenticationServer struct {
-	server *Server
+	cfg       *base.Config
+	sqlServer *SQLServer
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
-func newAuthenticationServer(s *Server) *authenticationServer {
+func newAuthenticationServer(cfg *base.Config, s *SQLServer) *authenticationServer {
 	return &authenticationServer{
-		server: s,
+		cfg:       cfg,
+		sqlServer: s,
 	}
 }
 
@@ -177,7 +180,7 @@ func (s *authenticationServer) UserLogin(
 // It is only available for demo and test clusters.
 func (s *authenticationServer) demoLogin(w http.ResponseWriter, req *http.Request) {
 	ctx := context.Background()
-	ctx = logtags.AddTag(ctx, "client", req.RemoteAddr)
+	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(req.RemoteAddr))
 	ctx = logtags.AddTag(ctx, "demologin", nil)
 
 	fail := func(err error) {
@@ -256,8 +259,8 @@ func (s *authenticationServer) UserLoginFromSSO(
 
 	exists, _, canLoginDBConsole, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
-		s.server.sqlServer.execCfg,
-		s.server.sqlServer.execCfg.InternalExecutor,
+		s.sqlServer.execCfg,
+		s.sqlServer.execCfg.InternalExecutor,
 		username,
 		"", /* databaseName */
 	)
@@ -291,7 +294,7 @@ func (s *authenticationServer) createSessionFor(
 		ID:     id,
 		Secret: secret,
 	}
-	return EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
+	return EncodeSessionCookie(cookieValue, !s.cfg.DisableTLSForHTTP)
 }
 
 // UserLogout allows a user to terminate their currently active session.
@@ -315,7 +318,7 @@ func (s *authenticationServer) UserLogout(
 	}
 
 	// Revoke the session.
-	if n, err := s.server.sqlServer.internalExecutor.ExecEx(
+	if n, err := s.sqlServer.internalExecutor.ExecEx(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
@@ -365,7 +368,7 @@ WHERE id = $1`
 		isRevoked    bool
 	)
 
-	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
+	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
@@ -392,7 +395,7 @@ WHERE id = $1`
 		return false, "", nil
 	}
 
-	if now := s.server.clock.PhysicalTime(); !now.Before(expiresAt) {
+	if now := s.sqlServer.execCfg.Clock.PhysicalTime(); !now.Before(expiresAt) {
 		return false, "", nil
 	}
 
@@ -421,8 +424,8 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 ) (valid bool, expired bool, err error) {
 	exists, _, canLoginDBConsole, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
-		s.server.sqlServer.execCfg,
-		s.server.sqlServer.execCfg.InternalExecutor,
+		s.sqlServer.execCfg,
+		s.sqlServer.execCfg.InternalExecutor,
 		username,
 		"", /* databaseName */
 	)
@@ -451,7 +454,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		// pushes clusters upgraded from a previous version into using
 		// SCRAM-SHA-256.
 		sql.MaybeUpgradeStoredPasswordHash(ctx,
-			s.server.sqlServer.execCfg,
+			s.sqlServer.execCfg,
 			username,
 			password, hashedPassword)
 	}
@@ -483,7 +486,7 @@ func (s *authenticationServer) newAuthSession(
 		return 0, nil, err
 	}
 
-	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
+	expiration := s.sqlServer.execCfg.Clock.PhysicalTime().Add(webSessionTimeout.Get(&s.sqlServer.execCfg.Settings.SV))
 
 	insertSessionStmt := `
 INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
@@ -492,7 +495,7 @@ RETURNING id
 `
 	var id int64
 
-	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
+	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"create-auth-session",
 		nil, /* txn */

@@ -7,11 +7,18 @@ go_library(
         "tracing_ui.go",
         "ui.go",
     ],
-    embedsrcs = [
-        "dist_vendor/list.min.js",
-        "templates/tracing/html_template.html",
-        "dist_vendor/.gitkeep",
-    ],
+    # keep
+    embedsrcs = select({
+        "//pkg/ui:cockroach_with_ui": [
+            "dist_vendor/list.min.js",
+            "templates/tracing/html_template.html",
+            "dist_vendor/.gitkeep",
+        ],
+        "//conditions:default": [
+            "templates/tracing/html_template.html",
+            "dist_vendor/.gitkeep",
+        ],
+    }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ui",
     visibility = ["//visibility:public"],
     deps = [

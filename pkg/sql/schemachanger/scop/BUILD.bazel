@@ -22,7 +22,6 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/types",
     ],
 )
 
@@ -47,6 +46,10 @@ genrule(
     exec_tools = [
         ":gen-visitors",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -59,6 +62,10 @@ genrule(
     exec_tools = [
         ":gen-visitors",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -70,6 +77,10 @@ genrule(
        """,
     exec_tools = [
         ":gen-visitors",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 

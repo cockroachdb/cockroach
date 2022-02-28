@@ -17,10 +17,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/docs",
         "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
@@ -37,6 +39,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
+        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
@@ -46,9 +49,11 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
+        "@com_github_robfig_cron_v3//:cron",
     ],
 )
 
@@ -67,6 +72,7 @@ go_test(
     embed = [":tabledesc"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/geo/geoindex",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -87,6 +93,7 @@ go_test(
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/privilege",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

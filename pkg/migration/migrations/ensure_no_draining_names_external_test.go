@@ -41,7 +41,7 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.AvoidDrainingNames - 1),
 				},
@@ -88,7 +88,9 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 	// Check that the draining name persists in the descriptor and in the db's
 	// schema mapping.
 	{
-		db := desctestutils.TestingGetDatabaseDescriptor(s.DB(), c, "t")
+		version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
+		db := desctestutils.TestingGetDatabaseDescriptorWitVersion(
+			s.DB(), c, version, "t")
 		_ = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
 			switch name {
 			case "foo":
@@ -98,7 +100,8 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 			}
 			return nil
 		})
-		foo := desctestutils.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "foo")
+		foo := desctestutils.TestingGetSchemaDescriptorWithVersion(
+			s.DB(), c, version, db.GetID(), "foo")
 		require.NotEmpty(t, foo.GetDrainingNames())
 	}
 
@@ -120,15 +123,16 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 	// Check that there are no draining names and that the database schema mapping
 	// is correct.
 	{
-		db := desctestutils.TestingGetDatabaseDescriptor(s.DB(), c, "t")
+		version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
+		db := desctestutils.TestingGetDatabaseDescriptorWitVersion(s.DB(), c, version, "t")
 		_ = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
 			require.False(t, isDropped)
 			require.True(t, name == "foo" || name == "bar")
 			return nil
 		})
-		foo := desctestutils.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "foo")
+		foo := desctestutils.TestingGetSchemaDescriptorWithVersion(s.DB(), c, version, db.GetID(), "foo")
 		require.Empty(t, foo.GetDrainingNames())
-		bar := desctestutils.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "bar")
+		bar := desctestutils.TestingGetSchemaDescriptorWithVersion(s.DB(), c, version, db.GetID(), "bar")
 		require.Empty(t, bar.GetDrainingNames())
 	}
 }

@@ -55,7 +55,7 @@ Query {"String": "DROP INDEX t_x_idx"}
 until crdb_only
 CommandComplete
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":545,"Routine":"dropIndexByName","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":560,"Routine":"dropIndexByName","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"DROP INDEX"}
 
 until noncrdb_only

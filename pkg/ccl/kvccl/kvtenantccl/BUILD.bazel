@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvtenantccl",
-    srcs = ["connector.go"],
+    srcs = [
+        "connector.go",
+        "setting_overrides.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl",
     visibility = ["//visibility:public"],
     deps = [
@@ -16,6 +19,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server/serverpb",
+        "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
@@ -38,6 +42,7 @@ go_test(
     srcs = [
         "connector_test.go",
         "main_test.go",
+        "setting_overrides_test.go",
         "tenant_kv_test.go",
         "tenant_trace_test.go",
         "tenant_upgrade_test.go",
@@ -60,6 +65,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/testutils",

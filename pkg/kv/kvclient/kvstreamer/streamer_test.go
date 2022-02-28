@@ -23,13 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -38,10 +35,11 @@ import (
 func getStreamer(
 	ctx context.Context, s serverutils.TestServerInterface, limitBytes int64, acc *mon.BoundAccount,
 ) *Streamer {
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	return NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.Stopper(),
-		kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), rootTxn.GetLeafTxnInputState(ctx)),
 		cluster.MakeTestingClusterSettings(),
 		lock.WaitPolicy(0),
 		limitBytes,
@@ -102,77 +100,20 @@ func TestStreamerLimitations(t *testing.T) {
 		// responded to.
 		require.Error(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
 	})
-}
 
-// TestLargeKeys verifies that the Streamer successfully completes the queries
-// when the keys to lookup are large (i.e. the enqueued requests themselves have
-// large memory footprint).
-func TestLargeKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStress(t, "the test inserts large blobs, and the machine can be overloaded when under stress")
-
-	rng, _ := randutil.NewTestRand()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-
-	// Lower the distsql_workmem limit so that we can operate with smaller
-	// blobs. Note that the joinReader in the row-by-row engine will override
-	// the limit if it is lower than 8MiB, so we cannot go lower than that here.
-	_, err := db.Exec("SET distsql_workmem='8MiB'")
-	require.NoError(t, err)
-	// In both engines, the index joiner buffers input rows up to 4MiB in size,
-	// so we have a couple of interesting options for the blob size:
-	// - 3000000 is interesting because it doesn't exceed the buffer size, yet
-	// two rows with such blobs do exceed it. The index joiners are expected to
-	// to process each row on its own.
-	// - 5000000 is interesting because a single row already exceeds the buffer
-	// size.
-	for _, blobSize := range []int{3000000, 5000000} {
-		// onlyLarge determines whether only large blobs are inserted or a mix
-		// of large and small blobs.
-		for _, onlyLarge := range []bool{false, true} {
-			_, err = db.Exec("DROP TABLE IF EXISTS foo")
-			require.NoError(t, err)
-			// We set up such a table that contains two large columns, one of them
-			// being the primary key. The idea is that the query below will first
-			// read from the secondary index which would include only the PK blob,
-			// and that will be used to construct index join lookups (i.e. the PK
-			// blobs will be the enqueued requests for the Streamer) whereas the
-			// other blob will be part of the response.
-			_, err = db.Exec("CREATE TABLE foo (pk_blob STRING PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
-			require.NoError(t, err)
-
-			// Insert a handful of rows.
-			numRows := rng.Intn(3) + 3
-			for i := 0; i < numRows; i++ {
-				letter := string(byte('a') + byte(i))
-				valueSize := blobSize
-				if !onlyLarge && rng.Float64() < 0.5 {
-					// If we're using a mix of large and small values, with 50%
-					// use a small value now.
-					valueSize = rng.Intn(10) + 1
-				}
-				_, err = db.Exec("INSERT INTO foo SELECT repeat($1, $2), 1, repeat($1, $2)", letter, valueSize)
-				require.NoError(t, err)
-			}
-
-			// Perform an index join so that the Streamer API is used.
-			query := "SELECT * FROM foo@foo_attribute_idx WHERE attribute=1"
-			testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
-				vectorizeMode := "off"
-				if vectorize {
-					vectorizeMode = "on"
-				}
-				_, err = db.Exec("SET vectorize = " + vectorizeMode)
-				require.NoError(t, err)
-				_, err = db.Exec(query)
-				require.NoError(t, err)
-			})
-		}
-	}
+	t.Run("unexpected RootTxn", func(t *testing.T) {
+		require.Panics(t, func() {
+			NewStreamer(
+				s.DistSenderI().(*kvcoord.DistSender),
+				s.Stopper(),
+				kv.NewTxn(ctx, s.DB(), s.NodeID()),
+				cluster.MakeTestingClusterSettings(),
+				lock.WaitPolicy(0),
+				math.MaxInt64, /* limitBytes */
+				nil,           /* acc */
+			)
+		})
+	})
 }
 
 // TestStreamerBudgetErrorInEnqueue verifies the behavior of the Streamer in
@@ -199,7 +140,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		var get roachpb.GetRequest
 		var union roachpb.RequestUnion_Get
 		key := make([]byte, keySize+6)
-		key[0] = 190
+		key[0] = 240
 		key[1] = 137
 		key[2] = 18
 		for i := 0; i < keySize; i++ {
@@ -421,4 +362,91 @@ func TestStreamerWideRows(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStreamerEmptyScans verifies that the Streamer behaves correctly when
+// Scan requests return empty responses.
+func TestStreamerEmptyScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a cluster with large --max-sql-memory parameter so that the
+	// Streamer isn't hitting the root budget exceeded error.
+	const rootPoolSize = 1 << 30 /* 1GiB */
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: rootPoolSize,
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// Create a dummy table for which we know the encoding of valid keys.
+	// Although not strictly necessary, we set up two column families since with
+	// a single family in production a Get request would have been used.
+	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k), FAMILY (pk, k), FAMILY (blob))")
+	require.NoError(t, err)
+
+	// Split the table into 5 ranges and populate the range cache.
+	for pk := 1; pk < 5; pk++ {
+		_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", pk))
+		require.NoError(t, err)
+	}
+	_, err = db.Exec("SELECT count(*) from t")
+	require.NoError(t, err)
+
+	makeScanRequest := func(start, end int) roachpb.RequestUnion {
+		var res roachpb.RequestUnion
+		var scan roachpb.ScanRequest
+		var union roachpb.RequestUnion_Scan
+		makeKey := func(pk int) []byte {
+			// These numbers essentially make a key like '/t/primary/pk'.
+			return []byte{240, 137, byte(136 + pk)}
+		}
+		scan.Key = makeKey(start)
+		scan.EndKey = makeKey(end)
+		union.Scan = &scan
+		res.Value = &union
+		return res
+	}
+
+	getStreamer := func() *Streamer {
+		s := getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
+		// There are two column families in the table.
+		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */)
+		return s
+	}
+
+	t.Run("scan single range", func(t *testing.T) {
+		streamer := getStreamer()
+		defer streamer.Close()
+
+		// Scan the row with pk=0.
+		reqs := make([]roachpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(0, 1)
+		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		results, err := streamer.GetResults(ctx)
+		require.NoError(t, err)
+		// We expect a single empty Scan response.
+		require.Equal(t, 1, len(results))
+	})
+
+	t.Run("scan multiple ranges", func(t *testing.T) {
+		streamer := getStreamer()
+		defer streamer.Close()
+
+		// Scan the rows with pk in range [1, 4).
+		reqs := make([]roachpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(1, 4)
+		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		// We expect an empty response for each range.
+		var numResults int
+		for {
+			results, err := streamer.GetResults(ctx)
+			require.NoError(t, err)
+			numResults += len(results)
+			if len(results) == 0 {
+				break
+			}
+		}
+		require.Equal(t, 3, numResults)
+	})
 }

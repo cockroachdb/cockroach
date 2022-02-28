@@ -13,6 +13,7 @@ package settingswatcher_test
 import (
 	"bytes"
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -51,13 +53,12 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 
 	const systemOnlySetting = "kv.snapshot_rebalance.max_rate"
 	toSet := map[string][]interface{}{
-		"sql.defaults.experimental_hash_sharded_indexes.enabled": {true, false},
-		"kv.queue.process.guaranteed_time_budget":                {"17s", "20s"},
-		"sql.txn_stats.sample_rate":                              {.23, .55},
-		"cluster.organization":                                   {"foobar", "bazbax"},
+		"kv.queue.process.guaranteed_time_budget": {"17s", "20s"},
+		"sql.txn_stats.sample_rate":               {.23, .55},
+		"cluster.organization":                    {"foobar", "bazbax"},
 		// Include a system-only setting to verify that we don't try to change its
 		// value (which would cause a panic in test builds).
-		systemOnlySetting: {1024, 2048},
+		systemOnlySetting: {2 << 20, 4 << 20},
 	}
 	fakeTenant := roachpb.MakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
@@ -98,7 +99,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		return len(rows)
 	}
 	checkSettingsValuesMatch := func(a, b *cluster.Settings) error {
-		return settingswatcher.CheckSettingsValuesMatch(t, a, b)
+		return CheckSettingsValuesMatch(t, a, b)
 	}
 	checkStoredValuesMatch := func(expected []roachpb.KeyValue) error {
 		got := filterSystemOnly(getSourceClusterRows())
@@ -305,7 +306,7 @@ type testingOverrideMonitor struct {
 
 	mu struct {
 		syncutil.Mutex
-		overrides map[string]settingswatcher.RawValue
+		overrides map[string]settings.EncodedValue
 	}
 }
 
@@ -315,7 +316,7 @@ func newTestingOverrideMonitor() *testingOverrideMonitor {
 	m := &testingOverrideMonitor{
 		ch: make(chan struct{}, 1),
 	}
-	m.mu.overrides = make(map[string]settingswatcher.RawValue)
+	m.mu.overrides = make(map[string]settings.EncodedValue)
 	return m
 }
 
@@ -330,7 +331,7 @@ func (m *testingOverrideMonitor) set(key string, val string, valType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.mu.overrides[key] = settingswatcher.RawValue{
+	m.mu.overrides[key] = settings.EncodedValue{
 		Value: val,
 		Type:  valType,
 	}
@@ -342,18 +343,91 @@ func (m *testingOverrideMonitor) unset(key string) {
 	delete(m.mu.overrides, key)
 }
 
-// NotifyCh is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) NotifyCh() <-chan struct{} {
+// RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor interface.
+func (m *testingOverrideMonitor) RegisterOverridesChannel() <-chan struct{} {
 	return m.ch
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) Overrides() map[string]settingswatcher.RawValue {
+func (m *testingOverrideMonitor) Overrides() map[string]settings.EncodedValue {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	res := make(map[string]settingswatcher.RawValue)
+	res := make(map[string]settings.EncodedValue)
 	for k, v := range m.mu.overrides {
 		res[k] = v
 	}
 	return res
+}
+
+// Test that an error occurring during processing of the
+// rangefeedcache.Watcher can be recovered after a permanent
+// rangefeed failure.
+func TestOverflowRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sideSettings := cluster.MakeTestingClusterSettings()
+	w := settingswatcher.New(
+		s.Clock(),
+		s.ExecutorConfig().(sql.ExecutorConfig).Codec,
+		sideSettings,
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.Stopper(),
+		nil,
+	)
+	var exitCalled int64 // accessed with atomics
+	errCh := make(chan error)
+	w.SetTestingKnobs(&rangefeedcache.TestingKnobs{
+		PreExit:          func() { atomic.AddInt64(&exitCalled, 1) },
+		ErrorInjectionCh: errCh,
+	})
+	require.NoError(t, w.Start(ctx))
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	// Shorten the closed timestamp duration as a cheeky way to check the
+	// checkpointing code while also speeding up the test.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+
+	checkSettings := func() {
+		testutils.SucceedsSoon(t, func() error {
+			return CheckSettingsValuesMatch(t, s.ClusterSettings(), sideSettings)
+		})
+	}
+	checkExits := func(exp int64) {
+		require.Equal(t, exp, atomic.LoadInt64(&exitCalled))
+	}
+	waitForExits := func(exp int64) {
+		require.Eventually(t, func() bool {
+			return atomic.LoadInt64(&exitCalled) == exp
+		}, time.Minute, time.Millisecond)
+	}
+
+	checkSettings()
+	tdb.Exec(t, "SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget = '1m'")
+	checkSettings()
+	checkExits(0)
+	errCh <- errors.New("boom")
+	waitForExits(1)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget = '2s'")
+	checkSettings()
+	checkExits(1)
+}
+
+// CheckSettingsValuesMatch is a test helper function to return an error when
+// two settings do not match. It generally gets used with SucceeedsSoon.
+func CheckSettingsValuesMatch(t *testing.T, a, b *cluster.Settings) error {
+	for _, k := range settings.Keys(false /* forSystemTenant */) {
+		s, ok := settings.Lookup(k, settings.LookupForLocalAccess, false /* forSystemTenant */)
+		require.True(t, ok)
+		if s.Class() == settings.SystemOnly {
+			continue
+		}
+		if av, bv := s.String(&a.SV), s.String(&b.SV); av != bv {
+			return errors.Errorf("values do not match for %s: %s != %s", k, av, bv)
+		}
+	}
+	return nil
 }

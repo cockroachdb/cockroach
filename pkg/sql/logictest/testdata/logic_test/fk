@@ -506,8 +506,7 @@ delivery  CREATE TABLE public.delivery (
           CONSTRAINT delivery_pkey PRIMARY KEY (rowid ASC),
           CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
           CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
-          INDEX delivery_item_idx (item ASC),
-          FAMILY "primary" (ts, "order", shipment, item, rowid)
+          INDEX delivery_item_idx (item ASC)
 )
 
 statement ok
@@ -656,10 +655,10 @@ ALTER TABLE delivery DROP COLUMN "item"
 statement ok
 DROP INDEX products@products_upc_key CASCADE
 
-statement error "products" is referenced by foreign key from table "orders"
+statement error "products" is referenced by foreign key from table "customer reviews"
 DROP TABLE products
 
-statement error referenced by foreign key from table "orders"
+statement error referenced by foreign key from table "customer reviews"
 DROP TABLE products RESTRICT
 
 statement error referenced by foreign key from table "customer reviews"
@@ -828,8 +827,7 @@ refpairs  CREATE TABLE public.refpairs (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
           CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
-          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
-          FAMILY "primary" (a, b, c, rowid)
+          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
 )
 
 statement error pgcode 23503 insert on table "refpairs" violates foreign key constraint "refpairs_a_b_fkey"\nDETAIL: Key \(a, b\)=\(100, 'two'\) is not present in table "pairs".
@@ -1049,8 +1047,7 @@ refers  CREATE TABLE public.refers (
         CONSTRAINT refers_pkey PRIMARY KEY (rowid ASC),
         CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
         INDEX another_idx (b ASC),
-        INDEX foo (a ASC),
-        FAMILY "primary" (a, b, rowid)
+        INDEX foo (a ASC)
 )
 
 statement ok
@@ -1129,8 +1126,7 @@ SHOW CREATE TABLE pkref_b
 pkref_b  CREATE TABLE public.pkref_b (
          b INT8 NOT NULL,
          CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
-         CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT,
-         FAMILY "primary" (b)
+         CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
 )
 
 subtest 20042
@@ -3839,3 +3835,38 @@ NOTICE: type of foreign key column "parent_id" (int4) is not identical to refere
 
 statement ok
 DROP DATABASE db_type_test
+
+# Regression test for #76852. Correctly maintain child indexes on virtual
+# columns during a cascading delete.
+statement ok
+CREATE TABLE p76852 (
+  p STRING PRIMARY KEY,
+  i INT
+);
+CREATE TABLE c76852 (
+  b BOOL,
+  v STRING AS (b::STRING) VIRTUAL,
+  p STRING REFERENCES p76852 (p) ON DELETE CASCADE,
+  PRIMARY KEY (p, b),
+  INDEX idx (v)
+);
+
+statement ok
+INSERT INTO p76852 (p, i) VALUES ('foo', 1);
+INSERT INTO c76852 (b, p) VALUES (true, 'foo');
+DELETE FROM p76852 WHERE true;
+
+# Fast path case.
+query B
+SELECT b FROM c76852@idx WHERE b
+----
+
+statement ok
+INSERT INTO p76852 (p, i) VALUES ('foo', 1);
+INSERT INTO c76852 (b, p) VALUES (true, 'foo');
+DELETE FROM p76852 WHERE i = 1;
+
+# Non-fast path case.
+query B
+SELECT b FROM c76852@idx WHERE b
+----

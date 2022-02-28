@@ -96,7 +96,7 @@ func (r *Replica) executeWriteBatch(
 
 	// Compute the transaction's local uncertainty limit using observed
 	// timestamps, which can help avoid uncertainty restarts.
-	ui := uncertainty.ComputeInterval(ba.Txn, st)
+	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
 
 	// Start tracking this request if it is an MVCC write (i.e. if it's the kind
 	// of request that needs to obey the closed timestamp). The act of tracking
@@ -316,7 +316,7 @@ func (r *Replica) executeWriteBatch(
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
-	ctx context.Context, ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) bool {
 	if !isOnePhaseCommit(ba) {
 		return false
@@ -343,7 +343,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 		ba.Txn.WriteTimestamp = minCommitTS
 		// We can only evaluate at the new timestamp if we manage to bump the read
 		// timestamp.
-		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans)
+		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, g)
 	}
 	return true
 }
@@ -362,19 +362,19 @@ func (r *Replica) evaluateWriteBatch(
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	ui uncertainty.Interval,
-	latchSpans *spanset.SpanSet,
+	g *concurrency.Guard,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	log.Event(ctx, "executing read-write batch")
 
 	// If the transaction has been pushed but it can commit at the higher
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
 	// allow it commit, and also it'll allow us to attempt the 1PC code path.
-	maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans)
+	maybeBumpReadTimestampToWriteTimestamp(ctx, ba, g)
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	if r.canAttempt1PCEvaluation(ctx, ba, latchSpans) {
-		res := r.evaluate1PC(ctx, idKey, ba, latchSpans)
+	if r.canAttempt1PCEvaluation(ctx, ba, g) {
+		res := r.evaluate1PC(ctx, idKey, ba, g)
 		switch res.success {
 		case onePCSucceeded:
 			return res.batch, res.stats, res.br, res.res, nil
@@ -403,9 +403,9 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	ms := new(enginepb.MVCCStats)
-	rec := NewReplicaEvalContext(r, latchSpans)
+	rec := NewReplicaEvalContext(r, g.LatchSpans())
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, ui, latchSpans, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, ui, g, nil /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -445,10 +445,7 @@ type onePCResult struct {
 // efficient - we're avoiding writing the transaction record and writing and the
 // immediately deleting intents.
 func (r *Replica) evaluate1PC(
-	ctx context.Context,
-	idKey kvserverbase.CmdIDKey,
-	ba *roachpb.BatchRequest,
-	latchSpans *spanset.SpanSet,
+	ctx context.Context, idKey kvserverbase.CmdIDKey, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
 
@@ -471,7 +468,7 @@ func (r *Replica) evaluate1PC(
 	// Is this relying on the batch being write-only?
 	ui := uncertainty.Interval{}
 
-	rec := NewReplicaEvalContext(r, latchSpans)
+	rec := NewReplicaEvalContext(r, g.LatchSpans())
 	var br *roachpb.BatchResponse
 	var res result.Result
 	var pErr *roachpb.Error
@@ -483,10 +480,10 @@ func (r *Replica) evaluate1PC(
 	ms := new(enginepb.MVCCStats)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, ui, latchSpans, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, ui, g, etArg.Deadline)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, ui, latchSpans)
+			ctx, idKey, rec, ms, &strippedBa, ui, g)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -577,7 +574,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	ui uncertainty.Interval,
-	latchSpans *spanset.SpanSet,
+	g *concurrency.Guard,
 	deadline *hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
@@ -591,7 +588,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, ui, latchSpans)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, ui, g)
 
 		var success bool
 		if pErr == nil {
@@ -604,7 +601,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, deadline) {
+		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, g, deadline) {
 			break
 		}
 	}
@@ -620,9 +617,9 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	ui uncertainty.Interval,
-	latchSpans *spanset.SpanSet,
+	g *concurrency.Guard,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
-	batch, opLogger := r.newBatchedEngine(ba, latchSpans)
+	batch, opLogger := r.newBatchedEngine(ba, g)
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, ui, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
@@ -639,7 +636,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(
-	ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
+	ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
 	if !batch.ConsistentIterators() {
@@ -690,7 +687,7 @@ func (r *Replica) newBatchedEngine(
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, latchSpans)
+		batch = spanset.NewBatch(batch, g.LatchSpans())
 	}
 	return batch, opLogger
 }

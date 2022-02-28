@@ -1,29 +1,43 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "validate",
-    srcs = ["validate.go"],
+    srcs = [
+        "schema_changer_state.go",
+        "validate.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate",
     visibility = ["//pkg/sql/catalog:__subpackages__"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
-go_library(
-    name = "catval",
-    srcs = ["validate.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catval",
-    visibility = ["//pkg/sql/catalog:__subpackages__"],
+go_test(
+    name = "validate_test",
+    srcs = [
+        "helpers_test.go",
+        "schema_changer_state_test.go",
+    ],
+    embed = [":validate"],
     deps = [
-        "//pkg/keys",
-        "//pkg/server/telemetry",
+        "//pkg/clusterversion",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/schemachanger/scpb",
+        "@com_github_stretchr_testify//require",
     ],
 )

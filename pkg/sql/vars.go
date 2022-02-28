@@ -1572,25 +1572,6 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_enable_hash_sharded_indexes`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("experimental_enable_hash_sharded_indexes", s)
-			if err != nil {
-				return err
-			}
-			m.SetHashShardedIndexesEnabled(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().HashShardedIndexesEnabled), nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(hashShardedIndexesEnabledClusterMode.Get(sv))
-		},
-	},
-
-	// CockroachDB extension.
 	`disallow_full_table_scans`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`disallow_full_table_scans`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -1648,13 +1629,13 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	`experimental_use_new_schema_changer`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_use_new_schema_changer`),
+	`use_declarative_schema_changer`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_declarative_schema_changer`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.NewSchemaChangerModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_use_new_schema_changer`, s,
-					"off", "on", "unsafe_always")
+				return newVarValueError(`use_declarative_schema_changer`, s,
+					"off", "on", "unsafe", "unsafe_always")
 			}
 			m.SetUseNewSchemaChanger(mode)
 			return nil
@@ -1907,6 +1888,24 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().CostScansWithDefaultColSize), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+	`default_transaction_quality_of_service`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`default_transaction_quality_of_service`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			qosLevel, ok := sessiondatapb.ParseQoSLevelFromString(s)
+			if !ok {
+				return newVarValueError(`default_transaction_quality_of_service`, s,
+					sessiondatapb.NormalName, sessiondatapb.UserHighName, sessiondatapb.UserLowName)
+			}
+			m.SetQualityOfService(qosLevel)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return evalCtx.QualityOfService().String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.Normal.String()
+		},
 	},
 }
 

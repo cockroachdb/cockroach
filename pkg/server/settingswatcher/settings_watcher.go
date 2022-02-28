@@ -48,8 +48,8 @@ type SettingsWatcher struct {
 		syncutil.Mutex
 
 		updater   settings.Updater
-		values    map[string]RawValue
-		overrides map[string]RawValue
+		values    map[string]settings.EncodedValue
+		overrides map[string]settings.EncodedValue
 	}
 
 	// testingWatcherKnobs allows the client to inject testing knobs into
@@ -128,10 +128,10 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		}
 	}
 
-	s.mu.values = make(map[string]RawValue)
+	s.mu.values = make(map[string]settings.EncodedValue)
 
 	if s.overridesMonitor != nil {
-		s.mu.overrides = make(map[string]RawValue)
+		s.mu.overrides = make(map[string]settings.EncodedValue)
 		// Initialize the overrides. We want to do this before processing the
 		// settings table, otherwise we could see temporary transitions to the value
 		// in the table.
@@ -139,7 +139,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 
 		// Set up a worker to watch the monitor.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
-			overridesCh := s.overridesMonitor.NotifyCh()
+			overridesCh := s.overridesMonitor.RegisterOverridesChannel()
 			for {
 				select {
 				case <-overridesCh:
@@ -272,7 +272,7 @@ func (s *SettingsWatcher) handleKV(
 const versionSettingKey = "version"
 
 // set the current value of a setting.
-func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val RawValue) {
+func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val settings.EncodedValue) {
 	// The system tenant (i.e. the KV layer) does not use the SettingsWatcher
 	// to propagate cluster version changes (it uses the BumpClusterVersion
 	// RPC). However, non-system tenants (i.e. SQL pods) (asynchronously) get
@@ -289,7 +289,7 @@ func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val RawValu
 		return
 	}
 
-	if err := s.mu.updater.Set(ctx, key, val.Value, val.Type); err != nil {
+	if err := s.mu.updater.Set(ctx, key, val); err != nil {
 		log.Warningf(ctx, "failed to set setting %s to %s: %v", log.Safe(key), val.Value, err)
 	}
 }
@@ -305,7 +305,7 @@ func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
 	if !ok {
 		log.Fatalf(ctx, "expected non-masked setting, got %T", s)
 	}
-	val := RawValue{
+	val := settings.EncodedValue{
 		Value: ws.EncodedDefault(),
 		Type:  ws.Typ(),
 	}
@@ -354,4 +354,9 @@ func (s *SettingsWatcher) resetUpdater() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.updater = s.settings.MakeUpdater()
+}
+
+// SetTestingKnobs is used by tests to set testing knobs.
+func (s *SettingsWatcher) SetTestingKnobs(knobs *rangefeedcache.TestingKnobs) {
+	s.testingWatcherKnobs = knobs
 }

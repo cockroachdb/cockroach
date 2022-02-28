@@ -30,12 +30,25 @@ export type NodeNames = { [nodeId: string]: string };
 
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
+  sessionStart: "Session Start Time (UTC)",
+  sessionDuration: "Session Duration",
+  mostRecentStatement: "Most Recent Statement",
+  status: "Status",
+  statementStartTime: "Statement Start Time (UTC)",
+  txnDuration: "Transaction Duration",
+  actions: "Actions",
+  memUsage: "Memory Usage",
+  maxMemUsed: "Maximum Memory Usage",
+  numRetries: "Retries",
+  numStatements: "Statements Run",
+  clientAddress: "Client IP Address",
+  username: "User Name",
+  applicationName: "Application Name",
   bytesRead: "Bytes Read",
   contention: "Contention",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
-  aggregationInterval: "Aggregation Interval (UTC)",
   maxMemUsage: "Max Memory",
   networkBytes: "Network",
   regionNodes: "Regions/Nodes",
@@ -59,7 +72,11 @@ export const contentModifiers = {
   statements: "statements",
 };
 
-export type StatisticType = "statement" | "transaction" | "transactionDetails";
+export type StatisticType =
+  | "statement"
+  | "session"
+  | "transaction"
+  | "transactionDetails";
 export type StatisticTableColumnKeys = keyof typeof statisticsColumnLabels;
 
 type StatisticTableTitleType = {
@@ -96,6 +113,170 @@ export function getLabel(
 // of data the statistics are based on (e.g. statements, transactions, or transactionDetails). The
 // StatisticType is used to modify the content of the tooltip.
 export const statisticsTableTitles: StatisticTableTitleType = {
+  sessionStart: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The timestamp at which the session started."}
+      >
+        {getLabel("sessionStart")}
+      </Tooltip>
+    );
+  },
+  sessionDuration: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The amount of time the session has been open."}
+      >
+        {getLabel("sessionDuration")}
+      </Tooltip>
+    );
+  },
+  status: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={
+          "A session is active if it has an open transaction (including implicit transactions, which are individual SQL statements), and idle if it has no open transaction."
+        }
+      >
+        {getLabel("status")}
+      </Tooltip>
+    );
+  },
+  mostRecentStatement: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={
+          "If more than one statement is active, the most recent statement is shown. If the session is idle, the last statement is shown."
+        }
+      >
+        {getLabel("mostRecentStatement")}
+      </Tooltip>
+    );
+  },
+  statementStartTime: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The timestamp at which the statement started."}
+      >
+        {getLabel("statementStartTime")}
+      </Tooltip>
+    );
+  },
+  memUsage: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={
+          "Amount of memory currently allocated to this session, followed by the maximum amount of memory this session has ever been allocated."
+        }
+      >
+        {getLabel("memUsage")}
+      </Tooltip>
+    );
+  },
+  clientAddress: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The IP address/port of the client that opened the session."}
+      >
+        {getLabel("clientAddress")}
+      </Tooltip>
+    );
+  },
+  username: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The user that opened the session."}
+      >
+        {getLabel("username")}
+      </Tooltip>
+    );
+  },
+  applicationName: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The application that ran the session."}
+      >
+        {getLabel("applicationName")}
+      </Tooltip>
+    );
+  },
+  actions: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"Actions to take on the session."}
+      >
+        {getLabel("actions")}
+      </Tooltip>
+    );
+  },
+  maxMemUsed: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={
+          "The maximum amount of allocated memory this session ever had."
+        }
+      >
+        {getLabel("maxMemUsage")}
+      </Tooltip>
+    );
+  },
+  numRetries: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The number of times this transaction encountered a retry."}
+      >
+        {getLabel("retries")}
+      </Tooltip>
+    );
+  },
+  numStatements: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={
+          "Number of statements that have been run in this transaction so far."
+        }
+      >
+        {getLabel("numStatements")}
+      </Tooltip>
+    );
+  },
+  txnDuration: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The duration of the open transaction, if there is one."}
+      >
+        {getLabel("txnDuration")}
+      </Tooltip>
+    );
+  },
   statements: () => {
     return (
       <Tooltip
@@ -137,27 +318,6 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("transactions")}
-      </Tooltip>
-    );
-  },
-  aggregationInterval: () => {
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <div>
-            <p>
-              The time interval of the statement execution. By default,
-              statements are configured to aggregate over an hour interval.
-              <br />
-              For example, if a statement is executed at 1:23PM it will fall in
-              the 1:00PM - 2:00PM time interval.
-            </p>
-          </div>
-        }
-      >
-        {getLabel("aggregationInterval")}
       </Tooltip>
     );
   },

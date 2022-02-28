@@ -11,8 +11,9 @@
 @import "../core/index.module.scss";
 
 .sessions-details{
-  all: initial;
   font-family: $font-family--base;
+  width: 100%;
+  max-width: 1200px;
 }
 
 .heading-with-controls {
@@ -48,5 +49,23 @@
   align-items: center;
   &:not(:last-child) {
     box-shadow: 0 1px 0 #dbe1ea;
+  }
+}
+
+.session-details-link a {
+  color: $colors--link;
+}
+
+.session-status-icon {
+  &__active {
+    height: 10px;
+    width: 20px;
+    fill: $colors--primary-green-3;
+  }
+
+  &__idle {
+    height: 10px;
+    width: 20px;
+    fill: $colors--functional-orange-3;
   }
 }

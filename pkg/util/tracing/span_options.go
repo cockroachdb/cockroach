@@ -68,7 +68,7 @@ type spanOptions struct {
 	// collection of each processor span recording independently, without relying
 	// on collecting the recording of the flow's span.
 	ParentDoesNotCollectRecording bool
-	RemoteParent                  SpanMeta               // see WithRemoteParent
+	RemoteParent                  SpanMeta               // see WithRemoteParentFromSpanMeta
 	RefType                       spanReferenceType      // see WithFollowsFrom
 	LogTags                       *logtags.Buffer        // see WithLogTags
 	Tags                          map[string]interface{} // see WithTags
@@ -133,7 +133,7 @@ func (opts *spanOptions) otelContext() (oteltrace.Span, oteltrace.SpanContext) {
 // A synopsis of the options follows. For details, see their comments.
 //
 // - WithParent: create a child Span with a local parent.
-// - WithRemoteParent: create a child Span with a remote parent.
+// - WithRemoteParentFromSpanMeta: create a child Span with a remote parent.
 // - WithFollowsFrom: hint that child may outlive parent.
 // - WithLogTags: populates the Span tags from a `logtags.Buffer`.
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
@@ -150,7 +150,7 @@ type parentOption spanRef
 // Span.
 //
 // In case when the parent span is created with a different Tracer (generally,
-// when the parent lives in a different process), WithRemoteParent should be
+// when the parent lives in a different process), WithRemoteParentFromSpanMeta should be
 // used.
 //
 // WithParent will be a no-op (i.e. the span resulting from
@@ -224,9 +224,9 @@ func (p parentOption) apply(opts spanOptions) spanOptions {
 
 type remoteParent SpanMeta
 
-// WithRemoteParent instructs StartSpan to create a child span descending from a
-// parent described via a SpanMeta. Generally this parent span lives in a
-// different process.
+// WithRemoteParentFromSpanMeta instructs StartSpan to create a child span
+// descending from a parent described via a SpanMeta. Generally this parent span
+// lives in a different process.
 //
 // For the purposes of trace recordings, there's no mechanism ensuring that the
 // child's recording will be passed to the parent span. When that's desired, it
@@ -240,7 +240,7 @@ type remoteParent SpanMeta
 // node 1                     (network)          node 2
 // --------------------------------------------------------------------------
 // Span.Meta()               ----------> sp2 := Tracer.StartSpan(
-//                                       		WithRemoteParent(.))
+//                                       		WithRemoteParentFromSpanMeta(.))
 //                                       doSomething(sp2)
 // Span.ImportRemoteSpans(.) <---------- sp2.FinishAndGetRecording()
 //
@@ -248,15 +248,37 @@ type remoteParent SpanMeta
 // corresponds to the expectation that the parent span will usually wait for the
 // child to Finish(). If this expectation does not hold, WithFollowsFrom should
 // be added to the StartSpan invocation.
-func WithRemoteParent(parent SpanMeta) SpanOption {
-	if parent.sterile {
-		return remoteParent{}
+//
+// If you're in possession of a TraceInfo instead of a SpanMeta, prefer using
+// WithRemoteParentFromTraceInfo instead. If the TraceInfo is heap-allocated,
+// WithRemoteParentFromTraceInfo will not allocate (whereas
+// WithRemoteParentFromSpanMeta allocates).
+func WithRemoteParentFromSpanMeta(parent SpanMeta) SpanOption {
+	if parent.Empty() || parent.sterile {
+		return nil
 	}
 	return (remoteParent)(parent)
 }
 
 func (p remoteParent) apply(opts spanOptions) spanOptions {
 	opts.RemoteParent = (SpanMeta)(p)
+	return opts
+}
+
+type remoteParentFromTraceInfoOpt tracingpb.TraceInfo
+
+var _ SpanOption = &remoteParentFromTraceInfoOpt{}
+
+// WithRemoteParentFromTraceInfo is like WithRemoteParentFromSpanMeta, except the remote
+// parent info is passed in as *TraceInfo. This is equivalent to
+// WithRemoteParentFromSpanMeta(SpanMetaFromProto(ti)), but more efficient because it
+// doesn't allocate.
+func WithRemoteParentFromTraceInfo(ti *tracingpb.TraceInfo) SpanOption {
+	return (*remoteParentFromTraceInfoOpt)(ti)
+}
+
+func (r *remoteParentFromTraceInfoOpt) apply(opts spanOptions) spanOptions {
+	opts.RemoteParent = SpanMetaFromProto(*(*tracingpb.TraceInfo)(r))
 	return opts
 }
 
@@ -297,7 +319,7 @@ var followsFromSingleton = SpanOption(followsFromOpt{})
 // WithFollowsFrom instructs StartSpan to link the child span to its parent
 // using a different kind of relationship than the regular parent-child one,
 // should a child span be created (i.e. should WithParent or
-// WithRemoteParent be supplied as well). This relationship was
+// WithRemoteParentFromSpanMeta be supplied as well). This relationship was
 // called "follows-from" in the old OpenTracing API. This only matters if the
 // trace is sent to an OpenTelemetry tracer; CRDB itself ignores it (what
 // matters for CRDB is the WithDetachedTrace option).

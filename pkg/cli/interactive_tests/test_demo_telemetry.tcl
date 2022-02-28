@@ -18,7 +18,7 @@ send "alter table vehicles partition by list (city) (partition p1 values in ('ny
 # expect that it failed, as no license was requested.
 eexpect "use of partitions requires an enterprise license"
 # clean up after the test
-interrupt
+send_eof
 eexpect eof
 
 end_test

@@ -266,7 +266,8 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 
 	eng := createTestPebbleEngine().(*Pebble)
 	defer eng.Close()
-	iter := newPebbleIterator(eng.db, nil, IterOptions{UpperBound: roachpb.Key("foo")})
+	iter := newPebbleIterator(
+		eng.db, nil, IterOptions{UpperBound: roachpb.Key("foo")}, StandardDurability)
 	defer iter.Close()
 	checker := &iterBoundsChecker{t: t}
 	iter.testingSetBoundsListener = checker
@@ -500,9 +501,9 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(k1, []byte("a1")))
 
 	var (
-		roEngine  = eng.NewReadOnly()
+		roEngine  = eng.NewReadOnly(StandardDurability)
 		batch     = eng.NewBatch()
-		roEngine2 = eng.NewReadOnly()
+		roEngine2 = eng.NewReadOnly(StandardDurability)
 		batch2    = eng.NewBatch()
 	)
 	defer roEngine.Close()
@@ -1123,6 +1124,22 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 		[]byte("foo")))
 	// Added 2 MVCCKeys.
 	finishAndCheck(22, 26)
+	// Using the same suffix for all keys in a block results in an interval of
+	// width one (inclusive lower bound to exclusive upper bound).
+	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
+	require.NoError(t, collector.UpdateKeySuffixes(
+		nil /* old prop */, nil /* old suffix */, suffix,
+	))
+	finishAndCheck(42, 43)
+	// An invalid key results in an error.
+	// Case 1: malformed sentinel.
+	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
+	sentinelPos := len(key) - 1 - int(key[len(key)-1])
+	key[sentinelPos] = '\xff'
+	require.Error(t, collector.UpdateKeySuffixes(nil, nil, key))
+	// Case 2: malformed bare suffix (too short).
+	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
+	require.Error(t, collector.UpdateKeySuffixes(nil, nil, suffix))
 }
 
 func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
@@ -1164,4 +1181,60 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	require.NoError(t, err)
 	expected := []int64{7, 6, 5}
 	require.Equal(t, expected, found)
+}
+
+func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+
+	ts := hlc.Timestamp{WallTime: 1}
+	k := MVCCKey{[]byte("a"), ts}
+	// Write.
+	require.NoError(t, eng.PutMVCC(k, []byte("a1")))
+	cbCount := int32(0)
+	eng.RegisterFlushCompletedCallback(func() {
+		atomic.AddInt32(&cbCount, 1)
+	})
+	roStandard := eng.NewReadOnly(StandardDurability)
+	defer roStandard.Close()
+	roGuaranteed := eng.NewReadOnly(GuaranteedDurability)
+	defer roGuaranteed.Close()
+	roGuaranteedPinned := eng.NewReadOnly(GuaranteedDurability)
+	defer roGuaranteedPinned.Close()
+	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators())
+	// Returns the value found or nil.
+	checkGetAndIter := func(reader Reader) []byte {
+		v, err := reader.MVCCGet(k)
+		require.NoError(t, err)
+		iter := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
+		defer iter.Close()
+		iter.SeekGE(k)
+		valid, err := iter.Valid()
+		require.NoError(t, err)
+		require.Equal(t, v != nil, valid)
+		if valid {
+			require.Equal(t, v, iter.Value())
+		}
+		return v
+	}
+	require.Equal(t, "a1", string(checkGetAndIter(roStandard)))
+	// Write is not visible yet.
+	require.Nil(t, checkGetAndIter(roGuaranteed))
+	require.Nil(t, checkGetAndIter(roGuaranteedPinned))
+
+	// Flush the engine and wait for it to complete.
+	require.NoError(t, eng.Flush())
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt32(&cbCount) < 1 {
+			return errors.Errorf("not flushed")
+		}
+		return nil
+	})
+	// Write is visible to new guaranteed reader. We need to use a new reader
+	// due to iterator caching.
+	roGuaranteed2 := eng.NewReadOnly(GuaranteedDurability)
+	defer roGuaranteed2.Close()
+	require.Equal(t, "a1", string(checkGetAndIter(roGuaranteed2)))
 }

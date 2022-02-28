@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -100,12 +102,12 @@ var _ operatorExpr = &IsOfTypeExpr{}
 
 // Operator is used to identify Operators; used in sql.y.
 type Operator interface {
-	operator()
+	Operator()
 }
 
 var _ Operator = (*UnaryOperator)(nil)
-var _ Operator = (*BinaryOperator)(nil)
-var _ Operator = (*ComparisonOperator)(nil)
+var _ Operator = (*treebin.BinaryOperator)(nil)
+var _ Operator = (*treecmp.ComparisonOperator)(nil)
 
 // SubqueryExpr is an interface used to identify an expression as a subquery.
 // It is implemented by both tree.Subquery and optbuilder.subquery, and is
@@ -352,144 +354,10 @@ func StripParens(expr Expr) Expr {
 	return expr
 }
 
-// ComparisonOperator represents a binary operator which returns a bool.
-type ComparisonOperator struct {
-	Symbol ComparisonOperatorSymbol
-	// IsExplicitOperator is true if OPERATOR(symbol) is used.
-	IsExplicitOperator bool
-}
-
-// MakeComparisonOperator creates a ComparisonOperator given a symbol.
-func MakeComparisonOperator(symbol ComparisonOperatorSymbol) ComparisonOperator {
-	return ComparisonOperator{Symbol: symbol}
-}
-
-func (o ComparisonOperator) String() string {
-	if o.IsExplicitOperator {
-		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
-	}
-	return o.Symbol.String()
-}
-
-func (ComparisonOperator) operator() {}
-
-// ComparisonOperatorSymbol represents a comparison operator symbol.
-type ComparisonOperatorSymbol int
-
-// ComparisonExpr.Operator
-const (
-	EQ ComparisonOperatorSymbol = iota
-	LT
-	GT
-	LE
-	GE
-	NE
-	In
-	NotIn
-	Like
-	NotLike
-	ILike
-	NotILike
-	SimilarTo
-	NotSimilarTo
-	RegMatch
-	NotRegMatch
-	RegIMatch
-	NotRegIMatch
-	IsDistinctFrom
-	IsNotDistinctFrom
-	Contains
-	ContainedBy
-	JSONExists
-	JSONSomeExists
-	JSONAllExists
-	Overlaps
-
-	// The following operators will always be used with an associated SubOperator.
-	// If Go had algebraic data types they would be defined in a self-contained
-	// manner like:
-	//
-	// Any(ComparisonOperator)
-	// Some(ComparisonOperator)
-	// ...
-	//
-	// where the internal ComparisonOperator qualifies the behavior of the primary
-	// operator. Instead, a secondary ComparisonOperator is optionally included in
-	// ComparisonExpr for the cases where these operators are the primary op.
-	//
-	// ComparisonOperator.HasSubOperator returns true for ops in this group.
-	Any
-	Some
-	All
-
-	NumComparisonOperatorSymbols
-)
-
-var _ = NumComparisonOperatorSymbols
-
-var comparisonOpName = [...]string{
-	EQ:           "=",
-	LT:           "<",
-	GT:           ">",
-	LE:           "<=",
-	GE:           ">=",
-	NE:           "!=",
-	In:           "IN",
-	NotIn:        "NOT IN",
-	Like:         "LIKE",
-	NotLike:      "NOT LIKE",
-	ILike:        "ILIKE",
-	NotILike:     "NOT ILIKE",
-	SimilarTo:    "SIMILAR TO",
-	NotSimilarTo: "NOT SIMILAR TO",
-	// TODO(otan): come up with a better name than RegMatch, as it also covers GeoContains.
-	RegMatch:          "~",
-	NotRegMatch:       "!~",
-	RegIMatch:         "~*",
-	NotRegIMatch:      "!~*",
-	IsDistinctFrom:    "IS DISTINCT FROM",
-	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
-	Contains:          "@>",
-	ContainedBy:       "<@",
-	JSONExists:        "?",
-	JSONSomeExists:    "?|",
-	JSONAllExists:     "?&",
-	Overlaps:          "&&",
-	Any:               "ANY",
-	Some:              "SOME",
-	All:               "ALL",
-}
-
-func (i ComparisonOperatorSymbol) String() string {
-	if i < 0 || i > ComparisonOperatorSymbol(len(comparisonOpName)-1) {
-		return fmt.Sprintf("ComparisonOp(%d)", i)
-	}
-	return comparisonOpName[i]
-}
-
-// Inverse returns the inverse of this comparison operator if it exists. The
-// second return value is true if it exists, and false otherwise.
-func (i ComparisonOperatorSymbol) Inverse() (ComparisonOperatorSymbol, bool) {
-	inverse, ok := cmpOpsInverse[i]
-	return inverse, ok
-}
-
-// HasSubOperator returns if the ComparisonOperator is used with a sub-operator.
-func (i ComparisonOperatorSymbol) HasSubOperator() bool {
-	switch i {
-	case Any:
-	case Some:
-	case All:
-	default:
-		return false
-	}
-	return true
-}
-
 // ComparisonExpr represents a two-value comparison expression.
 type ComparisonExpr struct {
-	Operator    ComparisonOperator
-	SubOperator ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
+	Operator    treecmp.ComparisonOperator
+	SubOperator treecmp.ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
 	Left, Right Expr
 
 	typeAnnotation
@@ -507,9 +375,9 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	// mode. In that mode we need the more verbose form in order to be able
 	// to re-parse the statement when reporting telemetry.
 	if !ctx.HasFlags(FmtHideConstants) {
-		if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		if node.Operator.Symbol == treecmp.IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 			opStr = "IS NOT"
-		} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		} else if node.Operator.Symbol == treecmp.IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 			opStr = "IS"
 		}
 	}
@@ -521,7 +389,7 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 }
 
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
-func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
+func NewTypedComparisonExpr(op treecmp.ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
 	node.typ = types.Bool
 	node.memoizeFn()
@@ -530,7 +398,7 @@ func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *Compa
 
 // NewTypedComparisonExprWithSubOp returns a new ComparisonExpr that is verified to be well-typed.
 func NewTypedComparisonExprWithSubOp(
-	op, subOp ComparisonOperator, left, right TypedExpr,
+	op, subOp treecmp.ComparisonOperator, left, right TypedExpr,
 ) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, SubOperator: subOp, Left: left, Right: right}
 	node.typ = types.Bool
@@ -587,7 +455,7 @@ func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := FoldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator.Symbol {
-	case Any, Some, All:
+	case treecmp.Any, treecmp.Some, treecmp.All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = FoldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
@@ -1122,114 +990,34 @@ func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
 	return nil, errors.AssertionFailedf("should not eval typed dummy")
 }
 
-// BinaryOperator represents a unary operator used in a BinaryExpr.
-type BinaryOperator struct {
-	Symbol BinaryOperatorSymbol
-	// IsExplicitOperator is true if OPERATOR(symbol) is used.
-	IsExplicitOperator bool
-}
-
-// MakeBinaryOperator creates a BinaryOperator given a symbol.
-func MakeBinaryOperator(symbol BinaryOperatorSymbol) BinaryOperator {
-	return BinaryOperator{Symbol: symbol}
-}
-
-func (o BinaryOperator) String() string {
-	if o.IsExplicitOperator {
-		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
-	}
-	return o.Symbol.String()
-}
-
-func (BinaryOperator) operator() {}
-
-// BinaryOperatorSymbol is a symbol for a binary operator.
-type BinaryOperatorSymbol uint8
-
-// BinaryExpr.Operator
-const (
-	Bitand BinaryOperatorSymbol = iota
-	Bitor
-	Bitxor
-	Plus
-	Minus
-	Mult
-	Div
-	FloorDiv
-	Mod
-	Pow
-	Concat
-	LShift
-	RShift
-	JSONFetchVal
-	JSONFetchText
-	JSONFetchValPath
-	JSONFetchTextPath
-
-	NumBinaryOperatorSymbols
-)
-
-var _ = NumBinaryOperatorSymbols
-
-var binaryOpName = [...]string{
-	Bitand:            "&",
-	Bitor:             "|",
-	Bitxor:            "#",
-	Plus:              "+",
-	Minus:             "-",
-	Mult:              "*",
-	Div:               "/",
-	FloorDiv:          "//",
-	Mod:               "%",
-	Pow:               "^",
-	Concat:            "||",
-	LShift:            "<<",
-	RShift:            ">>",
-	JSONFetchVal:      "->",
-	JSONFetchText:     "->>",
-	JSONFetchValPath:  "#>",
-	JSONFetchTextPath: "#>>",
-}
-
 // binaryOpPrio follows the precedence order in the grammar. Used for pretty-printing.
 var binaryOpPrio = [...]int{
-	Pow:  1,
-	Mult: 2, Div: 2, FloorDiv: 2, Mod: 2,
-	Plus: 3, Minus: 3,
-	LShift: 4, RShift: 4,
-	Bitand: 5,
-	Bitxor: 6,
-	Bitor:  7,
-	Concat: 8, JSONFetchVal: 8, JSONFetchText: 8, JSONFetchValPath: 8, JSONFetchTextPath: 8,
+	treebin.Pow:  1,
+	treebin.Mult: 2, treebin.Div: 2, treebin.FloorDiv: 2, treebin.Mod: 2,
+	treebin.Plus: 3, treebin.Minus: 3,
+	treebin.LShift: 4, treebin.RShift: 4,
+	treebin.Bitand: 5,
+	treebin.Bitxor: 6,
+	treebin.Bitor:  7,
+	treebin.Concat: 8, treebin.JSONFetchVal: 8, treebin.JSONFetchText: 8, treebin.JSONFetchValPath: 8, treebin.JSONFetchTextPath: 8,
 }
 
 // binaryOpFullyAssoc indicates whether an operator is fully associative.
 // Reminder: an op R is fully associative if (a R b) R c == a R (b R c)
 var binaryOpFullyAssoc = [...]bool{
-	Pow:  false,
-	Mult: true, Div: false, FloorDiv: false, Mod: false,
-	Plus: true, Minus: false,
-	LShift: false, RShift: false,
-	Bitand: true,
-	Bitxor: true,
-	Bitor:  true,
-	Concat: true, JSONFetchVal: false, JSONFetchText: false, JSONFetchValPath: false, JSONFetchTextPath: false,
-}
-
-func (i BinaryOperatorSymbol) isPadded() bool {
-	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
-}
-
-func (i BinaryOperatorSymbol) String() string {
-	if i > BinaryOperatorSymbol(len(binaryOpName)-1) {
-		return fmt.Sprintf("BinaryOp(%d)", i)
-	}
-	return binaryOpName[i]
+	treebin.Pow:  false,
+	treebin.Mult: true, treebin.Div: false, treebin.FloorDiv: false, treebin.Mod: false,
+	treebin.Plus: true, treebin.Minus: false,
+	treebin.LShift: false, treebin.RShift: false,
+	treebin.Bitand: true,
+	treebin.Bitxor: true,
+	treebin.Bitor:  true,
+	treebin.Concat: true, treebin.JSONFetchVal: false, treebin.JSONFetchText: false, treebin.JSONFetchValPath: false, treebin.JSONFetchTextPath: false,
 }
 
 // BinaryExpr represents a binary value expression.
 type BinaryExpr struct {
-	Operator    BinaryOperator
+	Operator    treebin.BinaryOperator
 	Left, Right Expr
 
 	typeAnnotation
@@ -1253,7 +1041,9 @@ func (node *BinaryExpr) ResolvedBinOp() *BinOp {
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
-func NewTypedBinaryExpr(op BinaryOperator, left, right TypedExpr, typ *types.T) *BinaryExpr {
+func NewTypedBinaryExpr(
+	op treebin.BinaryOperator, left, right TypedExpr, typ *types.T,
+) *BinaryExpr {
 	node := &BinaryExpr{Operator: op, Left: left, Right: right}
 	node.typ = typ
 	node.memoizeFn()
@@ -1275,7 +1065,9 @@ func (node *BinaryExpr) memoizeFn() {
 // newBinExprIfValidOverload constructs a new BinaryExpr if and only
 // if the pair of arguments have a valid implementation for the given
 // BinaryOperator.
-func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExpr) *BinaryExpr {
+func newBinExprIfValidOverload(
+	op treebin.BinaryOperator, left TypedExpr, right TypedExpr,
+) *BinaryExpr {
 	leftRet, rightRet := left.ResolvedType(), right.ResolvedType()
 	fn, ok := BinOps[op.Symbol].lookupImpl(leftRet, rightRet)
 	if ok {
@@ -1293,7 +1085,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(ctx *FmtCtx) {
-	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.isPadded())
+	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.IsPadded())
 }
 
 // UnaryOperator represents a unary operator used in a UnaryExpr.
@@ -1315,7 +1107,8 @@ func (o UnaryOperator) String() string {
 	return o.Symbol.String()
 }
 
-func (UnaryOperator) operator() {}
+// Operator implements tree.Operator.
+func (UnaryOperator) Operator() {}
 
 // UnaryOperatorSymbol represents a unary operator.
 type UnaryOperatorSymbol uint8

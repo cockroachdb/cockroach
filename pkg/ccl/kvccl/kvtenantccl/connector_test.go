@@ -46,8 +46,9 @@ var rpcRetryOpts = retry.Options{
 var _ roachpb.InternalServer = &mockServer{}
 
 type mockServer struct {
-	rangeLookupFn func(context.Context, *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error)
-	gossipSubFn   func(*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer) error
+	rangeLookupFn    func(context.Context, *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error)
+	gossipSubFn      func(*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer) error
+	tenantSettingsFn func(request *roachpb.TenantSettingsRequest, server roachpb.Internal_TenantSettingsServer) error
 }
 
 func (m *mockServer) RangeLookup(
@@ -60,6 +61,19 @@ func (m *mockServer) GossipSubscription(
 	req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer,
 ) error {
 	return m.gossipSubFn(req, stream)
+}
+
+func (m *mockServer) TenantSettings(
+	req *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer,
+) error {
+	if m.tenantSettingsFn == nil {
+		return stream.Send(&roachpb.TenantSettingsEvent{
+			Precedence:  roachpb.SpecificTenantOverrides,
+			Incremental: false,
+			Overrides:   nil,
+		})
+	}
+	return m.tenantSettingsFn(req, stream)
 }
 
 func (*mockServer) ResetQuorum(
@@ -100,24 +114,6 @@ func (m *mockServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
-func (m *mockServer) GetSystemSpanConfigs(
-	context.Context, *roachpb.GetSystemSpanConfigsRequest,
-) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	panic("unimplemented")
-}
-
-func (m *mockServer) UpdateSystemSpanConfigs(
-	context.Context, *roachpb.UpdateSystemSpanConfigsRequest,
-) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	panic("unimplemented")
-}
-
-func (m *mockServer) TenantSettings(
-	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
-) error {
-	panic("unimplemented")
-}
-
 func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyClusterID,
@@ -144,9 +140,9 @@ func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.Gossip
 		panic(err)
 	}
 	return &roachpb.GossipSubscriptionEvent{
-		Key:            gossip.KeySystemConfig,
+		Key:            gossip.KeyDeprecatedSystemConfig,
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
-		PatternMatched: gossip.KeySystemConfig,
+		PatternMatched: gossip.KeyDeprecatedSystemConfig,
 	}
 }
 
@@ -256,7 +252,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
 	sysCfg := c.GetSystemConfig()
 	require.Nil(t, sysCfg)
-	sysCfgC := c.RegisterSystemConfigChannel()
+	sysCfgC, _ := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC, 0)
 
 	// Return first SystemConfig response.
@@ -286,7 +282,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
 
 	// A newly registered SystemConfig channel will be immediately notified.
-	sysCfgC2 := c.RegisterSystemConfigChannel()
+	sysCfgC2, _ := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC2, 1)
 }
 

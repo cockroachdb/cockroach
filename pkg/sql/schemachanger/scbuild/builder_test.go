@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -42,6 +43,8 @@ import (
 func TestBuildDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
 	ctx := context.Background()
 
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
@@ -72,6 +75,7 @@ func TestBuildDataDriven(t *testing.T) {
 							// For setting up a builder inside tests we will ensure that the new schema
 							// changer will allow non-fully implemented operations.
 							sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+							sd.ApplicationName = ""
 						}))))
 				},
 			},
@@ -81,7 +85,7 @@ func TestBuildDataDriven(t *testing.T) {
 				defer s.Stopper().Stop(ctx)
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-					return run(ctx, t, d, s, tdb, depsType.dependenciesWrapper)
+					return run(ctx, t, depsType.name, d, s, tdb, depsType.dependenciesWrapper)
 				})
 			})
 		}
@@ -91,6 +95,7 @@ func TestBuildDataDriven(t *testing.T) {
 func run(
 	ctx context.Context,
 	t *testing.T,
+	depsTypeName string,
 	d *datadriven.TestData,
 	s serverutils.TestServerInterface,
 	tdb *sqlutils.SQLRunner,
@@ -131,13 +136,20 @@ func run(
 
 		return ""
 	case "build":
+		if a := d.CmdArgs; len(a) > 0 && a[0].Key == "skip" {
+			for _, v := range a[0].Vals {
+				if v == depsTypeName {
+					return d.Expected
+				}
+			}
+		}
 		var output scpb.CurrentState
 		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			for i := range stmts {
 				output, err = scbuild.Build(ctx, deps, output, stmts[i].AST)
-				require.NoError(t, err)
+				require.NoErrorf(t, err, "%s", stmts[i].SQL)
 			}
 		})
 		return marshalState(t, output)
@@ -146,14 +158,14 @@ func run(
 		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
-			require.Len(t, stmts, 1)
+			require.NotEmpty(t, stmts)
 
-			stmt := stmts[0]
-			alter, ok := stmt.AST.(*tree.AlterTable)
-			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-
-			_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
-			require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
+			for _, stmt := range stmts {
+				_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST)
+				expected := scerrors.NotImplementedError(nil)
+				require.Errorf(t, err, "%s: expected %T instead of success for", stmt.SQL, expected)
+				require.Truef(t, scerrors.HasNotImplemented(err), "%s: expected %T instead of %v", stmt.SQL, expected, err)
+			}
 		})
 		return ""
 

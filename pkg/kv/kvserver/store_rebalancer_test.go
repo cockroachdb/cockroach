@@ -631,7 +631,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
-				qpsScorerOptions{
+				&qpsScorerOptions{
 					deterministic:         false,
 					qpsRebalanceThreshold: qpsRebalanceThreshold,
 				},
@@ -883,7 +883,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
-				qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
+				&qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
 			)
 
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
@@ -955,7 +955,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{localDesc.StoreID}, qps: 100}})
 	hottestRanges := rr.topQPS()
 	sr.chooseRangeToRebalance(
-		ctx, &hottestRanges, &localDesc, storeList, qpsScorerOptions{qpsRebalanceThreshold: 0.05},
+		ctx, &hottestRanges, &localDesc, storeList, &qpsScorerOptions{qpsRebalanceThreshold: 0.05},
 	)
 	trace := finishAndGetRecording()
 	require.Regexpf(
@@ -1117,7 +1117,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
-				qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: tc.rebalanceThreshold},
+				&qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: tc.rebalanceThreshold},
 			)
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
 
@@ -1210,7 +1210,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		&hottestRanges,
 		&localDesc,
 		storeList,
-		qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
+		&qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
 	)
 	expectTargets := []roachpb.ReplicationTarget{
 		{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},

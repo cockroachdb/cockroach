@@ -976,7 +976,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 // the identical engine state.
 func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
 	pIter := iter.GetRawIter()
-	it := newPebbleIterator(nil, pIter, opts)
+	it := newPebbleIterator(nil, pIter, opts, StandardDurability)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}

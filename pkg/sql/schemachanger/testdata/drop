@@ -11,16 +11,25 @@ test
 DROP SCHEMA db.sc;
 ----
 checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 2 MutationType ops
-delete comment for descriptor #106 of type SchemaCommentType
+## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 5 MutationType ops
+## PreCommitPhase stage 1 of 1 with 7 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [104 106]
+delete comment for descriptor #106 of type SchemaCommentType
+delete schema namespace entry {104 0 sc} -> 106
 upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    jobId: "1"
+     id: 104
+     modificationTime: {}
   ...
        public:
          id: 105
@@ -29,6 +38,102 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 upsert descriptor #106
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc›
+  +        statement: DROP SCHEMA db.sc
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 106
+  +          name: sc
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 106
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schema:
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaParent:
+  +          parentDatabaseId: 104
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: __placeholder_comment__
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 106
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -39,13 +144,26 @@ upsert descriptor #106
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 write *eventpb.DropSchema to event log for descriptor #106: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete schema namespace entry {104 0 sc} -> 106
+upsert descriptor #104
+   database:
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    jobId: "1"
+     id: 104
+     modificationTime: {}
+  ...
+       public:
+         id: 105
+  -  version: "3"
+  +  version: "4"
 delete descriptor #106
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 setup
@@ -63,27 +181,331 @@ test
 DROP TABLE db.sc.t;
 ----
 checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 6 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 13 MutationType ops
+create job #1: "schema change job"
+  descriptor IDs: [108]
 delete comment for descriptor #108 of type TableCommentType
 delete comment for descriptor #108 of type ColumnCommentType
 delete comment for descriptor #108 of type ColumnCommentType
+delete comment for descriptor #108 of type ColumnCommentType
 delete comment for descriptor #108 of type IndexCommentType
-delete comment for constraint on #108, name: t_pkey, type: PrimaryKey
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 4 MutationType ops
-create job #1: "schema change job"
-  descriptor IDs: [108]
 delete object namespace entry {104 107 t} -> 108
 upsert descriptor #108
   ...
-     modificationTime: {}
-     name: t
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextFamilyId: 1
+     createAsOfTime:
+       wallTime: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
+  +        statement: DROP TABLE db.sc.t
+  +        statementTag: DROP TABLE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
+  +    - 17
+  +    - 18
+  +    - 19
+  +    - 20
+  +    - 21
+  +    - 22
+  +    - 23
+  +    - 24
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 108
+  +          name: t
+  +          schemaId: 107
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 108
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 108
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 108
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 108
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        table:
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 108
+  +          parentSchemaId: 107
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnFamily:
+  +          name: primary
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: k
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: v
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 25
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          isHidden: true
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: rowid
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 3
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isRelationBeingDropped: true
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnDefaultExpression:
+  +          columnId: 3
+  +          embeddedExpr:
+  +            expr: unique_rowid()
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 3
+  +          comment: __placeholder_comment__
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 1
+  +            isUnique: true
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 3
+  +            storingColumnIds:
+  +            - 1
+  +            - 2
+  +            tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t_pkey
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: __placeholder_comment__
+  +          indexId: 1
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -95,7 +517,9 @@ upsert descriptor #108
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
 create job #2: "GC for dropping descriptor 108"
   descriptor IDs: [108]
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹db›.‹sc›.‹t›
@@ -103,43 +527,450 @@ update progress of schema change job #1
 set schema change job #1 to non-cancellable
 upsert descriptor #108
   ...
-     modificationTime: {}
-     name: t
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextFamilyId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
+  -        statement: DROP TABLE db.sc.t
+  -        statementTag: DROP TABLE
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
+  -    - 17
+  -    - 18
+  -    - 19
+  -    - 20
+  -    - 21
+  -    - 22
+  -    - 23
+  -    - 24
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 104
+  -          descriptorId: 108
+  -          name: t
+  -          schemaId: 107
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 108
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 108
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 108
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 108
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        table:
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 108
+  -          parentSchemaId: 107
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnFamily:
+  -          name: primary
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: k
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: v
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 25
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          isHidden: true
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: rowid
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 3
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isRelationBeingDropped: true
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnDefaultExpression:
+  -          columnId: 3
+  -          embeddedExpr:
+  -            expr: unique_rowid()
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 3
+  -          comment: __placeholder_comment__
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 1
+  -            isUnique: true
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 3
+  -            storingColumnIds:
+  -            - 1
+  -            - 2
+  -            tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t_pkey
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: __placeholder_comment__
+  -          indexId: 1
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dropTime: <redacted>"
+     families:
   ...
      state: DROP
      unexposedParentSchemaId: 107
   -  version: "2"
   +  version: "3"
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 test
 DROP SCHEMA db.sc CASCADE;
 ----
 checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 4 MutationType ops
-delete comment for descriptor #107 of type SchemaCommentType
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 11 MutationType ops
+## PreCommitPhase stage 1 of 1 with 13 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [104 107 109 110]
+delete comment for descriptor #107 of type SchemaCommentType
+delete schema namespace entry {104 0 sc} -> 107
 delete object namespace entry {104 107 e} -> 109
 delete object namespace entry {104 107 _e} -> 110
 upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    jobId: "1"
+     id: 104
+     modificationTime: {}
   ...
        public:
          id: 105
   -    sc:
   -      id: 107
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #107
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 107
+  +          name: sc
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 107
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 107
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 107
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 107
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schema:
+  +          schemaId: 107
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaParent:
+  +          parentDatabaseId: 104
+  +          schemaId: 107
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: __placeholder_comment__
+  +          schemaId: 107
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 107
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -147,6 +978,96 @@ upsert descriptor #107
   +  state: DROP
   +  version: "2"
 upsert descriptor #109
+   type:
+     arrayTypeId: 110
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 109
+  +          name: e
+  +          schemaId: 107
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 109
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 109
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 109
+  +          privileges: 512
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 109
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        enumType:
+  +          arrayTypeId: 110
+  +          typeId: 109
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 109
+  +          parentSchemaId: 107
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     enumMembers:
+     - logicalRepresentation: a
   ...
          withGrantOption: 2
        version: 2
@@ -155,6 +1076,109 @@ upsert descriptor #109
   +  version: "2"
 upsert descriptor #110
   ...
+       family: ArrayFamily
+       oid: 100110
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 15
+  +    - 16
+  +    - 17
+  +    - 18
+  +    - 19
+  +    - 20
+  +    - 21
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 110
+  +          name: _e
+  +          schemaId: 107
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 110
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 110
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 110
+  +          privileges: 512
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 110
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        aliasType:
+  +          embeddedTypeT:
+  +            closedTypeIds:
+  +            - 109
+  +            - 110
+  +            type:
+  +              arrayContents:
+  +                family: EnumFamily
+  +                oid: 100109
+  +                udtMetadata:
+  +                  arrayTypeOid: 100110
+  +              arrayElemType: EnumFamily
+  +              family: ArrayFamily
+  +              oid: 100110
+  +          typeId: 110
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 110
+  +          parentSchemaId: 107
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 110
+     kind: ALIAS
+  ...
          withGrantOption: 2
        version: 2
   -  version: "1"
@@ -164,45 +1188,250 @@ upsert descriptor #110
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
 write *eventpb.DropSchema to event log for descriptor #107: DROP SCHEMA ‹db›.‹sc› CASCADE
-write *eventpb.DropType to event log for descriptor #110: DROP SCHEMA ‹db›.‹sc› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete schema namespace entry {104 0 sc} -> 107
+upsert descriptor #104
+   database:
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    jobId: "1"
+     id: 104
+     modificationTime: {}
+  ...
+       public:
+         id: 105
+  -  version: "6"
+  +  version: "7"
 delete descriptor #107
 delete descriptor #109
 delete descriptor #110
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 test
 DROP DATABASE db CASCADE;
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 5 MutationType ops
-delete comment for descriptor #105 of type SchemaCommentType
-delete comment for descriptor #104 of type DatabaseCommentType
-delete role settings for database on #104
+## StatementPhase stage 1 of 1 with 2 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 6 MutationType ops
+## PreCommitPhase stage 1 of 1 with 11 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [104 105]
+delete comment for descriptor #104 of type DatabaseCommentType
+delete comment for descriptor #105 of type SchemaCommentType
+delete role settings for database on #104
+delete database namespace entry {0 0 db} -> 104
+delete schema namespace entry {104 0 public} -> 105
 upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db› CASCADE
+  +        statement: DROP DATABASE db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          descriptorId: 104
+  +          name: db
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 104
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 104
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 104
+  +          privileges: 2048
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 104
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        database:
+  +          databaseId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseRoleSetting:
+  +          databaseId: 104
+  +          roleName: __placeholder_role_name__
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseComment:
+  +          comment: __placeholder_comment__
+  +          databaseId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 104
+     modificationTime: {}
   ...
-         withGrantOption: 2
-       version: 2
-  -  schemas:
-  -    public:
-  -      id: 105
-  -  version: "5"
-  +  schemas: {}
+       public:
+         id: 105
+  -  version: "7"
   +  state: DROP
-  +  version: "6"
+  +  version: "8"
 upsert descriptor #105
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db› CASCADE
+  +        statement: DROP DATABASE db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 105
+  +          name: public
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 105
+  +          owner: admin
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 105
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 105
+  +          privileges: 516
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 105
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schema:
+  +          isPublic: true
+  +          schemaId: 105
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaParent:
+  +          parentDatabaseId: 104
+  +          schemaId: 105
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: __placeholder_comment__
+  +          schemaId: 105
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 105
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -213,22 +1442,16 @@ upsert descriptor #105
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
-create job #2: "GC for dropping descriptors and parent database 104"
-  descriptor IDs: []
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹db› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete database namespace entry {0 0 db} -> 104
-delete schema namespace entry {104 0 public} -> 105
-upsert descriptor #104
-  ...
-       version: 2
-     state: DROP
-  -  version: "6"
-  +  version: "7"
+delete descriptor #104
 delete descriptor #105
-commit transaction #2
+deleting zone config for #104
+commit transaction #3
 # end PostCommitPhase
 
 setup
@@ -238,6 +1461,7 @@ CREATE SEQUENCE db1.public.sq1;
 CREATE SEQUENCE db1.sc1.sq1;
 CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'));
 CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'));
+CREATE TABLE db1.public.ttl (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes');
 CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1);
 CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1);
 CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
@@ -253,74 +1477,280 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 +object {111 113 sq1} -> 115
 +object {111 113 t1} -> 116
 +object {111 112 t1} -> 117
-+object {111 113 v1} -> 118
-+object {111 113 v2} -> 119
-+object {111 113 v3} -> 120
-+object {111 113 v4} -> 121
-+object {111 113 typ} -> 122
-+object {111 113 _typ} -> 123
-+object {111 113 v5} -> 124
++object {111 112 ttl} -> 118
++object {111 113 v1} -> 119
++object {111 113 v2} -> 120
++object {111 113 v3} -> 121
++object {111 113 v4} -> 122
++object {111 113 typ} -> 123
++object {111 113 _typ} -> 124
++object {111 113 v5} -> 125
 
 test
 DROP DATABASE db1 CASCADE
 ----
 checking for feature: DROP DATABASE
+increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 37 MutationType ops
+## StatementPhase stage 1 of 1 with 15 MutationType ops
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 113 MutationType ops
+create job #1: "schema change job"
+  descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]
+delete comment for descriptor #111 of type DatabaseCommentType
+delete comment for descriptor #112 of type SchemaCommentType
+delete comment for descriptor #113 of type SchemaCommentType
 delete comment for descriptor #114 of type TableCommentType
 delete comment for descriptor #117 of type TableCommentType
 delete comment for descriptor #117 of type ColumnCommentType
 delete comment for descriptor #117 of type ColumnCommentType
 delete comment for descriptor #117 of type ColumnCommentType
 delete comment for descriptor #117 of type IndexCommentType
-delete comment for descriptor #112 of type SchemaCommentType
+delete comment for descriptor #118 of type TableCommentType
+delete comment for descriptor #118 of type ColumnCommentType
+delete comment for descriptor #118 of type ColumnCommentType
+delete comment for descriptor #118 of type IndexCommentType
 delete comment for descriptor #115 of type TableCommentType
 delete comment for descriptor #116 of type TableCommentType
 delete comment for descriptor #116 of type ColumnCommentType
 delete comment for descriptor #116 of type ColumnCommentType
 delete comment for descriptor #116 of type ColumnCommentType
 delete comment for descriptor #116 of type IndexCommentType
-delete comment for descriptor #118 of type TableCommentType
 delete comment for descriptor #119 of type TableCommentType
+delete comment for descriptor #119 of type ColumnCommentType
 delete comment for descriptor #120 of type TableCommentType
+delete comment for descriptor #120 of type ColumnCommentType
+delete comment for descriptor #120 of type ColumnCommentType
 delete comment for descriptor #121 of type TableCommentType
-delete comment for descriptor #124 of type TableCommentType
-delete comment for descriptor #113 of type SchemaCommentType
-delete comment for descriptor #111 of type DatabaseCommentType
-delete comment for constraint on #117, name: t1_pkey, type: PrimaryKey
-delete comment for constraint on #116, name: t1_pkey, type: PrimaryKey
+delete comment for descriptor #121 of type ColumnCommentType
+delete comment for descriptor #121 of type ColumnCommentType
+delete comment for descriptor #122 of type TableCommentType
+delete comment for descriptor #122 of type ColumnCommentType
+delete comment for descriptor #122 of type ColumnCommentType
+delete comment for descriptor #125 of type TableCommentType
+delete comment for descriptor #125 of type ColumnCommentType
+delete comment for descriptor #125 of type ColumnCommentType
+delete comment for descriptor #125 of type ColumnCommentType
 delete role settings for database on #111
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 56 MutationType ops
-create job #1: "schema change job"
-  descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124]
+delete database namespace entry {0 0 db1} -> 111
+delete schema namespace entry {111 0 public} -> 112
+delete schema namespace entry {111 0 sc1} -> 113
 delete object namespace entry {111 112 sq1} -> 114
 delete object namespace entry {111 113 sq1} -> 115
 delete object namespace entry {111 113 t1} -> 116
 delete object namespace entry {111 112 t1} -> 117
-delete object namespace entry {111 113 v1} -> 118
-delete object namespace entry {111 113 v2} -> 119
-delete object namespace entry {111 113 v3} -> 120
-delete object namespace entry {111 113 v4} -> 121
-delete object namespace entry {111 113 typ} -> 122
-delete object namespace entry {111 113 _typ} -> 123
-delete object namespace entry {111 113 v5} -> 124
+delete object namespace entry {111 112 ttl} -> 118
+delete object namespace entry {111 113 v1} -> 119
+delete object namespace entry {111 113 v2} -> 120
+delete object namespace entry {111 113 v3} -> 121
+delete object namespace entry {111 113 v4} -> 122
+delete object namespace entry {111 113 typ} -> 123
+delete object namespace entry {111 113 _typ} -> 124
+delete object namespace entry {111 113 v5} -> 125
 upsert descriptor #111
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          descriptorId: 111
+  +          name: db1
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 111
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 111
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 111
+  +          privileges: 2048
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 111
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        database:
+  +          databaseId: 111
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseRoleSetting:
+  +          databaseId: 111
+  +          roleName: __placeholder_role_name__
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseComment:
+  +          comment: __placeholder_comment__
+  +          databaseId: 111
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 111
+     modificationTime: {}
   ...
-         withGrantOption: 2
-       version: 2
-  -  schemas:
-  -    public:
-  -      id: 112
-  -    sc1:
-  -      id: 113
+       sc1:
+         id: 113
   -  version: "2"
-  +  schemas: {}
   +  state: DROP
   +  version: "3"
 upsert descriptor #112
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 112
+  +          name: public
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 112
+  +          owner: admin
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 112
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 112
+  +          privileges: 516
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 112
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schema:
+  +          isPublic: true
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaParent:
+  +          parentDatabaseId: 111
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: __placeholder_comment__
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 112
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -328,6 +1758,102 @@ upsert descriptor #112
   +  state: DROP
   +  version: "2"
 upsert descriptor #113
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 16
+  +    - 17
+  +    - 18
+  +    - 19
+  +    - 20
+  +    - 21
+  +    - 22
+  +    - 23
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 113
+  +          name: sc1
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 113
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 113
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 113
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 113
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schema:
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaParent:
+  +          parentDatabaseId: 111
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: __placeholder_comment__
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 113
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -338,19 +1864,102 @@ upsert descriptor #114
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - byId: true
-  -    columnIds:
-  -    - 3
-  -    id: 117
-     families:
-     - columnIds:
-  ...
-     modificationTime: {}
-     name: sq1
-  +  newSchemaChangeJobId: "1"
-     parentId: 111
-     primaryIndex:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 24
+  +    - 25
+  +    - 26
+  +    - 27
+  +    - 28
+  +    - 29
+  +    - 30
+  +    - 31
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 114
+  +          name: sq1
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 114
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 114
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 114
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 114
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        sequence:
+  +          sequenceId: 114
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 114
+  +          parentSchemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 114
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependedOnBy:
+     - byId: true
   ...
        sequenceOwner: {}
        start: "1"
@@ -362,19 +1971,102 @@ upsert descriptor #115
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - byId: true
-  -    columnIds:
-  -    - 3
-  -    id: 116
-     families:
-     - columnIds:
-  ...
-     modificationTime: {}
-     name: sq1
-  +  newSchemaChangeJobId: "1"
-     parentId: 111
-     primaryIndex:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 80
+  +    - 81
+  +    - 82
+  +    - 83
+  +    - 84
+  +    - 85
+  +    - 86
+  +    - 87
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 115
+  +          name: sq1
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 115
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 115
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 115
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 115
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        sequence:
+  +          sequenceId: 115
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 115
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 115
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependedOnBy:
+     - byId: true
   ...
        sequenceOwner: {}
        start: "1"
@@ -384,32 +2076,321 @@ upsert descriptor #115
   +  version: "3"
 upsert descriptor #116
   ...
-         visibleType: 7
-         width: 256
-  -  - defaultExpr: nextval(115:::REGCLASS)
-  -    id: 3
-  +  - id: 3
-       name: val
-       nullable: true
-  ...
-         oid: 20
-         width: 64
-  -    usesSequenceIds:
-  -    - 115
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 2
-  -    id: 118
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 88
+  +    - 89
+  +    - 90
+  +    - 91
+  +    - 92
+  +    - 93
+  +    - 94
+  +    - 95
+  +    - 96
+  +    - 97
+  +    - 98
+  +    - 99
+  +    - 100
+  +    - 101
+  +    - 102
+  +    - 103
+  +    - 104
+  +    - 105
+  +    - 106
+  +    - 107
+  +    - 108
+  +    - 109
+  +    - 110
+  +    - 111
+  +    - 112
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 116
+  +          name: t1
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 116
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 116
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 116
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 116
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        table:
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 116
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnFamily:
+  +          name: primary
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: id
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isRelationBeingDropped: true
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: name
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: val
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 3
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnDefaultExpression:
+  +          columnId: 3
+  +          embeddedExpr:
+  +            expr: nextval(115:::REGCLASS)
+  +            usesSequenceIds:
+  +            - 115
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 3
+  +          comment: __placeholder_comment__
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 1
+  +            isUnique: true
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            storingColumnIds:
+  +            - 2
+  +            - 3
+  +            tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t1_pkey
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: __placeholder_comment__
+  +          indexId: 1
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
+       - 2
+       id: 119
+  +  dropTime: <redacted>"
      families:
      - columnIds:
-  ...
-     modificationTime: {}
-     name: t1
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextFamilyId: 1
   ...
      replacementOf:
        time: {}
@@ -419,26 +2400,317 @@ upsert descriptor #116
   +  version: "3"
 upsert descriptor #117
   ...
-         visibleType: 7
-         width: 256
-  -  - defaultExpr: nextval(114:::REGCLASS)
-  -    id: 3
-  +  - id: 3
-       name: val
-       nullable: true
-  ...
-         oid: 20
-         width: 64
-  -    usesSequenceIds:
-  -    - 114
      createAsOfTime:
        wallTime: "1"
-  ...
-     modificationTime: {}
-     name: t1
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextFamilyId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 32
+  +    - 33
+  +    - 34
+  +    - 35
+  +    - 36
+  +    - 37
+  +    - 38
+  +    - 39
+  +    - 40
+  +    - 41
+  +    - 42
+  +    - 43
+  +    - 44
+  +    - 45
+  +    - 46
+  +    - 47
+  +    - 48
+  +    - 49
+  +    - 50
+  +    - 51
+  +    - 52
+  +    - 53
+  +    - 54
+  +    - 55
+  +    - 56
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 117
+  +          name: t1
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 117
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 117
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 117
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 117
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        table:
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 117
+  +          parentSchemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnFamily:
+  +          name: primary
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: id
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isRelationBeingDropped: true
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: name
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: val
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 3
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnDefaultExpression:
+  +          columnId: 3
+  +          embeddedExpr:
+  +            expr: nextval(114:::REGCLASS)
+  +            usesSequenceIds:
+  +            - 114
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 3
+  +          comment: __placeholder_comment__
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 1
+  +            isUnique: true
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            storingColumnIds:
+  +            - 2
+  +            - 3
+  +            tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t1_pkey
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: __placeholder_comment__
+  +          indexId: 1
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -450,22 +2722,444 @@ upsert descriptor #118
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    id: 119
-  -  - columnIds:
-  -    - 1
-  -    id: 120
-  -  dependsOn:
-  -  - 116
-     formatVersion: 3
-     id: 118
-     modificationTime: {}
-     name: v1
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 2
-     nextMutationId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    - PUBLIC
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 57
+  +    - 58
+  +    - 59
+  +    - 60
+  +    - 61
+  +    - 62
+  +    - 63
+  +    - 64
+  +    - 65
+  +    - 66
+  +    - 67
+  +    - 68
+  +    - 69
+  +    - 70
+  +    - 71
+  +    - 72
+  +    - 73
+  +    - 74
+  +    - 75
+  +    - 76
+  +    - 77
+  +    - 78
+  +    - 79
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 118
+  +          name: ttl
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 118
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 118
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 118
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 118
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        table:
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 118
+  +          parentSchemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnFamily:
+  +          name: primary
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: id
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isRelationBeingDropped: true
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          isHidden: true
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: crdb_internal_expiration
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: TimestampTZFamily
+  +              oid: 1184
+  +          isRelationBeingDropped: true
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnDefaultExpression:
+  +          columnId: 2
+  +          embeddedExpr:
+  +            expr: current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnOnUpdateExpression:
+  +          columnId: 2
+  +          embeddedExpr:
+  +            expr: current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 1
+  +            isUnique: true
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            storingColumnIds:
+  +            - 2
+  +            tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: ttl_pkey
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: __placeholder_comment__
+  +          indexId: 1
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        rowLevelTtl:
+  +          rowLevelTtl:
+  +            durationExpr: '''00:10:00'':::INTERVAL'
+  +            scheduleId: <redacted>
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+       durationExpr: '''00:10:00'':::INTERVAL'
+       scheduleId: <redacted>
+  +  state: DROP
+     unexposedParentSchemaId: 112
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #119
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 113
+  +    - 114
+  +    - 115
+  +    - 116
+  +    - 117
+  +    - 118
+  +    - 119
+  +    - 120
+  +    - 121
+  +    - 122
+  +    - 123
+  +    - 124
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 119
+  +          name: v1
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 119
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 119
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 119
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 119
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        view:
+  +          usesRelationIds:
+  +          - 116
+  +          viewId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 119
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: name
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -474,28 +3168,208 @@ upsert descriptor #118
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT name FROM db1.sc1.t1)
-upsert descriptor #119
+upsert descriptor #120
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 120
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 121
-  -  dependsOn:
-  -  - 118
-     formatVersion: 3
-     id: 119
-     modificationTime: {}
-     name: v2
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextMutationId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 125
+  +    - 126
+  +    - 127
+  +    - 128
+  +    - 129
+  +    - 130
+  +    - 131
+  +    - 132
+  +    - 133
+  +    - 134
+  +    - 135
+  +    - 136
+  +    - 137
+  +    - 138
+  +    - 139
+  +    - 140
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 120
+  +          name: v2
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 120
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 120
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 120
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 120
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        view:
+  +          usesRelationIds:
+  +          - 119
+  +          viewId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 120
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: n1
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: n2
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -504,20 +3378,209 @@ upsert descriptor #119
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
-upsert descriptor #120
+upsert descriptor #121
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependsOn:
-  -  - 118
-  -  - 119
-     formatVersion: 3
-     id: 120
-     modificationTime: {}
-     name: v3
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextMutationId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 141
+  +    - 142
+  +    - 143
+  +    - 144
+  +    - 145
+  +    - 146
+  +    - 147
+  +    - 148
+  +    - 149
+  +    - 150
+  +    - 151
+  +    - 152
+  +    - 153
+  +    - 154
+  +    - 155
+  +    - 156
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 121
+  +          name: v3
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 121
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 121
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 121
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 121
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        view:
+  +          usesRelationIds:
+  +          - 119
+  +          - 120
+  +          viewId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 121
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: name
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: n1
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependsOn:
+     - 119
   ...
      replacementOf:
        time: {}
@@ -526,24 +3589,208 @@ upsert descriptor #120
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
-upsert descriptor #121
+upsert descriptor #122
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 124
-  -  dependsOn:
-  -  - 119
-     formatVersion: 3
-     id: 121
-     modificationTime: {}
-     name: v4
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextMutationId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 157
+  +    - 158
+  +    - 159
+  +    - 160
+  +    - 161
+  +    - 162
+  +    - 163
+  +    - 164
+  +    - 165
+  +    - 166
+  +    - 167
+  +    - 168
+  +    - 169
+  +    - 170
+  +    - 171
+  +    - 172
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 122
+  +          name: v4
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 122
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 122
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 122
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 122
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        view:
+  +          usesRelationIds:
+  +          - 120
+  +          viewId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 122
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: n2
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: n1
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -552,40 +3799,466 @@ upsert descriptor #121
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
-upsert descriptor #122
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 124
-  -  version: "2"
-  +  referencingDescriptorIds: []
-  +  state: DROP
-  +  version: "3"
 upsert descriptor #123
+   type:
+     arrayTypeId: 124
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 173
+  +    - 174
+  +    - 175
+  +    - 176
+  +    - 177
+  +    - 178
+  +    - 179
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 123
+  +          name: typ
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 123
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 123
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 123
+  +          privileges: 512
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 123
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        enumType:
+  +          arrayTypeId: 124
+  +          typeId: 123
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 123
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     enumMembers:
+     - logicalRepresentation: a
   ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 124
+     referencingDescriptorIds:
+     - 125
   -  version: "2"
-  +  referencingDescriptorIds: []
   +  state: DROP
   +  version: "3"
 upsert descriptor #124
   ...
+       family: ArrayFamily
+       oid: 100124
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 180
+  +    - 181
+  +    - 182
+  +    - 183
+  +    - 184
+  +    - 185
+  +    - 186
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 124
+  +          name: _typ
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 124
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 124
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 124
+  +          privileges: 512
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 124
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        aliasType:
+  +          embeddedTypeT:
+  +            closedTypeIds:
+  +            - 123
+  +            - 124
+  +            type:
+  +              arrayContents:
+  +                family: EnumFamily
+  +                oid: 100123
+  +                udtMetadata:
+  +                  arrayTypeOid: 100124
+  +              arrayElemType: EnumFamily
+  +              family: ArrayFamily
+  +              oid: 100124
+  +          typeId: 124
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 124
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 15
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 124
+     kind: ALIAS
+  ...
+     referencingDescriptorIds:
+     - 125
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #125
+  ...
      createAsOfTime:
        wallTime: "1"
-  -  dependsOn:
-  -  - 121
-     dependsOnTypes:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 187
+  +    - 188
+  +    - 189
+  +    - 190
+  +    - 191
+  +    - 192
+  +    - 193
+  +    - 194
+  +    - 195
+  +    - 196
+  +    - 197
+  +    - 198
+  +    - 199
+  +    - 200
+  +    - 201
+  +    - 202
+  +    - 203
+  +    - 204
+  +    - 205
+  +    - 206
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 125
+  +          name: v5
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 125
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 125
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 125
+  +          userName: public
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 125
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        view:
+  +          usesRelationIds:
+  +          - 122
+  +          usesTypeIds:
+  +          - 123
+  +          - 124
+  +          viewId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 125
+  +          parentSchemaId: 113
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: __placeholder_comment__
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: k
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 25
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: __placeholder_comment__
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: n2
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: __placeholder_comment__
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: n1
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 3
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 1043
+  +              visibleType: 7
+  +              width: 256
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 3
+  +          comment: __placeholder_comment__
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependsOn:
      - 122
-  ...
-     modificationTime: {}
-     name: v5
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextMutationId: 1
   ...
      replacementOf:
        time: {}
@@ -598,29 +4271,115 @@ upsert descriptor #124
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
-create job #2: "GC for dropping descriptors 114 117 115 116 118 119 120 121 124 and parent database 111"
-  descriptor IDs: [114 117 115 116 118 119 120 121 124]
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 66 MutationType ops
+create job #2: "GC for dropping descriptors 111 114 115 116 117 118 119 120 121 122 125"
+  descriptor IDs: [114 115 119 120 121 122 125 117 118 116]
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
-write *eventpb.DropType to event log for descriptor #123: DROP DATABASE ‹db1› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete database namespace entry {0 0 db1} -> 111
-delete schema namespace entry {111 0 public} -> 112
-delete schema namespace entry {111 0 sc1} -> 113
-upsert descriptor #111
-  ...
-       version: 2
-     state: DROP
-  -  version: "3"
-  +  version: "4"
+delete scheduleId: <redacted>
 upsert descriptor #114
   ...
-     modificationTime: {}
-     name: sq1
-  -  newSchemaChangeJobId: "1"
-     parentId: 111
-     primaryIndex:
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 24
+  -    - 25
+  -    - 26
+  -    - 27
+  -    - 28
+  -    - 29
+  -    - 30
+  -    - 31
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 114
+  -          name: sq1
+  -          schemaId: 112
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 114
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 114
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 114
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 114
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        sequence:
+  -          sequenceId: 114
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 114
+  -          parentSchemaId: 112
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 114
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependedOnBy:
+     - byId: true
   ...
      state: DROP
      unexposedParentSchemaId: 112
@@ -628,11 +4387,104 @@ upsert descriptor #114
   +  version: "4"
 upsert descriptor #115
   ...
-     modificationTime: {}
-     name: sq1
-  -  newSchemaChangeJobId: "1"
-     parentId: 111
-     primaryIndex:
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 80
+  -    - 81
+  -    - 82
+  -    - 83
+  -    - 84
+  -    - 85
+  -    - 86
+  -    - 87
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 115
+  -          name: sq1
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 115
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 115
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 115
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 115
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        sequence:
+  -          sequenceId: 115
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 115
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 115
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependedOnBy:
+     - byId: true
   ...
      state: DROP
      unexposedParentSchemaId: 113
@@ -640,11 +4492,316 @@ upsert descriptor #115
   +  version: "4"
 upsert descriptor #116
   ...
-     modificationTime: {}
-     name: t1
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextFamilyId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 88
+  -    - 89
+  -    - 90
+  -    - 91
+  -    - 92
+  -    - 93
+  -    - 94
+  -    - 95
+  -    - 96
+  -    - 97
+  -    - 98
+  -    - 99
+  -    - 100
+  -    - 101
+  -    - 102
+  -    - 103
+  -    - 104
+  -    - 105
+  -    - 106
+  -    - 107
+  -    - 108
+  -    - 109
+  -    - 110
+  -    - 111
+  -    - 112
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 116
+  -          name: t1
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 116
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 116
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 116
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 116
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        table:
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 116
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnFamily:
+  -          name: primary
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: id
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isRelationBeingDropped: true
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: name
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: val
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 3
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnDefaultExpression:
+  -          columnId: 3
+  -          embeddedExpr:
+  -            expr: nextval(115:::REGCLASS)
+  -            usesSequenceIds:
+  -            - 115
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 3
+  -          comment: __placeholder_comment__
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 1
+  -            isUnique: true
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            storingColumnIds:
+  -            - 2
+  -            - 3
+  -            tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t1_pkey
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: __placeholder_comment__
+  -          indexId: 1
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 113
@@ -652,11 +4809,316 @@ upsert descriptor #116
   +  version: "4"
 upsert descriptor #117
   ...
-     modificationTime: {}
-     name: t1
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextFamilyId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 32
+  -    - 33
+  -    - 34
+  -    - 35
+  -    - 36
+  -    - 37
+  -    - 38
+  -    - 39
+  -    - 40
+  -    - 41
+  -    - 42
+  -    - 43
+  -    - 44
+  -    - 45
+  -    - 46
+  -    - 47
+  -    - 48
+  -    - 49
+  -    - 50
+  -    - 51
+  -    - 52
+  -    - 53
+  -    - 54
+  -    - 55
+  -    - 56
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 117
+  -          name: t1
+  -          schemaId: 112
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 117
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 117
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 117
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 117
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        table:
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 117
+  -          parentSchemaId: 112
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnFamily:
+  -          name: primary
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: id
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isRelationBeingDropped: true
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: name
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: val
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 3
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnDefaultExpression:
+  -          columnId: 3
+  -          embeddedExpr:
+  -            expr: nextval(114:::REGCLASS)
+  -            usesSequenceIds:
+  -            - 114
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 3
+  -          comment: __placeholder_comment__
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 1
+  -            isUnique: true
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            storingColumnIds:
+  -            - 2
+  -            - 3
+  -            tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t1_pkey
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: __placeholder_comment__
+  -          indexId: 1
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dropTime: <redacted>"
+     families:
   ...
      state: DROP
      unexposedParentSchemaId: 112
@@ -664,72 +5126,1337 @@ upsert descriptor #117
   +  version: "3"
 upsert descriptor #118
   ...
-     modificationTime: {}
-     name: v1
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 2
-     nextMutationId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    - PUBLIC
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 57
+  -    - 58
+  -    - 59
+  -    - 60
+  -    - 61
+  -    - 62
+  -    - 63
+  -    - 64
+  -    - 65
+  -    - 66
+  -    - 67
+  -    - 68
+  -    - 69
+  -    - 70
+  -    - 71
+  -    - 72
+  -    - 73
+  -    - 74
+  -    - 75
+  -    - 76
+  -    - 77
+  -    - 78
+  -    - 79
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 118
+  -          name: ttl
+  -          schemaId: 112
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 118
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 118
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 118
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 118
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        table:
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 118
+  -          parentSchemaId: 112
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnFamily:
+  -          name: primary
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: id
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isRelationBeingDropped: true
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          isHidden: true
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: crdb_internal_expiration
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: TimestampTZFamily
+  -              oid: 1184
+  -          isRelationBeingDropped: true
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnDefaultExpression:
+  -          columnId: 2
+  -          embeddedExpr:
+  -            expr: current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnOnUpdateExpression:
+  -          columnId: 2
+  -          embeddedExpr:
+  -            expr: current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 1
+  -            isUnique: true
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            storingColumnIds:
+  -            - 2
+  -            tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: ttl_pkey
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: __placeholder_comment__
+  -          indexId: 1
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        rowLevelTtl:
+  -          rowLevelTtl:
+  -            durationExpr: '''00:10:00'':::INTERVAL'
+  -            scheduleId: <redacted>
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dropTime: <redacted>"
+     families:
+  ...
+     state: DROP
+     unexposedParentSchemaId: 112
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #119
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 113
+  -    - 114
+  -    - 115
+  -    - 116
+  -    - 117
+  -    - 118
+  -    - 119
+  -    - 120
+  -    - 121
+  -    - 122
+  -    - 123
+  -    - 124
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 119
+  -          name: v1
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 119
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 119
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 119
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 119
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        view:
+  -          usesRelationIds:
+  -          - 116
+  -          viewId: 119
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 119
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 119
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 119
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: name
+  -          tableId: 119
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 119
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 119
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "4"
   +  version: "5"
      viewQuery: (SELECT name FROM db1.sc1.t1)
-upsert descriptor #119
+upsert descriptor #120
   ...
-     modificationTime: {}
-     name: v2
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextMutationId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 125
+  -    - 126
+  -    - 127
+  -    - 128
+  -    - 129
+  -    - 130
+  -    - 131
+  -    - 132
+  -    - 133
+  -    - 134
+  -    - 135
+  -    - 136
+  -    - 137
+  -    - 138
+  -    - 139
+  -    - 140
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 120
+  -          name: v2
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 120
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 120
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 120
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 120
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        view:
+  -          usesRelationIds:
+  -          - 119
+  -          viewId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 120
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: n1
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: n2
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "4"
   +  version: "5"
      viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
-upsert descriptor #120
+upsert descriptor #121
   ...
-     modificationTime: {}
-     name: v3
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextMutationId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 141
+  -    - 142
+  -    - 143
+  -    - 144
+  -    - 145
+  -    - 146
+  -    - 147
+  -    - 148
+  -    - 149
+  -    - 150
+  -    - 151
+  -    - 152
+  -    - 153
+  -    - 154
+  -    - 155
+  -    - 156
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 121
+  -          name: v3
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 121
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 121
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 121
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 121
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        view:
+  -          usesRelationIds:
+  -          - 119
+  -          - 120
+  -          viewId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 121
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: name
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: n1
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 121
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependsOn:
+     - 119
   ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
-upsert descriptor #121
+upsert descriptor #122
   ...
-     modificationTime: {}
-     name: v4
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextMutationId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 157
+  -    - 158
+  -    - 159
+  -    - 160
+  -    - 161
+  -    - 162
+  -    - 163
+  -    - 164
+  -    - 165
+  -    - 166
+  -    - 167
+  -    - 168
+  -    - 169
+  -    - 170
+  -    - 171
+  -    - 172
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 122
+  -          name: v4
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 122
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 122
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 122
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 122
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        view:
+  -          usesRelationIds:
+  -          - 120
+  -          viewId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 122
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: n2
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: n1
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependedOnBy:
+     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
-upsert descriptor #124
+upsert descriptor #125
   ...
-     modificationTime: {}
-     name: v5
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 4
-     nextMutationId: 1
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 187
+  -    - 188
+  -    - 189
+  -    - 190
+  -    - 191
+  -    - 192
+  -    - 193
+  -    - 194
+  -    - 195
+  -    - 196
+  -    - 197
+  -    - 198
+  -    - 199
+  -    - 200
+  -    - 201
+  -    - 202
+  -    - 203
+  -    - 204
+  -    - 205
+  -    - 206
+  -    targets:
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 125
+  -          name: v5
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 125
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 125
+  -          privileges: 2
+  -          userName: admin
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 125
+  -          userName: public
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 125
+  -          privileges: 2
+  -          userName: root
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        view:
+  -          usesRelationIds:
+  -          - 122
+  -          usesTypeIds:
+  -          - 123
+  -          - 124
+  -          viewId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        objectParent:
+  -          objectId: 125
+  -          parentSchemaId: 113
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: __placeholder_comment__
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: k
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 1
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 25
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: __placeholder_comment__
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: n2
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: __placeholder_comment__
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: n1
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 3
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 1043
+  -              visibleType: 7
+  -              width: 256
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 3
+  -          comment: __placeholder_comment__
+  -          tableId: 125
+  -      metadata:
+  -        sourceElementId: 13
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     dependsOn:
+     - 122
   ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
+delete descriptor #111
 delete descriptor #112
 delete descriptor #113
-delete descriptor #122
 delete descriptor #123
-commit transaction #2
+delete descriptor #124
+commit transaction #3
 # end PostCommitPhase

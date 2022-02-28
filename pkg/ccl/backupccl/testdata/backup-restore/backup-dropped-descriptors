@@ -1,0 +1,202 @@
+# backup-dropped-desctiprors tests backup and restore interaction with database, schema
+# and type descriptors in the DROP state.
+subtest dropped-database-descriptors
+
+new-server name=s1
+----
+
+exec-sql
+SET use_declarative_schema_changer = 'off';
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+CREATE DATABASE d;
+CREATE TABLE d.foo (id INT);
+DROP DATABASE d CASCADE;
+----
+paused before it completed with reason: pause point "schemachanger.before.exec" hit
+
+# At this point, we have a descriptor entry for `d` in a DROP state.
+query-sql
+WITH tbls AS (
+	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
+)
+SELECT orig->'database'->'name', orig->'database'->'state' FROM tbls WHERE id = 107;
+----
+"d" "DROP"
+
+# A database backup should fail since we are explicitly targeting a dropped
+# object.
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/dropped-database';
+----
+pq: failed to resolve targets specified in the BACKUP stmt: database "d" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
+
+# A cluster backup should succeed but should ignore the dropped database
+# and table descriptors.
+exec-sql
+BACKUP INTO 'nodelocal://0/cluster/dropped-database';
+----
+
+query-sql
+SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-database'] WHERE object_name = 'd' OR object_name = 'foo';
+----
+0
+
+# Now create another descriptor entry with the same name in a PUBLIC state.
+exec-sql
+CREATE DATABASE d;
+CREATE TABLE d.bar (id INT);
+----
+
+# A database backup should succeed since we have a public database descriptor that matches the
+# target.
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/dropped-database';
+----
+
+# A cluster backup should succeed and include the public database descriptor and
+# its table.
+exec-sql
+BACKUP INTO 'nodelocal://0/cluster/dropped-database';
+----
+
+# Restore from the database backup to ensure it is valid.
+# Sanity check that we did not backup the table 'foo' that belonged to the
+# dropped database 'd'.
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/dropped-database' WITH new_db_name = 'd1';
+USE d1;
+----
+
+query-sql
+SELECT schema_name,table_name FROM [SHOW TABLES];
+----
+public bar
+
+# Restore from the cluster backup to ensure it is valid.
+# Sanity check that we did not backup the table 'foo' that belonged to the
+# dropped database 'd'.
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/dropped-database' WITH new_db_name = 'd2';
+USE d2;
+----
+
+query-sql
+SELECT schema_name,table_name FROM [SHOW TABLES];
+----
+public bar
+
+subtest end
+
+# Test backup/restore interaction with dropped schema and type in a database.
+subtest dropped-schema-descriptors
+
+new-server name=s2
+----
+
+exec-sql
+CREATE DATABASE d2;
+CREATE TABLE d2.t2 (id INT);
+----
+
+exec-sql
+CREATE TYPE d2.typ AS ENUM ('hello');
+CREATE SCHEMA d2.s;
+CREATE TABLE d2.s.t (id INT);
+SET use_declarative_schema_changer = 'off';
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+DROP SCHEMA d2.s CASCADE;
+----
+paused before it completed with reason: pause point "schemachanger.before.exec" hit
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'typeschemachanger.before.exec';
+DROP TYPE d2.typ;
+----
+paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
+
+query-sql
+WITH tbls AS (
+	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
+)
+SELECT orig->'schema'->'name', orig->'schema'->'state' FROM tbls WHERE id = 112;
+----
+"s" "DROP"
+
+
+query-sql
+WITH tbls AS (
+	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
+)
+SELECT orig->'type'->'name', orig->'type'->'state' FROM tbls WHERE id = 110 OR id = 111;
+----
+"typ" "DROP"
+"_typ" "DROP"
+
+# A database backup should succeed but should not include the dropped schema,
+# type, and table.
+exec-sql
+BACKUP DATABASE d2 INTO 'nodelocal://0/dropped-schema-in-database';
+----
+
+query-sql
+SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/dropped-schema-in-database'] WHERE
+object_name = 's' OR object_name = 'typ';
+----
+0
+
+
+# A cluster backup should succeed but should not include the dropped schema,
+# type, and table.
+exec-sql
+BACKUP INTO 'nodelocal://0/cluster/dropped-schema-in-database';
+----
+
+query-sql
+SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database']
+WHERE object_name = 's' OR object_name = 'typ';
+----
+0
+
+# Restore the backups to check they are valid.
+exec-sql
+RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/dropped-schema-in-database' WITH new_db_name = 'd3';
+USE d3;
+----
+
+# We don't expect to see the dropped schema 's'.
+query-sql
+SELECT schema_name FROM [SHOW SCHEMAS];
+----
+public
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES];
+----
+public t2
+
+
+exec-sql
+RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
+USE d4;
+----
+
+query-sql
+SELECT schema_name FROM [SHOW SCHEMAS];
+----
+public
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES];
+----
+public t2
+
+subtest end

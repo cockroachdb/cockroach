@@ -2,17 +2,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfigsqltranslator",
-    srcs = [
-        "protectedts_state_reader.go",
-        "sqltranslator.go",
-    ],
+    srcs = ["sqltranslator.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/sql",
@@ -27,21 +23,6 @@ go_library(
 
 go_test(
     name = "spanconfigsqltranslator_test",
-    srcs = [
-        "protectedts_state_reader_test.go",
-        "sqltranslator_test.go",
-    ],
+    srcs = ["sqltranslator_test.go"],
     data = glob(["testdata/**"]),
-    embed = [":spanconfigsqltranslator"],
-    deps = [
-        "//pkg/jobs/jobsprotectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/util/hlc",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/uuid",
-        "@com_github_stretchr_testify//require",
-    ],
 )

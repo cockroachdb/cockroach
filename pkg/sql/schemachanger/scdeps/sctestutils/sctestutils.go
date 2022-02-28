@@ -70,6 +70,7 @@ func WithBuilderDependenciesFromTestServer(
 	// changer will allow non-fully implemented operations.
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	fn(scdeps.NewBuilderDependencies(
+		execCfg.ClusterID(),
 		execCfg.Codec,
 		planner.Txn(),
 		planner.Descriptors(),
@@ -168,17 +169,18 @@ func MakePlan(t *testing.T, state scpb.CurrentState, phase scop.Phase) scplan.Pl
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	})
 	require.NoError(t, err)
-	// Remove really long ops details that aren't that important anyway.
+	return plan
+}
+
+// TruncateJobOps truncates really long ops details that aren't that important anyway.
+func TruncateJobOps(plan *scplan.Plan) {
 	for _, s := range plan.Stages {
 		for _, o := range s.ExtraOps {
-			if op, ok := o.(*scop.CreateDeclarativeSchemaChangerJob); ok {
-				op.TargetState.Targets = nil
-				op.Current = nil
-			}
-			if op, ok := o.(*scop.UpdateSchemaChangerJob); ok {
-				op.Current = nil
+			if op, ok := o.(*scop.SetJobStateOnDescriptor); ok {
+				op.State = scpb.DescriptorState{
+					JobID: op.State.JobID,
+				}
 			}
 		}
 	}
-	return plan
 }

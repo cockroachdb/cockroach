@@ -68,7 +68,7 @@ SHOW INDEXES FROM c
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
 c           c_bar_key      false       1             bar          ASC        false    false
-c           c_bar_key      false       2             id           ASC        false    true
+c           c_bar_key      false       2             id           ASC        true     true
 c           c_foo_bar_idx  true        1             foo          ASC        false    false
 c           c_foo_bar_idx  true        2             bar          DESC       false    false
 c           c_foo_bar_idx  true        3             id           ASC        false    true
@@ -85,7 +85,7 @@ SHOW INDEXES FROM c WITH COMMENT
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  comment
 c           c_bar_key      false       1             bar          ASC        false    false     NULL
-c           c_bar_key      false       2             id           ASC        false    true      NULL
+c           c_bar_key      false       2             id           ASC        true     true      NULL
 c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
 c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
 c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
@@ -499,8 +499,7 @@ SHOW CREATE TABLE test.null_default
 test.public.null_default  CREATE TABLE public.null_default (
                           ts TIMESTAMP NULL,
                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                          CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC),
-                          FAMILY "primary" (ts, rowid)
+                          CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Issue #13873: don't permit invalid default columns
@@ -856,3 +855,42 @@ query I
 SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
 ----
 1000
+
+# Tests that the collections cache is properly invalidated when uncommitted
+# descriptors are added as observed in #75825.
+subtest collection-improper-release
+
+statement ok
+BEGIN;
+CREATE TABLE tblmodified (price INT8, quantity INT8);
+ALTER TABLE tblmodified ADD CONSTRAINT quan_check CHECK (quantity > 0);
+ALTER TABLE tblmodified ADD CONSTRAINT pr_check CHECK (price > 0);
+
+# Check out the descriptor for tblmodified under the all descriptors cache,
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+quan_check  CHECK ((quantity > 0))  true
+
+# Descriptor is modified, so the cache should be invalidated.
+statement ok
+ALTER TABLE tblmodified DROP CONSTRAINT quan_check;
+
+# If the cache is properly invalidated then we should only see a single
+# constraint.
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+
+statement ok
+COMMIT;

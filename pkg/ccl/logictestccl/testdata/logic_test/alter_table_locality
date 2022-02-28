@@ -1224,8 +1224,7 @@ SHOW CREATE TABLE regional_by_table_no_region
 regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
                                                 i INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (i, rowid)
+                                                CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TTT
@@ -1273,8 +1272,7 @@ SHOW CREATE TABLE regional_by_table_no_region
 regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
                              i INT8 NULL,
                              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                             CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC),
-                             FAMILY "primary" (i, rowid)
+                             CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY GLOBAL
 
 query TTT
@@ -2618,11 +2616,8 @@ TABLE rbt_table_gc_ttl  ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING
                         lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE hash_sharded_idx_table (
-  pk INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+  pk INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 )
 
 statement error cannot convert hash_sharded_idx_table to REGIONAL BY ROW as the table contains hash sharded indexes

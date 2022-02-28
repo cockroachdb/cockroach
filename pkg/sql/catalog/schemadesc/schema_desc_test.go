@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -164,7 +166,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		privilege := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
@@ -173,7 +175,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 		cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&test.dbDesc).BuildImmutable())
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		results := cb.Validate(ctx, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+		results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
 		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)

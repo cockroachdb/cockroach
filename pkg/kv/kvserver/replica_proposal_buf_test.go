@@ -117,7 +117,7 @@ func (t *testProposer) rlocker() sync.Locker {
 	return t.RWMutex.RLocker()
 }
 
-func (t *testProposer) replicaID() roachpb.ReplicaID {
+func (t *testProposer) getReplicaID() roachpb.ReplicaID {
 	return 1
 }
 
@@ -170,7 +170,7 @@ func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderIn
 	var iAmTheLeader, leaderEligibleForLease bool
 	if leaderKnown {
 		leaderRep = roachpb.ReplicaID(raftGroup.BasicStatus().Lead)
-		iAmTheLeader = leaderRep == t.replicaID()
+		iAmTheLeader = leaderRep == t.getReplicaID()
 		repDesc := roachpb.ReplicaDescriptor{
 			ReplicaID: leaderRep,
 			Type:      &t.leaderReplicaType,
@@ -521,9 +521,9 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var p testProposer
 			var pc proposalCreator
-			// p.replicaID() is hardcoded; it'd better be hardcoded to what this test
-			// expects.
-			require.Equal(t, self, uint64(p.replicaID()))
+			// p.getReplicaID() is hardcoded; it'd better be hardcoded to what this
+			// test expects.
+			require.Equal(t, self, uint64(p.getReplicaID()))
 
 			var rejected roachpb.ReplicaID
 			if tc.expRejection {

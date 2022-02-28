@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -148,13 +149,13 @@ func (pt *partitioningTest) parse() error {
 		}
 		st := cluster.MakeTestingClusterSettings()
 		parentID, tableID := descpb.ID(bootstrap.TestingUserDescID(0)), descpb.ID(bootstrap.TestingUserDescID(1))
-		mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
-			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
+		mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
+			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, hlc.UnixNano())
 		if err != nil {
 			return err
 		}
 		pt.parsed.tableDesc = mutDesc
-		if err := descbuilder.ValidateSelf(pt.parsed.tableDesc); err != nil {
+		if err := descbuilder.ValidateSelf(pt.parsed.tableDesc, clusterversion.TestingClusterVersion); err != nil {
 			return err
 		}
 	}
@@ -1461,12 +1462,12 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 	// Our subzones should be spans prefixed with dropped copy of i1,
 	// dropped copy of i2, new copy of i1, and new copy of i2.
-	// These have ID's 2, 3, 6 and 7 respectively.
+	// These have ID's 2, 3, 8 and 10 respectively.
 	expectedSpans := []roachpb.Key{
 		table.IndexSpan(keys.SystemSQLCodec, 2 /* indexID */).Key,
 		table.IndexSpan(keys.SystemSQLCodec, 3 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 6 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 7 /* indexID */).Key,
+		table.IndexSpan(keys.SystemSQLCodec, 8 /* indexID */).Key,
+		table.IndexSpan(keys.SystemSQLCodec, 10 /* indexID */).Key,
 	}
 	if len(zone.SubzoneSpans) != len(expectedSpans) {
 		t.Fatalf("expected subzones to have length %d", len(expectedSpans))

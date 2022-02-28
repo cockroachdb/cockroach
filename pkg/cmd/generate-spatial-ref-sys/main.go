@@ -12,6 +12,7 @@
 // json.gz file (with the schema defined in the embeddedproj package).
 //
 // Sample run:
+//   # In PostgreSQL w/ PostGIS installed, run `copy spatial_ref_sys to '/tmp/srids.csv' DELIMITER ';' CSV HEADER;`
 //   go run ./pkg/cmd/generate-spatial-ref-sys --src='/tmp/srids.csv' --dest='./pkg/geo/geoprojbase/data/proj.json.gz'
 
 package main

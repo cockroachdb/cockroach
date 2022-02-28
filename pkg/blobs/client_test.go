@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -87,8 +89,10 @@ func setUpService(
 			return nil, errors.Errorf("node %d not found", nodeID)
 		},
 	)
+	localNodeIDContainer := &base.NodeIDContainer{}
+	localNodeIDContainer.Set(context.Background(), localNodeID)
 	return NewBlobClientFactory(
-		localNodeID,
+		localNodeIDContainer,
 		localDialer,
 		localExternalDir,
 	)
@@ -188,7 +192,7 @@ func TestBlobClientReadFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Check that fetched file content is correct
-			content, err := ioutil.ReadAll(reader)
+			content, err := ioctx.ReadAll(ctx, reader)
 			if err != nil {
 				t.Fatal(err)
 			}

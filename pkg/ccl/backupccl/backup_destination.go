@@ -10,18 +10,21 @@ package backupccl
 
 import (
 	"context"
-	"io/ioutil"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -282,11 +285,17 @@ func getEncryptionFromBase(
 		case jobspb.EncryptionMode_Passphrase:
 			encryptionOptions = &jobspb.BackupEncryptionOptions{
 				Mode: jobspb.EncryptionMode_Passphrase,
-				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), opts.Salt),
+				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), opts[0].Salt),
 			}
 		case jobspb.EncryptionMode_KMS:
-			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
-				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
+			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+			for _, encFile := range opts {
+				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
+					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
+				if err == nil {
+					break
+				}
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -309,14 +318,16 @@ func readLatestFile(
 		return "", err
 	}
 	defer collection.Close()
-	latestFile, err := collection.ReadFile(ctx, latestFileName)
+
+	latestFile, err := findLatestFile(ctx, collection)
+
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
 		}
 		return "", pgerror.WithCandidateCode(err, pgcode.Io)
 	}
-	latest, err := ioutil.ReadAll(latestFile)
+	latest, err := ioctx.ReadAll(ctx, latestFile)
 	if err != nil {
 		return "", err
 	}
@@ -324,4 +335,40 @@ func readLatestFile(
 		return "", errors.Errorf("malformed LATEST file")
 	}
 	return string(latest), nil
+}
+
+// findLatestFile returns a ioctx.ReaderCloserCtx of the most recent LATEST
+// file. First it tries reading from the latest-history directory. If
+// the backup is from an older version, it may not exist there yet so
+// it tries reading in the base directory if the first attempt fails.
+func findLatestFile(
+	ctx context.Context, exportStore cloud.ExternalStorage,
+) (ioctx.ReadCloserCtx, error) {
+	latestFile, err := exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return nil, err
+		}
+
+		latestFile, err = exportStore.ReadFile(ctx, latestFileName)
+	}
+	return latestFile, err
+}
+
+// writeNewLatestFile writes a new LATEST file to both the base directory
+// and latest-history directory, depending on cluster version.
+func writeNewLatestFile(
+	ctx context.Context, settings *cluster.Settings, exportStore cloud.ExternalStorage, suffix string,
+) error {
+	// If the cluster is still running on a mixed version, we want to write
+	// to the base directory as well the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		err := cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
+		if err != nil {
+			return err
+		}
+	}
+
+	return cloud.WriteFile(ctx, exportStore, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
 }

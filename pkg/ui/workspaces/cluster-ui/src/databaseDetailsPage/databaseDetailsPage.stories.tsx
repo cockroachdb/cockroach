@@ -25,6 +25,7 @@ import {
 } from "./databaseDetailsPage";
 
 import * as H from "history";
+import moment from "moment";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseDetailsPageProps = {
@@ -107,6 +108,7 @@ const withData: DatabaseDetailsPageProps = {
         userCount: roles.length,
         roles: roles,
         grants: grants,
+        statsLastUpdated: moment("0001-01-01T00:00:00Z"),
       },
       showNodeRegionsColumn: true,
       stats: {

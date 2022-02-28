@@ -285,6 +285,10 @@ func TestSchemaChangeGCJobTableGCdWhileWaitingForExpiration(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	// Disable the declarative schema changer, since the job execution model will
+	// be different / labeled in a different manner.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';")
+	sqlDB.Exec(t, "SET use_declarative_schema_changer = 'off';")
 	// Note: this is to avoid a common failure during shutdown when a range
 	// merge runs concurrently with node shutdown leading to a panic due to
 	// pebble already being closed. See #51544.
@@ -454,6 +458,8 @@ func TestGCJobRetry(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'off';")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	tdb.Exec(t, "DROP TABLE foo CASCADE;")

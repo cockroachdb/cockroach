@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -51,9 +51,9 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	// Hack in partitions. Doing this properly requires a CCL binary.
 	{
 		primaryIndex := *tableDesc.GetPrimaryIndex().IndexDesc()
-		primaryIndex.Partitioning = descpb.PartitioningDescriptor{
+		primaryIndex.Partitioning = catpb.PartitioningDescriptor{
 			NumColumns: 1,
-			Range: []descpb.PartitioningDescriptor_Range{{
+			Range: []catpb.PartitioningDescriptor_Range{{
 				Name:          "p1",
 				FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 				ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
@@ -64,9 +64,9 @@ func TestRemovePartitioningOSS(t *testing.T) {
 
 	{
 		secondaryIndex := *tableDesc.PublicNonPrimaryIndexes()[0].IndexDesc()
-		secondaryIndex.Partitioning = descpb.PartitioningDescriptor{
+		secondaryIndex.Partitioning = catpb.PartitioningDescriptor{
 			NumColumns: 1,
-			Range: []descpb.PartitioningDescriptor_Range{{
+			Range: []catpb.PartitioningDescriptor_Range{{
 				Name:          "p2",
 				FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 				ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),

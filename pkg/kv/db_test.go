@@ -13,6 +13,7 @@ package kv_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -714,4 +716,136 @@ func TestGenerateForcedRetryableError(t *testing.T) {
 	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
 	require.True(t, errors.As(err, &retryErr))
 	require.Equal(t, 1, int(retryErr.Transaction.Epoch))
+}
+
+// Get a retryable error within a db.Txn transaction and verify the retry
+// succeeds. We are verifying the behavior is the same whether the retryable
+// callback returns the retryable error or returns nil. Both implementations are
+// legal - returning early (with either nil or the error) after a retryable
+// error is optional.
+func TestDB_TxnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	testutils.RunTrueAndFalse(t, "returnNil", func(t *testing.T, returnNil bool) {
+		keyA := fmt.Sprintf("a_return_nil_%t", returnNil)
+		keyB := fmt.Sprintf("b_return_nil_%t", returnNil)
+		runNumber := 0
+		err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			require.NoError(t, txn.Put(ctx, keyA, "1"))
+			require.NoError(t, txn.Put(ctx, keyB, "1"))
+
+			{
+				// High priority txn - will abort the other txn.
+				hpTxn := kv.NewTxn(ctx, db, 0)
+				require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+				// Only write if we have not written before, because otherwise we will keep aborting
+				// the other txn forever.
+				r, err := hpTxn.Get(ctx, keyA)
+				require.NoError(t, err)
+				if !r.Exists() {
+					require.Zero(t, runNumber)
+					require.NoError(t, hpTxn.Put(ctx, keyA, "hp txn"))
+					require.NoError(t, hpTxn.Commit(ctx))
+				} else {
+					// We already wrote to keyA, meaning this is a retry, no need to write again.
+					require.Equal(t, 1, runNumber)
+					require.NoError(t, hpTxn.Rollback(ctx))
+				}
+			}
+
+			// Read, so that we'll get a retryable error.
+			r, err := txn.Get(ctx, keyA)
+			if runNumber == 0 {
+				// First run, we should get a retryable error.
+				require.Zero(t, runNumber)
+				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				require.Equal(t, []byte(nil), r.ValueBytes())
+
+				// At this point txn is poisoned, and any op returns the same (poisoning) error.
+				r, err = txn.Get(ctx, keyB)
+				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				require.Equal(t, []byte(nil), r.ValueBytes())
+			} else {
+				// The retry should succeed.
+				require.Equal(t, 1, runNumber)
+				require.NoError(t, err)
+				require.Equal(t, []byte("1"), r.ValueBytes())
+			}
+			runNumber++
+
+			if returnNil {
+				return nil
+			}
+			// Return the retryable error.
+			return err
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, runNumber)
+
+		err1 := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			// The high priority txn was overwritten by the successful retry.
+			kv, e1 := txn.Get(ctx, keyA)
+			require.NoError(t, e1)
+			require.Equal(t, []byte("1"), kv.ValueBytes())
+			kv, e2 := txn.Get(ctx, keyB)
+			require.NoError(t, e2)
+			require.Equal(t, []byte("1"), kv.ValueBytes())
+			return nil
+		})
+		require.NoError(t, err1)
+	})
+}
+
+func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "stepping", func(t *testing.T, stepping bool) {
+		// Create a txn which will be aborted by a high priority txn, with stepping
+		// enabled and disabled.
+		var txn *kv.Txn
+		var expectedStepping kv.SteppingMode
+		if stepping {
+			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0, sessiondatapb.Normal)
+			expectedStepping = kv.SteppingEnabled
+		} else {
+			txn = kv.NewTxn(ctx, db, 0)
+			expectedStepping = kv.SteppingDisabled
+		}
+		keyA := fmt.Sprintf("a_%t", stepping)
+		require.NoError(t, txn.Put(ctx, keyA, "1"))
+
+		{
+			// High priority txn - will abort the other txn.
+			hpTxn := kv.NewTxn(ctx, db, 0)
+			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+			require.NoError(t, hpTxn.Put(ctx, keyA, "hp txn"))
+			require.NoError(t, hpTxn.Commit(ctx))
+		}
+
+		_, err := txn.Get(ctx, keyA)
+		require.NotNil(t, err)
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+		pErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil)
+		require.ErrorAs(t, err, &pErr)
+		require.Equal(t, txn.ID(), pErr.TxnID)
+
+		// The transaction was aborted, therefore we should have a new transaction ID.
+		require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+
+		// Reset the handle in order to get a new sender.
+		txn.PrepareForRetry(ctx)
+
+		// Make sure we have a new txn ID.
+		require.NotEqual(t, pErr.TxnID, txn.ID())
+
+		// Using ConfigureStepping() to read the current state.
+		require.Equal(t, expectedStepping, txn.ConfigureStepping(ctx, expectedStepping))
+	})
 }

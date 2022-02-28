@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -751,7 +752,7 @@ CREATE TABLE crdb_internal.jobs (
 			return nil, nil, err
 		}
 
-		cleanup := func() {
+		cleanup := func(ctx context.Context) {
 			if err := it.Close(); err != nil {
 				// TODO(yuzefovich): this error should be propagated further up
 				// and not simply being logged. Fix it (#61123).
@@ -1460,10 +1461,14 @@ CREATE TABLE crdb_internal.cluster_settings (
 			if err != nil {
 				return err
 			}
-			if !hasModify {
+			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+			if err != nil {
+				return err
+			}
+			if !hasModify && !hasView {
 				return pgerror.Newf(pgcode.InsufficientPrivilege,
-					"only users with the %s privilege are allowed to read "+
-						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING)
+					"only users with either %s or %s privileges are allowed to read "+
+						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
 			}
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
@@ -2623,8 +2628,6 @@ CREATE TABLE crdb_internal.table_columns (
 }
 
 // crdbInternalTableIndexesTable exposes the index descriptors.
-//
-// TODO(tbg): prefix with kv_.
 var crdbInternalTableIndexesTable = virtualSchemaTable{
 	comment: "indexes accessible by current user in current database (KV scan)",
 	schema: `
@@ -2636,7 +2639,8 @@ CREATE TABLE crdb_internal.table_indexes (
   index_type       STRING NOT NULL,
   is_unique        BOOL NOT NULL,
   is_inverted      BOOL NOT NULL,
-  is_sharded       BOOL NOT NULL
+  is_sharded       BOOL NOT NULL,
+  created_at       TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2658,6 +2662,15 @@ CREATE TABLE crdb_internal.table_indexes (
 						if idx.Primary() {
 							idxType = primary
 						}
+						createdAt := tree.DNull
+						if ts := idx.CreatedAt(); !ts.IsZero() {
+							tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
+							if err != nil {
+								log.Warningf(ctx, "failed to construct timestamp for index: %v", err)
+							} else {
+								createdAt = tsDatum
+							}
+						}
 						row = append(row,
 							tableID,
 							tableName,
@@ -2667,6 +2680,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
+							createdAt,
 						)
 						return pusher.pushRow(row...)
 					})
@@ -4455,7 +4469,7 @@ func collectMarshaledJobMetadataMap(
 			continue
 		}
 		for _, j := range tbl.GetMutationJobs() {
-			referencedJobIDs[jobspb.JobID(j.JobID)] = struct{}{}
+			referencedJobIDs[j.JobID] = struct{}{}
 		}
 	}
 	if len(referencedJobIDs) == 0 {
@@ -4548,7 +4562,11 @@ CREATE TABLE crdb_internal.invalid_objects (
 					)
 				}
 			}
-			ve := c.ValidateWithRecover(ctx, descriptor)
+			version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+			ve := c.ValidateWithRecover(
+				ctx,
+				version,
+				descriptor)
 			for _, validationError := range ve {
 				addValidationErrorRow(validationError)
 			}
@@ -4905,7 +4923,7 @@ CREATE TABLE crdb_internal.default_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(descriptor catalog.DatabaseDescriptor) error {
-				addRowHelper := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+				addRowHelper := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
 					role := tree.DNull
 					forAllRoles := tree.DBoolTrue
 					if defaultPrivilegesForRole.IsExplicitRole() {
@@ -4967,13 +4985,13 @@ CREATE TABLE crdb_internal.default_privileges (
 					}
 					return nil
 				}
-				addRowForRole := func(role descpb.DefaultPrivilegesRole) error {
+				addRowForRole := func(role catpb.DefaultPrivilegesRole) error {
 					defaultPrivilegeDescriptor := dbContext.GetDefaultPrivilegeDescriptor()
 					defaultPrivilegesForRole, found := defaultPrivilegeDescriptor.GetDefaultPrivilegesForRole(role)
 					if !found {
 						// If an entry is not found for the role, the role still has
 						// the default set of default privileges.
-						newDefaultPrivilegesForRole := descpb.InitDefaultPrivilegesForRole(role, defaultPrivilegeDescriptor.GetDefaultPrivilegeDescriptorType())
+						newDefaultPrivilegesForRole := catpb.InitDefaultPrivilegesForRole(role, defaultPrivilegeDescriptor.GetDefaultPrivilegeDescriptorType())
 						defaultPrivilegesForRole = &newDefaultPrivilegesForRole
 					}
 					if err := addRowHelper(*defaultPrivilegesForRole); err != nil {
@@ -4982,7 +5000,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					return nil
 				}
 				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
-					role := descpb.DefaultPrivilegesRole{
+					role := catpb.DefaultPrivilegesRole{
 						Role: username,
 					}
 					return addRowForRole(role)
@@ -4991,7 +5009,7 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 
 				// Handle ForAllRoles outside of forEachRole since it is a pseudo role.
-				role := descpb.DefaultPrivilegesRole{
+				role := catpb.DefaultPrivilegesRole{
 					ForAllRoles: true,
 				}
 				return addRowForRole(role)
@@ -5118,10 +5136,8 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				transactionFingerprintID := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(statistics.Key.TransactionFingerprintID))))
 
-				// TODO(azhng): properly update plan_hash value once we can expose it
-				//  from the optimizer.
 				planHash := tree.NewDBytes(
-					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(0)))
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(statistics.Key.PlanHash)))
 
 				metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
 				if err != nil {

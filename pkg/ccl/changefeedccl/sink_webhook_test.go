@@ -99,7 +99,7 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 		"sink %s expected to receive message %s", sinkDest.URL(),
 		"{\"payload\":[{\"after\":null,\"key\":[1002],\"topic:\":\"foo\"}],\"length\":1}")
 
-	enc, err := makeJSONEncoder(getGenericWebhookSinkOptions(), jobspb.ChangefeedTargets{})
+	enc, err := makeJSONEncoder(getGenericWebhookSinkOptions(), []jobspb.ChangefeedTargetSpecification{})
 	require.NoError(t, err)
 
 	// test a resolved timestamp entry

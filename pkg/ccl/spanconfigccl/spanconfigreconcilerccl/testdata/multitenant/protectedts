@@ -1,0 +1,151 @@
+# Test span configs in the presence of multiple secondary tenants, each running
+# their own reconciliation loop.
+
+reconcile
+----
+
+mutations discard
+----
+
+initialize tenant=10
+----
+
+# Ensure that the host tenant observes no mutations.
+mutations
+----
+
+# We should observe placeholder entries for both tenants (installed when
+# creating tenant records).
+state offset=47
+----
+...
+/Table/5{0-1}                              database system (host)
+/Tenant/10{-"\x00"}                        database system (tenant)
+
+# Write a protected timestamp record on the system tenant cluster.
+protect record-id=1 ts=1
+cluster
+----
+
+# Write a protected timestamp record on the system tenant keyspace, and on the
+# secondary tenant keyspace.
+protect record-id=2 ts=2
+tenants 1,10
+----
+
+# Start the reconciliation loop for the secondary tenant.
+reconcile tenant=10
+----
+
+# We should see protected timestamp record mutations as the host tenant.
+mutations
+----
+upsert {entire-keyspace}                   protection_policies=[{ts: 1}]
+upsert {source=1,target=1}                 protection_policies=[{ts: 2}]
+upsert {source=1,target=10}                protection_policies=[{ts: 2}]
+
+# We shouldn't see any protected timestamp record mutations as a secondary
+# tenant.
+mutations tenant=10
+----
+delete /Tenant/10{-"\x00"}
+upsert /Tenant/10{-/Table/4}               database system (tenant)
+upsert /Tenant/10/Table/{4-5}              database system (tenant)
+upsert /Tenant/10/Table/{5-6}              database system (tenant)
+upsert /Tenant/10/Table/{6-7}              database system (tenant)
+upsert /Tenant/10/Table/{7-8}              database system (tenant)
+upsert /Tenant/10/Table/1{1-2}             database system (tenant)
+upsert /Tenant/10/Table/1{2-3}             database system (tenant)
+upsert /Tenant/10/Table/1{3-4}             database system (tenant)
+upsert /Tenant/10/Table/1{4-5}             database system (tenant)
+upsert /Tenant/10/Table/1{5-6}             database system (tenant)
+upsert /Tenant/10/Table/{19-20}            database system (tenant)
+upsert /Tenant/10/Table/2{0-1}             database system (tenant)
+upsert /Tenant/10/Table/2{1-2}             database system (tenant)
+upsert /Tenant/10/Table/2{3-4}             database system (tenant)
+upsert /Tenant/10/Table/2{4-5}             database system (tenant)
+upsert /Tenant/10/Table/2{5-6}             database system (tenant)
+upsert /Tenant/10/Table/2{6-7}             database system (tenant)
+upsert /Tenant/10/Table/2{7-8}             database system (tenant)
+upsert /Tenant/10/Table/2{8-9}             database system (tenant)
+upsert /Tenant/10/NamespaceTable/{30-Max}  database system (tenant)
+upsert /Tenant/10/{NamespaceTable/Max-Table/32} database system (tenant)
+upsert /Tenant/10/Table/3{2-3}             database system (tenant)
+upsert /Tenant/10/Table/3{3-4}             database system (tenant)
+upsert /Tenant/10/Table/3{4-5}             database system (tenant)
+upsert /Tenant/10/Table/3{5-6}             database system (tenant)
+upsert /Tenant/10/Table/3{6-7}             database system (tenant)
+upsert /Tenant/10/Table/3{7-8}             database system (tenant)
+upsert /Tenant/10/Table/{39-40}            database system (tenant)
+upsert /Tenant/10/Table/4{0-1}             database system (tenant)
+upsert /Tenant/10/Table/4{1-2}             database system (tenant)
+upsert /Tenant/10/Table/4{2-3}             database system (tenant)
+upsert /Tenant/10/Table/4{3-4}             database system (tenant)
+upsert /Tenant/10/Table/4{4-5}             database system (tenant)
+upsert /Tenant/10/Table/4{6-7}             database system (tenant)
+
+exec-sql tenant=10
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+mutations tenant=10
+----
+upsert /Tenant/10/Table/10{6-7}            range default
+upsert /Tenant/10/Table/10{7-8}            range default
+
+# Write a protected timestamp record on the cluster as a secondary tenant.
+protect record-id=3 ts=3 cluster tenant=10
+cluster
+----
+
+# We expect to see no mutations on the host tenant.
+mutations
+----
+
+mutations tenant=10
+----
+upsert {source=10,target=10}               protection_policies=[{ts: 3}]
+
+state limit=4
+----
+{entire-keyspace}                          protection_policies=[{ts: 1}]
+{source=1,target=1}                        protection_policies=[{ts: 2}]
+{source=1,target=10}                       protection_policies=[{ts: 2}]
+{source=10,target=10}                      protection_policies=[{ts: 3}]
+...
+
+# Release all the protected timestamp records from the host tenant.
+release record-id=1
+----
+
+release record-id=2
+----
+
+# We expect to see no mutations on the secondary tenant.
+mutations tenant=10
+----
+
+mutations
+----
+delete {entire-keyspace}
+delete {source=1,target=1}
+delete {source=1,target=10}
+
+# Release all the protected timestamp records from the secondary tenant.
+release record-id=3 tenant=10
+----
+
+mutations tenant=10
+----
+delete {source=10,target=10}
+
+# All system span config targets should have been removed at this point.
+state limit=4
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
+/System/{NodeLivenessMax-tsd}              range system
+/System{/tsd-tse}                          range default
+...

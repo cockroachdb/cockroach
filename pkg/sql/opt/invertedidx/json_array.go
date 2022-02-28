@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -240,9 +241,9 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			if d, ok := nonIndexParam.(tree.Datum); ok {
 				var invertedExpr inverted.Expression
 				switch t.Operator.Symbol {
-				case tree.ContainedBy:
+				case treecmp.ContainedBy:
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
-				case tree.Contains:
+				case treecmp.Contains:
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
 				case tree.Overlaps:
 					invertedExpr = getInvertedExprForArrayIndexForOverlaps(evalCtx, d)
@@ -294,10 +295,10 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 				return nil, nil
 			}
 			switch t.Operator.Symbol {
-			case tree.Contains:
+			case treecmp.Contains:
 				return getInvertedExprForJSONOrArrayIndexForContaining(g.evalCtx, d), nil
 
-			case tree.ContainedBy:
+			case treecmp.ContainedBy:
 				return getInvertedExprForJSONOrArrayIndexForContainedBy(g.evalCtx, d), nil
 
 			default:

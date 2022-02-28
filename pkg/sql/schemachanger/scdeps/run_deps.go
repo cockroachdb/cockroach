@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // NewJobRunDependencies returns an scrun.JobRunDependencies implementation built from the
@@ -34,7 +34,6 @@ func NewJobRunDependencies(
 	backfiller scexec.Backfiller,
 	rangeCounter RangeCounter,
 	eventLoggerFactory EventLoggerFactory,
-	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
@@ -44,6 +43,7 @@ func NewJobRunDependencies(
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 	sessionData *sessiondata.SessionData,
+	kvTrace bool,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
 		collectionFactory:     collectionFactory,
@@ -52,7 +52,6 @@ func NewJobRunDependencies(
 		backfiller:            backfiller,
 		rangeCounter:          rangeCounter,
 		eventLoggerFactory:    eventLoggerFactory,
-		partitioner:           partitioner,
 		jobRegistry:           jobRegistry,
 		job:                   job,
 		codec:                 codec,
@@ -62,6 +61,7 @@ func NewJobRunDependencies(
 		indexValidator:        indexValidator,
 		commentUpdaterFactory: commentUpdaterFactory,
 		sessionData:           sessionData,
+		kvTrace:               kvTrace,
 	}
 }
 
@@ -70,12 +70,12 @@ type jobExecutionDeps struct {
 	db                    *kv.DB
 	internalExecutor      sqlutil.InternalExecutor
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
-	partitioner           scmutationexec.Partitioner
 	backfiller            scexec.Backfiller
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          RangeCounter
 	jobRegistry           *jobs.Registry
 	job                   *jobs.Job
+	kvTrace               bool
 
 	indexValidator scexec.IndexValidator
 
@@ -108,6 +108,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				indexValidator:     d.indexValidator,
 				eventLogger:        d.eventLoggerFactory(txn),
 				schemaChangerJobID: d.job.ID(),
+				kvTrace:            d.kvTrace,
 			},
 			backfiller: d.backfiller,
 			backfillTracker: newBackfillTracker(d.codec,
@@ -116,10 +117,10 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 					d.codec, pl.GetNewSchemaChange().BackfillProgress,
 				),
 			),
-			periodicProgressFlusher: newPeriodicProgressFlusher(d.settings),
+			periodicProgressFlusher: newPeriodicProgressFlusherForIndexBackfill(d.settings),
 			statements:              d.statements,
-			partitioner:             d.partitioner,
-			user:                    d.job.Payload().UsernameProto.Decode(),
+			user:                    pl.UsernameProto.Decode(),
+			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
 			commentUpdaterFactory:   d.commentUpdaterFactory,
 			sessionData:             d.sessionData,
 		})

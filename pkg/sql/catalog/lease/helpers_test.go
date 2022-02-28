@@ -174,7 +174,8 @@ func (m *Manager) PublishMultiple(
 			for _, id := range ids {
 				// Re-read the current versions of the descriptor, this time
 				// transactionally.
-				desc, err := catkv.MustGetDescriptorByID(ctx, txn, m.storage.codec, id, catalog.Any)
+				version := m.storage.settings.Version.ActiveVersion(ctx)
+				desc, err := catkv.MustGetDescriptorByID(ctx, txn, m.storage.codec, version, id, catalog.Any)
 				// Due to details in #51417, it is possible for a user to request a
 				// descriptor which no longer exists. In that case, just return an error.
 				if err != nil {
@@ -191,11 +192,6 @@ func (m *Manager) PublishMultiple(
 				}
 
 				versions[id] = descsToUpdate[id].GetVersion()
-			}
-
-			// This is to write the updated descriptors if we're the system tenant.
-			if err := txn.SetSystemConfigTrigger(m.storage.codec.ForSystemTenant()); err != nil {
-				return err
 			}
 
 			// Run the update closure.
@@ -222,7 +218,7 @@ func (m *Manager) PublishMultiple(
 				// descriptor change occurs first in the transaction. This is
 				// necessary to ensure that the System configuration change is
 				// gossiped. See the documentation for
-				// transaction.SetSystemConfigTrigger() for more information.
+				// transaction.DeprecatedSetSystemConfigTrigger() for more information.
 				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}

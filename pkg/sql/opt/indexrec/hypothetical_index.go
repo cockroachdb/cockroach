@@ -195,8 +195,8 @@ func (hi *hypotheticalIndex) Ordinal() int {
 	return hi.indexOrdinal
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
+// ImplicitColumnCount is part of the cat.Index interface.
+func (hi *hypotheticalIndex) ImplicitColumnCount() int {
 	return 0
 }
 
@@ -210,7 +210,7 @@ func (hi *hypotheticalIndex) GeoConfig() *geoindex.Config {
 func (hi *hypotheticalIndex) Version() descpb.IndexDescriptorVersion {
 	// Return the latest version for non-primary indexes, since hypothetical
 	// indexes are not primary indexes.
-	return descpb.LatestNonPrimaryIndexDescriptorVersion
+	return descpb.PrimaryIndexWithStoredColumnsVersion
 }
 
 // PartitionCount is part of the cat.Index interface.

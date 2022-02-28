@@ -92,6 +92,7 @@ const statementStats: Required<IStatementStatistics> = {
     mean: 2,
     squared_diffs: 0.005,
   },
+  plan_gists: ["Ais="],
   exec_stats: execStats,
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),
@@ -785,7 +786,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
-    windowEnd: moment.utc("2021.12.12"),
+    fixedWindowEnd: moment.utc("2021.12.12"),
     key: "Custom"
   },
   apps: ["$ internal", "movr", "$ cockroach demo"],

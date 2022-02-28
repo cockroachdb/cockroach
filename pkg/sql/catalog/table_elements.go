@@ -11,6 +11,8 @@
 package catalog
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -84,6 +86,10 @@ type Mutation interface {
 	// if the mutation is a materialized view refresh, nil otherwise.
 	AsMaterializedViewRefresh() MaterializedViewRefresh
 
+	// AsModifyRowLevelTTL returns the corresponding ModifyRowLevelTTL
+	// if the mutation is a row-level TTL alter, nil otherwise.
+	AsModifyRowLevelTTL() ModifyRowLevelTTL
+
 	// NOTE: When adding new types of mutations to this interface, be sure to
 	// audit the code which unpacks and introspects mutations to be sure to add
 	// cases for the new type.
@@ -127,6 +133,7 @@ type Index interface {
 	// The remaining methods operate on the underlying descpb.IndexDescriptor object.
 
 	GetID() descpb.IndexID
+	GetConstraintID() descpb.ConstraintID
 	GetName() string
 	IsPartial() bool
 	IsUnique() bool
@@ -208,6 +215,16 @@ type Index interface {
 	// checked by the schema changer before they are brought back
 	// online.
 	ForcePut() bool
+
+	// CreatedAt is an approximate timestamp at which the index was created.
+	// It is derived from the statement time at which the relevant statement
+	// was issued.
+	CreatedAt() time.Time
+
+	// IsTemporaryIndexForBackfill() returns true iff the index is
+	// an index being used as the temporary index being used by an
+	// in-progress index backfill.
+	IsTemporaryIndexForBackfill() bool
 }
 
 // Column is an interface around the column descriptor types.
@@ -386,6 +403,9 @@ type ConstraintToUpdate interface {
 	// UniqueWithoutIndex returns the underlying unique without index constraint, if
 	// there is one.
 	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
+
+	// GetConstraintID returns the ID for the constraint.
+	GetConstraintID() descpb.ConstraintID
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.
@@ -448,11 +468,19 @@ type MaterializedViewRefresh interface {
 	TableWithNewIndexes(tbl TableDescriptor) TableDescriptor
 }
 
+// ModifyRowLevelTTL is an interface around a modify row level TTL mutation.
+type ModifyRowLevelTTL interface {
+	TableElementMaybeMutation
+
+	// RowLevelTTL returns the row level TTL for the mutation.
+	RowLevelTTL() *catpb.RowLevelTTL
+}
+
 // Partitioning is an interface around an index partitioning.
 type Partitioning interface {
 
 	// PartitioningDesc returns the underlying protobuf descriptor.
-	PartitioningDesc() *descpb.PartitioningDescriptor
+	PartitioningDesc() *catpb.PartitioningDescriptor
 
 	// DeepCopy returns a deep copy of the receiver.
 	DeepCopy() Partitioning
@@ -655,6 +683,43 @@ func FindNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index 
 // DeleteOnlyNonPrimaryIndex() for which test returns true.
 func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
+}
+
+// FindCorrespondingTemporaryIndexByID finds the temporary index that
+// corresponds to the currently mutated index identified by ID. It
+// assumes that the temporary index for a given index ID exists
+// directly after it in the mutations array.
+//
+// Callers should take care that AllocateIDs() has been called before
+// using this function.
+func FindCorrespondingTemporaryIndexByID(desc TableDescriptor, id descpb.IndexID) Index {
+	mutations := desc.AllMutations()
+	var ord int
+	for _, m := range mutations {
+		idx := m.AsIndex()
+		if idx != nil && idx.IndexDesc().ID == id {
+			// We want the mutation after this mutation
+			// since the temporary index is added directly
+			// after.
+			ord = m.MutationOrdinal() + 1
+		}
+	}
+
+	// A temporary index will never be found at index 0 since we
+	// always add them _after_ the index they correspond to.
+	if ord == 0 {
+		return nil
+	}
+
+	if len(mutations) >= ord+1 {
+		candidateMutation := mutations[ord]
+		if idx := candidateMutation.AsIndex(); idx != nil {
+			if idx.IsTemporaryIndexForBackfill() {
+				return idx
+			}
+		}
+	}
+	return nil
 }
 
 // UserDefinedTypeColsHaveSameVersion returns whether one table descriptor's

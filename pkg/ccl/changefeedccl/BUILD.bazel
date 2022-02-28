@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "changefeedccl",
     srcs = [
+        "alter_changefeed_stmt.go",
         "avro.go",
         "changefeed.go",
         "changefeed_dist.go",
@@ -37,6 +38,7 @@ go_library(
         "//pkg/ccl/changefeedccl/schemafeed",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
+        "//pkg/clusterversion",
         "//pkg/docs",
         "//pkg/featureflag",
         "//pkg/geo",
@@ -122,6 +124,7 @@ go_test(
     name = "changefeedccl_test",
     size = "enormous",
     srcs = [
+        "alter_changefeed_test.go",
         "avro_test.go",
         "bench_test.go",
         "changefeed_test.go",
@@ -140,6 +143,7 @@ go_test(
         "validations_test.go",
     ],
     embed = [":changefeedccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/blobs",
@@ -148,7 +152,6 @@ go_test(
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/changefeedccl/schemafeed",
-        "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
@@ -157,6 +160,8 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
+        "//pkg/clusterversion",
+        "//pkg/config",
         "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -189,6 +194,7 @@ go_test(
         "//pkg/sql/enum",
         "//pkg/sql/execinfra",
         "//pkg/sql/flowinfra",
+        "//pkg/sql/importer",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",

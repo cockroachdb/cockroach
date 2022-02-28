@@ -52,6 +52,7 @@ func getPingCheckDecommissionFn(
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
+// The error return is a gRPC error.
 func (s *Server) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
@@ -93,7 +94,8 @@ func (s *Server) Decommission(
 			if errors.Is(err, liveness.ErrMissingRecord) {
 				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
 			}
-			return err
+			log.Errorf(ctx, "%+s", err)
+			return grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 		if statusChanged {
 			nodeDetails.TargetNodeID = int32(nodeID)

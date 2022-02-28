@@ -1,7 +1,7 @@
 subtest add_column
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET use_declarative_schema_changer = 'on'
 
 statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
@@ -12,7 +12,7 @@ statement error pgcode 0A000 cannot explain a statement which is not supported b
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement ok
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
@@ -40,7 +40,7 @@ statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
 BEGIN
@@ -63,7 +63,7 @@ SELECT * FROM foo
 1  2  3
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement ok
 DROP TABLE foo;
@@ -152,7 +152,7 @@ CREATE TABLE foo (i INT PRIMARY KEY);
 CREATE TABLE bar (j INT PRIMARY KEY);
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
 BEGIN
@@ -185,7 +185,7 @@ j  b
 3  4
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
@@ -230,7 +230,7 @@ CREATE TYPE typ AS ENUM('a')
 statement ok
 CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
 
-statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it.
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
 DROP TYPE typ
 
 statement ok
@@ -239,7 +239,7 @@ DROP VIEW v
 statement ok
 CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
 
-statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it.
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
 DROP TYPE typ
 
 statement ok
@@ -259,7 +259,7 @@ statement ok
 CREATE VIEW v_dep AS (SELECT k FROM t)
 
 # Since v_dep depends on t.k which uses type typ, v_dep has a dependency to typ.
-statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it.
+statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it
 DROP TYPE typ
 
 statement ok
@@ -268,7 +268,7 @@ CREATE TYPE typ2 AS ENUM('a')
 statement ok
 CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
 
-statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it.
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
 DROP TYPE typ2
 
 statement ok
@@ -283,13 +283,13 @@ CREATE TYPE typ2 AS ENUM('a')
 statement ok
 CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
 
-statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it.
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
 DROP TYPE typ2
 
 statement ok
 ALTER TYPE typ2 RENAME TO typ3
 
-statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it.
+statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it
 DROP TYPE typ3
 
 statement ok
@@ -302,7 +302,7 @@ statement ok
 CREATE VIEW v4 AS (SELECT i FROM t4)
 
 # Note that v4 does not depend on typ4.
-statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it
 DROP TYPE typ4
 
 statement ok
@@ -321,7 +321,7 @@ statement ok
 CREATE VIEW v4_dep AS (SELECT j FROM t4)
 
 # Since v4_dep depends on t4.j which is of type typ4, v4_dep has a dependency to typ4.
-statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it
 DROP type typ4
 
 statement ok
@@ -334,21 +334,21 @@ CREATE TABLE t5 (i INT, j STRING DEFAULT 'a'::typ5::string)
 statement ok
 CREATE VIEW v5 AS (SELECT i FROM t5)
 
-statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it.
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it
 DROP TYPE typ5
 
 statement ok
 CREATE VIEW v5_dep AS (SELECT j FROM t5)
 
 # Since v5_dep depends on t5.j which uses type typ5, v5_dep has a dependency to typ5.
-statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it.
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it
 DROP TYPE typ5
 
 statement ok
 CREATE VIEW v6 AS (SELECT j FROM v4_dep)
 
 # v6 depends on v4_dep.j, which depends on t4.j, which depends on typ4, so v6 also depends on typ4.
-statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it
 DROP TYPE typ4
 
 statement ok
@@ -360,14 +360,14 @@ statement ok
 CREATE VIEW v7 AS (SELECT i FROM t6)
 
 # Note that v7 does not depend on t6.
-statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it.
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it
 DROP TYPE typ6
 
 statement ok
 CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
 
 # v7_dep depends on typ6 now.
-statement error annot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it.
+statement error annot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it
 DROP TYPE typ6
 
 
@@ -391,7 +391,7 @@ CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 statement ok
 explain (DDL, DEPS) DROP VIEW v1Dep CASCADE;
 
-statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
+statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it
 DROP VIEW v1Dep RESTRICT;
 
 statement error pq: "v1dep" is not a materialized view
@@ -446,7 +446,7 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-statement error "customers" is referenced by foreign key from table "orders"
+statement error "customers" is referenced by foreign key from table "shipments"
 DROP TABLE defaultdb.customers;
 
 statement ok
@@ -493,10 +493,10 @@ statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 # Basic test -- create and drop a type.
 statement ok
@@ -511,21 +511,21 @@ CREATE TYPE typ8 AS ENUM ('hello');
 statement ok
 CREATE TABLE t8 (x typ8)
 
-statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
 DROP TYPE typ8
 
 # Now add a column with the using the type.
 statement ok
 ALTER TABLE t8 ADD COLUMN y typ8
 
-statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
 DROP TYPE typ8
 
 # If we drop the original column x, t8 should still depend on t.
 statement ok
 ALTER TABLE t8 DROP COLUMN x
 
-statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
 DROP TYPE typ8
 
 # Now remove the other column.
@@ -540,7 +540,7 @@ statement ok
 CREATE TYPE typ8 AS ENUM ('hello');
 ALTER TABLE t8 ADD COLUMN x typ8[]
 
-statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
 DROP TYPE typ8
 
 statement ok
@@ -679,15 +679,19 @@ BLAH3
 BLAH4
 BLAH5
 
-# Verify that the current set of role settings
-query OTT colnames
-SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+# Verify that the current set of role settings.
+# Note that the NULL name corresponds the ALL DATABASES configurations.
+query TTT colnames
+  SELECT name, role_name, settings
+    FROM system.database_role_settings
+         LEFT JOIN system.namespace AS ns ON database_id = ns.id
+ORDER BY name, role_name;
 ----
-database_id  role_name      settings
-0            ·              {application_name=d}
-0            test_set_role  {application_name=a,custom_option.setting=e}
-183          ·              {application_name=c}
-183          test_set_role  {application_name=b}
+name  role_name      settings
+NULL  ·              {application_name=d}
+NULL  test_set_role  {application_name=a,custom_option.setting=e}
+db1   ·              {application_name=c}
+db1   test_set_role  {application_name=b}
 
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
@@ -696,7 +700,7 @@ statement error database "db1" is not empty and RESTRICT was specified
 DROP DATABASE db1 RESTRICT
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 # Sanity check: Things are properly executed in post rollback. We should
 # be able to select from tables/views/sequences still
@@ -725,7 +729,7 @@ statement ok
 SELECT 'a'::db1.sc1.typ::string
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 let $desc_count_pre_drop
 select count(*) from system.descriptor
@@ -755,7 +759,7 @@ select count(*) from system.descriptor
 query I
 select $desc_count_pre_drop-$desc_count_post_drop
 ----
-4
+5
 
 # Tests for computed column rewrites.
 statement ok
@@ -830,17 +834,17 @@ SHOW INDEXES FROM tIndex
 ----
 table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit
 tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
-tindex      bar          true        2             a                ASC        false    true
+tindex      bar          true        2             a                         ASC        false    true
 tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
-tindex      bar2         true        2             a                ASC        false    true
+tindex      bar2         true        2             a                         ASC        false    true
 tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
-tindex      bar3         false       2             a                ASC        false    true
+tindex      bar3         false       2             a                         ASC        true     true
 tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
-tindex      bar4         true        2             a                ASC        false    true
-tindex      foo          true        1             b                ASC        false    false
-tindex      foo          true        2             a                ASC        false    true
-tindex      tindex_pkey  false       1             a                ASC        false    false
-tindex      tindex_pkey  false       2             b                N/A        true     false
+tindex      bar4         true        2             a                         ASC        false    true
+tindex      foo          true        1             b                         ASC        false    false
+tindex      foo          true        2             a                         ASC        false    true
+tindex      tindex_pkey  false       1             a                         ASC        false    false
+tindex      tindex_pkey  false       2             b                         N/A        true     false
 
 statement error  duplicate key value violates unique constraint "bar3"
 INSERT INTO tIndex VALUES (2,1)
@@ -855,19 +859,19 @@ INSERT INTO tIndex VALUES (20000,10000)
 query TTBITTBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name   non_unique  seq_in_index  column_name      direction  storing  implicit
+table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit
 tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
-tindex      bar          true        2             a                ASC        false    true
+tindex      bar          true        2             a                         ASC        false    true
 tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
-tindex      bar2         true        2             a                ASC        false    true
+tindex      bar2         true        2             a                         ASC        false    true
 tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
-tindex      bar3         false       2             a                ASC        false    true
+tindex      bar3         false       2             a                         ASC        true     true
 tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
-tindex      bar4         true        2             a                ASC        false    true
-tindex      foo          true        1             b                ASC        false    false
-tindex      foo          true        2             a                ASC        false    true
-tindex      tindex_pkey  false       1             a                ASC        false    false
-tindex      tindex_pkey  false       2             b                N/A        true     false
+tindex      bar4         true        2             a                         ASC        false    true
+tindex      foo          true        1             b                         ASC        false    false
+tindex      foo          true        2             a                         ASC        false    true
+tindex      tindex_pkey  false       1             a                         ASC        false    false
+tindex      tindex_pkey  false       2             b                         N/A        true     false
 
 # test for DESC index
 
@@ -950,7 +954,6 @@ privs       privs_pkey  false       2             b            N/A        true  
 user root
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true;
 CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
@@ -1012,7 +1015,7 @@ DROP TABLE s1dr;
 subtest event-log
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement ok
 set sql_safe_updates=false;
@@ -1284,19 +1287,19 @@ CREATE TABLE ttc3 (
 );
 
 
-statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc1 test.public.ttc2 test.public.ttc3\]\) still depend on it.
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc1 test.public.ttc2 test.public.ttc3\]\) still depend on it
 DROP TYPE d_tc;
 
 statement ok
 DROP TABLE ttc1;
 
-statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc2 test.public.ttc3\]\) still depend on it.
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc2 test.public.ttc3\]\) still depend on it
 DROP TYPE d_tc;
 
 statement ok
 DROP TABLE ttc2;
 
-statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc3\]\) still depend on it.
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc3\]\) still depend on it
 DROP TYPE d_tc;
 
 statement ok
@@ -1323,7 +1326,7 @@ CREATE DATABASE db1;
 user testuser
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET use_declarative_schema_changer = 'on'
 
 statement error must be owner of schema sc1
 DROP SCHEMA sc1;

@@ -137,59 +137,63 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn() error {
-	if c.conn == nil {
-		if c.reconnecting && c.connCtx.IsInteractive() {
-			fmt.Fprintf(c.errw, "warning: connection lost!\n"+
-				"opening new connection: all session settings will be lost\n")
-		}
-		base, err := pq.NewConnector(c.url)
-		if err != nil {
-			return wrapConnError(err)
-		}
-		// Add a notice handler - re-use the cliOutputError function in this case.
-		connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-			c.handleNotice(notice)
-		})
-		// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
-		// to follow the gosql.DB interface. We should probably look at initializing
-		// connections only once instead. The context is only used for dialing.
-		conn, err := connector.Connect(context.TODO())
-		if err != nil {
-			// Connection failed: if the failure is due to a missing
-			// password, we're going to fill the password here.
-			//
-			// TODO(knz): CockroachDB servers do not properly fill SQLSTATE
-			// (28P01) for password auth errors, so we have to "make do"
-			// with a string match. This should be cleaned up by adding
-			// the missing code server-side.
-			errStr := strings.TrimPrefix(err.Error(), "pq: ")
-			if strings.HasPrefix(errStr, "password authentication failed") && c.passwordMissing {
-				if pErr := c.fillPassword(); pErr != nil {
-					return errors.CombineErrors(err, pErr)
-				}
-				// Recurse, once. We recurse to ensure that pq.NewConnector
-				// and ConnectorWithNoticeHandler get called with the new URL.
-				// The recursion only occurs once because fillPassword()
-				// resets c.passwordMissing, so we cannot get into this
-				// conditional a second time.
-				return c.EnsureConn()
-			}
-			// Not a password auth error, or password already set. Simply fail.
-			return wrapConnError(err)
-		}
-		if c.reconnecting && c.dbName != "" {
-			// Attempt to reset the current database.
-			if _, err := conn.(DriverConn).Exec(`SET DATABASE = $1`, []driver.Value{c.dbName}); err != nil {
-				fmt.Fprintf(c.errw, "warning: unable to restore current database: %v\n", err)
-			}
-		}
-		c.conn = conn.(DriverConn)
-		if err := c.checkServerMetadata(); err != nil {
-			err = errors.CombineErrors(err, c.Close())
-			return wrapConnError(err)
-		}
-		c.reconnecting = false
+	if c.conn != nil {
+		return nil
 	}
+	ctx := context.Background()
+
+	if c.reconnecting && c.connCtx.IsInteractive() {
+		fmt.Fprintf(c.errw, "warning: connection lost!\n"+
+			"opening new connection: all session settings will be lost\n")
+	}
+	base, err := pq.NewConnector(c.url)
+	if err != nil {
+		return wrapConnError(err)
+	}
+	// Add a notice handler - re-use the cliOutputError function in this case.
+	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		c.handleNotice(notice)
+	})
+	// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
+	// to follow the gosql.DB interface. We should probably look at initializing
+	// connections only once instead. The context is only used for dialing.
+	conn, err := connector.Connect(ctx)
+	if err != nil {
+		// Connection failed: if the failure is due to a missing
+		// password, we're going to fill the password here.
+		//
+		// TODO(knz): CockroachDB servers do not properly fill SQLSTATE
+		// (28P01) for password auth errors, so we have to "make do"
+		// with a string match. This should be cleaned up by adding
+		// the missing code server-side.
+		errStr := strings.TrimPrefix(err.Error(), "pq: ")
+		if strings.HasPrefix(errStr, "password authentication failed") && c.passwordMissing {
+			if pErr := c.fillPassword(); pErr != nil {
+				return errors.CombineErrors(err, pErr)
+			}
+			// Recurse, once. We recurse to ensure that pq.NewConnector
+			// and ConnectorWithNoticeHandler get called with the new URL.
+			// The recursion only occurs once because fillPassword()
+			// resets c.passwordMissing, so we cannot get into this
+			// conditional a second time.
+			return c.EnsureConn()
+		}
+		// Not a password auth error, or password already set. Simply fail.
+		return wrapConnError(err)
+	}
+	if c.reconnecting && c.dbName != "" {
+		// Attempt to reset the current database.
+		if _, err := conn.(DriverConn).ExecContext(ctx, `SET DATABASE = $1`,
+			[]driver.NamedValue{{Value: c.dbName}}); err != nil {
+			fmt.Fprintf(c.errw, "warning: unable to restore current database: %v\n", err)
+		}
+	}
+	c.conn = conn.(DriverConn)
+	if err := c.checkServerMetadata(ctx); err != nil {
+		err = errors.CombineErrors(err, c.Close())
+		return wrapConnError(err)
+	}
+	c.reconnecting = false
 	return nil
 }
 
@@ -204,11 +208,11 @@ const (
 // tryEnableServerExecutionTimings attempts to check if the server supports the
 // SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
 // server side execution timings instead of timing on the client.
-func (c *sqlConn) tryEnableServerExecutionTimings() error {
+func (c *sqlConn) tryEnableServerExecutionTimings(ctx context.Context) error {
 	// Starting in v21.2 servers, clients can request an explicit set of
 	// values which makes them compatible with any post-21.2 column
 	// additions.
-	_, err := c.QueryRow("SHOW LAST QUERY STATISTICS RETURNING x", nil)
+	_, err := c.QueryRow(ctx, "SHOW LAST QUERY STATISTICS RETURNING x")
 	if err != nil && !clierror.IsSQLSyntaxError(err) {
 		return err
 	}
@@ -220,7 +224,7 @@ func (c *sqlConn) tryEnableServerExecutionTimings() error {
 	// Pre-21.2 servers may have SHOW LAST QUERY STATISTICS.
 	// Note: this branch is obsolete, remove it when compatibility
 	// with pre-21.2 servers is not required any more.
-	_, err = c.QueryRow("SHOW LAST QUERY STATISTICS", nil)
+	_, err = c.QueryRow(ctx, "SHOW LAST QUERY STATISTICS")
 	if err != nil && !clierror.IsSQLSyntaxError(err) {
 		return err
 	}
@@ -236,9 +240,11 @@ func (c *sqlConn) tryEnableServerExecutionTimings() error {
 	return nil
 }
 
-func (c *sqlConn) GetServerMetadata() (nodeID int32, version, clusterID string, err error) {
+func (c *sqlConn) GetServerMetadata(
+	ctx context.Context,
+) (nodeID int32, version, clusterID string, err error) {
 	// Retrieve the node ID and server build info.
-	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
+	rows, err := c.Query(ctx, "SELECT * FROM crdb_internal.node_build_info")
 	if errors.Is(err, driver.ErrBadConn) {
 		return 0, "", "", err
 	}
@@ -332,7 +338,7 @@ func toString(v driver.Value) string {
 // upon the initial connection or if either has changed since
 // the last connection, based on the last known values in the sqlConn
 // struct.
-func (c *sqlConn) checkServerMetadata() error {
+func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	if !c.connCtx.IsInteractive() {
 		// Version reporting is just noise if the user is not present to
 		// change their mind upon seeing the information.
@@ -344,7 +350,7 @@ func (c *sqlConn) checkServerMetadata() error {
 		return nil
 	}
 
-	_, newServerVersion, newClusterID, err := c.GetServerMetadata()
+	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
 	if errors.Is(err, driver.ErrBadConn) {
 		return err
 	}
@@ -401,14 +407,16 @@ func (c *sqlConn) checkServerMetadata() error {
 	}
 	// Try to enable server execution timings for the CLI to display if
 	// supported by the server.
-	return c.tryEnableServerExecutionTimings()
+	return c.tryEnableServerExecutionTimings(ctx)
 }
 
 // GetServerValue retrieves the first driverValue returned by the
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.
-func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) {
-	rows, err := c.Query(sql, nil)
+func (c *sqlConn) GetServerValue(
+	ctx context.Context, what, sql string,
+) (driver.Value, string, bool) {
+	rows, err := c.Query(ctx, sql)
 	if err != nil {
 		fmt.Fprintf(c.errw, "warning: error retrieving the %s: %v\n", what, err)
 		return nil, "", false
@@ -432,7 +440,7 @@ func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) 
 	return dbVals[0], dbColType, true
 }
 
-func (c *sqlConn) GetLastQueryStatistics() (results QueryStats, resErr error) {
+func (c *sqlConn) GetLastQueryStatistics(ctx context.Context) (results QueryStats, resErr error) {
 	if !c.connCtx.EnableServerExecutionTimings || c.lastQueryStatsMode == modeDisabled {
 		return results, nil
 	}
@@ -444,7 +452,7 @@ func (c *sqlConn) GetLastQueryStatistics() (results QueryStats, resErr error) {
 		stmt = `SHOW LAST QUERY STATISTICS`
 	}
 
-	vals, cols, err := c.queryRowInternal(stmt, nil)
+	vals, cols, err := c.queryRowInternal(ctx, stmt, nil)
 	if err != nil {
 		return results, err
 	}
@@ -488,23 +496,29 @@ func (c *sqlConn) GetLastQueryStatistics() (results QueryStats, resErr error) {
 //
 // NOTE: the supplied closure should not have external side
 // effects beyond changes to the database.
-func (c *sqlConn) ExecTxn(fn func(TxBoundConn) error) (err error) {
-	if err := c.Exec(`BEGIN`, nil); err != nil {
+func (c *sqlConn) ExecTxn(
+	ctx context.Context, fn func(context.Context, TxBoundConn) error,
+) (err error) {
+	if err := c.Exec(ctx, `BEGIN`); err != nil {
 		return err
 	}
-	return crdb.ExecuteInTx(context.TODO(), sqlTxnShim{c}, func() error {
-		return fn(c)
+	return crdb.ExecuteInTx(ctx, sqlTxnShim{c}, func() error {
+		return fn(ctx, c)
 	})
 }
 
-func (c *sqlConn) Exec(query string, args []driver.Value) error {
+func (c *sqlConn) Exec(ctx context.Context, query string, args ...interface{}) error {
+	dVals, err := convertArgs(args)
+	if err != nil {
+		return err
+	}
 	if err := c.EnsureConn(); err != nil {
 		return err
 	}
 	if c.connCtx.Echo {
 		fmt.Fprintln(c.errw, ">", query)
 	}
-	_, err := c.conn.Exec(query, args)
+	_, err = c.conn.ExecContext(ctx, query, dVals)
 	c.flushNotices()
 	if errors.Is(err, driver.ErrBadConn) {
 		c.reconnecting = true
@@ -513,14 +527,18 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 	return err
 }
 
-func (c *sqlConn) Query(query string, args []driver.Value) (Rows, error) {
+func (c *sqlConn) Query(ctx context.Context, query string, args ...interface{}) (Rows, error) {
+	dVals, err := convertArgs(args)
+	if err != nil {
+		return nil, err
+	}
 	if err := c.EnsureConn(); err != nil {
 		return nil, err
 	}
 	if c.connCtx.Echo {
 		fmt.Fprintln(c.errw, ">", query)
 	}
-	rows, err := c.conn.Query(query, args)
+	rows, err := c.conn.QueryContext(ctx, query, dVals)
 	if errors.Is(err, driver.ErrBadConn) {
 		c.reconnecting = true
 		c.silentClose()
@@ -531,15 +549,17 @@ func (c *sqlConn) Query(query string, args []driver.Value) (Rows, error) {
 	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
-func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
-	results, _, err := c.queryRowInternal(query, args)
+func (c *sqlConn) QueryRow(
+	ctx context.Context, query string, args ...interface{},
+) ([]driver.Value, error) {
+	results, _, err := c.queryRowInternal(ctx, query, args)
 	return results, err
 }
 
 func (c *sqlConn) queryRowInternal(
-	query string, args []driver.Value,
+	ctx context.Context, query string, args []interface{},
 ) (vals []driver.Value, colNames []string, resErr error) {
-	rows, _, err := MakeQuery(query, args...)(c)
+	rows, _, err := MakeQuery(query, args...)(ctx, c)
 	if err != nil {
 		return nil, nil, err
 	}

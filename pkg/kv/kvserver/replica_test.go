@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -226,7 +228,7 @@ func (tc *testContext) Sender() kv.Sender {
 			ba.RangeID = 1
 		}
 		if ba.Timestamp.IsEmpty() {
-			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 				tc.Fatal(err)
 			}
 		}
@@ -251,16 +253,18 @@ func (tc *testContext) SendWrapped(args roachpb.Request) (roachpb.Response, *roa
 }
 
 // initConfigs creates default configuration entries.
+//
+// TODO(ajwerner): Remove this in 22.2.
 func (tc *testContext) initConfigs(t testing.TB) error {
 	// Put an empty system config into gossip so that gossip callbacks get
 	// run. We're using a fake config, but it's hooked into SystemConfig.
-	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
+	if err := tc.gossip.AddInfoProto(gossip.KeyDeprecatedSystemConfig,
 		&config.SystemConfigEntries{}, 0); err != nil {
 		return err
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
+		if cfg := tc.gossip.DeprecatedGetSystemConfig(); cfg == nil {
 			return errors.Errorf("expected system config to be set")
 		}
 		return nil
@@ -475,7 +479,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				// Emulate what a server actually does and bump the write timestamp when
 				// possible. This makes some batches with diverged read and write
 				// timestamps pass isOnePhaseCommit().
-				maybeBumpReadTimestampToWriteTimestamp(ctx, &ba, &spanset.SpanSet{})
+				maybeBumpReadTimestampToWriteTimestamp(ctx, &ba, allSpansGuard())
 
 				if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
 					t.Errorf("expected 1pc=%t; got %t", c.exp1PC, is1PC)
@@ -1150,6 +1154,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
 // upon acquisition of the range lease.
+//
+// TODO(ajwerner): Delete this test in 22.2.
 func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1161,7 +1167,18 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+	// Use the TestingBinaryMinSupportedVersion for bootstrap because we won't
+	// gossip the system config once the current version is finalized.
+	cfg.Settings = cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false,
+	)
+	require.NoError(t, cfg.Settings.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
+		Version: clusterversion.TestingBinaryMinSupportedVersion,
+	}))
+	tc.StartWithStoreConfigAndVersion(ctx, t, stopper, cfg,
+		clusterversion.TestingBinaryMinSupportedVersion)
 
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
@@ -1178,7 +1195,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if cfg := tc.gossip.GetSystemConfig(); cfg != nil {
+	if cfg := tc.gossip.DeprecatedGetSystemConfig(); cfg != nil {
 		if nv := len(cfg.Values); nv == 1 && cfg.Values[nv-1].Key.Equal(key) {
 			t.Errorf("unexpected gossip of system config: %s", cfg)
 		}
@@ -1202,7 +1219,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	tc.manualClock.Increment(11 + int64(tc.Clock().MaxOffset())) // advance time
 	now = tc.Clock().NowAsClockTimestamp()
 
-	ch := tc.gossip.RegisterSystemConfigChannel()
+	ch := tc.gossip.DeprecatedRegisterSystemConfigChannel()
 	select {
 	case <-ch:
 	default:
@@ -1222,7 +1239,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		sysCfg := tc.gossip.GetSystemConfig()
+		sysCfg := tc.gossip.DeprecatedGetSystemConfig()
 		if sysCfg == nil {
 			return errors.Errorf("no system config yet")
 		}
@@ -1544,7 +1561,7 @@ func TestReplicaGossipAllConfigs(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
-	if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
+	if cfg := tc.gossip.DeprecatedGetSystemConfig(); cfg == nil {
 		t.Fatal("config not set")
 	}
 }
@@ -2709,6 +2726,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		},
 		&spans,
 		nil,
+		0,
 	)
 	for _, tc := range []struct {
 		access       spanset.SpanAccess
@@ -4511,7 +4529,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		var ba roachpb.BatchRequest
 		gArgs := getArgs(key)
 		ba.Add(&gArgs)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := tc.Sender().Send(ctx, ba)
@@ -4677,7 +4695,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(&put)
 	assignSeqNumsForReqs(txn, &put)
-	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 		t.Fatal(err)
 	}
 	br, pErr := tc.Sender().Send(ctx, ba)
@@ -4845,7 +4863,7 @@ func setupResolutionTest(
 		var ba roachpb.BatchRequest
 		ba.Header = h
 		ba.RangeID = newRepl.RangeID
-		if err := ba.SetActiveTimestamp(newRepl.store.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(newRepl.store.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		pArgs := putArgs(splitKey.AsRawKey(), []byte("value"))
@@ -4898,7 +4916,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 		ba.Header.RangeID = newRepl.RangeID
 		gArgs := getArgs(splitKey)
 		ba.Add(&gArgs)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := newRepl.Send(ctx, ba)
@@ -7153,244 +7171,256 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 func TestEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tc := testContext{}
-	cfg := TestStoreConfig(nil)
-	// Disable ticks to avoid quiescence, which can result in empty
-	// entries being proposed and causing the test to flake.
-	cfg.RaftTickInterval = math.MaxInt32
-	cfg.TestingKnobs.DisableRaftLogQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
-	repl := tc.repl
-	rangeID := repl.RangeID
-	var indexes []uint64
+	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		ctx := context.Background()
+		tc := testContext{}
+		cfg := TestStoreConfig(nil)
+		// Disable ticks to avoid quiescence, which can result in empty
+		// entries being proposed and causing the test to flake.
+		cfg.RaftTickInterval = math.MaxInt32
+		cfg.TestingKnobs.DisableRaftLogQueue = true
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+		st := tc.store.ClusterSettings()
+		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
-	populateLogs := func(from, to int) []uint64 {
-		var newIndexes []uint64
-		for i := from; i < to; i++ {
-			args := incrementArgs([]byte("a"), int64(i))
-			if _, pErr := tc.SendWrapped(args); pErr != nil {
-				t.Fatal(pErr)
+		repl := tc.repl
+		rangeID := repl.RangeID
+		var indexes []uint64
+
+		populateLogs := func(from, to int) []uint64 {
+			var newIndexes []uint64
+			for i := from; i < to; i++ {
+				args := incrementArgs([]byte("a"), int64(i))
+				if _, pErr := tc.SendWrapped(args); pErr != nil {
+					t.Fatal(pErr)
+				}
+				idx, err := repl.GetLastIndex()
+				if err != nil {
+					t.Fatal(err)
+				}
+				newIndexes = append(newIndexes, idx)
 			}
-			idx, err := repl.GetLastIndex()
-			if err != nil {
+			return newIndexes
+		}
+
+		truncateLogs := func(index int) {
+			truncateArgs := truncateLogArgs(indexes[index], rangeID)
+			if _, err := kv.SendWrappedWith(
+				ctx,
+				tc.Sender(),
+				roachpb.Header{RangeID: 1},
+				&truncateArgs,
+			); err != nil {
 				t.Fatal(err)
 			}
-			newIndexes = append(newIndexes, idx)
+			waitForTruncationForTesting(t, repl, indexes[index], looselyCoupled)
 		}
-		return newIndexes
-	}
 
-	truncateLogs := func(index int) {
-		truncateArgs := truncateLogArgs(indexes[index], rangeID)
-		if _, err := kv.SendWrappedWith(
-			ctx,
-			tc.Sender(),
-			roachpb.Header{RangeID: 1},
-			&truncateArgs,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
+		// Populate the log with 10 entries. Save the LastIndex after each write.
+		indexes = append(indexes, populateLogs(0, 10)...)
 
-	// Populate the log with 10 entries. Save the LastIndex after each write.
-	indexes = append(indexes, populateLogs(0, 10)...)
+		for i, tc := range []struct {
+			lo             uint64
+			hi             uint64
+			maxBytes       uint64
+			expResultCount int
+			expCacheCount  int
+			expError       error
+			// Setup, if not nil, is called before running the test case.
+			setup func()
+		}{
+			// Case 0: All of the entries from cache.
+			{lo: indexes[0], hi: indexes[9] + 1, expResultCount: 10, expCacheCount: 10, setup: nil},
+			// Case 1: Get the first entry from cache.
+			{lo: indexes[0], hi: indexes[1], expResultCount: 1, expCacheCount: 1, setup: nil},
+			// Case 2: Get the last entry from cache.
+			{lo: indexes[9], hi: indexes[9] + 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+			// Case 3: lo is available, but hi is not, cache miss.
+			{lo: indexes[9], hi: indexes[9] + 2, expCacheCount: 1, expError: raft.ErrUnavailable, setup: nil},
 
-	for i, tc := range []struct {
-		lo             uint64
-		hi             uint64
-		maxBytes       uint64
-		expResultCount int
-		expCacheCount  int
-		expError       error
-		// Setup, if not nil, is called before running the test case.
-		setup func()
-	}{
-		// Case 0: All of the entries from cache.
-		{lo: indexes[0], hi: indexes[9] + 1, expResultCount: 10, expCacheCount: 10, setup: nil},
-		// Case 1: Get the first entry from cache.
-		{lo: indexes[0], hi: indexes[1], expResultCount: 1, expCacheCount: 1, setup: nil},
-		// Case 2: Get the last entry from cache.
-		{lo: indexes[9], hi: indexes[9] + 1, expResultCount: 1, expCacheCount: 1, setup: nil},
-		// Case 3: lo is available, but hi is not, cache miss.
-		{lo: indexes[9], hi: indexes[9] + 2, expCacheCount: 1, expError: raft.ErrUnavailable, setup: nil},
-
-		// Case 4: Just most of the entries from cache.
-		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: func() {
-			// Discard the first half of the log.
-			truncateLogs(5)
-		}},
-		// Case 5: Get a single entry from cache.
-		{lo: indexes[5], hi: indexes[6], expResultCount: 1, expCacheCount: 1, setup: nil},
-		// Case 6: Get range without size limitation. (Like case 4, without truncating).
-		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: nil},
-		// Case 7: maxBytes is set low so only a single value should be
-		// returned.
-		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
-		// Case 8: hi value is just past the last index, should return all
-		// available entries.
-		{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5, expCacheCount: 5, setup: nil},
-		// Case 9: all values have been truncated from cache and storage.
-		{lo: indexes[1], hi: indexes[2], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 10: hi has just been truncated from cache and storage.
-		{lo: indexes[1], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 11: another case where hi has just been truncated from
-		// cache and storage.
-		{lo: indexes[3], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 12: lo has been truncated and hi is the truncation point.
-		{lo: indexes[4], hi: indexes[5], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 13: lo has been truncated but hi is available.
-		{lo: indexes[4], hi: indexes[9], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 14: lo has been truncated and hi is not available.
-		{lo: indexes[4], hi: indexes[9] + 100, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 15: lo has been truncated but hi is available, and maxBytes is
-		// set low.
-		{lo: indexes[4], hi: indexes[9], maxBytes: 1, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
-		// Case 16: lo is available but hi is not.
-		{lo: indexes[5], hi: indexes[9] + 100, expCacheCount: 6, expError: raft.ErrUnavailable, setup: nil},
-		// Case 17: both lo and hi are not available, cache miss.
-		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expCacheCount: 0, expError: raft.ErrUnavailable, setup: nil},
-		// Case 18: lo is available, hi is not, but it was cut off by maxBytes.
-		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
-		// Case 19: lo and hi are available, but entry cache evicted.
-		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
-			// Manually evict cache for the first 10 log entries.
-			repl.store.raftEntryCache.Clear(rangeID, indexes[9]+1)
-			indexes = append(indexes, populateLogs(10, 40)...)
-		}},
-		// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
-		{lo: indexes[5], hi: indexes[9] + 5, expResultCount: 9, expCacheCount: 0, setup: nil},
-		// Case 21: lo and hi are available and in entry cache.
-		{lo: indexes[9] + 2, hi: indexes[9] + 32, expResultCount: 30, expCacheCount: 30, setup: nil},
-		// Case 22: lo is available and hi is not.
-		{lo: indexes[9] + 2, hi: indexes[9] + 33, expCacheCount: 30, expError: raft.ErrUnavailable, setup: nil},
-	} {
-		if tc.setup != nil {
-			tc.setup()
-		}
-		if tc.maxBytes == 0 {
-			tc.maxBytes = math.MaxUint64
-		}
-		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.Scan(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
-		if len(cacheEntries) != tc.expCacheCount {
-			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
-		}
-		repl.mu.Lock()
-		ents, err := repl.raftEntriesLocked(tc.lo, tc.hi, tc.maxBytes)
-		repl.mu.Unlock()
-		if tc.expError == nil && err != nil {
-			t.Errorf("%d: expected no error, got %s", i, err)
-			continue
-		} else if !errors.Is(err, tc.expError) {
-			t.Errorf("%d: expected error %s, got %s", i, tc.expError, err)
-			continue
-		}
-		if len(ents) != tc.expResultCount {
-			t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
-		} else if tc.expResultCount > 0 {
-			expHitLimit := ents[len(ents)-1].Index < tc.hi-1
-			if hitLimit != expHitLimit {
-				t.Errorf("%d: unexpected hit limit: %t", i, hitLimit)
+			// Case 4: Just most of the entries from cache.
+			{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: func() {
+				// Discard the first half of the log.
+				truncateLogs(5)
+			}},
+			// Case 5: Get a single entry from cache.
+			{lo: indexes[5], hi: indexes[6], expResultCount: 1, expCacheCount: 1, setup: nil},
+			// Case 6: Get range without size limitation. (Like case 4, without truncating).
+			{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: nil},
+			// Case 7: maxBytes is set low so only a single value should be
+			// returned.
+			{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+			// Case 8: hi value is just past the last index, should return all
+			// available entries.
+			{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5, expCacheCount: 5, setup: nil},
+			// Case 9: all values have been truncated from cache and storage.
+			{lo: indexes[1], hi: indexes[2], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 10: hi has just been truncated from cache and storage.
+			{lo: indexes[1], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 11: another case where hi has just been truncated from
+			// cache and storage.
+			{lo: indexes[3], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 12: lo has been truncated and hi is the truncation point.
+			{lo: indexes[4], hi: indexes[5], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 13: lo has been truncated but hi is available.
+			{lo: indexes[4], hi: indexes[9], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 14: lo has been truncated and hi is not available.
+			{lo: indexes[4], hi: indexes[9] + 100, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 15: lo has been truncated but hi is available, and maxBytes is
+			// set low.
+			{lo: indexes[4], hi: indexes[9], maxBytes: 1, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+			// Case 16: lo is available but hi is not.
+			{lo: indexes[5], hi: indexes[9] + 100, expCacheCount: 6, expError: raft.ErrUnavailable, setup: nil},
+			// Case 17: both lo and hi are not available, cache miss.
+			{lo: indexes[9] + 100, hi: indexes[9] + 1000, expCacheCount: 0, expError: raft.ErrUnavailable, setup: nil},
+			// Case 18: lo is available, hi is not, but it was cut off by maxBytes.
+			{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+			// Case 19: lo and hi are available, but entry cache evicted.
+			{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
+				// Manually evict cache for the first 10 log entries.
+				repl.store.raftEntryCache.Clear(rangeID, indexes[9]+1)
+				indexes = append(indexes, populateLogs(10, 40)...)
+			}},
+			// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
+			{lo: indexes[5], hi: indexes[9] + 5, expResultCount: 9, expCacheCount: 0, setup: nil},
+			// Case 21: lo and hi are available and in entry cache.
+			{lo: indexes[9] + 2, hi: indexes[9] + 32, expResultCount: 30, expCacheCount: 30, setup: nil},
+			// Case 22: lo is available and hi is not.
+			{lo: indexes[9] + 2, hi: indexes[9] + 33, expCacheCount: 30, expError: raft.ErrUnavailable, setup: nil},
+		} {
+			if tc.setup != nil {
+				tc.setup()
+			}
+			if tc.maxBytes == 0 {
+				tc.maxBytes = math.MaxUint64
+			}
+			cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.Scan(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
+			if len(cacheEntries) != tc.expCacheCount {
+				t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
+			}
+			repl.mu.Lock()
+			ents, err := repl.raftEntriesLocked(tc.lo, tc.hi, tc.maxBytes)
+			repl.mu.Unlock()
+			if tc.expError == nil && err != nil {
+				t.Errorf("%d: expected no error, got %s", i, err)
+				continue
+			} else if !errors.Is(err, tc.expError) {
+				t.Errorf("%d: expected error %s, got %s", i, tc.expError, err)
+				continue
+			}
+			if len(ents) != tc.expResultCount {
+				t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
+			} else if tc.expResultCount > 0 {
+				expHitLimit := ents[len(ents)-1].Index < tc.hi-1
+				if hitLimit != expHitLimit {
+					t.Errorf("%d: unexpected hit limit: %t", i, hitLimit)
+				}
 			}
 		}
-	}
 
-	// Case 23: Lo must be less than or equal to hi.
-	repl.mu.Lock()
-	if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], math.MaxUint64); err == nil {
-		t.Errorf("23: error expected, got none")
-	}
-	repl.mu.Unlock()
+		// Case 23: Lo must be less than or equal to hi.
+		repl.mu.Lock()
+		if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], math.MaxUint64); err == nil {
+			t.Errorf("23: error expected, got none")
+		}
+		repl.mu.Unlock()
+	})
 }
 
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tc := testContext{}
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.DisableRaftLogQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
-	repl := tc.repl
-	rangeID := repl.RangeID
+	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		ctx := context.Background()
+		tc := testContext{}
+		tsc := TestStoreConfig(nil)
+		tsc.TestingKnobs.DisableRaftLogQueue = true
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+		st := tc.store.ClusterSettings()
+		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
-	// Populate the log with 10 entries. Save the LastIndex after each write.
-	var indexes []uint64
-	for i := 0; i < 10; i++ {
-		args := incrementArgs([]byte("a"), int64(i))
+		repl := tc.repl
+		rangeID := repl.RangeID
 
-		if _, pErr := tc.SendWrapped(args); pErr != nil {
+		// Populate the log with 10 entries. Save the LastIndex after each write.
+		var indexes []uint64
+		for i := 0; i < 10; i++ {
+			args := incrementArgs([]byte("a"), int64(i))
+
+			if _, pErr := tc.SendWrapped(args); pErr != nil {
+				t.Fatal(pErr)
+			}
+			idx, err := tc.repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			indexes = append(indexes, idx)
+		}
+
+		// Discard the first half of the log.
+		truncateArgs := truncateLogArgs(indexes[5], rangeID)
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		idx, err := tc.repl.GetLastIndex()
+		waitForTruncationForTesting(t, repl, indexes[5], looselyCoupled)
+
+		repl.mu.Lock()
+		defer repl.mu.Unlock()
+
+		firstIndex, err := repl.raftFirstIndexLocked()
 		if err != nil {
 			t.Fatal(err)
 		}
-		indexes = append(indexes, idx)
-	}
+		if firstIndex != indexes[5] {
+			t.Fatalf("expected firstIndex %d to be %d", firstIndex, indexes[4])
+		}
 
-	// Discard the first half of the log.
-	truncateArgs := truncateLogArgs(indexes[5], rangeID)
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+		// Truncated logs should return an ErrCompacted error.
+		if _, err := tc.repl.raftTermRLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
+			t.Errorf("expected ErrCompacted, got %s", err)
+		}
+		if _, err := tc.repl.raftTermRLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
+			t.Errorf("expected ErrCompacted, got %s", err)
+		}
 
-	repl.mu.Lock()
-	defer repl.mu.Unlock()
+		// FirstIndex-1 should return the term of firstIndex.
+		firstIndexTerm, err := tc.repl.raftTermRLocked(firstIndex)
+		if err != nil {
+			t.Errorf("expect no error, got %s", err)
+		}
 
-	firstIndex, err := repl.raftFirstIndexLocked()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if firstIndex != indexes[5] {
-		t.Fatalf("expected firstIndex %d to be %d", firstIndex, indexes[4])
-	}
+		term, err := tc.repl.raftTermRLocked(indexes[4])
+		if err != nil {
+			t.Errorf("expect no error, got %s", err)
+		}
+		if term != firstIndexTerm {
+			t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
+		}
 
-	// Truncated logs should return an ErrCompacted error.
-	if _, err := tc.repl.raftTermRLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
-		t.Errorf("expected ErrCompacted, got %s", err)
-	}
-	if _, err := tc.repl.raftTermRLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
-		t.Errorf("expected ErrCompacted, got %s", err)
-	}
+		lastIndex, err := repl.raftLastIndexLocked()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// FirstIndex-1 should return the term of firstIndex.
-	firstIndexTerm, err := tc.repl.raftTermRLocked(firstIndex)
-	if err != nil {
-		t.Errorf("expect no error, got %s", err)
-	}
+		// Last index should return correctly.
+		if _, err := tc.repl.raftTermRLocked(lastIndex); err != nil {
+			t.Errorf("expected no error, got %s", err)
+		}
 
-	term, err := tc.repl.raftTermRLocked(indexes[4])
-	if err != nil {
-		t.Errorf("expect no error, got %s", err)
-	}
-	if term != firstIndexTerm {
-		t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
-	}
-
-	lastIndex, err := repl.raftLastIndexLocked()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Last index should return correctly.
-	if _, err := tc.repl.raftTermRLocked(lastIndex); err != nil {
-		t.Errorf("expected no error, got %s", err)
-	}
-
-	// Terms for after the last index should return ErrUnavailable.
-	if _, err := tc.repl.raftTermRLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
-		t.Errorf("expected ErrUnavailable, got %s", err)
-	}
-	if _, err := tc.repl.raftTermRLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
-		t.Errorf("expected ErrUnavailable, got %s", err)
-	}
+		// Terms for after the last index should return ErrUnavailable.
+		if _, err := tc.repl.raftTermRLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
+			t.Errorf("expected ErrUnavailable, got %s", err)
+		}
+		if _, err := tc.repl.raftTermRLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
+			t.Errorf("expected ErrUnavailable, got %s", err)
+		}
+	})
 }
 
 func TestGCIncorrectRange(t *testing.T) {
@@ -7501,7 +7531,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ba.Add(&roachpb.GetRequest{
 				RequestHeader: roachpb.RequestHeader{Key: key},
 			})
-			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 				t.Fatal(err)
 			}
 			_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
@@ -8079,7 +8109,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		st := r.CurrentLeaseStatus(ctx)
-		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, st, uncertainty.Interval{}, allSpans())
+		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, st, uncertainty.Interval{}, allSpansGuard())
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -8201,7 +8231,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 
 	incCmdID = makeIDKey()
 	atomic.StoreInt32(&filterActive, 1)
-	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, repl.CurrentLeaseStatus(ctx), uncertainty.Interval{}, allSpans())
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, repl.CurrentLeaseStatus(ctx), uncertainty.Interval{}, allSpansGuard())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8396,7 +8426,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
+			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil, 0)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {
@@ -8646,6 +8676,177 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 	})
 }
 
+// TestGCThresholdRacesWithRead performs a GC and a read concurrently on the
+// same key. It ensures that either the read wins the race and observes the
+// correct result or the GC wins the race and the read returns an error. Either
+// result is ok. However, it should never be possible for the read to return
+// without error and without the correct result. This would indicate a bug in
+// the synchronization between reads and GC operations.
+//
+// The test contains a subtest for each of the combinations of the following
+// boolean options:
+//
+// - followerRead: configures whether the read should be served from the
+//     leaseholder replica or from a follower replica.
+//
+// - thresholdFirst: configures whether the GC operation should be split into
+//     two requests, with the first bumping the GC threshold and the second
+//     GCing the expired version. This is how the real MVCC GC queue works.
+//
+func TestGCThresholdRacesWithRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 55293)
+
+	testutils.RunTrueAndFalse(t, "followerRead", func(t *testing.T, followerRead bool) {
+		testutils.RunTrueAndFalse(t, "thresholdFirst", func(t *testing.T, thresholdFirst bool) {
+			if !thresholdFirst {
+				skip.IgnoreLint(t, "the test fails, revealing that it is not safe "+
+					"to bump the GC threshold and to GC individual keys at the same time")
+			}
+
+			ctx := context.Background()
+			tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &StoreTestingKnobs{
+							// Disable the GC queue so the test is the only one issuing GC
+							// requests.
+							DisableGCQueue: true,
+							EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+								// The thresholdFirst = false variants will perform the unsafe
+								// action of bumping the GC threshold at the same time that it
+								// GCs individual keys.
+								AllowGCWithNewThresholdAndKeys: true,
+							},
+						},
+					},
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+			key := tc.ScratchRange(t)
+			desc := tc.LookupRangeOrFatal(t, key)
+			tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+			var stores []*Store
+			for i := 0; i < tc.NumServers(); i++ {
+				server := tc.Server(i)
+				store, err := server.GetStores().(*Stores).GetStore(server.GetFirstStoreID())
+				require.NoError(t, err)
+				stores = append(stores, store)
+			}
+			writer := stores[0]
+			reader := stores[0]
+			if followerRead {
+				reader = stores[1]
+			}
+
+			now := tc.Server(0).Clock().Now()
+			ts1 := now.Add(1, 0)
+			ts2 := now.Add(2, 0)
+			ts3 := now.Add(3, 0)
+			h1 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts1}
+			h2 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts2}
+			h3 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts3}
+			va := []byte("a")
+			vb := []byte("b")
+
+			// Write two versions of the key:
+			//  k@ts1 -> a
+			//  k@ts2 -> b
+			pArgs := putArgs(key, va)
+			_, pErr := kv.SendWrappedWith(ctx, writer, h1, &pArgs)
+			require.Nil(t, pErr)
+
+			pArgs = putArgs(key, vb)
+			_, pErr = kv.SendWrappedWith(ctx, writer, h2, &pArgs)
+			require.Nil(t, pErr)
+
+			// If the test wants to read from a follower, drop the closed timestamp
+			// duration and then wait until the follower can serve requests at ts1.
+			if followerRead {
+				_, err := tc.ServerConn(0).Exec(
+					`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+				require.NoError(t, err)
+
+				testutils.SucceedsSoon(t, func() error {
+					var ba roachpb.BatchRequest
+					ba.RangeID = desc.RangeID
+					ba.ReadConsistency = roachpb.INCONSISTENT
+					ba.Add(&roachpb.QueryResolvedTimestampRequest{
+						RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
+					})
+					br, pErr := reader.Send(ctx, ba)
+					require.Nil(t, pErr)
+					rts := br.Responses[0].GetQueryResolvedTimestamp().ResolvedTS
+					if rts.Less(ts1) {
+						return errors.Errorf("resolved timestamp %s < %s", rts, ts1)
+					}
+					return nil
+				})
+			}
+
+			// Verify that a read @ ts1 returns "a".
+			gArgs := getArgs(key)
+			resp, pErr := kv.SendWrappedWith(ctx, reader, h1, &gArgs)
+			require.Nil(t, pErr)
+			require.NotNil(t, resp)
+			require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+			b, err := resp.(*roachpb.GetResponse).Value.GetBytes()
+			require.Nil(t, err)
+			require.Equal(t, va, b)
+
+			// Perform two actions concurrently:
+			//  1. GC up to ts2. This should remove the k@ts1 version.
+			//  2. Read @ ts1.
+			//
+			// There are two valid results for the read. If it wins the race, it
+			// should succeed and return "a". If it loses the race, it should fail
+			// with a BatchTimestampBeforeGCError error. It should not be possible
+			// for the read to return without error and also without the value "a".
+			// This would indicate a bug in the synchronization between reads and GC
+			// operations.
+			gc := func() {
+				if thresholdFirst {
+					gcReq := gcArgs(key, key.Next())
+					gcReq.Threshold = ts2
+					_, pErr = kv.SendWrappedWith(ctx, writer, h3, &gcReq)
+					require.Nil(t, pErr)
+				}
+
+				gcReq := gcArgs(key, key.Next(), gcKey(key, ts1))
+				if !thresholdFirst {
+					gcReq.Threshold = ts2
+				}
+				_, pErr = kv.SendWrappedWith(ctx, writer, h3, &gcReq)
+				require.Nil(t, pErr)
+			}
+			read := func() {
+				resp, pErr := kv.SendWrappedWith(ctx, reader, h1, &gArgs)
+				if pErr == nil {
+					t.Logf("read won race: %v", resp)
+					require.NotNil(t, resp)
+					require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+					b, err := resp.(*roachpb.GetResponse).Value.GetBytes()
+					require.Nil(t, err)
+					require.Equal(t, va, b)
+				} else {
+					t.Logf("read lost race: %v", pErr)
+					gcErr := &roachpb.BatchTimestampBeforeGCError{}
+					require.ErrorAs(t, pErr.GoError(), &gcErr)
+				}
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() { defer wg.Done(); gc() }()
+			go func() { defer wg.Done(); read() }()
+			wg.Wait()
+		})
+	})
+}
+
 func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -8734,7 +8935,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	assignSeqNumsForReqs(txn, &txnPut, &txnPut2)
 	origTxn := txn.Clone()
 
-	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, uncertainty.Interval{}, allSpans())
+	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, uncertainty.Interval{}, allSpansGuard())
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9128,7 +9329,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		ba.Header.RangeID = repl.RangeID
 		ba.Add(req)
 		ba.Txn = txn
-		if err := ba.SetActiveTimestamp(repl.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(repl.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := repl.Send(ctx, ba)
@@ -9421,7 +9622,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	ba.Header.Txn = txn
 	ba.Add(&etArgs)
 	assignSeqNumsForReqs(txn, &etArgs)
-	require.NoError(t, ba.SetActiveTimestamp(func() hlc.Timestamp { return hlc.Timestamp{} }))
+	require.NoError(t, ba.SetActiveTimestamp(s.Clock()))
 	// Get a reference to the txn's replica.
 	stores := s.GetStores().(*Stores)
 	store, err := stores.GetStore(s.GetFirstStoreID())
@@ -10175,7 +10376,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
-		sysCfg := tc.store.Gossip().GetSystemConfig()
+		sysCfg := tc.store.Gossip().DeprecatedGetSystemConfig()
 		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg)
 		if !testutils.IsError(err, "boom") {
 			t.Fatal(err)
@@ -10695,6 +10896,93 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// EndTransaction. This is hard to do at the moment, though, because we
 		// never defer the handling of the write too old conditions to the end of
 		// the transaction (but we might in the future).
+		{
+			name: "serverside-refresh of read within uncertainty interval error on get in non-txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				// NOTE: set the TimestampFromServerClock field manually. This is
+				// usually set on the server for non-transactional requests without
+				// client-assigned timestamps. It is also usually set to the same
+				// value as the server-assigned timestamp. But to have more control
+				// over the uncertainty interval that this request receives, we set
+				// it here to a value above the request timestamp.
+				serverTS := ts.Next()
+				ba.TimestampFromServerClock = (*hlc.ClockTimestamp)(&serverTS)
+				expTS = ts.Next()
+				get := getArgs(roachpb.Key("a"))
+				ba.Add(&get)
+				return
+			},
+		},
+		{
+			name: "serverside-refresh of read within uncertainty interval error on get in non-1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
+				ts = ts.Prev()
+				ba.Txn = newTxn("a", ts)
+				ba.Txn.GlobalUncertaintyLimit = expTS
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
+				get := getArgs(roachpb.Key("a"))
+				ba.Add(&get)
+				return
+			},
+		},
+		{
+			name: "serverside-refresh of read within uncertainty interval error on get in non-1PC txn with prior reads",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ts = ts.Prev()
+				ba.Txn = newTxn("a", ts)
+				ba.Txn.GlobalUncertaintyLimit = ts.Next()
+				get := getArgs(roachpb.Key("a"))
+				ba.Add(&get)
+				return
+			},
+			expErr: "ReadWithinUncertaintyIntervalError",
+		},
+		{
+			name: "serverside-refresh of read within uncertainty interval error on get in 1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
+				ts = ts.Prev()
+				ba.Txn = newTxn("a", ts)
+				ba.Txn.GlobalUncertaintyLimit = expTS
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
+				get := getArgs(roachpb.Key("a"))
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				ba.Add(&get, &et)
+				assignSeqNumsForReqs(ba.Txn, &get, &et)
+				return
+			},
+		},
+		{
+			name: "serverside-refresh of read within uncertainty interval error on get in 1PC txn with prior reads",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ts = ts.Prev()
+				ba.Txn = newTxn("a", ts)
+				ba.Txn.GlobalUncertaintyLimit = ts.Next()
+				get := getArgs(roachpb.Key("a"))
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				ba.Add(&get, &et)
+				assignSeqNumsForReqs(ba.Txn, &get, &et)
+				return
+			},
+			expErr: "ReadWithinUncertaintyIntervalError",
+		},
 	}
 
 	for _, test := range testCases {
@@ -12921,7 +13209,13 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
-	requeue, err := tc.store.replicateQueue.processOneChange(ctx, tc.repl, func(ctx context.Context, repl *Replica) bool { return false }, true /* dryRun */)
+	requeue, err := tc.store.replicateQueue.processOneChange(
+		ctx,
+		tc.repl,
+		func(ctx context.Context, repl *Replica) bool { return false },
+		false, /* scatter */
+		true,  /* dryRun */
+	)
 	require.Equal(t, errBoom, err)
 	require.False(t, requeue)
 }
@@ -12939,7 +13233,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
 		ba.Add(&req)
-		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, tc.repl.CurrentLeaseStatus(ctx), uncertainty.Interval{}, allSpans())
+		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, tc.repl.CurrentLeaseStatus(ctx), uncertainty.Interval{}, allSpansGuard())
 		if err != nil {
 			t.Error(err)
 		}

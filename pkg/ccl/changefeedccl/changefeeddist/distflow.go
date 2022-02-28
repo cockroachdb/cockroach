@@ -24,7 +24,7 @@ import (
 
 // ChangefeedResultTypes is the types returned by changefeed stream.
 var ChangefeedResultTypes = []*types.T{
-	types.Bytes,  // resolved span
+	types.Bytes,  // aggregator progress update
 	types.String, // topic
 	types.Bytes,  // key
 	types.Bytes,  // value
@@ -47,7 +47,7 @@ func StartDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
-		execCtx.ExecCfg().Codec.ForSystemTenant() /* distribute */)
+		sql.DistributionTypeSystemTenantOnly)
 
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {

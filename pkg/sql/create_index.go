@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -97,7 +97,8 @@ func (p *planner) maybeSetupConstraintForShard(
 ) error {
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 
@@ -169,8 +170,6 @@ func makeIndexDescriptor(
 		n.Inverted,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
-		params.EvalContext(),
-		params.SessionData(),
 	); err != nil {
 		return nil, err
 	}
@@ -194,6 +193,7 @@ func makeIndexDescriptor(
 		Unique:            n.Unique,
 		StoreColumnNames:  n.Storing.ToStrings(),
 		CreatedExplicitly: true,
+		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 
 	if n.Inverted {
@@ -228,16 +228,13 @@ func makeIndexDescriptor(
 
 	if n.Sharded != nil {
 		if n.PartitionByIndex.ContainsPartitions() {
-			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support explicit partitioning")
 		}
-		if tableDesc.IsLocalityRegionalByRow() {
-			return nil, hashShardedIndexesOnRegionalByRowError()
-		}
+
 		shardCol, newColumns, err := setupShardedIndex(
 			params.ctx,
 			params.EvalContext(),
 			&params.p.semaCtx,
-			params.SessionData().HashShardedIndexesEnabled,
 			columns,
 			n.Sharded.ShardBuckets,
 			tableDesc,
@@ -359,9 +356,16 @@ func replaceExpressionElemsWithVirtualCols(
 	isInverted bool,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	sessionData *sessiondata.SessionData,
 ) error {
+	findExistingExprIndexCol := func(expr string) (colName string, ok bool) {
+		for _, col := range desc.AllColumns() {
+			if col.IsExpressionIndexColumn() && col.GetComputeExpr() == expr {
+				return col.GetName(), true
+			}
+		}
+		return "", false
+	}
+
 	lastColumnIdx := len(elems) - 1
 	for i := range elems {
 		elem := &elems[i]
@@ -387,6 +391,17 @@ func replaceExpressionElemsWithVirtualCols(
 			)
 			if err != nil {
 				return err
+			}
+
+			// Use an existing expression index column if one exists, rather
+			// than creating a new one.
+			if existingColName, ok := findExistingExprIndexCol(expr); ok {
+				// Set the column name and unset the expression.
+				elem.Column = tree.Name(existingColName)
+				elem.Expr = nil
+				// Increment expression index telemetry.
+				telemetry.Inc(sqltelemetry.ExpressionIndexCounter)
+				continue
 			}
 
 			// The expression type cannot be ambiguous.
@@ -485,9 +500,6 @@ func replaceExpressionElemsWithVirtualCols(
 // and expects to see its own writes.
 func (n *createIndexNode) ReadingOwnWrites() {}
 
-var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
-	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
-
 // setupShardedIndex creates a shard column for the given index descriptor. It
 // returns the shard column and the new column list for the index. If the shard
 // column is new, either of the following happens:
@@ -497,7 +509,6 @@ func setupShardedIndex(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	shardedIndexEnabled bool,
 	columns tree.IndexElemList,
 	bucketsExpr tree.Expr,
 	tableDesc *tabledesc.Mutable,
@@ -505,8 +516,17 @@ func setupShardedIndex(
 	storageParams tree.StorageParams,
 	isNewTable bool,
 ) (shard catalog.Column, newColumns tree.IndexElemList, err error) {
-	if !shardedIndexEnabled {
-		return nil, nil, hashShardedIndexesDisabledError
+	if !isNewTable && tableDesc.IsPartitionAllBy() {
+		partitionAllBy, err := partitionByFromTableDesc(evalCtx.Codec, tableDesc)
+		if err != nil {
+			return nil, nil, err
+		}
+		if anyColumnIsPartitioningField(columns, partitionAllBy) {
+			return nil, nil, pgerror.New(
+				pgcode.FeatureNotSupported,
+				`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
+			)
+		}
 	}
 
 	colNames := make([]string, 0, len(columns))
@@ -621,7 +641,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	indexDesc.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
+	indexDesc.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 
 	if n.n.PartitionByIndex != nil && n.tableDesc.GetLocalityConfig() != nil {
 		return pgerror.New(
@@ -645,12 +665,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(params.ctx, indexDesc, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings); err != nil {
 		return err
 	}
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
+
 	if err := params.p.configureZoneConfigForNewIndexPartitioning(
 		params.ctx,
 		n.tableDesc,
@@ -755,16 +777,33 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 		if err != nil {
 			return err
 		}
+
+		indexIDs := []descpb.IndexID{indexDesc.ID}
+		if idx := catalog.FindCorrespondingTemporaryIndexByID(tableDesc, indexDesc.ID); idx != nil {
+			indexIDs = append(indexIDs, idx.GetID())
+		}
+
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
 			regionConfig,
 			tableDesc,
-			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexDesc.ID),
+			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),
 		); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func anyColumnIsPartitioningField(columns tree.IndexElemList, partitionBy *tree.PartitionBy) bool {
+	for _, field := range partitionBy.Fields {
+		for _, column := range columns {
+			if field == column.Column {
+				return true
+			}
+		}
+	}
+	return false
 }

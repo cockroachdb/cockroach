@@ -41,7 +41,7 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 type ID = catid.DescID
 
 // InvalidID is the uninitialised descriptor id.
-const InvalidID ID = 0
+const InvalidID = catid.InvalidDescID
 
 // IDs is a sortable list of IDs.
 type IDs []ID
@@ -73,6 +73,9 @@ type FamilyID = catid.FamilyID
 
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID = catid.IndexID
+
+// ConstraintID is a custom type for TableDescriptor constraint IDs.
+type ConstraintID = catid.ConstraintID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
@@ -112,18 +115,6 @@ const (
 	// these were implicitly derived based on the set of non-virtual columns in
 	// the table.
 	PrimaryIndexWithStoredColumnsVersion
-
-	// LatestPrimaryIndexDescriptorVersion is the latest index descriptor
-	// version value for primary indexes, and so will be found in all
-	// newly-created primary indexes.
-	// This property is tested by TestLatestIndexDescriptorVersionValues.
-	LatestPrimaryIndexDescriptorVersion = PrimaryIndexWithStoredColumnsVersion
-
-	// LatestNonPrimaryIndexDescriptorVersion is the latest index descriptor
-	// version value for non-primary indexes, and so will be found in all
-	// newly-created secondary indexes, as well as index mutations.
-	// this property is tested by TestLatestIndexDescriptorVersionValues.
-	LatestNonPrimaryIndexDescriptorVersion = StrictIndexColumnIDGuaranteesVersion
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.

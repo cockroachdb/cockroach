@@ -12,6 +12,7 @@ package contention
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -20,10 +21,13 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -54,6 +58,11 @@ type Registry struct {
 	// nonSQLKeysMap is an LRU cache that keeps track of up to
 	// orderedKeyMapMaxSize non-SQL contended keys.
 	nonSQLKeysMap *nonSQLKeysMap
+
+	// eventStore stores the historical contention events and maps the
+	// transactions in the contention events to their corresponding transaction
+	// fingerprint ID.
+	eventStore *eventStore
 }
 
 var (
@@ -232,15 +241,22 @@ func newNonSQLKeysMap() *nonSQLKeysMap {
 }
 
 // NewRegistry creates a new Registry.
-func NewRegistry() *Registry {
+func NewRegistry(st *cluster.Settings, endpoint ResolverEndpoint) *Registry {
 	return &Registry{
 		indexMap:      newIndexMap(),
 		nonSQLKeysMap: newNonSQLKeysMap(),
+		eventStore:    newEventStore(st, endpoint, timeutil.Now),
 	}
 }
 
+// Start starts the background goroutines for the Registry.
+func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
+	r.eventStore.start(ctx, stopper)
+}
+
 // AddContentionEvent adds a new ContentionEvent to the Registry.
-func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
+func (r *Registry) AddContentionEvent(event contentionpb.ExtendedContentionEvent) {
+	c := event.BlockingEvent
 	r.globalLock.Lock()
 	defer r.globalLock.Unlock()
 	// Remove the tenant ID prefix if there is any.
@@ -265,6 +281,8 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
 	} else {
 		v.addContentionEvent(c)
 	}
+
+	r.eventStore.addEvent(event)
 }
 
 func serializeTxnCache(txnCache *cache.UnorderedCache) []contentionpb.SingleTxnContention {

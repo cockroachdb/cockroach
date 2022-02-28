@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -71,10 +72,6 @@ type Mutable struct {
 	// ClusterVersion represents the version of the type descriptor read
 	// from the store.
 	ClusterVersion *immutable
-
-	// changed represents whether or not the descriptor was changed
-	// after RunPostDeserializationChanges.
-	changed bool
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
@@ -95,6 +92,10 @@ type immutable struct {
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
+
+	// changes represents how descriptor was changes	after
+	// RunPostDeserializationChanges.
+	changes catalog.PostDeserializationChanges
 }
 
 // UpdateCachedFieldsOnModifiedMutable refreshes the immutable field by
@@ -184,8 +185,16 @@ func (desc *immutable) ByteSize() int64 {
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
+//
+// It overrides the wrapper's implementation to deal with the fact that
+// mutable has overridden the definition of IsUncommittedVersion.
+func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
+	return newBuilder(desc.TypeDesc(), desc.IsUncommittedVersion(), desc.changes)
+}
+
+// NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.TypeDesc())
+	return newBuilder(desc.TypeDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // PrimaryRegionName implements the TypeDescriptor interface.
@@ -315,9 +324,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	imm := NewBuilder(desc.TypeDesc()).BuildImmutableType()
-	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
-	return imm
+	return desc.NewBuilder().(TypeDescriptorBuilder).BuildImmutableType()
 }
 
 // IsNew implements the MutableDescriptor interface.
@@ -602,6 +609,9 @@ func (desc *immutable) ValidateCrossReferences(
 	dbDesc, err := vdg.GetDatabaseDescriptor(desc.GetParentID())
 	if err != nil {
 		vea.Report(err)
+	} else if dbDesc.Dropped() {
+		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
+			dbDesc.GetName(), dbDesc.GetID()))
 	}
 
 	// Check that the parent schema exists.
@@ -613,6 +623,10 @@ func (desc *immutable) ValidateCrossReferences(
 			vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
 				desc.GetParentSchemaID(), schemaDesc.GetParentID()))
 		}
+		if schemaDesc != nil && schemaDesc.Dropped() {
+			vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped",
+				schemaDesc.GetName(), schemaDesc.GetID()))
+		}
 	}
 
 	if desc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM && dbDesc != nil {
@@ -623,8 +637,10 @@ func (desc *immutable) ValidateCrossReferences(
 	switch desc.GetKind() {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// Ensure that the referenced array type exists.
-		if _, err := vdg.GetTypeDescriptor(desc.GetArrayTypeID()); err != nil {
+		if typ, err := vdg.GetTypeDescriptor(desc.GetArrayTypeID()); err != nil {
 			vea.Report(errors.Wrapf(err, "arrayTypeID %d does not exist for %q", desc.GetArrayTypeID(), desc.GetKind()))
+		} else if typ.Dropped() {
+			vea.Report(errors.AssertionFailedf("array type %q (%d) is dropped", typ.GetName(), typ.GetID()))
 		}
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.GetAlias().UserDefined() {
@@ -632,8 +648,10 @@ func (desc *immutable) ValidateCrossReferences(
 			if err != nil {
 				vea.Report(err)
 			}
-			if _, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
+			if typ, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
 				vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
+			} else if typ.Dropped() {
+				vea.Report(errors.AssertionFailedf("aliased type %q (%d) is dropped", typ.GetName(), typ.GetID()))
 			}
 		}
 	}
@@ -924,6 +942,11 @@ func (desc *immutable) HasPendingSchemaChanges() bool {
 	}
 }
 
+// GetPostDeserializationChanges implements the Descriptor interface.
+func (desc *immutable) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return desc.changes
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
@@ -992,8 +1015,8 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	return ret, nil
 }
 
-// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-// RunPostDeserializationChanges.
-func (desc *Mutable) HasPostDeserializationChanges() bool {
-	return desc.changed
+// SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {
+	desc.DeclarativeSchemaChangerState = state
 }

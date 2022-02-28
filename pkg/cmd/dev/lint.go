@@ -47,7 +47,6 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
 	args = append(args, "run", "--config=test", "//build/bazelutil:lint")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
@@ -63,13 +62,18 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "-test.run", fmt.Sprintf("Lint/%s", filter))
 	}
 	logCommand("bazel", args...)
-	if len(pkgs) > 0 {
+	if len(pkgs) > 1 {
+		return fmt.Errorf("can only lint a single package (found %s)", strings.Join(pkgs, ", "))
+	}
+	if len(pkgs) == 1 {
 		pkg := strings.TrimRight(pkgs[0], "/")
 		if !strings.HasPrefix(pkg, "./") {
 			pkg = "./" + pkg
 		}
 		env := os.Environ()
-		env = append(env, fmt.Sprintf("PKG=%s", pkg))
+		envvar := fmt.Sprintf("PKG=%s", pkg)
+		d.log.Printf("export %s", envvar)
+		env = append(env, envvar)
 		return d.exec.CommandContextWithEnv(ctx, env, "bazel", args...)
 	}
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)

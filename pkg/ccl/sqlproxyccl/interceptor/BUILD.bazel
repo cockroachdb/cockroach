@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "interceptor",
+    srcs = [
+        "backend_interceptor.go",
+        "base.go",
+        "chunkreader.go",
+        "frontend_interceptor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgproto3_v2//:pgproto3",
+    ],
+)
+
+go_test(
+    name = "interceptor_test",
+    srcs = [
+        "backend_interceptor_test.go",
+        "base_test.go",
+        "chunkreader_test.go",
+        "frontend_interceptor_test.go",
+        "interceptor_test.go",
+    ],
+    embed = [":interceptor"],
+    deps = [
+        "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgproto3_v2//:pgproto3",
+        "@com_github_stretchr_testify//require",
+    ],
+)

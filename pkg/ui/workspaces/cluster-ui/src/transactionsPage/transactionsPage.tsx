@@ -66,6 +66,7 @@ import {
   TimeScale,
   toDateRange,
 } from "../timeScaleDropdown";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -324,10 +325,6 @@ export class TransactionsPage extends React.Component<
     }
   };
 
-  resetTime = (): void => {
-    this.changeTimeScale(defaultTimeScaleSelected);
-  };
-
   render(): React.ReactElement {
     const {
       data,
@@ -374,6 +371,12 @@ export class TransactionsPage extends React.Component<
       data?.transactions || [],
       internal_app_name_prefix,
     );
+    const longLoadingMessage = !this.props?.data && (
+      <InlineAlert
+        intent="info"
+        title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+      />
+    );
 
     return (
       <div className={cx("table-area")}>
@@ -403,11 +406,6 @@ export class TransactionsPage extends React.Component<
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
             />
-          </PageConfigItem>
-          <PageConfigItem>
-            <button className={cx("reset-btn")} onClick={this.resetTime}>
-              reset time
-            </button>
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
             <ClearStats
@@ -521,6 +519,7 @@ export class TransactionsPage extends React.Component<
             })
           }
         />
+        {longLoadingMessage}
       </div>
     );
   }
