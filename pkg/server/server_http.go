@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -53,6 +54,31 @@ func newHTTPServer(
 		},
 	}
 }
+
+// HSTSEnabled is a boolean that enables HSTS headers on the HTTP
+// server. These instruct a valid user agent to use HTTPS *only*
+// for all future connections to this host.
+var HSTSEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"security.hsts.enabled",
+		"if true, HSTS headers will be sent along with all HTTP "+
+			"requests. The headers will contain a max-age setting of one "+
+			"year. Browsers honoring the header will always use HTTPS to "+
+			"access the DB Console. Ensure that TLS is correctly configured "+
+			"prior to enabling.",
+		false,
+	).WithPublic()
+	return s
+}()
+
+const hstsHeaderKey = "Strict-Transport-Security"
+
+// hstsHeaderValue contains the static HSTS header value we return when
+// HSTS is enabled via the clusters setting above. It sets the expiry
+// of 1 year that the browser should remember to only use HTTPS for
+// this site.
+const hstsHeaderValue = "max-age=31536000"
 
 const healthPath = "/health"
 
@@ -226,6 +252,9 @@ func (s *httpServer) start(
 		if err := stopper.RunAsyncTask(workersCtx, "serve-health", func(context.Context) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				if HSTSEnabled.Get(&s.cfg.Settings.SV) {
+					w.Header().Set(hstsHeaderKey, hstsHeaderValue)
+				}
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
 			})
 			mux.Handle(healthPath, http.HandlerFunc(s.baseHandler))
@@ -286,6 +315,10 @@ func (s *httpServer) gzipHandler(w http.ResponseWriter, r *http.Request) {
 func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
+
+	if HSTSEnabled.Get(&s.cfg.Settings.SV) {
+		w.Header().Set("Strict-Transport-Security", hstsHeaderValue)
+	}
 
 	// This is our base handler.
 	// Intercept all panics, log them, and return an internal server error as a response.

@@ -328,6 +328,7 @@ go_test(
         "pagination_test.go",
         "purge_auth_session_test.go",
         "servemode_test.go",
+        "server_http_test.go",
         "server_import_ts_test.go",
         "server_systemlog_gc_test.go",
         "server_test.go",
