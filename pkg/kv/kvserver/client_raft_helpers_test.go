@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -178,6 +179,19 @@ func (h *testClusterStoreRaftMessageHandler) HandleSnapshot(
 		return err
 	}
 	return store.HandleSnapshot(ctx, header, respStream)
+}
+
+func (h *testClusterStoreRaftMessageHandler) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream kvserver.DelegateSnapshotResponseStream,
+	span *tracing.Span,
+) error {
+	store, err := h.getStore()
+	if err != nil {
+		return err
+	}
+	return store.HandleDelegatedSnapshot(ctx, req, stream, span)
 }
 
 // testClusterPartitionedRange is a convenient abstraction to create a range on a node
