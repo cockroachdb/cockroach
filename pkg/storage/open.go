@@ -48,6 +48,13 @@ var MustExist ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
+// DisableAutomaticCompactions configures an engine to be opened with disabled
+// automatic compactions. Used primarily for debugCompactCmd.
+var DisableAutomaticCompactions ConfigOption = func(cfg *engineConfig) error {
+	cfg.Opts.DisableAutomaticCompactions = true
+	return nil
+}
+
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {
