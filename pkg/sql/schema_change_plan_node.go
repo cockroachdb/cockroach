@@ -188,7 +188,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	// phase was not executed.
 	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
 		deps := scdeps.NewBuilderDependencies(
-			p.ExecCfg().ClusterID(),
+			p.ExecCfg().LogicalClusterID(),
 			p.ExecCfg().Codec,
 			p.Txn(),
 			p.Descriptors(),
