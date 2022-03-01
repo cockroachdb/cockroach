@@ -50,6 +50,13 @@ protect record-id=4 ts=4
 descs 104
 ----
 
+mutations
+----
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      protection_policies=[{ts: 3} {ts: 4}]
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      protection_policies=[{ts: 3} {ts: 4}]
+
 # Write a protected timestamp record on the entire keyspace.
 protect record-id=5 ts=5
 cluster
@@ -59,10 +66,6 @@ mutations
 ----
 delete {entire-keyspace}
 upsert {entire-keyspace}                   protection_policies=[{ts: 1} {ts: 5}]
-delete /Table/10{6-7}
-upsert /Table/10{6-7}                      protection_policies=[{ts: 3} {ts: 4}]
-delete /Table/10{7-8}
-upsert /Table/10{7-8}                      protection_policies=[{ts: 3} {ts: 4}]
 
 state limit=3
 ----
