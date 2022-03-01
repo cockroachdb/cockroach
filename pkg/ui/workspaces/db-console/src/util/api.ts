@@ -116,6 +116,7 @@ export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresRespo
 export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
 
 export type StatementsResponseMessage = protos.cockroach.server.serverpb.StatementsResponse;
+export type StatementDetailsResponseMessage = protos.cockroach.server.serverpb.StatementDetailsResponse;
 
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
@@ -138,6 +139,7 @@ export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverp
 export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
 export type StatementsRequestMessage = protos.cockroach.server.serverpb.StatementsRequest;
+export type StatementDetailsRequestMessage = protos.cockroach.server.serverpb.StatementDetailsRequest;
 
 export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
 export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
@@ -697,6 +699,26 @@ export function getStatements(
   return timeoutFetch(
     serverpb.StatementsResponse,
     `${STATUS_PREFIX}/statements?${queryStr}`,
+    null,
+    timeout,
+  );
+}
+
+// getStatementDetails returns the statistics about the selected statement.
+export function getStatementDetails(
+  req: StatementDetailsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<StatementDetailsResponseMessage> {
+  let queryStr = propsToQueryString({
+    start: req.start.toInt(),
+    end: req.end.toInt(),
+  });
+  for (const app of req.app_names) {
+    queryStr += `&appNames=${app}`;
+  }
+  return timeoutFetch(
+    serverpb.StatementDetailsResponse,
+    `${STATUS_PREFIX}/stmtdetails/${req.fingerprint_id}?${queryStr}`,
     null,
     timeout,
   );
