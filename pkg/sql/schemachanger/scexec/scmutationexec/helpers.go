@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,8 +93,12 @@ func mutationStateChange(
 	return nil
 }
 
-func removeMutation(
-	tbl *tabledesc.Mutable, f MutationSelector, exp descpb.DescriptorMutation_State,
+func (m *visitor) removeMutation(
+	tbl *tabledesc.Mutable,
+	f MutationSelector,
+	exp descpb.DescriptorMutation_State,
+	metadata scpb.TargetMetadata,
+	details eventpb.CommonSQLEventDetails,
 ) (descpb.DescriptorMutation, error) {
 	mut, err := FindMutation(tbl, f)
 	if err != nil {
@@ -107,6 +113,29 @@ func removeMutation(
 		)
 	}
 	tbl.Mutations = append(tbl.Mutations[:foundIdx], tbl.Mutations[foundIdx+1:]...)
+	// If this is the last remaining mutation, then we need to emit an event
+	// log entry.
+	hasMutationID := false
+	for _, mut := range tbl.Mutations {
+		if mut.MutationID == cpy.MutationID {
+			hasMutationID = true
+			break
+		}
+	}
+	if !hasMutationID {
+		err := m.s.EnqueueEvent(tbl.GetID(),
+			metadata,
+			details,
+			&eventpb.FinishSchemaChange{
+				CommonSchemaChangeEventDetails: eventpb.CommonSchemaChangeEventDetails{
+					DescriptorID: uint32(tbl.GetID()),
+					MutationID:   uint32(cpy.MutationID),
+				},
+			})
+		if err != nil {
+			return cpy, err
+		}
+	}
 	return cpy, nil
 }
 
