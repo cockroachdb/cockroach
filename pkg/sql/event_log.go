@@ -346,6 +346,28 @@ func (l schemaChangerEventLogger) LogEvent(
 		entry)
 }
 
+func (l schemaChangerEventLogger) LogEventForSchemaChange(
+	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
+) error {
+	event.CommonDetails().Timestamp = l.txn.ReadTimestamp().WallTime
+	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
+	if !ok {
+		return errors.AssertionFailedf("unknown event type: %T", event)
+	}
+	scCommon.CommonSchemaChangeDetails().InstanceID = int32(l.execCfg.NodeID.SQLInstanceID())
+	return insertEventRecords(
+		ctx, l.execCfg.InternalExecutor,
+		l.txn,
+		int32(l.execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		1,                                       /* depth: use this function as origin */
+		eventLogOptions{dst: LogEverywhere},
+		eventLogEntry{
+			targetID: int32(descID),
+			event:    event,
+		},
+	)
+}
+
 // LogEventForJobs emits a cluster event in the context of a job.
 func LogEventForJobs(
 	ctx context.Context,
