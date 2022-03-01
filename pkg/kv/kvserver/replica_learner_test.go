@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -359,15 +360,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	})
 }
 
-// TestNonVoterCatchesUpViaRaftSnapshotQueue ensures that a non-voting replica
-// in need of a snapshot will receive one via the raft snapshot queue. This is
-// also meant to test that a non-voting replica that is initialized via an
-// `INITIAL` snapshot during its addition is not ignored by the raft snapshot
-// queue for future snapshots.
-func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
+func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	skip.UnderShort(t, "this test sleeps for a few seconds")
 
 	var skipInitialSnapshot int64
@@ -388,6 +381,7 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 	// Disable the raft snapshot queue, we will manually queue a replica into it
 	// below.
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
+
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
 			ServerArgs:      base.TestServerArgs{Knobs: knobs},
@@ -407,6 +401,8 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 		return err
 	})
 
+	// Wait until we remove the lock that prevents the raft snapshot queue from
+	// sending this replica a snapshot.
 	select {
 	case <-nonVoterSnapLockRemoved:
 	case <-time.After(testutils.DefaultSucceedsSoonDuration):
@@ -421,6 +417,16 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 	require.NotNil(t, leaseholderRepl)
 
 	time.Sleep(kvserver.RaftLogQueuePendingSnapshotGracePeriod)
+
+	if drainReceivingNode {
+		// Draining nodes shouldn't reject raft snapshots, so this should have no
+		// effect on the outcome of this test.
+		const drainingServerIdx = 1
+		const drainingNodeID = drainingServerIdx + 1
+		client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
+		require.NoError(t, err)
+		drain(ctx, t, client, drainingNodeID)
+	}
 
 	testutils.SucceedsSoon(t, func() error {
 		// Manually enqueue the leaseholder replica into its store's raft snapshot
@@ -445,6 +451,64 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, g.Wait())
+}
+
+func drain(ctx context.Context, t *testing.T, client serverpb.AdminClient, drainingNodeID int) {
+	stream, err := client.Drain(ctx, &serverpb.DrainRequest{
+		NodeId:  strconv.Itoa(drainingNodeID),
+		DoDrain: true,
+	})
+	require.NoError(t, err)
+
+	// Wait until the draining node acknowledges that it's draining.
+	_, err = stream.Recv()
+	require.NoError(t, err)
+}
+
+// TestSnapshotsToDrainingNodes tests that INITIAL (i.e. rebalancing) snapshots
+// to draining receivers are rejected, but `VIA_SNAPSHOT_QUEUE` snapshots
+// aren't.
+func TestSnapshotsToDrainingNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("rebalancing snapshots", func(t *testing.T) {
+		ctx := context.Background()
+
+		// We set up a 2 node test cluster with the second node marked draining.
+		const drainingServerIdx = 1
+		const drainingNodeID = drainingServerIdx + 1
+		tc := testcluster.StartTestCluster(
+			t, 2, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+			},
+		)
+		defer tc.Stopper().Stop(ctx)
+		client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
+		require.NoError(t, err)
+		drain(ctx, t, client, drainingNodeID)
+
+		// Now, we try to add a replica to it, we expect that to fail.
+		scratchKey := tc.ScratchRange(t)
+		_, err = tc.AddVoters(scratchKey, makeReplicationTargets(drainingNodeID)...)
+		require.Regexp(t, "store is draining", err)
+	})
+
+	t.Run("raft snapshots", func(t *testing.T) {
+		testRaftSnapshotsToNonVoters(t, true /* drainReceivingNode */)
+	})
+
+}
+
+// TestNonVoterCatchesUpViaRaftSnapshotQueue ensures that a non-voting replica
+// in need of a snapshot will receive one via the raft snapshot queue. This is
+// also meant to test that a non-voting replica that is initialized via an
+// `INITIAL` snapshot during its addition is not ignored by the raft snapshot
+// queue for future snapshots.
+func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testRaftSnapshotsToNonVoters(t, false /* drainReceivingNode */)
 }
 
 func TestSplitWithLearnerOrJointConfig(t *testing.T) {
