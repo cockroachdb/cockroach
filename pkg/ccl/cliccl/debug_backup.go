@@ -182,6 +182,9 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cli.UsageAndErr(cmd, args)
 		},
+		// The debug backups command is hidden from the help
+		// to signal that it isn't yet a stable interface.
+		Hidden: true,
 	}
 
 	backupFlags := backupCmds.Flags()
