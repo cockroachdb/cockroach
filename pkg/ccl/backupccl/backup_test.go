@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -10103,4 +10105,92 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBackupNoOverwriteCheckpoint tests BACKUP to see that it no longer
+// overwrites the latest file.
+func TestBackupNoOverwriteLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	const userfile = "'userfile:///a'"
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	ctx := context.Background()
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	require.NoError(t, err)
+	findNumLatestFiles := func() (int, string) {
+		var numLatestFiles int
+		var latestFile string
+		err = store.List(ctx, latestHistoryDirectory, "", func(p string) error {
+			if numLatestFiles == 0 {
+				latestFile = p
+			}
+			numLatestFiles++
+			return nil
+		}, 0)
+		require.NoError(t, err)
+		return numLatestFiles, latestFile
+	}
+
+	query := fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	numLatest, firstLatest := findNumLatestFiles()
+	require.Equal(t, numLatest, 1)
+
+	query = fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	numLatest, secondLatest := findNumLatestFiles()
+	require.Equal(t, numLatest, 2)
+	require.NotEqual(t, firstLatest, secondLatest)
+
+	query = fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	numLatest, thirdLatest := findNumLatestFiles()
+	require.Equal(t, numLatest, 3)
+	require.NotEqual(t, firstLatest, thirdLatest)
+}
+
+// TestBackupLatestInBaseDirectory tests to see that a LATEST
+// file in the base directory can be properly read when one is not found
+// in metadata/latest. This can occur when an older version node creates
+// the backup.
+func TestBackupLatestInBaseDirectory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	const userfile = "'userfile:///a'"
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint - 1),
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+		},
+	}
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	ctx := context.Background()
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	require.NoError(t, err)
+
+	query := fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+
+	// Check that the LATEST file was written to the base directory
+	// and the metadata/latest directory.
+	r, err := store.ReadFile(ctx, latestFileName)
+	require.NoError(t, err)
+	r.Close(ctx)
+
+	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
+	sqlDB.Exec(t, query)
 }
