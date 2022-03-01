@@ -95,7 +95,7 @@ const StatementTableCell = (props: { session: ISession }) => {
         statementFingerprintID: stmt.id,
         statementNoConstants: stmt.sql_no_constants,
         implicitTxn: session.active_txn?.implicit,
-        app: session.application_name,
+        appNames: [session.application_name],
       })}
     >
       <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>

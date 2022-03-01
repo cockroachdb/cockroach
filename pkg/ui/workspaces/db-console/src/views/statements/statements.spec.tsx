@@ -17,17 +17,18 @@ import { merge } from "lodash";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
-import { appAttr, statementAttr } from "src/util/constants";
+import { appAttr, appNamesAttr, statementAttr } from "src/util/constants";
 import {
   selectStatements,
   selectApps,
   selectTotalFingerprints,
   selectLastReset,
 } from "./statementsPage";
-import { selectStatement } from "./statementDetails";
+import { selectStatementDetails } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { util } from "@cockroachlabs/cluster-ui";
+import { generateStmtDetailsToID } from "src/redux/apiReducers";
 
 type CollectedStatementStatistics = util.CollectedStatementStatistics;
 type ExecStats = util.ExecStats;
@@ -265,7 +266,7 @@ describe("selectStatement", () => {
     const state = makeInvalidState();
     const props = makeEmptyRouteProps();
 
-    const result = selectStatement(state, props);
+    const result = selectStatementDetails(state, props);
 
     assert.isNull(result);
   });
@@ -278,103 +279,15 @@ describe("selectStatement", () => {
 
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
-    const result = selectStatement(state, props);
+    const result = selectStatementDetails(state, props).statement;
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
+    assert.equal(result.key_data.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
-  });
-
-  it("coalesces statements from different apps", () => {
-    const stmtA = makeFingerprint(1);
-    const stmtB = makeFingerprint(1, "foobar");
-    const stmtC = makeFingerprint(1, "another");
-    const sumCount = stmtA.stats.count
-      .add(stmtB.stats.count.add(stmtC.stats.count))
-      .toNumber();
-    const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const stmtAFingerprintID = stmtA.id.toString();
-    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
-    const result = selectStatement(state, props);
-
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), sumCount);
-    assert.deepEqual(result.app, [
-      stmtA.key.key_data.app,
-      stmtB.key.key_data.app,
-      stmtC.key.key_data.app,
-    ]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
-  });
-
-  it("coalesces statements with differing node ids", () => {
-    const stmtA = makeFingerprint(1, "", 1);
-    const stmtB = makeFingerprint(1, "", 2);
-    const stmtC = makeFingerprint(1, "", 3);
-    const sumCount = stmtA.stats.count
-      .add(stmtB.stats.count)
-      .add(stmtC.stats.count)
-      .toNumber();
-    const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const stmtAFingerprintID = stmtA.id.toString();
-    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
-    const result = selectStatement(state, props);
-
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), sumCount);
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.node_id, [1, 2, 3]);
-  });
-
-  it("coalesces statements with differing distSQL, vec and failed values", () => {
-    const stmtA = makeFingerprint(1, "", 1, false, false, false);
-    const stmtB = makeFingerprint(1, "", 1, false, true, true);
-    const stmtC = makeFingerprint(1, "", 1, true, false, false);
-    const stmtD = makeFingerprint(1, "", 1, true, true, true);
-    const stmtE = makeFingerprint(1, "", 1, false, false, false);
-    const stmtF = makeFingerprint(1, "", 1, false, true, true);
-    const stmtG = makeFingerprint(1, "", 1, true, false, false);
-    const stmtH = makeFingerprint(1, "", 1, true, true, true);
-    const sumCount = stmtA.stats.count
-      .add(stmtB.stats.count)
-      .add(stmtC.stats.count)
-      .add(stmtD.stats.count)
-      .add(stmtE.stats.count)
-      .add(stmtF.stats.count)
-      .add(stmtG.stats.count)
-      .add(stmtH.stats.count)
-      .toNumber();
-    const state = makeStateWithStatements([
-      stmtA,
-      stmtB,
-      stmtC,
-      stmtD,
-      stmtE,
-      stmtF,
-      stmtG,
-      stmtH,
-    ]);
-    const stmtAFingerprintID = stmtA.id.toString();
-    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
-    const result = selectStatement(state, props);
-
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), sumCount);
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.vec, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.failed, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    assert.deepEqual(result.app_names, [stmtA.key.key_data.app]);
+    assert.deepEqual(result.key_data.distSQL, false);
+    assert.deepEqual(result.key_data.vec, false);
+    assert.deepEqual(result.key_data.failed, false);
+    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
   });
 
   it("filters out statements when app param is set", () => {
@@ -387,15 +300,15 @@ describe("selectStatement", () => {
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(stmtAFingerprintID, "foo");
 
-    const result = selectStatement(state, props);
+    const result = selectStatementDetails(state, props).statement;
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
+    assert.equal(result.key_data.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    assert.deepEqual(result.app_names, [stmtA.key.key_data.app]);
+    assert.deepEqual(result.key_data.distSQL, false);
+    assert.deepEqual(result.key_data.vec, false);
+    assert.deepEqual(result.key_data.failed, false);
+    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
   });
 
   it('filters out statements with app set when app param is "(unset)"', () => {
@@ -411,15 +324,15 @@ describe("selectStatement", () => {
       "(unset)",
     );
 
-    const result = selectStatement(state, props);
+    const result = selectStatementDetails(state, props).statement;
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
+    assert.equal(result.key_data.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    assert.deepEqual(result.app_names, [stmtA.key.key_data.app]);
+    assert.deepEqual(result.key_data.distSQL, false);
+    assert.deepEqual(result.key_data.vec, false);
+    assert.deepEqual(result.key_data.failed, false);
+    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
   });
 
   it('filters out statements with app set when app param is "$ internal"', () => {
@@ -435,16 +348,16 @@ describe("selectStatement", () => {
       "$ internal",
     );
 
-    const result = selectStatement(state, props);
+    const result = selectStatementDetails(state, props)?.statement;
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
+    assert.equal(result.key_data.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     // Statements with internal app prefix should have "$ internal" as app name
-    assert.deepEqual(result.app, ["$ internal"]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    assert.deepEqual(result.app_names, ["$ internal_stmnt_app"]);
+    assert.deepEqual(result.key_data.distSQL, false);
+    assert.deepEqual(result.key_data.vec, false);
+    assert.deepEqual(result.key_data.failed, false);
+    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
   });
 });
 
@@ -534,6 +447,7 @@ function makeInvalidState(): AdminUIState {
         inFlight: true,
         valid: false,
       },
+      statementDetails: {},
       statementDiagnosticsReports: {
         inFlight: true,
         valid: false,
@@ -547,7 +461,7 @@ function makeStateWithStatementsAndLastReset(
   lastReset: number,
 ) {
   const store = createAdminUIStore(H.createMemoryHistory());
-  return merge(store.getState(), {
+  const state = merge(store.getState(), {
     cachedData: {
       statements: {
         data: protos.cockroach.server.serverpb.StatementsResponse.fromObject({
@@ -561,12 +475,37 @@ function makeStateWithStatementsAndLastReset(
         inFlight: false,
         valid: true,
       },
+      statementDetails: {},
       statementDiagnosticsReports: {
         inFlight: true,
         valid: false,
       },
     },
   });
+
+  for (const stmt of statements) {
+    state.cachedData.statementDetails[
+      generateStmtDetailsToID(stmt.id.toString(), stmt.key.key_data.app)
+    ] = {
+      data: protos.cockroach.server.serverpb.StatementDetailsResponse.fromObject(
+        {
+          statement: {
+            key_data: stmt.key.key_data,
+            formatted_query: stmt.key.key_data.query,
+            app_names: [stmt.key.key_data.app],
+            stats: stmt.stats,
+          },
+          statements_per_aggregated_ts: [],
+          statements_per_plan_hash: [],
+          internal_app_name_prefix: "$ internal",
+        },
+      ),
+      inFlight: false,
+      valid: true,
+    };
+  }
+
+  return state;
 }
 
 function makeStateWithStatements(statements: CollectedStatementStatistics[]) {
@@ -633,8 +572,23 @@ function makeRoutePropsWithStatement(stmt: string) {
 }
 
 function makeRoutePropsWithStatementAndApp(stmt: string, app: string) {
-  return makeRoutePropsWithParams({
+  const params = {
     [appAttr]: app,
     [statementAttr]: stmt,
-  });
+  };
+  const searchParams = {
+    [appNamesAttr]: app,
+  };
+  const history = H.createHashHistory();
+  history.location.search = new URLSearchParams(searchParams).toString();
+  return {
+    location: history.location,
+    history,
+    match: {
+      url: "",
+      path: history.location.pathname,
+      isExact: false,
+      params,
+    },
+  };
 }

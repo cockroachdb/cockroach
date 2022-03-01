@@ -39,7 +39,9 @@ const cx = classNames.bind(styles);
  * getValidErrorsList eliminates any null Error values, and returns either
  * null or a non-empty list of Errors.
  */
-function getValidErrorsList(errors?: Error | Error[] | null): Error[] | null {
+export function getValidErrorsList(
+  errors?: Error | Error[] | null,
+): Error[] | null {
   if (errors) {
     if (!Array.isArray(errors)) {
       // Put single Error into a list to simplify logic in main Loading component.
