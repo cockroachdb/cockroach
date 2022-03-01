@@ -467,7 +467,7 @@ func getTotalStatementDetails(
 		return statement, serverError(ctx, err)
 	}
 	if len(row) == 0 {
-		return statement, serverError(ctx, errors.New("statement not found"))
+		return statement, nil
 	}
 	if row.Len() != expectedNumDatums {
 		return statement, serverError(ctx, errors.Newf("expected %d columns, received %d", expectedNumDatums))
