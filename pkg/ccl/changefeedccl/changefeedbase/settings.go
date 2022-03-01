@@ -49,7 +49,7 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
 	1<<29, // 512MiB
-)
+).WithPublic()
 
 // SlowSpanLogThreshold controls when we will log slow spans.
 var SlowSpanLogThreshold = settings.RegisterDurationSetting(
@@ -88,7 +88,7 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
-)
+).WithPublic()
 
 // FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
 // to the checkpoint record.
@@ -119,7 +119,7 @@ var ScanRequestLimit = settings.RegisterIntSetting(
 	"changefeed.backfill.concurrent_scan_requests",
 	"number of concurrent scan requests per node issued during a backfill",
 	0,
-)
+).WithPublic()
 
 // ScanRequestSize is the target size of the scan request response.
 //
@@ -181,7 +181,7 @@ var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 		"advances, as long as the rate of checkpointing keeps up with the rate of frontier changes",
 	0,
 	settings.NonNegativeDuration,
-)
+).WithPublic()
 
 // EventMemoryMultiplier is the multiplier for the amount of memory needed to process an event.
 //
@@ -209,7 +209,7 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	"controls how often the changefeed forwards its protected timestamp to the resolved timestamp",
 	10*time.Minute,
 	settings.PositiveDuration,
-)
+).WithPublic()
 
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
