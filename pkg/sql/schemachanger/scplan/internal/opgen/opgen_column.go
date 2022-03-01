@@ -41,10 +41,11 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Column) scop.Op {
+				emit(func(this *scpb.Column, md *targetsWithElementMap) scop.Op {
 					return &scop.MakeColumnPublic{
-						TableID:  this.TableID,
-						ColumnID: this.ColumnID,
+						EventBase: newLogEventBase(this, md),
+						TableID:   this.TableID,
+						ColumnID:  this.ColumnID,
 					}
 				}),
 			),
@@ -74,10 +75,11 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Column) scop.Op {
+				emit(func(this *scpb.Column, md *targetsWithElementMap) scop.Op {
 					return &scop.MakeColumnAbsent{
-						TableID:  this.TableID,
-						ColumnID: this.ColumnID,
+						EventBase: newLogEventBase(this, md),
+						TableID:   this.TableID,
+						ColumnID:  this.ColumnID,
 					}
 				}),
 			),

@@ -141,9 +141,17 @@ func logEvents(ctx context.Context, mvs *mutationVisitorState, el EventLogger) e
 		entries := eventLogEntriesForStatement(mvs.eventsByStatement[statementID])
 		for _, e := range entries {
 			// TODO(postamar): batch these
-			if err := el.LogEvent(ctx, e.id, e.details, e.event); err != nil {
-				return err
+			switch e.event.(type) {
+			case eventpb.EventWithCommonSQLPayload:
+				if err := el.LogEvent(ctx, e.id, e.details, e.event); err != nil {
+					return err
+				}
+			case eventpb.EventWithCommonSchemaChangePayload:
+				if err := el.LogEventForSchemaChange(ctx, e.id, e.event); err != nil {
+					return err
+				}
 			}
+
 		}
 	}
 	return nil

@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func (m *visitor) MakeAddedIndexDeleteOnly(
@@ -127,10 +129,18 @@ func (m *visitor) MakeAddedPrimaryIndexPublic(
 		return err
 	}
 	indexDesc := index.IndexDescDeepCopy()
-	if _, err := removeMutation(
+	if _, err := m.removeMutation(
 		tbl,
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		op.TargetMetadata,
+		eventpb.CommonSQLEventDetails{
+			DescriptorID:    uint32(tbl.GetID()),
+			Statement:       redact.RedactableString(op.Statement),
+			Tag:             op.StatementTag,
+			ApplicationName: op.Authorization.AppName,
+			User:            op.Authorization.UserName,
+		},
 	); err != nil {
 		return err
 	}
@@ -233,10 +243,18 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 	if err != nil {
 		return err
 	}
-	_, err = removeMutation(
+	_, err = m.removeMutation(
 		tbl,
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
+		op.TargetMetadata,
+		eventpb.CommonSQLEventDetails{
+			DescriptorID:    uint32(tbl.GetID()),
+			Statement:       redact.RedactableString(op.Statement),
+			Tag:             op.StatementTag,
+			ApplicationName: op.Authorization.AppName,
+			User:            op.Authorization.UserName,
+		},
 	)
 	return err
 }

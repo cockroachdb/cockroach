@@ -66,12 +66,17 @@ type Catalog interface {
 
 // EventLogger encapsulates the operations for emitting event log entries.
 type EventLogger interface {
-	// LogEvent writes to the eventlog.
+	// LogEvent writes to the event log.
 	LogEvent(
 		ctx context.Context,
 		descID descpb.ID,
 		details eventpb.CommonSQLEventDetails,
 		event eventpb.EventPayload,
+	) error
+
+	// LogEventForSchemaChange write a schema change event entry into the event log.
+	LogEventForSchemaChange(
+		ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 	) error
 }
 

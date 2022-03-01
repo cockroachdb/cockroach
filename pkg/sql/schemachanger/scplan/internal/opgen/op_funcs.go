@@ -21,6 +21,22 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+func newLogEventBase(e scpb.Element, md *targetsWithElementMap) scop.EventBase {
+	idx, ok := md.elementToTarget[e]
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"could not find element %s in target state", screl.ElementString(e),
+		))
+	}
+	t := md.Targets[idx]
+	return scop.EventBase{
+		TargetMetadata: *protoutil.Clone(&t.Metadata).(*scpb.TargetMetadata),
+		Authorization:  *protoutil.Clone(&md.Authorization).(*scpb.Authorization),
+		Statement:      md.Statements[t.Metadata.StatementID].RedactedStatement,
+		StatementTag:   md.Statements[t.Metadata.StatementID].StatementTag,
+	}
+}
+
 func newLogEventOp(e scpb.Element, md *targetsWithElementMap) *scop.LogEvent {
 	idx, ok := md.elementToTarget[e]
 	if !ok {
@@ -30,12 +46,9 @@ func newLogEventOp(e scpb.Element, md *targetsWithElementMap) *scop.LogEvent {
 	}
 	t := md.Targets[idx]
 	return &scop.LogEvent{
-		TargetMetadata: *protoutil.Clone(&t.Metadata).(*scpb.TargetMetadata),
-		Authorization:  *protoutil.Clone(&md.Authorization).(*scpb.Authorization),
-		Statement:      md.Statements[t.Metadata.StatementID].RedactedStatement,
-		StatementTag:   md.Statements[t.Metadata.StatementID].StatementTag,
-		Element:        *protoutil.Clone(&t.ElementProto).(*scpb.ElementProto),
-		TargetStatus:   t.TargetStatus,
+		EventBase:    newLogEventBase(e, md),
+		Element:      *protoutil.Clone(&t.ElementProto).(*scpb.ElementProto),
+		TargetStatus: t.TargetStatus,
 	}
 }
 

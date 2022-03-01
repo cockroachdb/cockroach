@@ -21,6 +21,15 @@ import (
 
 type mutationOp struct{ baseOp }
 
+// EventBase basic fields needed for anything event log related
+type EventBase struct {
+	TargetMetadata scpb.TargetMetadata
+	Authorization  scpb.Authorization
+	Statement      string
+	StatementTag   string
+	Element        scpb.ElementProto
+}
+
 // Make sure baseOp is used for linter.
 var _ = mutationOp{baseOp: baseOp{}}
 
@@ -71,6 +80,7 @@ type MakeAddedSecondaryIndexPublic struct {
 // public.
 type MakeAddedPrimaryIndexPublic struct {
 	mutationOp
+	EventBase
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -160,6 +170,7 @@ type RemoveDroppedIndexPartialPredicate struct {
 // table.
 type MakeIndexAbsent struct {
 	mutationOp
+	EventBase
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -179,6 +190,7 @@ type SetAddedColumnType struct {
 // MakeColumnPublic moves a new column from its mutation to public.
 type MakeColumnPublic struct {
 	mutationOp
+	EventBase
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -211,6 +223,7 @@ type RemoveDroppedColumnType struct {
 // table.
 type MakeColumnAbsent struct {
 	mutationOp
+	EventBase
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -269,12 +282,9 @@ type AddIndexPartitionInfo struct {
 // LogEvent logs an event for a given descriptor.
 type LogEvent struct {
 	mutationOp
-	TargetMetadata scpb.TargetMetadata
-	Authorization  scpb.Authorization
-	Statement      string
-	StatementTag   string
-	Element        scpb.ElementProto
-	TargetStatus   scpb.Status
+	EventBase
+	Element      scpb.ElementProto
+	TargetStatus scpb.Status
 }
 
 // AddColumnFamily adds a new column family to the table.
