@@ -515,7 +515,7 @@ func checkPrivilegesForBackup(
 			"only users with the admin role are allowed to perform full cluster backups")
 	}
 	// Do not allow tenant backups.
-	if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
+	if backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet() {
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			"only users with the admin role can perform BACKUP TENANT")
@@ -782,11 +782,11 @@ func backupPlanHook(
 			}
 		}
 
-		if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
+		if backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet() {
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
-			initialDetails.SpecificTenantIds = []roachpb.TenantID{backupStmt.Targets.Tenant}
+			initialDetails.SpecificTenantIds = []roachpb.TenantID{backupStmt.Targets.TenantID.TenantID}
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()

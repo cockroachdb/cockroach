@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -270,7 +269,7 @@ func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBacku
 	}
 
 	// Return true if the backup has table targets or is backing up a tenant.
-	return eval.Targets.Tables != nil || eval.Targets.Tenant != roachpb.TenantID{}
+	return eval.Targets.Tables != nil || eval.Targets.TenantID.IsSet()
 }
 
 // doCreateBackupSchedule creates requested schedule (or schedules).
