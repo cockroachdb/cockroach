@@ -224,6 +224,110 @@ func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
 	require.Len(t, desc.Replicas().NonVoterDescriptors(), 0)
 }
 
+// TestAddReplicaWithReceiverThrottling tests that outgoing snapshots on the
+// delegated sender will throttle if incoming snapshots on the recipients are
+// blocked.
+func TestAddReplicaWithReceiverThrottling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// blockIncomingSnapshots will block receiving snapshots.
+	blockIncomingSnapshots := make(chan struct{})
+	waitForRebalanceToBlockCh := make(chan struct{})
+	activateBlocking := int64(1)
+	var count int64
+	knobs, ltk := makeReplicationTestKnobs()
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
+		if atomic.LoadInt64(&activateBlocking) > 0 {
+			// Signal waitForRebalanceToBlockCh to indicate the testing knob was hit.
+			close(waitForRebalanceToBlockCh)
+			blockIncomingSnapshots <- struct{}{}
+		}
+		return nil
+	}
+	ltk.storeKnobs.ThrottleEmptySnapshots = true
+	ltk.storeKnobs.BeforeSendSnapshotThrottle = func() {
+		atomic.AddInt64(&count, 1)
+	}
+	ltk.storeKnobs.AfterSendSnapshotThrottle = func() {
+		atomic.AddInt64(&count, -1)
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+
+	defer tc.Stopper().Stop(ctx)
+	scratch := tc.ScratchRange(t)
+	replicationChange := make(chan error, 2)
+	g := ctxgroup.WithContext(ctx)
+
+	// Add a non-voter to the range and expect it to block on blockIncomingSnapshots.
+	g.GoCtx(
+		func(ctx context.Context) error {
+			desc, err := tc.LookupRange(scratch)
+			if err != nil {
+				return err
+			}
+			_, err = tc.Servers[0].DB().AdminChangeReplicas(ctx, scratch, desc,
+				roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, tc.Target(2)),
+			)
+			replicationChange <- err
+			return err
+		},
+	)
+
+	select {
+	case <-waitForRebalanceToBlockCh:
+		// First replication change has hit the testing knob, continue with adding
+		// second voter.
+	case <-replicationChange:
+		t.Fatal("did not expect the replication change to complete")
+	case <-time.After(15 * time.Second):
+		t.Fatal("timed out waiting for rebalance to block")
+	}
+
+	g.GoCtx(
+		func(ctx context.Context) error {
+			desc, err := tc.LookupRange(scratch)
+			if err != nil {
+				return err
+			}
+			_, err = tc.Servers[0].DB().AdminChangeReplicas(
+				ctx, scratch, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+			)
+			replicationChange <- err
+			return err
+		},
+	)
+
+	require.Eventually(
+		t, func() bool {
+			// Check that there is 1 snapshot waiting on the snapshot send semaphore,
+			// as the other snapshot should currently be throttled in the semaphore.
+			return atomic.LoadInt64(&count) == int64(1)
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond,
+	)
+	// Expect that the replication change is blocked on the channel, and the
+	// snapshot is still throttled on the send snapshot semaphore.
+	select {
+	case <-time.After(1 * time.Second):
+		require.Equalf(t, atomic.LoadInt64(&count), int64(1), "expected snapshot to still be blocked.")
+	case <-replicationChange:
+		t.Fatal("did not expect the replication change to complete")
+	}
+
+	// Disable the testing knob for blocking recipient snapshots to finish test.
+	atomic.StoreInt64(&activateBlocking, 0)
+	<-blockIncomingSnapshots
+
+	// Wait for the goroutines to finish.
+	require.NoError(t, g.Wait())
+}
+
 func TestLearnerRaftConfState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

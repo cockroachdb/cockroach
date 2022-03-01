@@ -13,11 +13,13 @@ package cockroach.kv.kvserver.kvserverpb;
 option go_package = "kvserverpb";
 
 import "roachpb/errors.proto";
+import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "etcd/raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
 
 // RaftHeartbeat is a request that contains the barebones information for a
 // raftpb.MsgHeartbeat raftpb.Message. RaftHeartbeats are coalesced and sent
@@ -212,6 +214,42 @@ message SnapshotResponse {
   Status status = 1;
   string message = 2;
   reserved 3;
+}
+
+// DelegateSnapshotRequest is the request used to delegate send snapshot requests.
+message DelegateSnapshotRequest {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // The replica that delegates the snapshot request, in most cases the leader/leaseholder.
+  // The snapshot request should originate from the coordinator.
+  roachpb.ReplicaDescriptor coordinator_replica = 2 [(gogoproto.nullable) = false];
+
+  // The replica receiving the snapshot.
+  roachpb.ReplicaDescriptor recipient_replica = 3 [(gogoproto.nullable) = false];
+
+  // The replica selected to act as the snapshot sender.
+  roachpb.ReplicaDescriptor delegated_sender = 4 [(gogoproto.nullable) = false];
+
+  // The priority of the snapshot.
+  SnapshotRequest.Priority priority = 5;
+
+  // The type of the snapshot.
+  SnapshotRequest.Type type = 6;
+
+  // The Raft term of the coordinator (in most cases the leaseholder) replica.
+  // The term is used during snapshot receiving to reject messages from an older term.
+  uint64 term = 7;
+
+  // The truncated state of the Raft log on the coordinator replica.
+  roachpb.RaftTruncatedState truncated_state = 8;
+}
+
+message DelegateSnapshotResponse {
+  SnapshotResponse snapResponse = 1;
+  // collected_spans stores trace spans recorded during the execution of this
+  // request.
+  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 2 [(gogoproto.nullable) = false];
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
