@@ -1,0 +1,14 @@
+# LogicTest: local-v1.1@v1.0-noupgrade
+
+query T
+SELECT crdb_internal.active_version()
+----
+{"internal": 0, "major": 1, "minor": 0, "patch": 0}
+
+statement ok
+SET CLUSTER SETTING version = '1.1'
+
+query T
+SELECT crdb_internal.active_version()
+----
+{"internal": 0, "major": 1, "minor": 1, "patch": 0}
