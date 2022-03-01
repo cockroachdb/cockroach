@@ -201,6 +201,11 @@ message SnapshotRequest {
   reserved 3;
 }
 
+message DelegatedSnapshotRequest {
+  SnapshotRequest snapRequest = 1;
+  roachpb.ReplicaDescriptor delegated_sender = 2 [(gogoproto.nullable) = false];
+}
+
 message SnapshotResponse {
   enum Status {
     UNKNOWN = 0;

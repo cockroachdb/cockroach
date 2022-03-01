@@ -104,6 +104,13 @@ type SnapshotResponseStream interface {
 	Recv() (*kvserverpb.SnapshotRequest, error)
 }
 
+// DelegateSnapshotResponseStream is the subset of the
+// MultiRaft_RaftSnapshotServer interface that is needed for sending delegated responses.
+type DelegateSnapshotResponseStream interface {
+	Send(request *kvserverpb.SnapshotResponse) error
+	Recv() (*kvserverpb.DelegatedSnapshotRequest, error)
+}
+
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
@@ -112,7 +119,8 @@ type RaftMessageHandler interface {
 	// If an error is encountered during asynchronous processing, it will be
 	// streamed back to the sender of the message as a RaftMessageResponse.
 	HandleRaftRequest(ctx context.Context, req *kvserverpb.RaftMessageRequest,
-		respStream RaftMessageResponseStream) *roachpb.Error
+		respStream RaftMessageResponseStream,
+	) *roachpb.Error
 
 	// HandleRaftResponse is called for each raft response. Note that
 	// not all messages receive a response. An error is returned if and only if
@@ -122,6 +130,13 @@ type RaftMessageHandler interface {
 	// HandleSnapshot is called for each new incoming snapshot stream, after
 	// parsing the initial SnapshotRequest_Header on the stream.
 	HandleSnapshot(ctx context.Context, header *kvserverpb.SnapshotRequest_Header, respStream SnapshotResponseStream) error
+
+	// SendDelegatedSnapshot is called for each incoming delegated snapshot
+	// request.
+	SendDelegatedSnapshot(
+		ctx context.Context, req *kvserverpb.DelegatedSnapshotRequest,
+		respStream DelegateSnapshotResponseStream,
+	) error
 }
 
 type raftTransportStats struct {
@@ -403,6 +418,78 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 		return err
 	case <-t.stopper.ShouldQuiesce():
 		return nil
+	}
+}
+
+// DelegateRaftSnapshot handles incoming delegated snapshot requests and parses
+// the request to pass off to the new sender store.
+func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
+	errCh := make(chan error, 1)
+	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	defer cancel()
+	if err := t.stopper.RunAsyncTaskEx(
+		taskCtx,
+		stop.TaskOpts{
+			TaskName: "storage.RaftTransport: processing snapshot",
+			SpanOpt:  stop.ChildSpan,
+		}, func(ctx context.Context) {
+			errCh <- func() error {
+				req, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				// check to ensure the header is valid.
+				if req.SnapRequest.Header == nil {
+					return stream.Send(
+						&kvserverpb.SnapshotResponse{
+							Status:  kvserverpb.SnapshotResponse_ERROR,
+							Message: "client error: no header in first snapshot request message",
+						},
+					)
+				}
+				// get the handler of the new sender store.
+				handler, ok := t.getHandler(req.DelegatedSender.StoreID)
+				if !ok {
+					log.Warningf(
+						ctx, "unable to accept Raft message from leaseholder: %+v: no handler registered for"+
+							" new sender store"+
+							" %+v",
+						req.SnapRequest.Header.RaftMessageRequest.FromReplica.StoreID,
+						req.DelegatedSender.StoreID,
+					)
+					return roachpb.NewStoreNotFoundError(req.DelegatedSender.StoreID)
+				}
+				// acknowledge to the leaseholder that the request has been accepted.
+				if err := stream.Send(&kvserverpb.SnapshotResponse{Status: kvserverpb.SnapshotResponse_ACCEPTED}); err != nil {
+					return err
+				}
+				// pass off the request to the new sender store.
+				err = handler.SendDelegatedSnapshot(ctx, req, stream)
+				if err != nil {
+					log.Infof(ctx, "error: %v", err)
+					return stream.Send(
+						&kvserverpb.SnapshotResponse{
+							Status:  kvserverpb.SnapshotResponse_ERROR,
+							Message: err.Error(),
+						},
+					)
+				}
+				return stream.Send(
+					&kvserverpb.SnapshotResponse{
+						Status:  kvserverpb.SnapshotResponse_APPLIED,
+						Message: "accepted!",
+					},
+				)
+			}()
+		},
+	); err != nil {
+		return err
+	}
+	select {
+	case <-t.stopper.ShouldQuiesce():
+		return nil
+	case err := <-errCh:
+		return err
 	}
 }
 
@@ -705,7 +792,33 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
+
 	return sendSnapshot(
 		ctx, t.st, stream, storePool, header, snap, newBatch, sent,
 	)
+}
+
+// SendDelegatedSnapshot creates a rpc stream between the leaseholder and the
+// new sender for delegated snapshot requests.
+func (t *RaftTransport) SendDelegatedSnapshot(
+	ctx context.Context, storePool *StorePool, req *kvserverpb.DelegatedSnapshotRequest,
+) error {
+	nodeID := req.DelegatedSender.NodeID
+	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	if err != nil {
+		return err
+	}
+	client := NewMultiRaftClient(conn)
+
+	// creates rpc stream between leaseholder and the new sender.
+	stream, err := client.DelegateRaftSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+		}
+	}()
+	return sendDelegatedSnapshot(ctx, stream, storePool, req)
 }

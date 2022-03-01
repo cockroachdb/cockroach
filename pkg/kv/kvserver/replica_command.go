@@ -1788,7 +1788,11 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
+
+		if err := r.sendDelegate(
+			ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL,
+			priority,
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -2415,6 +2419,77 @@ func recordRangeEventsInLog(
 	return nil
 }
 
+// getSenderReplica returns a replica descriptor for a voter replica to act as
+// the new sender.
+func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescriptor, error) {
+	return r.GetReplicaDescriptor()
+}
+
+func (r *Replica) sendDelegate(
+	ctx context.Context,
+	recipient roachpb.ReplicaDescriptor,
+	snapType kvserverpb.SnapshotRequest_Type,
+	priority kvserverpb.SnapshotRequest_Priority,
+) (retErr error) {
+	defer func() {
+		// Report the snapshot status to Raft, which expects us to do this once we
+		// finish sending the snapshot.
+		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
+	}()
+	// choose the new sender replica
+	sender, err := r.getSenderReplica(ctx)
+	if err != nil {
+		return err
+	}
+	desc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return err
+	}
+	status := r.RaftStatus()
+	if status == nil {
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+	}
+
+	// create new snapshot request header with only metadata
+	header := &kvserverpb.SnapshotRequest_Header{
+		DeprecatedUnreplicatedTruncatedState: true,
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
+			RangeID:     r.RangeID,
+			FromReplica: desc,
+			ToReplica:   recipient,
+			Message: raftpb.Message{
+				Type: raftpb.MsgSnap,
+				To:   uint64(recipient.ReplicaID),
+				From: uint64(r.replicaID),
+			},
+		},
+		RangeSize: r.GetMVCCStats().Total(),
+		Priority:  priority,
+		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
+		Type:      snapType,
+	}
+	snapshotRequest := &kvserverpb.SnapshotRequest{Header: header}
+	delegatedRequest := &kvserverpb.DelegatedSnapshotRequest{
+		SnapRequest: snapshotRequest, DelegatedSender: sender,
+	}
+	err = contextutil.RunWithTimeout(
+		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+			return r.store.cfg.Transport.SendDelegatedSnapshot(
+				ctx,
+				r.store.allocator.storePool,
+				delegatedRequest,
+			)
+		},
+	)
+
+	if err != nil {
+		return errors.Mark(err, errMarkSnapshotError)
+	}
+	return nil
+}
+
 // sendSnapshot sends a snapshot of the replica state to the specified replica.
 // Currently only invoked from replicateQueue and raftSnapshotQueue. Be careful
 // about adding additional calls as generating a snapshot is moderately
@@ -2529,15 +2604,17 @@ func recordRangeEventsInLog(
 func (r *Replica) sendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
-	snapType kvserverpb.SnapshotRequest_Type,
-	priority kvserverpb.SnapshotRequest_Priority,
+	req *kvserverpb.DelegatedSnapshotRequest,
 ) (retErr error) {
+	// TODO(amy): Do I need to report Raft Status here? I left it to the leaseholder since it should
+	// be propagated up.
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
 		// finish sending the snapshot.
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
+	snapType := req.SnapRequest.Header.Type
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
 		err = errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
@@ -2552,16 +2629,12 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Wrapf(errMarkSnapshotError,
+		return errors.Wrapf(
+			errMarkSnapshotError,
 			"attempting to send snapshot that does not contain the recipient as a replica; "+
-				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
+				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc,
+		)
 	}
-
-	sender, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return errors.Wrapf(err, "%s: change replicas failed", r)
-	}
-
 	status := r.RaftStatus()
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
@@ -2583,44 +2656,28 @@ func (r *Replica) sendSnapshot(
 	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
+	req.SnapRequest.Header.State = snap.State
+	req.SnapRequest.Header.RaftMessageRequest.Message.Snapshot = snap.RaftSnap
 
-	req := kvserverpb.SnapshotRequest_Header{
-		State:                                snap.State,
-		DeprecatedUnreplicatedTruncatedState: true,
-		RaftMessageRequest: kvserverpb.RaftMessageRequest{
-			RangeID:     r.RangeID,
-			FromReplica: sender,
-			ToReplica:   recipient,
-			Message: raftpb.Message{
-				Type:     raftpb.MsgSnap,
-				To:       uint64(recipient.ReplicaID),
-				From:     uint64(sender.ReplicaID),
-				Term:     status.Term,
-				Snapshot: snap.RaftSnap,
-			},
-		},
-		RangeSize: r.GetMVCCStats().Total(),
-		Priority:  priority,
-		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
-		Type:      snapType,
-	}
 	newBatchFn := func() storage.Batch {
 		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+
 	err = contextutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
 				r.store.allocator.storePool,
-				req,
+				*req.SnapRequest.Header,
 				snap,
 				newBatchFn,
 				sent,
 			)
-		})
+		},
+	)
 	if err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
 			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())

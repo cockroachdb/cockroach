@@ -764,6 +764,8 @@ type Store struct {
 
 	// Semaphore to limit concurrent non-empty snapshot application.
 	snapshotApplySem chan struct{}
+	// Semaphore to limit concurrent non-empty snapshot sending.
+	snapshotSendSem chan struct{}
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1198,7 +1200,7 @@ func NewStore(
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-
+	s.snapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {

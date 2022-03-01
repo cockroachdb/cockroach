@@ -3452,6 +3452,14 @@ func (errorChannelTestHandler) HandleSnapshot(
 	panic("unimplemented")
 }
 
+func (errorChannelTestHandler) SendDelegatedSnapshot(
+	_ context.Context,
+	req *kvserverpb.DelegatedSnapshotRequest,
+	respStream kvserver.DelegateSnapshotResponseStream,
+) error {
+	panic("unimplemented")
+}
+
 // This test simulates a scenario where one replica has been removed from the
 // range's Raft group but it is unaware of the fact. We check that this replica
 // coming back from the dead cannot cause elections.
@@ -3460,10 +3468,12 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 4,
+	tc := testcluster.StartTestCluster(
+		t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-		})
+		},
+	)
 	defer tc.Stopper().Stop(ctx)
 
 	// Move the first range from the first node to the other three.

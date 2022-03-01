@@ -61,6 +61,20 @@ type outgoingSnapshotStream interface {
 	Recv() (*kvserverpb.SnapshotResponse, error)
 }
 
+// incomingSnapshotStream is the minimal interface on a GRPC stream required
+// to receive a snapshot over the network.
+type incomingDelegatedStream interface {
+	Send(*kvserverpb.SnapshotResponse) error
+	Recv() (*kvserverpb.DelegatedSnapshotRequest, error)
+}
+
+// outgoingSnapshotStream is the minimal interface on a GRPC stream required
+// to send a snapshot over the network.
+type outgoingDelegatedStream interface {
+	Send(*kvserverpb.DelegatedSnapshotRequest) error
+	Recv() (*kvserverpb.SnapshotResponse, error)
+}
+
 // snapshotStrategy is an approach to sending and receiving Range snapshots.
 // Each implementation corresponds to a SnapshotRequest_Strategy, and it is
 // expected that the implementation that matches the Strategy specified in the
@@ -1101,11 +1115,13 @@ func sendSnapshot(
 	// (only a limited number of snapshots are allowed concurrently) or flat-out
 	// reject the snapshot. After the initial message exchange, we'll go and send
 	// the actual snapshot (if not rejected).
+
 	resp, err := stream.Recv()
 	if err != nil {
 		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
 		return err
 	}
+
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
@@ -1198,7 +1214,79 @@ func sendSnapshot(
 	case kvserverpb.SnapshotResponse_APPLIED:
 		return nil
 	default:
-		return errors.Errorf("%s: server sent an invalid status during finalization: %s",
-			to, resp.Status)
+		return errors.Errorf(
+			"%s: server sent an invalid status during finalization: %s",
+			to, resp.Status,
+		)
 	}
+}
+
+// sendDelegatedSnapshot sends an outgoing delegated snapshot request via a
+// pre-opened GRPC stream. It sends the delegated snapshot request to the new
+// sender and waits for confirmation if the snapshot has been applied.
+func sendDelegatedSnapshot(
+	ctx context.Context,
+	stream outgoingDelegatedStream,
+	storePool SnapshotStorePool,
+	req *kvserverpb.DelegatedSnapshotRequest,
+) error {
+
+	to := req.SnapRequest.Header.RaftMessageRequest.ToReplica
+	delegatedSender := req.DelegatedSender
+	if err := stream.Send(req); err != nil {
+		return err
+	}
+	// Wait for response to see if the receiver accepted or rejected
+	resp, err := stream.Recv()
+	if err != nil {
+		storePool.throttle(throttleFailed, err.Error(), delegatedSender.StoreID)
+		return err
+	}
+	switch resp.Status {
+	case kvserverpb.SnapshotResponse_ERROR:
+		storePool.throttle(throttleFailed, resp.Message, delegatedSender.StoreID)
+		return errors.Errorf(
+			"%s: remote couldn't accept %s with error: %s",
+			delegatedSender, req, resp.Message,
+		)
+	case kvserverpb.SnapshotResponse_ACCEPTED:
+		// This is the response we're expecting. New sender accepted the request.
+	default:
+		err := errors.Errorf(
+			"%s: server sent an invalid status while negotiating %s: %s",
+			delegatedSender, req, resp.Status,
+		)
+		storePool.throttle(throttleFailed, err.Error(), delegatedSender.StoreID)
+		return err
+	}
+
+	// Wait for response to see if the receiver successfully applied the snapshot
+	resp, err = stream.Recv()
+	if err != nil {
+		return errors.Wrapf(err, "%s: remote failed to send snapshot", delegatedSender)
+	}
+	// Wait for EOF to ensure server side processing is complete.
+	if unexpectedResp, err := stream.Recv(); err != io.EOF {
+		if err != nil {
+			return errors.Wrapf(err, "%s: expected EOF, got resp=%v with error", to, unexpectedResp)
+		}
+		return errors.Newf("%s: expected EOF, got resp=%v", to, unexpectedResp)
+	}
+	switch resp.Status {
+	case kvserverpb.SnapshotResponse_ERROR:
+		storePool.throttle(throttleFailed, resp.Message, delegatedSender.StoreID)
+		return errors.Errorf("%s: remote couldn't apply the snapshot with error: %s",
+			to, resp.Message)
+	case kvserverpb.SnapshotResponse_APPLIED:
+		// This is the response we're expecting. Snapshot successfully applied.
+		return nil
+	default:
+		err := errors.Errorf(
+			"%s: server sent an invalid status while negotiating %s: %s",
+			delegatedSender, req, resp.Status,
+		)
+		storePool.throttle(throttleFailed, err.Error(), delegatedSender.StoreID)
+		return err
+	}
+
 }

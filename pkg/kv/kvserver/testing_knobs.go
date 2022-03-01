@@ -140,6 +140,8 @@ type StoreTestingKnobs struct {
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
+	// TESTING
+	DelegateSnapshots func() bool
 	// DisableRaftSnapshotQueue disables the raft snapshot queue. Use this
 	// sparingly, as it tends to produce flaky tests during up-replication where
 	// the explicit learner snapshot gets lost. Since uninitialized replicas

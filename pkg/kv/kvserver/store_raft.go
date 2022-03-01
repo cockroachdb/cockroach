@@ -63,6 +63,99 @@ func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
 	}
 }
 
+// reserveSendSnapshot throttles outgoing snapshots. The returned closure is used
+// to cleanup the reservation and release its resources.
+func (s *Store) reserveSendSnapshot(
+	ctx context.Context, req *kvserverpb.DelegatedSnapshotRequest,
+) (_cleanup func(), _err error) {
+	header := req.SnapRequest.Header
+	tBegin := timeutil.Now()
+	// Empty snapshots are exempt from rate limits because they're so cheap to
+	// apply. This vastly speeds up rebalancing any empty ranges created by a
+	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
+	// getting stuck behind large snapshots managed by the replicate queue.
+
+	if header.RangeSize != 0 {
+		queueCtx := ctx
+		if deadline, ok := queueCtx.Deadline(); ok {
+			// Enforce a more strict timeout for acquiring the snapshot reservation to
+			// ensure that if the reservation is acquired, the snapshot has sufficient
+			// time to complete. See the comment on snapshotReservationQueueTimeoutFraction
+			// and TestReserveSnapshotQueueTimeout.
+			timeoutFrac := snapshotReservationQueueTimeoutFraction.Get(&s.ClusterSettings().SV)
+			timeout := time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
+			var cancel func()
+			queueCtx, cancel = context.WithTimeout(queueCtx, timeout) // nolint:context
+			defer cancel()
+		}
+		select {
+		case s.snapshotSendSem <- struct{}{}:
+		case <-queueCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return nil, errors.Wrap(err, "acquiring snapshot reservation")
+			}
+			return nil, errors.Wrapf(
+				queueCtx.Err(),
+				"giving up during snapshot reservation due to %q",
+				snapshotReservationQueueTimeoutFraction.Key(),
+			)
+		case <-s.stopper.ShouldQuiesce():
+			return nil, errors.Errorf("stopped")
+		}
+	}
+
+	// The choice here is essentially arbitrary, but with a default range size of 128mb-512mb and the
+	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
+	// which is what we want to log.
+	const snapshotReservationWaitWarnThreshold = 32 * time.Second
+	if elapsed := timeutil.Since(tBegin); elapsed > snapshotReservationWaitWarnThreshold {
+		replDesc := req.DelegatedSender
+		log.Infof(
+			ctx,
+			"waited for %.1fs to acquire snapshot sending reservation for r%d/s%d",
+			elapsed.Seconds(),
+			req.SnapRequest.Header.RaftMessageRequest.RangeID,
+			replDesc.StoreID,
+		)
+	}
+
+	return func() {
+		if header.RangeSize != 0 {
+			<-s.snapshotSendSem
+		}
+	}, nil
+}
+
+// SendDelegatedSnapshot reads the incoming delegated snapshot message throttles
+// sending snapshots before passing the request to the sender replica.
+func (s *Store) SendDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegatedSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
+) error {
+	ctx = s.AnnotateCtx(ctx)
+	const name = "storage.Store: handle snapshot delegation"
+	return s.stopper.RunTaskWithErr(
+		ctx, name, func(ctx context.Context) error {
+			s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
+			// get the new sender replica.
+			sender, err := s.GetReplica(req.SnapRequest.Header.RaftMessageRequest.RangeID)
+			if err != nil {
+				return err
+			}
+			// throttle snapshot sending.
+			cleanup, err := s.reserveSendSnapshot(ctx, req)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			return sender.sendSnapshot(
+				ctx, req.SnapRequest.Header.RaftMessageRequest.ToReplica, req,
+			)
+		},
+	)
+}
+
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
 func (s *Store) HandleSnapshot(
@@ -70,11 +163,12 @@ func (s *Store) HandleSnapshot(
 ) error {
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot"
-	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
-		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
+	return s.stopper.RunTaskWithErr(
+		ctx, name, func(ctx context.Context) error {
+			s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
-		return s.receiveSnapshot(ctx, header, stream)
-	})
+			return s.receiveSnapshot(ctx, header, stream)
+		})
 }
 
 func (s *Store) uncoalesceBeats(
