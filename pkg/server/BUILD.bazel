@@ -267,6 +267,7 @@ go_test(
         "node_tombstone_storage_test.go",
         "pagination_test.go",
         "servemode_test.go",
+        "server_http_test.go",
         "server_import_ts_test.go",
         "server_systemlog_gc_test.go",
         "server_test.go",
