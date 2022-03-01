@@ -32,21 +32,36 @@ import (
 
 var (
 	queryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"server.shutdown.query_wait",
 		"the timeout for waiting for active queries to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		10*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 
 	drainWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting. --drain-wait is to specify the duration of the "+
+			"whole draining process, while server.shutdown.drain_wait is to set the "+
+			"wait time for health probes to notice that the node is not ready.)",
+		0*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+	).WithPublic()
+
+	connectionWait = settings.RegisterDurationSetting(
+		settings.TenantReadOnly,
+		"server.shutdown.connection_wait",
+		"the maximum amount of time a server waits for all SQL connections to "+
+			"be closed before proceeding with a drain. "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		0*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 )
 
@@ -309,20 +324,36 @@ func (s *drainServer) drainClients(
 	s.grpc.setMode(modeDraining)
 	s.sqlServer.isReady.Set(false)
 
+	// Log the number of connections periodically.
+	if err := s.logOpenConns(ctx); err != nil {
+		log.Ops.Warningf(ctx, "error showing alive SQL connections: %v", err)
+	}
+
 	// Wait the duration of drainWait.
 	// This will fail load balancer checks and delay draining so that client
 	// traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
+		log.Ops.Info(ctx, "waiting for health probes to notice that the node "+
+			"is not ready for new sql connections")
 		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
-	// Drain all SQL connections.
-	// The queryWait duration is a timeout for waiting on clients
-	// to self-disconnect. If the timeout is reached, any remaining connections
+	// Wait for users to close the existing SQL connections.
+	// During this phase, the server is rejecting new SQL connections.
+	// The server exits this phase either once all SQL connections are closed,
+	// or the connectionMaxWait timeout elapses, whichever happens earlier.
+	if err := s.sqlServer.pgServer.WaitForSQLConnsToClose(ctx, connectionWait.Get(&s.sqlServer.execCfg.Settings.SV), s.stopper); err != nil {
+		return err
+	}
+
+	// Drain any remaining SQL connections.
+	// The queryWait duration is a timeout for waiting for SQL queries to finish.
+	// If the timeout is reached, any remaining connections
 	// will be closed.
 	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
-	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
+
+	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter, nil); err != nil {
 		return err
 	}
 
@@ -356,4 +387,22 @@ func (s *drainServer) drainNode(
 	}
 	// Mark the stores of the node as "draining" and drain all range leases.
 	return s.kvServer.node.SetDraining(true /* drain */, reporter, verbose)
+}
+
+// logOpenConns logs the number of open SQL connections every 3 seconds.
+func (s *drainServer) logOpenConns(ctx context.Context) error {
+	return s.stopper.RunAsyncTask(ctx, "log-open-conns", func(ctx context.Context) {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				log.Ops.Infof(ctx, "number of open connections: %d\n", s.sqlServer.pgServer.GetConnCancelMapLen())
+			case <-s.stopper.ShouldQuiesce():
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
 }
