@@ -925,12 +925,19 @@ func waitForTruncationForTesting(
 			// Flush the engine to advance durability, which triggers truncation.
 			require.NoError(t, r.Engine().Flush())
 		}
-		// FirstIndex has changed.
+		// FirstIndex should have changed.
 		firstIndex, err := r.GetFirstIndex()
 		require.NoError(t, err)
 		if firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}
+		// Some low-level tests also look at the raftEntryCache or sideloaded
+		// storage, which are updated after, and non-atomically with the change to
+		// first index (latter holds Replica.mu). Since the raftLogTruncator holds Replica.raftMu
+		// for the duration of its work, we can, by acquiring and releasing raftMu here, ensure
+		// that we have waited for it to finish.
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
 		return nil
 	})
 }
