@@ -95,6 +95,7 @@ func NewWithOverrides(
 ) *SettingsWatcher {
 	s := New(clock, codec, settingsToUpdate, f, stopper, storage)
 	s.overridesMonitor = overridesMonitor
+	settingsToUpdate.OverridesInformer = s
 	return s
 }
 
@@ -359,4 +360,12 @@ func (s *SettingsWatcher) resetUpdater() {
 // SetTestingKnobs is used by tests to set testing knobs.
 func (s *SettingsWatcher) SetTestingKnobs(knobs *rangefeedcache.TestingKnobs) {
 	s.testingWatcherKnobs = knobs
+}
+
+// IsOverridden implements cluster.OverridesInformer.
+func (s *SettingsWatcher) IsOverridden(settingName string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, exists := s.mu.overrides[settingName]
+	return exists
 }

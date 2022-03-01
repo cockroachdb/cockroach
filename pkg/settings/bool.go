@@ -60,12 +60,7 @@ var _ = (*BoolSetting).Default
 // For testing usage only.
 func (b *BoolSetting) Override(ctx context.Context, sv *Values, v bool) {
 	b.set(ctx, sv, v)
-
-	vInt := int64(0)
-	if v {
-		vInt = 1
-	}
-	sv.setDefaultOverrideInt64(b.slot, vInt)
+	sv.setDefaultOverride(b.slot, v)
 }
 
 func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
@@ -78,9 +73,8 @@ func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
 
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(b.slot)
-	if ok {
-		b.set(ctx, sv, val > 0)
+	if val := sv.getDefaultOverride(b.slot); val != nil {
+		b.set(ctx, sv, val.(bool))
 		return
 	}
 	b.set(ctx, sv, b.defaultValue)
