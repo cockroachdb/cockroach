@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -405,6 +407,83 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
+const readAmpSnapshotDeclineDefaultThreshold = 1000
+
+// ReadAmpSnapshotDeclineThreshold defines the read amplification threshold
+// beyond which all incoming rebalance snapshots will be declined by the
+// receiving store.
+var ReadAmpSnapshotDeclineThreshold = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.snapshot_decline.read_amp_threshold",
+	"when the receiving store's read amplification exceeds this threshold,"+
+		" the store will decline all incoming rebalance snapshots",
+	readAmpSnapshotDeclineDefaultThreshold,
+	settings.PositiveInt,
+)
+
+type snapshotDeclineReason string
+
+func (r snapshotDeclineReason) String() string {
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r snapshotDeclineReason) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(string(r))
+}
+
+// shouldDeclineSnapshot determines whether the store should decline the
+// incoming rebalance snapshot due to poor LSM health. Note that recovery
+// snapshots are never declined.
+func (s *Store) shouldDeclineSnapshot(
+	header *kvserverpb.SnapshotRequest_Header,
+) (declined bool, reason string) {
+	switch t := header.Priority; t {
+	case kvserverpb.SnapshotRequest_RECOVERY:
+		// Don't obstruct recovery snapshots.
+	case kvserverpb.SnapshotRequest_REBALANCE:
+		if s.IsDraining() {
+			// Draining nodes will generally not be rebalanced to (see the filtering
+			// that happens in getStoreListFromIDsLocked()), but in case they are,
+			// they should reject the incoming rebalancing snapshots.
+			//
+			// We can not reject Raft snapshots because draining nodes may have
+			// replicas in `StateSnapshot` that need to catch up.
+			//
+			// TODO(aayush): We also do not reject snapshots sent to replace dead
+			// replicas here, but draining stores are still filtered out in
+			// getStoreListFromIDsLocked(). Is that sound? Don't we want to
+			// upreplicate to draining nodes if there are no other candidates?
+			return true, storeDrainingMsg
+		}
+
+		// Stores with high read amp should not be rebalanced to.
+		readAmpThreshold := ReadAmpSnapshotDeclineThreshold.Get(&s.cfg.Settings.SV)
+		if ra := int64(s.engine.GetMetrics().ReadAmp()); ra > readAmpThreshold {
+			return true, fmt.Sprintf(
+				"read-amplification %v higher than kv.snapshot_decline.read_amp_threshold",
+				ra,
+			)
+		}
+
+		// Stores with an almost full disk should not be rebalanced to.
+		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
+
+		// Avoid performing the disk fullness check in most test builds (unless the
+		// testing knob says otherwise) because most test cluster users shouldn't
+		// have to care about figuring out the correct start up incantation to
+		// populate and gossip store stats.
+		diskFullCheckEnabled := s.cfg.TestingKnobs.EnableDiskFullnessCheckForSnapshots || !buildutil.CrdbTestBuild
+		if ok && diskFullCheckEnabled && (!maxCapacityCheck(storeDesc) || header.RangeSize > storeDesc.Capacity.Available) {
+			return true, snapshotStoreTooFullMsg
+		}
+	default:
+		// If this a new snapshot type that this cockroach version does not know
+		// about, we let it through.
+	}
+	return false, ""
+}
+
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
 // to cleanup the reservation and release its resources. A nil cleanup function
 // and a non-empty rejectionMessage indicates the reservation was declined.
@@ -412,26 +491,12 @@ func (s *Store) reserveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
 	tBegin := timeutil.Now()
-	if header.RangeSize == 0 {
-		// Empty snapshots are exempt from rate limits because they're so cheap to
-		// apply. This vastly speeds up rebalancing any empty ranges created by a
-		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
-		// getting stuck behind large snapshots managed by the replicate queue.
-	} else if header.CanDecline {
-		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
-		if ok && (!maxCapacityCheck(storeDesc) || header.RangeSize > storeDesc.Capacity.Available) {
-			return nil, nil
-		}
-		select {
-		case s.snapshotApplySem <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-s.stopper.ShouldQuiesce():
-			return nil, errors.Errorf("stopped")
-		default:
-			return nil, nil
-		}
-	} else {
+
+	// Empty snapshots are exempt from rate limits because they're so cheap to
+	// apply. This vastly speeds up rebalancing any empty ranges created by a
+	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
+	// getting stuck behind large snapshots managed by the replicate queue.
+	if header.RangeSize != 0 {
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -472,7 +537,6 @@ func (s *Store) reserveSnapshot(
 			replDesc.ReplicaID,
 		)
 	}
-
 	s.metrics.ReservedReplicaCount.Inc(1)
 	s.metrics.Reserved.Inc(header.RangeSize)
 	return func() {
@@ -615,27 +679,6 @@ func (s *Store) checkSnapshotOverlapLocked(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
-	// Draining nodes will generally not be rebalanced to (see the filtering that
-	// happens in getStoreListFromIDsLocked()), but in case they are, they should
-	// reject the incoming rebalancing snapshots.
-	if s.IsDraining() {
-		switch t := header.Priority; t {
-		case kvserverpb.SnapshotRequest_RECOVERY:
-			// We can not reject Raft snapshots because draining nodes may have
-			// replicas in `StateSnapshot` that need to catch up.
-			//
-			// TODO(aayush): We also do not reject snapshots sent to replace dead
-			// replicas here, but draining stores are still filtered out in
-			// getStoreListFromIDsLocked(). Is that sound? Don't we want to
-			// upreplicate to draining nodes if there are no other candidates?
-		case kvserverpb.SnapshotRequest_REBALANCE:
-			return sendSnapshotError(stream, errors.New(storeDrainingMsg))
-		default:
-			// If this a new snapshot type that this cockroach version does not know
-			// about, we let it through.
-		}
-	}
-
 	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
 		if err := fn(header); err != nil {
 			return sendSnapshotError(stream, err)
@@ -647,20 +690,21 @@ func (s *Store) receiveSnapshot(
 	if _, ok := header.State.Desc.GetReplicaDescriptor(storeID); !ok {
 		return errors.AssertionFailedf(
 			`snapshot of type %s was sent to s%d which did not contain it as a replica: %s`,
-			header.Type, storeID, header.State.Desc.Replicas())
+			header.Type, storeID, header.State.Desc.Replicas(),
+		)
 	}
 
+	if declined, reason := s.shouldDeclineSnapshot(header); declined {
+		return sendSnapshotError(stream, errors.Newf("%v", snapshotDeclineReason(reason)))
+	}
 	cleanup, err := s.reserveSnapshot(ctx, header)
+
 	if err != nil {
 		return err
 	}
-	if cleanup == nil {
-		return stream.Send(&kvserverpb.SnapshotResponse{
-			Status:  kvserverpb.SnapshotResponse_DECLINED,
-			Message: err.Error(),
-		})
+	if cleanup != nil {
+		defer cleanup()
 	}
-	defer cleanup()
 
 	// The comment on ReplicaPlaceholder motivates and documents
 	// ReplicaPlaceholder semantics. Please be familiar with them
@@ -747,10 +791,12 @@ func (s *Store) receiveSnapshot(
 }
 
 func sendSnapshotError(stream incomingSnapshotStream, err error) error {
-	return stream.Send(&kvserverpb.SnapshotResponse{
-		Status:  kvserverpb.SnapshotResponse_ERROR,
-		Message: err.Error(),
-	})
+	return stream.Send(
+		&kvserverpb.SnapshotResponse{
+			Status:  kvserverpb.SnapshotResponse_ERROR,
+			Message: err.Error(),
+		},
+	)
 }
 
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
@@ -1130,24 +1176,20 @@ func sendSnapshot(
 		return err
 	}
 	switch resp.Status {
-	case kvserverpb.SnapshotResponse_DECLINED:
-		if header.CanDecline {
-			declinedMsg := "reservation rejected"
-			if len(resp.Message) > 0 {
-				declinedMsg = resp.Message
-			}
-			err := &benignError{errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)}
-			storePool.throttle(throttleDeclined, err.Error(), to.StoreID)
-			return err
-		}
-		err := errors.Errorf("%s: programming error: remote declined required %s: %s",
-			to, snap, resp.Message)
-		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
-		return err
 	case kvserverpb.SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
-		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
-			to, snap, resp.Message)
+		return errors.Errorf(
+			"%s: remote couldn't accept %s with error: %s",
+			to, snap, resp.Message,
+		)
+	case kvserverpb.SnapshotResponse_DECLINED:
+		// The snapshot was declined by the receiver. See shouldDeclineSnapshot()
+		// for why this can happen.
+		storePool.throttle(throttleDeclined, resp.Message, to.StoreID)
+		return errors.Errorf(
+			"%s: remote couldn't accept %s with message: %s",
+			to, snap, resp.Message,
+		)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:

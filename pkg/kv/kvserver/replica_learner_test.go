@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -463,6 +464,31 @@ func drain(ctx context.Context, t *testing.T, client serverpb.AdminClient, drain
 	// Wait until the draining node acknowledges that it's draining.
 	_, err = stream.Recv()
 	require.NoError(t, err)
+}
+
+// TestSnapshotsToNodesWithPoorLSM tests that nodes with a high read
+// amplification reject rebalancing snapshots.
+func TestSnapshotsToNodesWithPoorLSM(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	kvserver.ReadAmpSnapshotDeclineThreshold.Override(ctx, &settings.SV, -1)
+
+	tc := testcluster.StartTestCluster(
+		t, 2, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: settings,
+			},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	_, err := tc.AddVoters(scratchKey, makeReplicationTargets(2)...)
+	require.Regexp(t, "read-amplification.*higher than", err)
 }
 
 // TestSnapshotsToDrainingNodes tests that INITIAL (i.e. rebalancing) snapshots

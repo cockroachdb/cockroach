@@ -41,17 +41,6 @@ const (
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
 )
 
-// DeclinedReservationsTimeout specifies a duration during which the local
-// replicate queue will not consider stores which have rejected a reservation a
-// viable target.
-var DeclinedReservationsTimeout = settings.RegisterDurationSetting(
-	settings.SystemOnly,
-	"server.declined_reservation_timeout",
-	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
-	1*time.Second,
-	settings.NonNegativeDuration,
-)
-
 // FailedReservationsTimeout specifies a duration during which the local
 // replicate queue will not consider stores which have failed a reservation a
 // viable target.
@@ -60,6 +49,17 @@ var FailedReservationsTimeout = settings.RegisterDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
+	settings.NonNegativeDuration,
+)
+
+// DeclinedSnapshotTimeout specifies a duration during which the local replicate
+// queue will not consider stores which have declined a snapshot a viable
+// target.
+var DeclinedSnapshotTimeout = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.declined_snapshot.timeout",
+	"the amount of time to consider the store throttled for rebalancing after a declined snapshot",
+	5*time.Minute,
 	settings.NonNegativeDuration,
 )
 
@@ -957,7 +957,7 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 	// timeout period has passed.
 	switch reason {
 	case throttleDeclined:
-		timeout := DeclinedReservationsTimeout.Get(&sp.st.SV)
+		timeout := DeclinedSnapshotTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
@@ -972,6 +972,8 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
 				why, storeID, timeout, detail.throttledUntil)
 		}
+	default:
+		log.Warningf(sp.AnnotateCtx(context.TODO()), "unknown throttle reason %v", reason)
 	}
 }
 
