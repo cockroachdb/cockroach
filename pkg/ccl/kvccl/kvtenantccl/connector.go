@@ -568,10 +568,9 @@ func (c *Connector) getClient(ctx context.Context) (*client, error) {
 // The method will only return a non-nil error on context cancellation.
 func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 	for r := retry.StartWithCtx(ctx, c.rpcRetryOptions); r.Next(); {
-		// Try each address on each retry iteration.
-		randStart := rand.Intn(len(c.addrs))
-		for i := range c.addrs {
-			addr := c.addrs[(i+randStart)%len(c.addrs)]
+		// Try each address on each retry iteration (in random order).
+		for _, i := range rand.Perm(len(c.addrs)) {
+			addr := c.addrs[i]
 			conn, err := c.dialAddr(ctx, addr)
 			if err != nil {
 				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
