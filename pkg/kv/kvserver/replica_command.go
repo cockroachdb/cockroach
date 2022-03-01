@@ -557,7 +557,8 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
 		// command with the updated descriptor.
 		if !errors.HasType(lastErr, (*roachpb.ConditionFailedError)(nil)) &&
-			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
+			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) &&
+			!kv.IsExpectedRelocateError(lastErr) {
 			break
 		}
 	}
