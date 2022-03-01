@@ -2326,6 +2326,9 @@ func (s *Server) startServeUI(
 		if err := s.stopper.RunAsyncTask(workersCtx, "serve-health", func(context.Context) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				if httputil.HSTSEnabled.Get(&s.cfg.Settings.SV) {
+					w.Header().Set(httputil.HstsHeaderKey, httputil.HstsHeaderValue)
+				}
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
 			})
 			mux.Handle("/health", s)
@@ -2683,6 +2686,10 @@ func (s *Server) gzipHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
+
+	if httputil.HSTSEnabled.Get(&s.cfg.Settings.SV) {
+		w.Header().Set(httputil.HstsHeaderKey, httputil.HstsHeaderValue)
+	}
 
 	// This is our base handler.
 	// Intercept all panics, log them, and return an internal server error as a response.
