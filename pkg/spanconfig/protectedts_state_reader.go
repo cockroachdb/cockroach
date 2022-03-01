@@ -51,19 +51,19 @@ func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForCluster() []roac
 // TenantProtectedTimestamps represents all the protections that apply to a
 // tenant's keyspace.
 type TenantProtectedTimestamps struct {
-	protections []roachpb.ProtectionPolicy
-	tenantID    roachpb.TenantID
+	Protections []roachpb.ProtectionPolicy
+	TenantID    roachpb.TenantID
 }
 
 // GetTenantProtections returns the ProtectionPolicies that apply to this tenant.
 func (t *TenantProtectedTimestamps) GetTenantProtections() []roachpb.ProtectionPolicy {
-	return t.protections
+	return t.Protections
 }
 
 // GetTenantID returns the tenant ID of the tenant that the protected timestamp
 // records target.
 func (t *TenantProtectedTimestamps) GetTenantID() roachpb.TenantID {
-	return t.tenantID
+	return t.TenantID
 }
 
 // GetProtectionPoliciesForTenants returns all the protected timestamps that
@@ -77,7 +77,7 @@ func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForTenants() []Tena
 // apply to a particular tenant's keyspace.
 func (p *ProtectedTimestampStateReader) ProtectionExistsForTenant(tenantID roachpb.TenantID) bool {
 	for _, tp := range p.tenantProtections {
-		if tp.tenantID.Equal(tenantID) {
+		if tp.TenantID.Equal(tenantID) {
 			return true
 		}
 	}
@@ -120,6 +120,6 @@ func (p *ProtectedTimestampStateReader) loadProtectedTimestampRecords(ptsState p
 
 	for tenID, tenantProtections := range tenantProtections {
 		p.tenantProtections = append(p.tenantProtections,
-			TenantProtectedTimestamps{tenantID: tenID, protections: tenantProtections})
+			TenantProtectedTimestamps{TenantID: tenID, Protections: tenantProtections})
 	}
 }

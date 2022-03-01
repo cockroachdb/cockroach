@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2385,6 +2385,9 @@ func TestUnsplittableRange(t *testing.T) {
 				DefaultZoneConfigOverride:       &zoneConfig,
 				DefaultSystemZoneConfigOverride: &zoneSystemConfig,
 			},
+			SpanConfig: &spanconfig.TestingKnobs{
+				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
+			},
 		},
 	})
 	s := serv.(*server.TestServer)
@@ -2430,14 +2433,7 @@ func TestUnsplittableRange(t *testing.T) {
 	manualClock.Increment(10 * ttl.Nanoseconds())
 	// Trigger the MVCC GC queue, which should clean up the earlier version of the
 	// row. Once the first version of the row is cleaned up, the range should
-	// exit the split queue purgatory. We need to tickle the protected timestamp
-	// subsystem to release a timestamp at which we get to actually remove the data.
-	require.NoError(
-		t,
-		spanconfigptsreader.TestingRefreshPTSState(
-			ctx, store.GetStoreConfig().ProtectedTimestampReader, s.Clock().Now(),
-		),
-	)
+	// exit the split queue purgatory.
 	repl := store.LookupReplica(tableKey)
 	if err := store.ManualMVCCGC(repl); err != nil {
 		t.Fatal(err)

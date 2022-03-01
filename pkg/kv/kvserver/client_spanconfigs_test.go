@@ -47,6 +47,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 				DisableSplitQueue: true,
+				DisableGCQueue:    true,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
 				StoreKVSubscriberOverride: mockSubscriber,
@@ -116,6 +117,12 @@ func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
 	return m.Store.GetSpanConfigForKey(ctx, key)
+}
+
+func (m *mockSpanConfigSubscriber) GetProtectionTimestamps(
+	context.Context, roachpb.Span,
+) ([]hlc.Timestamp, hlc.Timestamp, error) {
+	panic("unimplemented")
 }
 
 func (m *mockSpanConfigSubscriber) LastUpdated() hlc.Timestamp {

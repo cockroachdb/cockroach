@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfig
+package spanconfig_test
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,24 +65,24 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 	protectTenants(state, ts(5), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 	protectTenants(state, ts(6), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 
-	ptsStateReader := NewProtectedTimestampStateReader(context.Background(), *state)
+	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(context.Background(), *state)
 	clusterTimestamps := ptsStateReader.GetProtectionPoliciesForCluster()
 	require.Len(t, clusterTimestamps, 1)
 	require.Equal(t, []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(3)}}, clusterTimestamps)
 
 	tenantTimestamps := ptsStateReader.GetProtectionPoliciesForTenants()
 	sort.Slice(tenantTimestamps, func(i, j int) bool {
-		return tenantTimestamps[i].tenantID.ToUint64() < tenantTimestamps[j].tenantID.ToUint64()
+		return tenantTimestamps[i].TenantID.ToUint64() < tenantTimestamps[j].TenantID.ToUint64()
 	})
 	require.Len(t, tenantTimestamps, 2)
-	require.Equal(t, []TenantProtectedTimestamps{
+	require.Equal(t, []spanconfig.TenantProtectedTimestamps{
 		{
-			tenantID:    roachpb.MakeTenantID(1),
-			protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(4)}},
+			TenantID:    roachpb.MakeTenantID(1),
+			Protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(4)}},
 		},
 		{
-			tenantID: roachpb.MakeTenantID(2),
-			protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(5)},
+			TenantID: roachpb.MakeTenantID(2),
+			Protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(5)},
 				{ProtectedTimestamp: ts(6)}},
 		},
 	}, tenantTimestamps)

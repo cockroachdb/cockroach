@@ -86,6 +86,14 @@ func (s *Store) GetSpanConfigForKey(
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	return s.getSpanConfigForKeyRLocked(ctx, key)
+}
+
+// getSpanConfigForKeyRLocked is like GetSpanConfigForKey but requires the
+// caller to hold the Store read lock.
+func (s *Store) getSpanConfigForKeyRLocked(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
 	conf, found, err := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
 	if err != nil {
 		return roachpb.SpanConfig{}, err
@@ -105,6 +113,23 @@ func (s *Store) Apply(
 		log.Fatalf(ctx, "%v", err)
 	}
 	return deleted, added
+}
+
+// ForEachOverlappingSpanConfig invokes the supplied callback on each
+// span config that overlaps with the supplied span. In addition to the
+// SpanConfig, the s	pan it applies over is passed into the callback as well.
+func (s *Store) ForEachOverlappingSpanConfig(
+	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.mu.spanConfigStore.forEachOverlapping(span, func(entry spanConfigEntry) error {
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(entry.span.Key))
+		if err != nil {
+			return err
+		}
+		return f(entry.span, config)
+	})
 }
 
 // Copy returns a copy of the Store.

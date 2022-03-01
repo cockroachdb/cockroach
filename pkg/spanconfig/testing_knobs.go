@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestingKnobs provide fine-grained control over the various span config
@@ -69,6 +70,10 @@ type TestingKnobs struct {
 	// ReconcilerInitialInterceptor, if set, is invoked at the very outset of
 	// the reconciliation process.
 	ReconcilerInitialInterceptor func()
+
+	// ProtectedTSReaderOverrideFn returns a ProtectedTSReader which is used to
+	// override the ProtectedTSReader used when setting up a new store.
+	ProtectedTSReaderOverrideFn func(clock *hlc.Clock) ProtectedTSReader
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
