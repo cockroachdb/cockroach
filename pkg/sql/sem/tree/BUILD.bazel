@@ -101,6 +101,7 @@ go_library(
         "table_name.go",
         "table_pattern.go",
         "table_ref.go",
+        "tenant.go",
         "testutils.go",
         "time.go",
         "truncate.go",
