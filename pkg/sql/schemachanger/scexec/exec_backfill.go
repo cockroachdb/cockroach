@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -194,13 +195,12 @@ func forEachProgressConcurrently(
 	run := func(i int) {
 		g.GoCtx(func(ctx context.Context) (err error) {
 			defer func() {
-				switch r := recover().(type) {
-				case nil:
-					return
-				case error:
-					err = errors.Wrapf(r, "failed to %s", op)
-				default:
-					err = errors.AssertionFailedf("failed to %s: %v", op, r)
+				if r := recover(); r != nil {
+					ok, e := errorutil.ShouldCatch(r)
+					if !ok {
+						panic(r)
+					}
+					err = errors.Wrapf(e, "failed to %s", op)
 				}
 			}()
 			return f(ctx, &progresses[i])

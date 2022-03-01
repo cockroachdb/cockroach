@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -660,12 +661,12 @@ func (c *conn) processCommandsAsync(
 			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
 				if r := recover(); r != nil {
 					// Catch the panic and return it to the client as an error.
-					if err, ok := r.(error); ok {
-						// Mask the cause but keep the details.
-						retErr = errors.Handled(err)
-					} else {
-						retErr = errors.Newf("%+v", r)
+					ok, err := errorutil.ShouldCatch(r)
+					if !ok {
+						panic(r)
 					}
+					// Mask the cause but keep the details.
+					retErr = errors.Handled(err)
 					retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
 					// Add a prefix. This also adds a stack trace.
 					retErr = errors.Wrap(retErr, "caught fatal error")

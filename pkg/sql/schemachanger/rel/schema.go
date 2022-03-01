@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,13 +33,12 @@ type Schema struct {
 // The name parameter is just used for debugging and error messages.
 func NewSchema(name string, m ...SchemaOption) (_ *Schema, err error) {
 	defer func() {
-		switch r := recover().(type) {
-		case nil:
-			return
-		case error:
-			err = errors.Wrap(r, "failed to construct schema")
-		default:
-			err = errors.AssertionFailedf("failed to construct schema: %v", r)
+		if r := recover(); r != nil {
+			ok, e := errorutil.ShouldCatch(r)
+			if !ok {
+				panic(r)
+			}
+			err = errors.Wrap(e, "failed to construct schema")
 		}
 	}()
 	sc := buildSchema(name, m...)

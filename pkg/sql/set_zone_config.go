@@ -654,13 +654,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				if err := func() (err error) {
 					defer func() {
 						if p := recover(); p != nil {
-							if errP, ok := p.(error); ok {
-								// Catch and return the error.
-								err = errP
-							} else {
-								// Nothing we know about, let it continue as a panic.
+							ok, errP := errorutil.ShouldCatch(p)
+							if !ok {
 								panic(p)
 							}
+							err = errP
 						}
 					}()
 

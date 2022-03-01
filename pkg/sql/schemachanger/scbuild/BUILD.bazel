@@ -39,10 +39,12 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/util/errorutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
+        "@com_github_pkg_errors//:errors",
     ],
 )
 

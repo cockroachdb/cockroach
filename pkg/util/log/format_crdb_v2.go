@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"io"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -505,12 +506,18 @@ type entryDecoderV2 struct {
 // Decode decodes the next log entry into the provided protobuf message.
 func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	defer func() {
-		switch r := recover().(type) {
-		case nil: // do nothing
-		case error:
-			err = errors.Wrapf(r, "decoding on line %d", d.lines)
-		default:
-			panic(r)
+		if r := recover(); r != nil {
+			// The following check is a repeat of errorutil.ShouldCatch(),
+			// which cannot be used directly here due to a go import cycle.
+			e, ok := r.(error)
+			if !ok {
+				panic(r)
+			}
+			err = e
+			if errors.HasInterface(err, (*runtime.Error)(nil)) {
+				err = errors.HandleAsAssertionFailure(err)
+			}
+			err = errors.Wrapf(e, "decoding on line %d", d.lines)
 		}
 	}()
 	frag, atEOF := d.peekNextFragment()

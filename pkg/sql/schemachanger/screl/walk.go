@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	types "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,12 +53,12 @@ func WalkExpressions(e scpb.Element, f func(t *catpb.Expression) error) error {
 // It's plenty well tested for its use case of decomposing elements.
 func walk(wantType reflect.Type, toWalk interface{}, f func(interface{}) error) (err error) {
 	defer func() {
-		switch r := recover().(type) {
-		case nil:
-		case error:
-			err = r
-		default:
-			err = errors.AssertionFailedf("failed to do walk: %v", r)
+		if r := recover(); r != nil {
+			ok, e := errorutil.ShouldCatch(r)
+			if !ok {
+				panic(r)
+			}
+			err = e
 		}
 	}()
 

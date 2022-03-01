@@ -22,8 +22,8 @@ package yacc
 
 import (
 	"fmt"
-	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,14 +103,15 @@ func (t *Tree) unexpected(token item, context string) {
 
 // recover is the handler that turns panics into returns from the top level of Parse.
 func (t *Tree) recover(errp *error) {
-	if e := recover(); e != nil {
-		if _, ok := e.(runtime.Error); ok {
-			panic(e)
+	if r := recover(); r != nil {
+		ok, e := errorutil.ShouldCatch(r)
+		if !ok {
+			panic(r)
 		}
 		if t != nil {
 			t.stopParse()
 		}
-		*errp = e.(error)
+		*errp = e
 	}
 }
 

@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/scplan/internal/scgraphviz",
         "//pkg/sql/schemachanger/scplan/internal/scstage",
+        "//pkg/util/errorutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

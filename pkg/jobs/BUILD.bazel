@@ -49,6 +49,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/envutil",
+        "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/json",
         "//pkg/util/log",
