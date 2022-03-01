@@ -7023,11 +7023,10 @@ func TestDropColumnAfterMutations(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	conn1 := sqlutils.MakeSQLRunner(sqlDB)
-	conn2 := sqlutils.MakeSQLRunner(sqlDB)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	var schemaChangeWaitGroup sync.WaitGroup
 
-	conn1.Exec(t, `
+	tdb.Exec(t, `
 CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
 INSERT INTO t VALUES (1, 1);
 `)
@@ -7043,7 +7042,7 @@ INSERT INTO t VALUES (1, 1);
 		schemaChangeWaitGroup.Add(1)
 		go func() {
 			defer schemaChangeWaitGroup.Done()
-			_, err := conn2.DB.ExecContext(ctx,
+			_, err := tdb.DB.ExecContext(ctx,
 				`
 BEGIN;
 ALTER TABLE t ALTER COLUMN j SET NOT NULL;
@@ -7058,7 +7057,7 @@ COMMIT;
 		schemaChangeWaitGroup.Add(1)
 		go func() {
 			defer schemaChangeWaitGroup.Done()
-			_, err := conn2.DB.ExecContext(ctx,
+			_, err := tdb.DB.ExecContext(ctx,
 				`
 SET sql_safe_updates = false;
 BEGIN;
@@ -7095,14 +7094,14 @@ COMMIT;
 		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
 		jobControlMu.Unlock()
 
-		conn2.Exec(t, `
+		tdb.Exec(t, `
 	   DROP TABLE t;
 	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
 	   INSERT INTO t VALUES (1, 1);
 	   `)
 		go func() {
 			// This transaction will not complete. Therefore, we don't check the returned error.
-			_, _ = conn2.DB.ExecContext(context.Background(),
+			_, _ = tdb.DB.ExecContext(context.Background(),
 				`
 	   SET application_name='failed-concurrent-drop-mutations';
 	   BEGIN;
@@ -7117,7 +7116,7 @@ COMMIT;
 
 		go func() {
 			// This transaction will not complete. Therefore, we don't check the returned error.
-			_, _ = conn1.DB.ExecContext(context.Background(),
+			_, _ = tdb.DB.ExecContext(context.Background(),
 				`
 	   SET application_name='failed-concurrent-drop-mutations';
 	   SET sql_safe_updates = false;
@@ -7148,14 +7147,14 @@ COMMIT;
 		// the test.
 
 		// Second job should be in reverting state and retrying.
-		conn1.CheckQueryResultsRetry(t,
+		tdb.CheckQueryResultsRetry(t,
 			fmt.Sprintf("SELECT num_runs > 3 FROM system.jobs WHERE id = %d AND status = '%s'", jobIDs[1], jobs.StatusReverting),
 			[][]string{{"true"}},
 		)
 		// First job should be in running state.
-		conn1.CheckQueryResults(t, fmt.Sprintf("SELECT status from system.jobs WHERE id = %d", jobIDs[0]), [][]string{{string(jobs.StatusRunning)}})
+		tdb.CheckQueryResults(t, fmt.Sprintf("SELECT status from system.jobs WHERE id = %d", jobIDs[0]), [][]string{{string(jobs.StatusRunning)}})
 		// Both jobs should be stuck in COMMIT, waiting for jobs to complete.
-		conn1.CheckQueryResults(t,
+		tdb.CheckQueryResults(t,
 			"SELECT count(*) FROM [SHOW SESSIONS] WHERE last_active_query LIKE '%COMMIT%' AND session_id != (SELECT * FROM [SHOW session_id]) "+
 				"AND application_name='failed-concurrent-drop-mutations'",
 			[][]string{{"2"}},
@@ -7168,8 +7167,7 @@ COMMIT;
 	// Test 3: with concurrent drop and mutations where an insert will
 	// cause the backfill operation to fail.
 	t.Run("concurrent-drop-mutations-insert-fail", func(t *testing.T) {
-		conn1.Exec(t, `SET use_declarative_schema_changer = 'off'`)
-		conn2.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+		tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 
 		jobControlMu.Lock()
 		delayJobList = []string{"ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL",
@@ -7177,7 +7175,7 @@ COMMIT;
 		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
 		jobControlMu.Unlock()
 
-		conn2.Exec(t, `
+		tdb.Exec(t, `
 	   DROP TABLE t;
 	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
 	   INSERT INTO t VALUES (1, 1);
@@ -7188,7 +7186,7 @@ COMMIT;
 			// will fail during backfill or the dependent one with the drop will fail.
 
 			// This transaction will not complete. Therefore, we don't check the returned error.
-			_, _ = conn2.DB.ExecContext(context.Background(),
+			_, _ = tdb.DB.ExecContext(context.Background(),
 				`
 	   SET application_name='concurrent-drop-mutations-insert-fail';
 	   BEGIN;
@@ -7201,7 +7199,7 @@ COMMIT;
 
 		go func() {
 			// This transaction will not complete. Therefore, we don't check the returned error.
-			_, _ = conn1.DB.ExecContext(context.Background(),
+			_, _ = tdb.DB.ExecContext(context.Background(),
 				`
 	   SET application_name='concurrent-drop-mutations-insert-fail';
 	   SET sql_safe_updates = false;
@@ -7234,7 +7232,7 @@ COMMIT;
 			// job to backfill to validate this test's correctness assumptions.
 			firstJobID := jobIDs[0]
 			secondJobID := jobIDs[1]
-			res := conn1.QueryStr(t, "SELECT status from system.jobs where id in ($1, $2)", firstJobID, secondJobID)
+			res := tdb.QueryStr(t, "SELECT status from system.jobs where id in ($1, $2)", firstJobID, secondJobID)
 			require.Len(t, res, 2)
 			firstJobStatus := jobs.Status(res[0][0])
 			secondJobStatus := jobs.Status(res[1][0])
@@ -7248,12 +7246,12 @@ COMMIT;
 			return errors.New("one job should be running while the other job should be reverting")
 		})
 		// Ensure that the reverting job is retrying.
-		conn1.CheckQueryResultsRetry(t,
+		tdb.CheckQueryResultsRetry(t,
 			fmt.Sprintf("SELECT num_runs > 3 FROM system.jobs WHERE id = %d", revertingJobID),
 			[][]string{{"true"}},
 		)
 		// Both jobs should be stuck in COMMIT, waiting for jobs to complete.
-		conn1.CheckQueryResults(t,
+		tdb.CheckQueryResults(t,
 			"SELECT count(*) FROM [SHOW SESSIONS] WHERE last_active_query LIKE '%COMMIT%' AND session_id != (SELECT * FROM [SHOW session_id]) "+
 				"AND application_name='concurrent-drop-mutations-insert-fail'",
 			[][]string{{"2"}},
