@@ -10,6 +10,8 @@ package backupccl
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -18,15 +20,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -338,20 +343,43 @@ func readLatestFile(
 }
 
 // findLatestFile returns a ioctx.ReaderCloserCtx of the most recent LATEST
-// file. First it tries reading from the latest-history directory. If
+// file. First it tries reading from the latest directory. If
 // the backup is from an older version, it may not exist there yet so
 // it tries reading in the base directory if the first attempt fails.
 func findLatestFile(
 	ctx context.Context, exportStore cloud.ExternalStorage,
 ) (ioctx.ReadCloserCtx, error) {
-	latestFile, err := exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
-	if err != nil {
-		latestFile, err = exportStore.ReadFile(ctx, latestFileName)
-		if err != nil {
-			return nil, errors.Wrap(err, "s/Latest/LATEST/g file could not be read in base or metadata directory")
-		}
+	// HTTP doesn't support listing so only try reading the checkpoint from
+	// the base directory.
+	if exportStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
+		return exportStore.ReadFile(ctx, latestFileName)
 	}
-	return latestFile, err
+
+	// First try reading from the latest directory. If the backup is from
+	// an older version, it may not exist there yet so try reading
+	// in the base directory if the first attempt fails.
+	var latestFile string
+	// We name files such that the most recent latest file will always
+	// be at the top, so just grab the first filename.
+	err := exportStore.List(ctx, latestHistoryDirectory, "", func(p string) error {
+		p = strings.TrimPrefix(p, "/")
+		latestFile = p
+		return nil
+	}, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	// The latest file couldn't be found in the latest directory,
+	// try the base directory instead.
+	if latestFile == "" {
+		r, err := exportStore.ReadFile(ctx, latestFileName)
+		if err != nil {
+			return nil, errors.Wrap(err, "LATEST file could not be read in base or metadata directory")
+		}
+		return r, nil
+	}
+	return exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFile)
 }
 
 // writeNewLatestFile writes a new LATEST file to both the base directory
@@ -362,12 +390,18 @@ func writeNewLatestFile(
 	// If the cluster is still running on a mixed version, we want to write
 	// to the base directory as well the progress directory. That way if
 	// an old node resumes a backup, it doesn't have to start over.
-	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) ||
+		exportStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
 		err := cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
 		if err != nil {
 			return err
 		}
 	}
 
-	return cloud.WriteFile(ctx, exportStore, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
+	// Takes the one's complement of the timestamp so that files are sorted
+	// lexicographically such that the most recent is always the top.
+	var buffer []byte
+	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
+	fileName := fmt.Sprintf("%s/%s-%s", latestHistoryDirectory, latestFileName, hex.EncodeToString(buffer))
+	return cloud.WriteFile(ctx, exportStore, fileName, strings.NewReader(suffix))
 }

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -78,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -9854,8 +9857,7 @@ func TestUserfileNormalizationIncrementalShowBackup(t *testing.T) {
 }
 
 // TestBackupNoOverwriteCheckpoint tests BACKUP to see that it no longer
-// overwrites the checkpoint file, while still correctly handling older
-// backups that do.
+// overwrites the checkpoint file.
 func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -9879,5 +9881,114 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	filetable.SetTestingKnobs(filetable.TestingKnobs{EnforceNoOverwrite: true})
 	defer filetable.SetTestingKnobs(filetable.TestingKnobs{EnforceNoOverwrite: false})
 	query := fmt.Sprintf("BACKUP TO %s", userfile)
+	sqlDB.Exec(t, query)
+}
+
+// TestBackupNoOverwriteCheckpoint tests BACKUP to see that it no longer
+// overwrites the latest file.
+func TestBackupNoOverwriteLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	const userfile = "'userfile:///a'"
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Set the testing knobs so that userfile does not delete the filename
+	// it's trying to write first. This means that if the file already exists
+	// it will throw an error when it tries to write. Make sure to set it
+	// back to true at the end of the test.
+	filetable.SetTestingKnobs(filetable.TestingKnobs{EnforceNoOverwrite: true})
+	defer filetable.SetTestingKnobs(filetable.TestingKnobs{EnforceNoOverwrite: false})
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	ctx := context.Background()
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	require.NoError(t, err)
+	findNumLatestFiles := func() (int, string) {
+		var numLatestFiles int
+		var latestFile string
+		err = store.List(ctx, latestHistoryDirectory, "", func(p string) error {
+			if numLatestFiles == 0 {
+				latestFile = p
+			}
+			numLatestFiles++
+			return nil
+		}, 0)
+		require.NoError(t, err)
+		return numLatestFiles, latestFile
+	}
+
+	query := fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	numLatest, firstLatest := findNumLatestFiles()
+	require.True(t, numLatest == 1)
+
+	query = fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	numLatest, secondLatest := findNumLatestFiles()
+	require.True(t, numLatest == 2)
+	require.True(t, firstLatest != secondLatest)
+}
+
+// TestOlderVersionLatestFile tests to see that a LATEST file in the base
+// directory can be properly read when one is not found in the metadata/latest
+// directory. This can occur when an older version node creates the backup.
+func TestOlderVersionLatestFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	const userfile = "'userfile:///a'"
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint - 1),
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+		},
+	}
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	ctx := context.Background()
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	require.NoError(t, err)
+
+	query := fmt.Sprintf("BACKUP INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	// Check that the LATEST file was written to the base directory
+	// and the metadata/latest directory.
+	r, err := store.ReadFile(ctx, latestFileName)
+	require.NoError(t, err)
+	baseLatest, err := ioctx.ReadAll(ctx, r)
+	require.NoError(t, err)
+	r.Close(ctx)
+
+	var latestFile string
+	err = store.List(ctx, latestHistoryDirectory, "", func(p string) error {
+		latestFile = p
+		return nil
+	}, 1)
+	r, err = store.ReadFile(ctx, latestHistoryDirectory+latestFile)
+	require.NoError(t, err)
+	metadataLatest, err := ioctx.ReadAll(ctx, r)
+	require.NoError(t, err)
+	r.Close(ctx)
+
+	// Assert that the LATEST files are the same in the base directory and
+	// metadata/latest directories.
+	require.Equal(t, baseLatest, metadataLatest)
+
+	// Delete the LATEST file in the metadata/latest directory so we can
+	// test that if we try an incremental backup it correctly find the LATEST
+	// file in the base directory.
+	err = store.Delete(ctx, latestHistoryDirectory+latestFile)
+	require.NoError(t, err)
+	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
 	sqlDB.Exec(t, query)
 }
