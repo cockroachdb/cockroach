@@ -11,16 +11,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
 const (
-	// dateLayout is the expected date format for prepDate and publishDate input values.
-	dateLayout = "2006-01-02"
+	// dateFormatCommandLine is the expected date format for prepDate and publishDate input values.
+	dateFormatCommandLine = "2006-01-02"
+	// dateFormatEmail is the expected date format for prepDate and publishDate input values.
+	dateFormatEmail = "Monday, January 2"
 
 	// prepDate is the date when we expect to select the release candidate.
 	prepDate = "prep-date"
@@ -29,6 +34,12 @@ const (
 
 	// nextVersion can be left out for stable/patch releases, but needs to be passed in for pre-releases (alpha/beta/rc).
 	nextVersion = "next-version"
+
+	// NoProjectName is the project value for issues without a project.
+	NoProjectName = "No Project"
+
+	eventRemovedProject = "removed_from_project"
+	eventAddedProject   = "added_to_project"
 )
 
 var blockersFlags = struct {
@@ -82,13 +93,13 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 	if blockersFlags.smtpUser == "" {
 		return fmt.Errorf("either %s environment variable or %s flag should be set", envSMTPUser, smtpUser)
 	}
-	releasePrepDate, err := time.Parse(dateLayout, blockersFlags.prepDate)
+	releasePrepDate, err := time.Parse(dateFormatCommandLine, blockersFlags.prepDate)
 	if err != nil {
-		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.prepDate, dateLayout)
+		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.prepDate, dateFormatCommandLine)
 	}
-	releasePublishDate, err := time.Parse(dateLayout, blockersFlags.publishDate)
+	releasePublishDate, err := time.Parse(dateFormatCommandLine, blockersFlags.publishDate)
 	if err != nil {
-		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.publishDate, dateLayout)
+		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.publishDate, dateFormatCommandLine)
 	}
 	if blockersFlags.nextVersion == "" {
 		var err error
@@ -98,37 +109,39 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// TODO(celia): (future PR) fetch blockers and use real data instead of `temp*` values.
-	fmt.Println("TODO(celia): fetch blockers")
-	tempTotalBlockers := 23
-	tempBlockerList := []ProjectBlocker{
-		{
-			ProjectName: "Project ABC",
-			NumBlockers: 11,
-		},
-		{
-			ProjectName: "Project XYZ",
-			NumBlockers: 12,
-		},
+	// simple check to ensure that .releaseSeries matches .nextVersion
+	if !strings.HasPrefix(blockersFlags.nextVersion, fmt.Sprintf("v%s.", blockersFlags.releaseSeries)) {
+		return fmt.Errorf("version %s does not match release series %s", blockersFlags.nextVersion, blockersFlags.releaseSeries)
 	}
 
 	blockersURL := "go.crdb.dev/blockers/" + blockersFlags.releaseSeries
 	releaseBranch := "release-" + blockersFlags.releaseSeries
+	releaseBranchLabel := fmt.Sprintf("branch-release-%s", blockersFlags.releaseSeries)
 
-	// TODO(celia): (future PR) dynamically set branchExists, based on whether `releaseBranch` branch exists in crdb repo
-	branchExists := true
+	client := newGithubClient(context.Background(), githubToken)
+	branchExists, err := client.branchExists(releaseBranch)
+	if err != nil {
+		return fmt.Errorf("cannot fetch branches: %w", err)
+	}
 	if !branchExists {
 		blockersURL = "go.crdb.dev/blockers"
 		releaseBranch = "master"
+		releaseBranchLabel = "branch-master"
 	}
+
+	blockers, err := fetchOpenBlockers(client, releaseBranchLabel)
+	if err != nil {
+		return fmt.Errorf("cannot fetch blockers: %w", err)
+	}
+
 	args := messageDataPostBlockers{
 		Version:       blockersFlags.nextVersion,
-		PrepDate:      releasePrepDate.Format("Monday, January 2"),
-		ReleaseDate:   releasePublishDate.Format("Monday, January 2"),
-		TotalBlockers: tempTotalBlockers,
+		PrepDate:      releasePrepDate.Format(dateFormatEmail),
+		ReleaseDate:   releasePublishDate.Format(dateFormatEmail),
+		TotalBlockers: blockers.TotalBlockers,
 		BlockersURL:   blockersURL,
 		ReleaseBranch: releaseBranch,
-		BlockerList:   tempBlockerList,
+		BlockerList:   blockers.BlockerList,
 	}
 	opts := sendOpts{
 		templatesDir: blockersFlags.templatesDir,
@@ -145,4 +158,131 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("cannot send email: %w", err)
 	}
 	return nil
+}
+
+type openBlockers struct {
+	TotalBlockers int
+	BlockerList   []ProjectBlocker
+}
+
+func fetchOpenBlockers(
+	client githubClient,
+	releaseBranchLabel string,
+) (*openBlockers, error) {
+	issues, err := client.openIssues([]string{
+		"release-blocker",
+		releaseBranchLabel,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(issues) == 0 {
+		return &openBlockers{}, nil
+	}
+	numBlockersByProject := make(map[string]int)
+	for _, issue := range issues {
+		if len(issue.ProjectName) == 0 {
+			issue.ProjectName = NoProjectName
+		}
+		total, _ := numBlockersByProject[issue.ProjectName]
+		numBlockersByProject[issue.ProjectName] = total + 1
+	}
+	var blockers projectBlockers
+	for projectName, numBlockers := range numBlockersByProject {
+		blockers = append(blockers, ProjectBlocker{
+			ProjectName: projectName,
+			NumBlockers: numBlockers,
+		})
+	}
+	// sorting blockers Projects alphabetically, except for "No Project", which always goes last.
+	sort.Sort(blockers)
+	return &openBlockers{
+		TotalBlockers: len(issues),
+		BlockerList:   blockers,
+	}, nil
+}
+
+// mostRecentProjectName returns the most recently added project name, by iterating
+// through issue.Project.Name values found in the issues' timeline.
+// Returns nil if no project name found.
+func mostRecentProjectName(client githubClient, issueNum int) (string, error) {
+	removedProjects := make(map[string]bool)
+	events, err := client.issueEvents(issueNum)
+	if err != nil {
+		return "", err
+	}
+
+	// Ensure that events are sorted in chronological order.
+	sort.Sort(githubEvents(events))
+
+	// Iterate backwards through the events, to find the most recently added project.
+	for i := len(events) - 1; i >= 0; i-- {
+		projectName := events[i].ProjectName
+		if len(projectName) == 0 {
+			continue
+		}
+
+		// A "removed" project event means that this ProjectCard was added
+		// at some earlier point in time, but was subsequently removed.
+		if events[i].Event == eventRemovedProject {
+			// Add ProjectName to a removedProjects "stack", so
+			// that we don't return this Project when we eventually
+			// get to the earlier "added" project event.
+			removedProjects[projectName] = true
+		} else if events[i].Event == eventAddedProject {
+
+			if _, exists := removedProjects[projectName]; exists {
+				// This "added" project was subsequently removed from the issue,
+				// so we shouldn't return this Project. Now that we got to the
+				// "added" event, we can pop it from the "stack".
+				delete(removedProjects, projectName)
+			} else {
+				// This is the most recent project that was added; return this.
+				return projectName, err
+			}
+		}
+
+	}
+
+	return "", nil
+}
+
+// githubEvents implements the sort.Sort interface, so that we can
+// sort events chronologically by CreatedAt.
+type githubEvents []githubEvent
+
+func (e githubEvents) Len() int {
+	return len(e)
+}
+
+func (e githubEvents) Less(i, j int) bool {
+	return e[i].CreatedAt.Before(e[j].CreatedAt)
+}
+
+func (e githubEvents) Swap(i, j int) {
+	e[i], e[j] = e[j], e[i]
+}
+
+// projectBlockers implements the sort.Sort interface, so that we can
+// sort blockers alphabetically by Project Name,
+// except for "No Project" (blockers without a project), which should always
+// be listed last.
+type projectBlockers []ProjectBlocker
+
+func (p projectBlockers) Len() int {
+	return len(p)
+}
+
+func (p projectBlockers) Less(i, j int) bool {
+	if p[i].ProjectName == NoProjectName {
+		return false
+	}
+	if p[j].ProjectName == NoProjectName {
+		return true
+	}
+	return p[i].ProjectName < p[j].ProjectName
+}
+
+func (p projectBlockers) Swap(i, j int) {
+	p[i], p[j] = p[j], p[i]
 }
