@@ -115,11 +115,6 @@ func (dv *datumVec) AppendVal(v coldata.Datum) {
 	dv.data = append(dv.data, datum)
 }
 
-// SetLength implements coldata.DatumVec interface.
-func (dv *datumVec) SetLength(l int) {
-	dv.data = dv.data[:l]
-}
-
 // Len implements coldata.DatumVec interface.
 func (dv *datumVec) Len() int {
 	return len(dv.data)
@@ -145,6 +140,24 @@ func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	return err
 }
 
+// valuesSize returns the footprint of actual datums (in bytes) with ordinals in
+// [startIdx:] range, ignoring the overhead of tree.Datum wrapper.
+func (dv *datumVec) valuesSize(startIdx int) int64 {
+	var size int64
+	// Only the elements up to the length are expected to be non-nil. Note that
+	// we cannot take a short-cut with fixed-length values here because they
+	// might not be set, so we could over-account if we did something like
+	//   size += (len-startIdx) * fixedSize.
+	if startIdx < dv.Len() {
+		for _, d := range dv.data[startIdx:dv.Len()] {
+			if d != nil {
+				size += int64(d.Size())
+			}
+		}
+	}
+	return size
+}
+
 // Size implements coldata.DatumVec interface.
 func (dv *datumVec) Size(startIdx int) int64 {
 	// Note that we don't account for the overhead of datumVec struct, and the
@@ -156,24 +169,18 @@ func (dv *datumVec) Size(startIdx int) int64 {
 	if startIdx < 0 {
 		startIdx = 0
 	}
-	count := int64(dv.Cap() - startIdx)
-	size := memsize.DatumOverhead * count
-	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
-		// The elements in dv.data[max(startIdx,len):cap] range are accounted with
-		// the default datum size for the type. For those in the range
-		// [startIdx, len) we call Datum.Size().
-		idx := startIdx
-		for ; idx < len(dv.data); idx++ {
-			if dv.data[idx] != nil {
-				size += int64(dv.data[idx].Size())
-			}
-		}
-		// Pick up where the loop left off.
-		size += int64(dv.Cap()-idx) * int64(datumSize)
-	} else {
-		size += int64(datumSize) * count
+	// We have to account for the tree.Datum overhead for the whole capacity of
+	// the underlying slice.
+	return memsize.DatumOverhead*int64(dv.Cap()-startIdx) + dv.valuesSize(startIdx)
+}
+
+// Reset implements coldata.DatumVec interface.
+func (dv *datumVec) Reset() int64 {
+	released := dv.valuesSize(0 /* startIdx */)
+	for i := range dv.data {
+		dv.data[i] = nil
 	}
-	return size
+	return released
 }
 
 // assertValidDatum asserts that the given datum is valid to be stored in this
