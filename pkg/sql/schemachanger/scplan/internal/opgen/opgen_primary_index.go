@@ -55,10 +55,11 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.PrimaryIndex) scop.Op {
+				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) scop.Op {
 					return &scop.MakeAddedPrimaryIndexPublic{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
+						EventBase: newLogEventBase(this, md),
+						TableID:   this.TableID,
+						IndexID:   this.IndexID,
 					}
 				}),
 			),
@@ -96,10 +97,11 @@ func init() {
 						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
-				emit(func(this *scpb.PrimaryIndex) scop.Op {
+				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) scop.Op {
 					return &scop.MakeIndexAbsent{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
+						EventBase: newLogEventBase(this, md),
+						TableID:   this.TableID,
+						IndexID:   this.IndexID,
 					}
 				}),
 			),
