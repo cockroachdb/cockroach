@@ -389,7 +389,7 @@ export class TransactionDetails extends React.Component<
                       data={aggregatedStatements}
                       columns={makeStatementsColumns(
                         aggregatedStatements,
-                        "", // selectedApp
+                        [],
                         calculateTotalWorkload(aggregatedStatements),
                         nodeRegions,
                         "transactionDetails",

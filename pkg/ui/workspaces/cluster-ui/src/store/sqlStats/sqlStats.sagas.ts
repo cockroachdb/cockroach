@@ -30,6 +30,7 @@ import {
   actions as sqlStatsActions,
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
+import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 import { rootActions } from "../reducers";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 import { toDateRange } from "../../timeScaleDropdown";
@@ -83,6 +84,7 @@ export function* resetSQLStatsSaga() {
     yield call(resetSQLStats);
     yield put(sqlStatsActions.invalidated());
     yield put(sqlStatsActions.refresh());
+    yield put(sqlDetailsStatsActions.invalidated());
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }

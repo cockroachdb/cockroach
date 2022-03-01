@@ -12,7 +12,6 @@ import React, { Fragment } from "react";
 import _ from "lodash";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Fraction } from "../statementDetails";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   getAttributeTooltip,
@@ -126,17 +125,6 @@ export function flattenAttributes(
 }
 
 /* ************************* HELPER FUNCTIONS ************************* */
-
-function fractionToString(fraction: Fraction): string {
-  // The fraction denominator is the number of times the statement
-  // has been executed.
-
-  if (Number.isNaN(fraction.numerator)) {
-    return "unknown";
-  }
-
-  return (fraction.numerator > 0).toString();
-}
 
 // flattenTreeAttributes takes a tree representation of a logical
 // plan (IExplainTreePlanNode) and flattens the attributes in each node.
@@ -274,8 +262,8 @@ function PlanNode({ node }: PlanNodeProps): React.ReactElement {
 }
 
 export type GlobalPropertiesType = {
-  distribution: Fraction;
-  vectorized: Fraction;
+  distribution: boolean;
+  vectorized: boolean;
 };
 
 interface PlanViewProps {
@@ -294,12 +282,12 @@ export function PlanView({
   const globalAttrs: FlatPlanNodeAttribute[] = [
     {
       key: "distribution",
-      values: [fractionToString(globalProperties.distribution)],
+      values: [globalProperties.distribution.toString()],
       warn: false, // distribution is never warned
     },
     {
       key: "vectorized",
-      values: [fractionToString(globalProperties.vectorized)],
+      values: [globalProperties.vectorized.toString()],
       warn: false, // vectorized is never warned
     },
   ];

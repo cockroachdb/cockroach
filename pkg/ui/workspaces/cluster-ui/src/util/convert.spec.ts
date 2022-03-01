@@ -19,18 +19,11 @@ import {
   LongToMoment,
   DurationToNumber,
   NumberToDuration,
+  makeTimestamp,
 } from "./convert";
 import { fromNumber } from "long";
 
-type Timestamp = protos.google.protobuf.ITimestamp;
-
 const SECONDS = [0, 1, 2, 3, 4, 5, 100, 200, 300];
-
-function makeTimestamp(unixTs: number): Timestamp {
-  return new protos.google.protobuf.Timestamp({
-    seconds: fromNumber(unixTs),
-  });
-}
 
 describe("Test convert functions", (): void => {
   describe("NanoToMilli", (): void => {

@@ -23,13 +23,10 @@ import { Button } from "src/button";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
-  appAttr,
-  databaseAttr,
-  aggregatedTsAttr,
   propsToQueryString,
   TimestampToMoment,
-  aggregationIntervalAttr,
   computeOrUseStmtSummary,
+  appNamesAttr,
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -43,7 +40,7 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 export const StatementTableCell = {
   statements: (
     search?: string,
-    selectedApp?: string,
+    selectedApp?: string[],
     onStatementClick?: (statement: string) => void,
   ) => (stmt: AggregateStatistics): React.ReactElement => (
     <StatementLink
@@ -52,10 +49,9 @@ export const StatementTableCell = {
       statementSummary={stmt.summary}
       aggregatedTs={stmt.aggregatedTs}
       aggregationInterval={stmt.aggregationInterval}
-      database={stmt.database}
+      appNames={selectedApp}
       implicitTxn={stmt.implicitTxn}
       search={search}
-      app={selectedApp}
       onClick={onStatementClick}
     />
   ),
@@ -163,11 +159,9 @@ export const StatementTableCell = {
 type StatementLinkTargetProps = {
   statementFingerprintID: string;
   aggregatedTs?: number;
-  aggregationInterval?: number;
-  app: string;
+  appNames?: string[];
   implicitTxn: boolean;
   statementNoConstants?: string;
-  database?: string;
 };
 
 // StatementLinkTarget returns the link to the relevant statement page, given
@@ -179,10 +173,7 @@ export const StatementLinkTarget = (
   const statementFingerprintID = props.statementFingerprintID;
 
   const searchParams = propsToQueryString({
-    [databaseAttr]: props.database,
-    [appAttr]: props.app,
-    [aggregatedTsAttr]: props.aggregatedTs,
-    [aggregationIntervalAttr]: props.aggregationInterval,
+    [appNamesAttr]: props.appNames,
   });
 
   return `${base}/${encodeURIComponent(
@@ -194,27 +185,24 @@ interface StatementLinkProps {
   statementFingerprintID: string;
   aggregatedTs?: number;
   aggregationInterval?: number;
+  appNames?: string[];
+  implicitTxn: boolean;
   statement: string;
   statementSummary: string;
-  app: string;
-  implicitTxn: boolean;
   search: string;
   statementNoConstants?: string;
-  database?: string;
   onClick?: (statement: string) => void;
 }
 
 export const StatementLink = ({
   statementFingerprintID,
-  aggregatedTs,
   aggregationInterval,
+  appNames,
+  implicitTxn,
   statement,
   statementSummary,
-  app,
-  implicitTxn,
   search,
   statementNoConstants,
-  database,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
   const onStatementClick = React.useCallback(() => {
@@ -225,13 +213,11 @@ export const StatementLink = ({
 
   const linkProps = {
     statementFingerprintID,
-    aggregatedTs,
     aggregationInterval,
-    statement,
-    app,
+    appNames,
     implicitTxn,
+    statement,
     statementNoConstants,
-    database,
   };
 
   const summary = computeOrUseStmtSummary(statement, statementSummary);
