@@ -4,6 +4,7 @@ go_library(
     name = "serverutils",
     srcs = [
         "test_cluster_shim.go",
+        "test_cluster_utils.go",
         "test_server_shim.go",
         "test_tenant_shim.go",
     ],
@@ -20,6 +21,7 @@ go_library(
         "//pkg/server/status",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/testutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
