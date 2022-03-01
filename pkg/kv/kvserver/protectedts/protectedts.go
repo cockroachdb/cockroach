@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -115,6 +116,7 @@ type Iterator func(*ptpb.Record) (wantMore bool)
 // by any Records at a given asOf can move its GC threshold up to that
 // timestamp less its GC TTL.
 type Cache interface {
+	spanconfig.ProtectedTSReader
 
 	// Iterate examines the records with spans which overlap with [from, to).
 	// Nil values for from or to are equivalent to Key{}. The order of records
@@ -177,4 +179,10 @@ func (c *emptyCache) QueryRecord(
 
 func (c *emptyCache) Refresh(_ context.Context, asOf hlc.Timestamp) error {
 	return nil
+}
+
+func (c *emptyCache) GetProtectionTimestamps(
+	context.Context, roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp) {
+	return protectionTimestamps, (*hlc.Clock)(c).Now()
 }

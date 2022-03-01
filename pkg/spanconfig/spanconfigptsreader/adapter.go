@@ -12,10 +12,12 @@ package spanconfigptsreader
 
 import (
 	"context"
+	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -36,21 +38,20 @@ import (
 //
 // TODO(arul): In 22.2, we would have completely migrated away from the old
 //  subsystem, and we'd be able to get rid of this interface.
-//
-// TODO(arul): Add the KVSubscriber here as well and actually encapsulate PTS
-// information from both these sources as described above; This will happen once
-// we make the KVSubscriber implement the spanconfig.ProtectedTSReader
-// interface.
 type adapter struct {
-	cache *ptcache.Cache
+	cache        protectedts.Cache
+	kvSubscriber spanconfig.KVSubscriber
 }
 
 var _ spanconfig.ProtectedTSReader = &adapter{}
 
 // NewAdapter returns an adapter that implements spanconfig.ProtectedTSReader.
-func NewAdapter(cache *ptcache.Cache) spanconfig.ProtectedTSReader {
+func NewAdapter(
+	cache protectedts.Cache, kvSubscriber spanconfig.KVSubscriber,
+) spanconfig.ProtectedTSReader {
 	return &adapter{
-		cache: cache,
+		cache:        cache,
+		kvSubscriber: kvSubscriber,
 	}
 }
 
@@ -59,20 +60,33 @@ func NewAdapter(cache *ptcache.Cache) spanconfig.ProtectedTSReader {
 func (a *adapter) GetProtectionTimestamps(
 	ctx context.Context, sp roachpb.Span,
 ) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp) {
-	return a.cache.GetProtectionTimestamps(ctx, sp)
+	cacheTimestamps, cacheFreshness := a.cache.GetProtectionTimestamps(ctx, sp)
+	subscriberTimestamps, subscriberFreshness := a.kvSubscriber.GetProtectionTimestamps(ctx, sp)
+
+	// The freshness of the adapter is the minimum freshness of the Cache and
+	// KVSubscriber.
+	subscriberFreshness.Backward(cacheFreshness)
+	return append(subscriberTimestamps, cacheTimestamps...), subscriberFreshness
 }
 
 // TestingRefreshPTSState refreshes the in-memory protected timestamp state to
 // at least asOf.
-// TODO(arul): Once we wrap the KVSubscriber in this adapter interface, we'll
-// need to ensure that the subscriber is at-least as caught up as the supplied
-// asOf timestamp as well.
 func TestingRefreshPTSState(
-	ctx context.Context, protectedTSReader spanconfig.ProtectedTSReader, asOf hlc.Timestamp,
+	ctx context.Context,
+	t *testing.T,
+	protectedTSReader spanconfig.ProtectedTSReader,
+	asOf hlc.Timestamp,
 ) error {
 	a, ok := protectedTSReader.(*adapter)
 	if !ok {
-		return errors.AssertionFailedf("could not convert protectedts.Provider to ptprovider.Provider")
+		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
+	testutils.SucceedsSoon(t, func() error {
+		_, fresh := a.GetProtectionTimestamps(ctx, roachpb.Span{})
+		if fresh.Less(asOf) {
+			return errors.AssertionFailedf("KVSubscriber fresh as of %s; not caught up to %s", fresh, asOf)
+		}
+		return nil
+	})
 	return a.cache.Refresh(ctx, asOf)
 }

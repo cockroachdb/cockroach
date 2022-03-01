@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -135,7 +134,7 @@ type Server struct {
 	replicationReporter *reports.Reporter
 	protectedtsProvider protectedts.Provider
 
-	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
+	spanConfigSubscriber spanconfig.KVSubscriber
 
 	sqlServer *SQLServer
 
@@ -513,7 +512,69 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	systemConfigWatcher := systemconfigwatcher.New(
 		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
 	)
-	protectedTSReader := spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache.(*ptcache.Cache))
+
+	var spanConfig struct {
+		// kvAccessor powers the span configuration RPCs and the host tenant's
+		// reconciliation job.
+		kvAccessor spanconfig.KVAccessor
+		// subscriber is used by stores to subscribe to span configuration updates.
+		subscriber spanconfig.KVSubscriber
+		// kvAccessorForTenantRecords is when creating/destroying secondary
+		// tenant records.
+		kvAccessorForTenantRecords spanconfig.KVAccessor
+	}
+	if !cfg.SpanConfigsDisabled {
+		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
+			spanConfig.subscriber = spanConfigKnobs.StoreKVSubscriberOverride
+		} else {
+			// We use the span configs infra to control whether rangefeeds are
+			// enabled on a given range. At the moment this only applies to
+			// system tables (on both host and secondary tenants). We need to
+			// consider two things:
+			// - The sql-side reconciliation process runs asynchronously. When
+			//   the config for a given range is requested, we might not yet have
+			//   it, thus falling back to the static config below.
+			// - Various internal subsystems rely on rangefeeds to function.
+			//
+			// Consequently, we configure our static fallback config to actually
+			// allow rangefeeds. As the sql-side reconciliation process kicks
+			// off, it'll install the actual configs that we'll later consult.
+			// For system table ranges we install configs that allow for
+			// rangefeeds. Until then, we simply allow rangefeeds when a more
+			// targeted config is not found.
+			fallbackConf := cfg.DefaultZoneConfig.AsSpanConfig()
+			fallbackConf.RangefeedEnabled = true
+			// We do the same for opting out of strict GC enforcement; it
+			// really only applies to user table ranges
+			fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
+
+			spanConfig.subscriber = spanconfigkvsubscriber.New(
+				clock,
+				rangeFeedFactory,
+				keys.SpanConfigurationsTableID,
+				1<<20, /* 1 MB */
+				fallbackConf,
+				spanConfigKnobs,
+			)
+		}
+
+		scKVAccessor := spanconfigkvaccessor.New(
+			db, internalExecutor, cfg.Settings,
+			systemschema.SpanConfigurationsTableName.FQString(),
+		)
+		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
+	} else {
+		// If the spanconfigs infrastructure is disabled, there should be no
+		// reconciliation jobs or RPCs issued against the infrastructure. Plug
+		// in a disabled spanconfig.KVAccessor that would error out for
+		// unexpected use.
+		spanConfig.kvAccessor = spanconfigkvaccessor.DisabledKVAccessor
+
+		// Use a no-op accessor where tenant records are created/destroyed.
+		spanConfig.kvAccessorForTenantRecords = spanconfigkvaccessor.NoopKVAccessor
+	}
+	protectedTSReader := spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache, spanConfig.subscriber)
 
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
@@ -544,71 +605,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		KVMemoryMonitor:          kvMemoryMonitor,
 		RangefeedBudgetFactory:   rangeReedBudgetFactory,
 		SystemConfigProvider:     systemConfigWatcher,
-	}
-
-	var spanConfig struct {
-		// kvAccessor powers the span configuration RPCs and the host tenant's
-		// reconciliation job.
-		kvAccessor spanconfig.KVAccessor
-		// subscriber is used by stores to subsribe to span configuration
-		// updates.
-		subscriber *spanconfigkvsubscriber.KVSubscriber
-		// kvAccessorForTenantRecords is when creating/destroying secondary
-		// tenant records.
-		kvAccessorForTenantRecords spanconfig.KVAccessor
-	}
-	storeCfg.SpanConfigsDisabled = cfg.SpanConfigsDisabled
-	if !cfg.SpanConfigsDisabled {
-		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
-			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
-		} else {
-			// We use the span configs infra to control whether rangefeeds are
-			// enabled on a given range. At the moment this only applies to
-			// system tables (on both host and secondary tenants). We need to
-			// consider two things:
-			// - The sql-side reconciliation process runs asynchronously. When
-			//   the config for a given range is requested, we might not yet have
-			//   it, thus falling back to the static config below.
-			// - Various internal subsystems rely on rangefeeds to function.
-			//
-			// Consequently, we configure our static fallback config to actually
-			// allow rangefeeds. As the sql-side reconciliation process kicks
-			// off, it'll install the actual configs that we'll later consult.
-			// For system table ranges we install configs that allow for
-			// rangefeeds. Until then, we simply allow rangefeeds when a more
-			// targeted config is not found.
-			fallbackConf := storeCfg.DefaultSpanConfig
-			fallbackConf.RangefeedEnabled = true
-			// We do the same for opting out of strict GC enforcement; it
-			// really only applies to user table ranges
-			fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
-
-			spanConfig.subscriber = spanconfigkvsubscriber.New(
-				clock,
-				rangeFeedFactory,
-				keys.SpanConfigurationsTableID,
-				1<<20, /* 1 MB */
-				fallbackConf,
-				spanConfigKnobs,
-			)
-			storeCfg.SpanConfigSubscriber = spanConfig.subscriber
-		}
-
-		scKVAccessor := spanconfigkvaccessor.New(
-			db, internalExecutor, cfg.Settings,
-			systemschema.SpanConfigurationsTableName.FQString(),
-		)
-		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
-	} else {
-		// If the spanconfigs infrastructure is disabled, there should be no
-		// reconciliation jobs or RPCs issued against the infrastructure. Plug
-		// in a disabled spanconfig.KVAccessor that would error out for
-		// unexpected use.
-		spanConfig.kvAccessor = spanconfigkvaccessor.DisabledKVAccessor
-
-		// Use a no-op accessor where tenant records are created/destroyed.
-		spanConfig.kvAccessorForTenantRecords = spanconfigkvaccessor.NoopKVAccessor
+		SpanConfigSubscriber:     spanConfig.subscriber,
+		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {

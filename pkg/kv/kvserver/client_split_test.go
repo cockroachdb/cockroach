@@ -2435,7 +2435,7 @@ func TestUnsplittableRange(t *testing.T) {
 	require.NoError(
 		t,
 		spanconfigptsreader.TestingRefreshPTSState(
-			ctx, store.GetStoreConfig().ProtectedTimestampReader, s.Clock().Now(),
+			ctx, t, store.GetStoreConfig().ProtectedTimestampReader, s.Clock().Now(),
 		),
 	)
 	repl := store.LookupReplica(tableKey)

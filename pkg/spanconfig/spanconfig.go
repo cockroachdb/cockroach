@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -48,10 +49,12 @@ type KVAccessor interface {
 	WithTxn(context.Context, *kv.Txn) KVAccessor
 }
 
-// KVSubscriber presents a consistent[1] snapshot of a StoreReader that's
-// incrementally maintained with changes made to the global span configurations
-// state (system.span_configurations). The maintenance happens transparently;
-// callers can subscribe to learn about what key spans may have seen a
+// KVSubscriber presents a consistent[1] snapshot of a StoreReader and
+// ProtectedTSReader that's incrementally maintained with changes made to the
+// global span configurations state (system.span_configurations). The
+// maintenance happens transparently.
+//
+// Callers can subscribe to learn about what key spans may have seen a
 // configuration change. After learning about a span update through a callback
 // invocation, subscribers can consult the embedded StoreReader to retrieve an
 // up-to-date[2] config for the updated span. The callback is called in a single
@@ -66,10 +69,11 @@ type KVAccessor interface {
 // StoreReader for the given span would still retrieve the last config observed
 // for the span[3].
 //
-// [1]: The contents of the StoreReader at t1 corresponds exactly to the
-//      contents of the global span configuration state at t0 where t0 <= t1. If
-//      the StoreReader is read from at t2 where t2 > t1, it's guaranteed to
-//      observe a view of the global state at t >= t0.
+// [1]: The contents of the StoreReader and ProtectedTSReader at t1 corresponds
+//      exactly to the contents of the global span configuration state at t0
+//      where t0 <= t1. If the StoreReader or ProtectedTSReader is read from at
+//      t2 where t2 > t1, it's guaranteed to observe a view of the global state
+//      at t >= t0.
 // [2]: For the canonical KVSubscriber implementation, this is typically lagging
 //      by the closed timestamp target duration.
 // [3]: The canonical KVSubscriber implementation is bounced whenever errors
@@ -77,6 +81,9 @@ type KVAccessor interface {
 //      (typically through a coarsely targeted [min,max) span).
 type KVSubscriber interface {
 	StoreReader
+	ProtectedTSReader
+
+	Start(ctx context.Context, stopper *stop.Stopper) error
 	LastUpdated() hlc.Timestamp
 	Subscribe(func(ctx context.Context, updated roachpb.Span))
 }
@@ -190,6 +197,15 @@ type Reconciler interface {
 type Store interface {
 	StoreWriter
 	StoreReader
+
+	// ForEachOverlappingSpanConfig invokes the supplied callback on each
+	// span config that overlaps with the supplied span. In addition to the
+	// SpanConfig, the span it applies over is passed into the callback as well.
+	ForEachOverlappingSpanConfig(
+		ctx context.Context,
+		span roachpb.Span,
+		f func(roachpb.Span, roachpb.SpanConfig) error,
+	) error
 }
 
 // StoreWriter is the write-only portion of the Store interface.

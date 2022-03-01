@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -102,6 +103,10 @@ func newMockSpanConfigSubscriber(store spanconfig.Store) *mockSpanConfigSubscrib
 	return &mockSpanConfigSubscriber{Store: store}
 }
 
+func (m *mockSpanConfigSubscriber) Start(context.Context, *stop.Stopper) error {
+	return nil
+}
+
 func (m *mockSpanConfigSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
 	return m.Store.NeedsSplit(ctx, start, end)
 }
@@ -116,6 +121,12 @@ func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
 	return m.Store.GetSpanConfigForKey(ctx, key)
+}
+
+func (m *mockSpanConfigSubscriber) GetProtectionTimestamps(
+	context.Context, roachpb.Span,
+) ([]hlc.Timestamp, hlc.Timestamp) {
+	panic("unimplemented")
 }
 
 func (m *mockSpanConfigSubscriber) LastUpdated() hlc.Timestamp {

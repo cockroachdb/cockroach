@@ -52,9 +52,13 @@ func ParseSpan(t *testing.T, sp string) roachpb.Span {
 
 	matches := spanRe.FindStringSubmatch(sp)
 	start, end := matches[1], matches[2]
+	endKey := roachpb.Key(end)
+	if start == end {
+		endKey = nil
+	}
 	return roachpb.Span{
 		Key:    roachpb.Key(start),
-		EndKey: roachpb.Key(end),
+		EndKey: endKey,
 	}
 }
 
