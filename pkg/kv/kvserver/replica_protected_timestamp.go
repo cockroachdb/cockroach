@@ -66,7 +66,7 @@ func (r *Replica) maybeUpdateCachedProtectedTS(ts *cachedProtectedTimestampState
 
 func (r *Replica) readProtectedTimestampsRLocked(
 	ctx context.Context,
-) (ts cachedProtectedTimestampState) {
+) (ts cachedProtectedTimestampState, _ error) {
 	desc := r.descRLocked()
 	gcThreshold := *r.mu.state.GCThreshold
 
@@ -75,7 +75,11 @@ func (r *Replica) readProtectedTimestampsRLocked(
 		EndKey: roachpb.Key(desc.EndKey),
 	}
 	var protectionTimestamps []hlc.Timestamp
-	protectionTimestamps, ts.readAt = r.store.protectedtsReader.GetProtectionTimestamps(ctx, sp)
+	var err error
+	protectionTimestamps, ts.readAt, err = r.store.protectedtsReader.GetProtectionTimestamps(ctx, sp)
+	if err != nil {
+		return ts, err
+	}
 	earliestTS := hlc.Timestamp{}
 	for _, protectionTimestamp := range protectionTimestamps {
 		// Check if the timestamp the record was trying to protect is strictly
@@ -88,7 +92,7 @@ func (r *Replica) readProtectedTimestampsRLocked(
 		}
 	}
 	ts.earliestProtectionTimestamp = earliestTS
-	return ts
+	return ts, nil
 }
 
 // checkProtectedTimestampsForGC determines whether the Replica can run GC. If
@@ -104,7 +108,7 @@ func (r *Replica) readProtectedTimestampsRLocked(
 // old gc threshold, and the new gc threshold.
 func (r *Replica) checkProtectedTimestampsForGC(
 	ctx context.Context, gcTTL time.Duration,
-) (canGC bool, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp) {
+) (canGC bool, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp, _ error) {
 
 	// We may be reading the protected timestamp cache while we're holding
 	// the Replica.mu for reading. If we do so and find newer state in the cache
@@ -123,7 +127,11 @@ func (r *Replica) checkProtectedTimestampsForGC(
 
 	// read.earliestRecord is the record with the earliest timestamp which is
 	// greater than the existing gcThreshold.
-	read = r.readProtectedTimestampsRLocked(ctx)
+	var err error
+	read, err = r.readProtectedTimestampsRLocked(ctx)
+	if err != nil {
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, err
+	}
 	gcTimestamp = read.readAt
 	if !read.earliestProtectionTimestamp.IsEmpty() {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
@@ -137,12 +145,12 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	if gcTimestamp.Less(lease.Start.ToTimestamp()) {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
 			r, lease, gcTimestamp)
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
 	}
 
 	newThreshold = gc.CalculateThreshold(gcTimestamp, gcTTL)
 
-	return true, read.readAt, gcTimestamp, oldThreshold, newThreshold
+	return true, read.readAt, gcTimestamp, oldThreshold, newThreshold, nil
 }
 
 // markPendingGC is called just prior to sending the GC request to increase the

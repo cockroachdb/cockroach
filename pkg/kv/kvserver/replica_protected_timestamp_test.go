@@ -47,7 +47,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			name: "lease is too new",
 			test: func(t *testing.T, r *Replica, _ *manualPTSReader) {
 				r.mu.state.Lease.Start = r.store.Clock().NowAsClockTimestamp()
-				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, _, _, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.False(t, canGC)
 				require.Zero(t, gcTimestamp)
 			},
@@ -63,7 +64,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				})
 				// We should allow gc to proceed with the normal new threshold if that
 				// threshold is earlier than all of the records.
-				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, _, _, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.Equal(t, mp.asOf, gcTimestamp)
 			},
@@ -82,7 +84,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				// We should allow gc to proceed up to the timestamp which precedes the
 				// protected timestamp. This means we expect a GC timestamp 10 seconds
 				// after ts.Prev() given the policy.
-				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.False(t, newThreshold.Equal(oldThreshold))
 				require.Equal(t, ts.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
@@ -105,7 +108,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				// predecessor of the earliest valid record. However, the GC
 				// queue does not enqueue ranges in such cases, so this is only
 				// applicable to manually enqueued ranges.
-				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.Equal(t, newThreshold, oldThreshold)
 				require.True(t, newThreshold.Equal(oldThreshold))
@@ -123,7 +127,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
 					protectionTimestamps: []hlc.Timestamp{ts},
 				})
-				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, _, _, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.Equal(t, mp.asOf, gcTimestamp)
 			},
@@ -145,7 +150,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				// We should allow gc to proceed up to the timestamp which precedes the
 				// earliest protected timestamp (t3). This means we expect a GC
 				// timestamp 10 seconds after ts3.Prev() given the policy.
-				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.False(t, newThreshold.Equal(oldThreshold))
 				require.Equal(t, ts3.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
@@ -158,7 +164,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			name: "no protections apply",
 			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
 				mp.asOf = r.store.Clock().Now().Next()
-				canGC, _, gcTimestamp, _, _ := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, _, _, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.Equal(t, mp.asOf, gcTimestamp)
 			},
@@ -184,7 +191,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				// We should allow gc to proceed up to the timestamp which precedes the
 				// earliest protected timestamp (t3) that is still valid. This means we
 				// expect a GC timestamp 10 seconds after ts3.Prev() given the policy.
-				canGC, _, gcTimestamp, oldThreshold, newThreshold := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				canGC, _, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
 				require.True(t, canGC)
 				require.False(t, newThreshold.Equal(oldThreshold))
 				require.Equal(t, ts3.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
@@ -217,14 +225,14 @@ type manualPTSReader struct {
 // GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
 // interface.
 func (mp *manualPTSReader) GetProtectionTimestamps(
-	_ context.Context, sp roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp) {
+	ctx context.Context, sp roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
 	for _, protection := range mp.protections {
 		if protection.sp.Overlaps(sp) {
 			protectionTimestamps = append(protectionTimestamps, protection.protectionTimestamps...)
 		}
 	}
-	return protectionTimestamps, mp.asOf
+	return protectionTimestamps, mp.asOf, nil
 }
 
 // shuffleAllProtectionTimestamps shuffles protection timestamps associated with
