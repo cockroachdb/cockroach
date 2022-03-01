@@ -483,12 +483,14 @@ func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
 	return r.maybeUnquiesceAndWakeLeaderLocked()
 }
 
-func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
+func (r *Replica) ReadProtectedTimestamps(ctx context.Context) error {
 	var ts cachedProtectedTimestampState
 	defer r.maybeUpdateCachedProtectedTS(&ts)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ts = r.readProtectedTimestampsRLocked(ctx)
+	var err error
+	ts, err = r.readProtectedTimestampsRLocked(ctx)
+	return err
 }
 
 // ClosedTimestampPolicy returns the closed timestamp policy of the range, which

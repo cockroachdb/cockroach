@@ -180,7 +180,11 @@ func (mgcq *mvccGCQueue) shouldQueue(
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
 	_, conf := repl.DescAndSpanConfig()
-	canGC, _, gcTimestamp, oldThreshold, newThreshold := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	if err != nil {
+		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
+		return false, 0
+	}
 	if !canGC {
 		return false, 0
 	}
@@ -525,7 +529,10 @@ func (mgcq *mvccGCQueue) process(
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
-	canGC, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	if err != nil {
+		return false, err
+	}
 	if !canGC {
 		return false, nil
 	}
