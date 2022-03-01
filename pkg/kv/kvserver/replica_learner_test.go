@@ -435,6 +435,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		recording, pErr, err := leaseholderStore.ManuallyEnqueue(
 			ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
 		)
+		log.Infof(ctx, "%v", recording)
 		if pErr != nil {
 			return pErr
 		}
