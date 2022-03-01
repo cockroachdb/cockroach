@@ -1334,6 +1334,37 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 	}
 }
 
+// TestEmptyTxnIsBeingCorrectlyCounted tests that SQL Active Transaction
+// metric correctly handles empty transactions.
+func TestEmptyTxnIsBeingCorrectlyCounted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, conn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	openSQLTxnCountPreEmptyTxns := s.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLTxnsOpen.Value()
+	numOfEmptyTxns := int64(100)
+
+	// Since we constantly have background transactions running, it introduces
+	// some uncertainties and makes it difficult to compare the exact value of
+	// sql.txns.open metrics. To account for the uncertainties, we execute a
+	// large number of empty transactions. Then we compare the sql.txns.open
+	// metrics before and after executing the batch empty transactions. We assert
+	// that the delta between two observations is less than the size of the batch.
+	for i := int64(0); i < numOfEmptyTxns; i++ {
+		sqlConn.Exec(t, "BEGIN;COMMIT;")
+	}
+
+	openSQLTxnCountPostEmptyTxns := s.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLTxnsOpen.Value()
+	require.Less(t, openSQLTxnCountPostEmptyTxns-openSQLTxnCountPreEmptyTxns, numOfEmptyTxns,
+		"expected the sql.txns.open counter to be properly decremented "+
+			"after executing empty transactions, but it was not")
+}
+
 // dynamicRequestFilter exposes a filter method which is a
 // kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {
