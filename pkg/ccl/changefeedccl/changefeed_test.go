@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -128,6 +129,68 @@ func TestChangefeedBasics(t *testing.T) {
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
 	// cloudStorageTest is a regression test for #36994.
+}
+
+// TestChangefeedSendError validates that SendErrors do not fail the changefeed
+// as they can occur in normal situations such as a cluster update
+func TestChangefeedSendError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+
+		knobs := f.Server().TestingKnobs().
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Allow triggering a single sendError
+		sendErrorCh := make(chan error, 1)
+		knobs.FeedKnobs.OnRangeFeedValue = func(_ roachpb.KeyValue) error {
+			select {
+			case err := <-sendErrorCh:
+				return err
+			default:
+				return nil
+			}
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+		sendErrorCh <- kvcoord.TestNewSendError("test sendError")
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+
+		// Changefeed should've been retried due to the SendError
+		registry := f.Server().JobRegistry().(*jobs.Registry)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		retryCounter := sli.ErrorRetries
+		testutils.SucceedsSoon(t, func() error {
+			if retryCounter.Value() < 1 {
+				return fmt.Errorf("no retry has occurred")
+			}
+			return nil
+		})
+
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+			`foo: [4]->{"after": {"a": 4}}`,
+		})
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedBasicConfluentKafka(t *testing.T) {
@@ -376,8 +439,8 @@ func TestChangefeedFullTableName(t *testing.T) {
 			assertPayloads(t, foo, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	}
-	//TODO(zinger): Plumb this option through to all encoders so it works in sinkless mode
-	//t.Run(`sinkless`, sinklessTest(testFn))
+	// TODO(zinger): Plumb this option through to all encoders so it works in sinkless mode
+	// t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
