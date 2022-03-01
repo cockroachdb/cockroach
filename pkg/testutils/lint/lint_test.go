@@ -2132,7 +2132,14 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`In file included from.*(start|runtime)_jemalloc\.go`),
 			stream.GrepNot(`include/jemalloc/jemalloc\.h`),
 
+			// Allow shadowing for variables named err, pErr (proto-errors in kv) and
+			// ctx. For these variables, these names are very common and having too
+			// look for new names to avoid shadowing is too onerous or even
+			// counter-productive if it makes people use the wrong variable by
+			// mistake.
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
+			stream.GrepNot(`declaration of "ctx" shadows`),
+
 			// This exception is for hash.go, which re-implements runtime.noescape
 			// for efficient hashing.
 			stream.GrepNot(`pkg/sql/colexec/colexechash/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
