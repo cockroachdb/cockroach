@@ -73,6 +73,7 @@ type formatInterceptor struct{}
 
 func (formatInterceptor) formatterName() string { return "json-intercept" }
 func (formatInterceptor) doc() string           { return "internal only" }
+func (formatInterceptor) contentType() string   { return "application/json" }
 func (formatInterceptor) formatEntry(entry logEntry) *buffer {
 	pEntry := entry.convertToLegacy()
 	buf := getBuffer()

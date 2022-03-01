@@ -385,6 +385,7 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 		unsafeTLS:         *c.UnsafeTLS,
 		timeout:           *c.Timeout,
 		disableKeepAlives: *c.DisableKeepAlives,
+		contentType:       info.formatter.contentType(),
 	})
 	if err != nil {
 		return nil, err
