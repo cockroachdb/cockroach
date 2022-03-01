@@ -293,9 +293,11 @@ func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
 		return nil
 	}
 	// We use any table with reserved ID in system tenant as system case.
-	if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
-		acc := f.systemFeedBytesMon.MakeBoundAccount()
-		return NewFeedBudget(&acc, 0)
+	if _, id, err := keys.DecodeTenantPrefix(key.AsRawKey()); err == nil && id.IsSystem() {
+		if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
+			acc := f.systemFeedBytesMon.MakeBoundAccount()
+			return NewFeedBudget(&acc, 0)
+		}
 	}
 	acc := f.feedBytesMon.MakeBoundAccount()
 	return NewFeedBudget(&acc, f.limit)
