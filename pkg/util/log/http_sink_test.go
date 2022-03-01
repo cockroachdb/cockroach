@@ -214,7 +214,7 @@ func TestHTTPSinkContentTypeJSON(t *testing.T) {
 	address := "http://localhost" // testBase appends the port
 	timeout := 5 * time.Second
 	tb := true
-	format := "json"
+	format := "json-fluent"
 	expectedContentType := "application/json"
 	defaults := logconfig.HTTPDefaults{
 		Address: &address,
@@ -232,7 +232,7 @@ func TestHTTPSinkContentTypeJSON(t *testing.T) {
 		t.Log(body)
 		contentType := header.Get("Content-Type")
 		if contentType != expectedContentType {
-			return errors.Newf("mismatched content type: expected %s, got %s")
+			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
 		}
 		return nil
 	}
@@ -266,7 +266,7 @@ func TestHTTPSinkContentTypePlainText(t *testing.T) {
 		t.Log(body)
 		contentType := header.Get("Content-Type")
 		if contentType != expectedContentType {
-			return errors.Newf("mismatched content type: expected %s, got %s")
+			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
 		}
 		return nil
 	}
