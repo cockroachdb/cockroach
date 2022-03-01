@@ -105,7 +105,7 @@ func (s *Container) RecordStatement(
 	if value.Plan != nil {
 		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
 		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
-		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+		s.setLogicalPlanLastSampled(stmtFingerprintID, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -141,8 +141,8 @@ func (s *Container) RecordStatement(
 		estimatedMemoryAllocBytes := stats.sizeUnsafe() + statementKey.size() + 8
 
 		// We also accounts for the memory used for s.sampledPlanMetadataCache.
-		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
+		// timestamp size + hash.
+		estimatedMemoryAllocBytes += timestampSize + 8
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
@@ -187,11 +187,7 @@ func (s *Container) RecordStatementExecStats(
 func (s *Container) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
-	lastSampled := s.getLogicalPlanLastSampled(sampledPlanKey{
-		anonymizedStmt: fingerprint,
-		implicitTxn:    implicitTxn,
-		database:       database,
-	})
+	lastSampled := s.getLogicalPlanLastSampled(roachpb.ConstructStatementFingerprintID(fingerprint, false, implicitTxn, database))
 	return s.shouldSaveLogicalPlanDescription(lastSampled)
 }
 
