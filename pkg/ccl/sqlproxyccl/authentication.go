@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 )
@@ -131,5 +132,58 @@ var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttl
 			return newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
 		}
 	}
+	return newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
+}
+
+// readTokenAuthResult reads the result for the token-based authentication, and
+// assumes that the connection credentials have already been transmitted to the
+// server (as part of the startup message). If authentication fails, this will
+// return an error.
+//
+// NOTE: For now, this also reads the initial connection data
+// (i.e. ParameterStatus and BackendKeyData) until we see a ReadyForQuery
+// message. All messages will be discarded, and this is fine because we only
+// call this during connection migration, and the proxy is the client. Once we
+// address the TODO below, we could generalize it such that the client here is
+// a no-op client.
+//
+// TODO(jaylim-crl): We should extract out the initial connection data stuff
+// into a readInitialConnData function that `authenticate` can also use. It was
+// a mistake to split reader (interceptor) and writer (net.Conn), and I think
+// we should merge them back in the future. Instead of having the writer as the
+// other end, the writer should be the same connection. That way, a
+// sqlproxyccl.Conn can be used to read-from, or write-to the same component.
+var readTokenAuthResult = func(serverConn net.Conn) error {
+	// This interceptor is discarded once this function returns. Just like
+	// pgproto3.NewFrontend, this interceptor has an internal buffer.
+	// Discarding the buffer is fine since there won't be any other messages
+	// from the server once we receive the ReadyForQuery message because the
+	// caller (i.e. proxy) does not forward client messages until then.
+	serverInterceptor := interceptor.NewFrontendInterceptor(serverConn)
+
+	// The auth step should require only a few back and forths so 20 iterations
+	// should be enough.
+	var i int
+	for ; i < 20; i++ {
+		backendMsg, err := serverInterceptor.ReadMsg()
+		if err != nil {
+			return newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
+		}
+
+		switch tp := backendMsg.(type) {
+		case *pgproto3.AuthenticationOk, *pgproto3.ParameterStatus, *pgproto3.BackendKeyData:
+			// Do nothing.
+
+		case *pgproto3.ErrorResponse:
+			return newErrorf(codeAuthFailed, "authentication failed: %s", tp.Message)
+
+		case *pgproto3.ReadyForQuery:
+			return nil
+
+		default:
+			return newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
+		}
+	}
+
 	return newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
 }
