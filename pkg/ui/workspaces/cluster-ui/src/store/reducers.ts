@@ -25,6 +25,10 @@ import {
 import { UIConfigState, reducer as uiConfig } from "./uiConfig";
 import { DOMAIN_NAME } from "./utils";
 import { SQLStatsState, reducer as sqlStats } from "./sqlStats";
+import {
+  SQLDetailsStatsReducerState,
+  reducer as sqlDetailsStats,
+} from "./statementDetails";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -35,6 +39,7 @@ export type AdminUiState = {
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
   sqlStats: SQLStatsState;
+  sqlDetailsStats: SQLDetailsStatsReducerState;
 };
 
 export type AppState = {
@@ -50,6 +55,7 @@ export const reducers = combineReducers<AdminUiState>({
   terminateQuery,
   uiConfig,
   sqlStats,
+  sqlDetailsStats,
 });
 
 export const rootActions = {
