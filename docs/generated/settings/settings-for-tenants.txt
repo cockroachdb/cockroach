@@ -52,6 +52,7 @@ server.clock.persist_upper_bound_interval	duration	0s	the interval between persi
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
+server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.
 server.identity_map.configuration	string		system-identity to database-username mappings
 server.max_connections_per_gateway	integer	-1	the maximum number of non-superuser SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
