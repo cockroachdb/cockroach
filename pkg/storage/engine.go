@@ -746,8 +746,10 @@ type Engine interface {
 	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 	// CompactRange ensures that the specified range of key value pairs is
-	// optimized for space efficiency.
-	CompactRange(start, end roachpb.Key) error
+	// optimized for space efficiency. The forceBottommost parameter ensures
+	// that the key range is compacted all the way to the bottommost level of
+	// SSTables, which is necessary to pick up changes to bloom filters.
+	CompactRange(start, end roachpb.Key, forceBottommost bool) error
 	// InMem returns true if the receiver is an in-memory engine and false
 	// otherwise.
 	//
