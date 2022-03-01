@@ -83,16 +83,16 @@ ALTER TABLE t ADD CONSTRAINT dne_unique UNIQUE (dne)
 # We ignore the job status because GC for temporary indexes used
 # during backfills may already running rather than waiting for the GC
 # TTL depending on the timing.
-query TTTR
-SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, fraction_completed::decimal(10,2)
+query TTT
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 3
 ----
-SCHEMA CHANGE GC  GC for temporary index used during index backfill                           root  0.00
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  0.00
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  0.00
+SCHEMA CHANGE GC  GC for temporary index used during index backfill                           root
+SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root
+SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root
 
 query IIII colnames,rowsort
 SELECT * FROM t
