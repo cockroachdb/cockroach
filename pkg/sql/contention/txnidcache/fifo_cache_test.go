@@ -22,7 +22,7 @@ import (
 )
 
 func TestFIFOCache(t *testing.T) {
-	cache := newFIFOCache(func() int64 { return 2 * blockSize } /* capacity */)
+	cache := newFIFOCache(func() int64 { return 4 * blockSize * entrySize } /* capacity */)
 
 	// Fill the first eviction block in cache to 1/4 capacity.
 	input1, expected1 := generateInputBlock(blockSize * 1 / 4 /* size */)
