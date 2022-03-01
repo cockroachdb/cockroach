@@ -2055,6 +2055,151 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
 }
 
+func TestStatusAPIStatementDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
+				},
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []string{
+		`set application_name = 'first-app'`,
+		`CREATE DATABASE roachblog`,
+		`SET database = roachblog`,
+		`CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`,
+		`INSERT INTO posts VALUES (1, 'foo')`,
+		`INSERT INTO posts VALUES (2, 'foo')`,
+		`INSERT INTO posts VALUES (3, 'foo')`,
+		`SELECT * FROM posts`,
+	}
+
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt)
+	}
+	fingerprintID := roachpb.ConstructStatementFingerprintID(`INSERT INTO posts VALUES (_, '_')`,
+		false, true, `roachblog`)
+	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
+
+	var resp serverpb.StatementDetailsResponse
+	// Test that non-admin without VIEWACTIVITY or VIEWACTIVITYREDACTED privileges cannot access.
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	type resultValues struct {
+		totalCount        int
+		aggregatedTsCount int
+		planHashCount     int
+		appNames          []string
+	}
+
+	testPath := func(path string, expected resultValues) {
+		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
+		require.Equal(t, expected.aggregatedTsCount, len(resp.StatementsPerAggregatedTs))
+		require.Equal(t, expected.planHashCount, len(resp.StatementsPerPlanHash))
+		require.Equal(t, expected.appNames, resp.Statement.AppNames)
+	}
+
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
+	testPath(path, resultValues{totalCount: 3, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app"}})
+	// Execute same fingerprint id statement on a different application
+	statements = []string{
+		`set application_name = 'second-app'`,
+		`INSERT INTO posts VALUES (4, 'foo')`,
+		`INSERT INTO posts VALUES (5, 'foo')`,
+	}
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt)
+	}
+
+	oneMinAfterAggregatedTs := aggregatedTs + 60
+
+	// Test with no query params.
+	testPath(path,
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+	testPath(fmt.Sprintf("%v?end=%d", path, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+	testPath(fmt.Sprintf("%v?start=%d&end=%d", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with start = 1 min after aggregatedTs; should give no results
+	testPath(fmt.Sprintf("%v?start=%d", path, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 0, aggregatedTsCount: 0, planHashCount: 0, appNames: []string{}})
+	// Test with one app_name
+	testPath(fmt.Sprintf("%v?app_names=first-app", path),
+		resultValues{totalCount: 3, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app"}})
+	// Test with another app_name
+	testPath(fmt.Sprintf("%v?app_names=second-app", path),
+		resultValues{totalCount: 2, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"second-app"}})
+	// Test with both app_names
+	testPath(fmt.Sprintf("%v?app_names=first-app&app_names=second-app", path),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with app_name non-existing
+	testPath(fmt.Sprintf("%v?app_names=non-existing", path),
+		resultValues{totalCount: 0, aggregatedTsCount: 0, planHashCount: 0, appNames: []string{}})
+	// Test with app_name, start and end time.
+	testPath(fmt.Sprintf("%v?start=%d&end=%d&app_names=first-app&app_names=second-app", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+
+	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
+	testPath(path,
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+	testPath(fmt.Sprintf("%v?end=%d", path, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+	testPath(fmt.Sprintf("%v?start=%d&end=%d", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with start = 1 min after aggregatedTs; should give no results
+	testPath(fmt.Sprintf("%v?start=%d", path, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 0, aggregatedTsCount: 0, planHashCount: 0, appNames: []string{}})
+	// Test with one app_name
+	testPath(fmt.Sprintf("%v?app_names=first-app", path),
+		resultValues{totalCount: 3, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app"}})
+	// Test with another app_name
+	testPath(fmt.Sprintf("%v?app_names=second-app", path),
+		resultValues{totalCount: 2, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"second-app"}})
+	// Test with both app_names
+	testPath(fmt.Sprintf("%v?app_names=first-app&app_names=second-app", path),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+	// Test with app_name non-existing
+	testPath(fmt.Sprintf("%v?app_names=non-existing", path),
+		resultValues{totalCount: 0, aggregatedTsCount: 0, planHashCount: 0, appNames: []string{}})
+	// Test with app_name, start and end time.
+	testPath(fmt.Sprintf("%v?start=%d&end=%d&app_names=first-app&app_names=second-app", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
+		resultValues{totalCount: 5, aggregatedTsCount: 1, planHashCount: 1, appNames: []string{"first-app", "second-app"}})
+}
+
 func TestListSessionsSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
