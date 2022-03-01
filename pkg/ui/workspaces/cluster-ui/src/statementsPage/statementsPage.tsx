@@ -12,7 +12,7 @@ import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge } from "lodash";
 import classNames from "classnames/bind";
-import { Loading } from "src/loading";
+import { getValidErrorsList, Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   ColumnDescriptor,
@@ -506,7 +506,7 @@ export class StatementsPage extends React.Component<
     // hiding columns that won't be displayed for tenants.
     const columns = makeStatementsColumns(
       statements,
-      filters.app,
+      filters.app.split(","),
       totalWorkload,
       nodeRegions,
       "statement",
@@ -608,12 +608,13 @@ export class StatementsPage extends React.Component<
       ? []
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
-    const longLoadingMessage = isNil(this.props.statements) && (
-      <InlineAlert
-        intent="info"
-        title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
-      />
-    );
+    const longLoadingMessage = isNil(this.props.statements) &&
+      isNil(getValidErrorsList(this.props.statementsError)) && (
+        <InlineAlert
+          intent="info"
+          title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+        />
+      );
 
     return (
       <div className={cx("root", "table-area")}>

@@ -11,14 +11,14 @@
 import { withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
+import { RouteComponentProps } from "react-router-dom";
 import {
   StatementDetails,
   StatementDetailsDispatchProps,
-  StatementDetailsProps,
 } from "./statementDetails";
 import { AppState, uiConfigActions } from "../store";
 import {
-  selectStatement,
+  selectStatementDetails,
   selectStatementDetailsUiConfig,
 } from "./statementDetails.selectors";
 import {
@@ -29,7 +29,7 @@ import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
-import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as sqlDetailsStatsActions } from "src/store/statementDetails";
 import {
   actions as statementDiagnosticsActions,
   selectDiagnosticsReportsByStatementFingerprint,
@@ -40,6 +40,7 @@ import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { StatementDetailsRequest } from "../api";
 type IDuration = google.protobuf.IDuration;
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
@@ -51,11 +52,11 @@ const CancelStatementDiagnosticsReportRequest =
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
-const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
-  const statement = selectStatement(state, props);
-  const statementFingerprint = statement?.statement;
+const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
+  const statementDetails = selectStatementDetails(state, props);
+  const statementFingerprint = statementDetails?.statement.key_data.query;
   return {
-    statement,
+    statementDetails,
     statementsError: state.adminUI.sqlStats.lastError,
     timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
@@ -76,7 +77,8 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
-  refreshStatements: () => dispatch(sqlStatsActions.refresh()),
+  refreshStatementDetails: (req: StatementDetailsRequest) =>
+    dispatch(sqlDetailsStatsActions.refresh(req)),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),
