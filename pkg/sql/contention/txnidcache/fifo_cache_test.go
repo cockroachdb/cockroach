@@ -12,191 +12,116 @@ package txnidcache
 
 import (
 	"fmt"
-	"math/rand"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFIFOCache(t *testing.T) {
-	cache := newFIFOCache(func() int64 { return 2 * blockSize } /* capacity */)
+func TestFIFOCacheDataDriven(t *testing.T) {
+	var cache *fifoCache
+	inputBlocks := make(map[string]*block)
+	expectedMaps := make(map[string]map[uuid.UUID]roachpb.TransactionFingerprintID)
+	blockToNameMap := make(map[*block]string)
 
-	// Fill the first eviction block in cache to 1/4 capacity.
-	input1, expected1 := generateInputBlock(blockSize * 1 / 4 /* size */)
-	cache.add(cloneBlock(input1))
-	checkExists(t, cache, expected1)
-	checkEvictionListShape(t, cache, []int{blockSize * 1 / 4})
-	checkEvictionListContent(t, cache, []*block{input1})
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				var capacity int
+				d.ScanArgs(t, "capacity", &capacity)
+				cache = newFIFOCache(func() int64 { return int64(capacity) } /* capacity */)
+				return fmt.Sprintf("cache_size: %d", cache.size())
+			case "newInputBlock":
+				var name string
+				var percentageFilledStr string
 
-	// Fill the first eviction block in cache to 3/4 capacity.
-	input2, expected2 := generateInputBlock(blockSize / 2 /* size */)
-	cache.add(cloneBlock(input2))
-	checkExists(t, cache, expected1, expected2)
-	checkEvictionListShape(t, cache, []int{blockSize * 3 / 4})
+				d.ScanArgs(t, "name", &name)
+				d.ScanArgs(t, "percentageFilled", &percentageFilledStr)
 
-	checkEvictionListContent(t, cache, []*block{input1, input2})
+				percentageFilled, err := strconv.ParseFloat(percentageFilledStr, 64)
+				require.NoError(t, err)
 
-	// Overflow the first eviction block, the second block should be 1/2 filled.
-	input3, expected3 := generateInputBlock(blockSize * 3 / 4)
-	cache.add(cloneBlock(input3))
-	checkExists(t, cache, expected1, expected2, expected3)
-	checkEvictionListShape(t, cache, []int{blockSize, blockSize / 2})
-	checkEvictionListContent(t, cache, []*block{input1, input2, input3})
+				actualSize := int(blockSize * percentageFilled)
+				input, expected := generateInputBlock(actualSize)
+				inputBlocks[name] = input
+				expectedMaps[name] = expected
 
-	// Overflow the second block, cause the first block to be evicted. Second
-	// block becomes the first block, and it is completely filled. The new second
-	// block should be 1/4 filled. Part of the input3 will be evicted.
-	input4, expected4 := generateInputBlock(blockSize * 3 / 4)
-	cache.add(cloneBlock(input4))
-	checkEvictionListShape(t, cache, []int{blockSize, blockSize / 4})
+				return fmt.Sprintf("blockSize: %d", actualSize)
+			case "insertBlock":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				input, ok := inputBlocks[name]
+				require.True(t, ok, "input %s is not found", name)
+				input = cloneBlock(input)
+				cache.add(input)
+				blockToNameMap[input] = name
+			case "show":
+				var result []string
 
-	// First 1/4 of input3 should be evicted and the remaining [2/4:3/4] should
-	// still remain.
-	remainingInput3 := &block{}
-	copy(remainingInput3[:], input3[blockSize*1/4:blockSize*3/4])
-	checkEvictionListContent(t, cache, []*block{remainingInput3, input4})
+				result = append(result, fmt.Sprintf("cacheSize: %d", cache.size()))
+				for cur := cache.mu.eviction.head; cur != nil; cur = cur.next {
+					blockName := blockToNameMap[cur.block]
 
-	// Removes the portion that hasn't been evicted.
-	evictedExpected3 := removeEntryFromMap(expected3, input3[blockSize*1/4:blockSize*3/4])
+					actualBlockSize := 0
+					for blockOffset := 0; blockOffset < blockSize; blockOffset++ {
+						if !cur.block[blockOffset].Valid() {
+							break
+						}
+						actualBlockSize++
+					}
 
-	// Removes the portion that has been evicted.
-	remainingExpected3 := removeEntryFromMap(expected3, input3[:blockSize*1/4])
+					result = append(result,
+						fmt.Sprintf("blockName: %s, blockSize: %d",
+							blockName, actualBlockSize))
+				}
 
-	checkNotExist(t, cache, expected1, expected2, evictedExpected3)
-	checkExists(t, cache, remainingExpected3, expected4)
+				return strings.Join(result, "\n")
+			case "checkCacheContent":
+				var presentInputBlockNamesStr string
+				var evictedInputBlockNamesStr string
 
-	// Partially fill up the second block in the eviction list.
-	input5, expected5 := generateInputBlock(blockSize / 2)
-	cache.add(cloneBlock(input5))
-	checkNotExist(t, cache, expected1, expected2, evictedExpected3)
-	checkExists(t, cache, remainingExpected3, expected4, expected5)
-	checkEvictionListShape(t, cache, []int{blockSize, blockSize * 3 / 4})
-	checkEvictionListContent(t, cache, []*block{remainingInput3, input4, input5})
+				if d.HasArg("presentBlockNames") {
+					d.ScanArgs(t, "presentBlockNames", &presentInputBlockNamesStr)
+				}
+				if d.HasArg("evictedBlockNames") {
+					d.ScanArgs(t, "evictedBlockNames", &evictedInputBlockNamesStr)
+				}
 
-	// Overflow the second block again to trigger another eviction, part of the
-	// input4 would be evicted.
-	input6, expected6 := generateInputBlock(blockSize * 3 / 4)
-	cache.add(cloneBlock(input6))
-	checkEvictionListShape(t, cache, []int{blockSize, blockSize / 2})
+				presentInputBlockNames := strings.Split(presentInputBlockNamesStr, ",")
+				for _, name := range presentInputBlockNames {
+					expected := expectedMaps[name]
+					for txnID, expectedTxnFingerprintID := range expected {
+						actualTxnFingerprintID, ok := cache.mu.data[txnID]
+						require.True(t, ok, "expected to find txn fingerprint ID "+
+							"for txnID %s, but it was not found", txnID)
+						require.Equal(t, expectedTxnFingerprintID, actualTxnFingerprintID,
+							"expected the txnID %s to have txn fingerprint ID %d, but "+
+								"got %d", txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
+					}
+				}
 
-	remainingInput4 := &block{}
-	copy(remainingInput4[:], input4[blockSize/2:blockSize*3/4])
-	checkEvictionListContent(t, cache, []*block{remainingInput4, input5, input6})
+				evictedInputBlockNames := strings.Split(evictedInputBlockNamesStr, ",")
+				for _, name := range evictedInputBlockNames {
+					expected := expectedMaps[name]
+					for txnID := range expected {
+						_, ok := cache.mu.data[txnID]
+						require.False(t, ok, "expected to not find txn fingerprint ID "+
+							"for txnID %s, but it was found", txnID)
+					}
+				}
 
-	evictedExpected4 := removeEntryFromMap(expected4, input4[blockSize/2:blockSize*3/4])
-	remainingExpected4 := removeEntryFromMap(expected4, input4[:blockSize/2])
-
-	checkNotExist(t, cache, expected1, expected2, expected3, evictedExpected4)
-	checkExists(t, cache, remainingExpected4, expected5, expected6)
-}
-
-func removeEntryFromMap(
-	m map[uuid.UUID]roachpb.TransactionFingerprintID, filterList []contentionpb.ResolvedTxnID,
-) map[uuid.UUID]roachpb.TransactionFingerprintID {
-	newMap := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
-	for k, v := range m {
-		newMap[k] = v
-	}
-
-	for _, val := range filterList {
-		delete(newMap, val.TxnID)
-	}
-
-	return newMap
-}
-
-func checkEvictionListContent(t *testing.T, cache *fifoCache, expectedBlocks []*block) {
-	t.Helper()
-
-	cur := cache.mu.eviction.head
-	evictionListBlockIdx := 0
-	evictionListSize := 0
-
-	for i := range expectedBlocks {
-		require.NotNilf(t, cur, "expect a valid eviction list node, but it (size=%d)"+
-			"is nil", evictionListSize)
-
-		for blockIdx := 0; blockIdx < blockSize; blockIdx++ {
-			if !expectedBlocks[i][blockIdx].Valid() {
-				break
+				return "ok"
 			}
-
-			require.Equal(t, expectedBlocks[i][blockIdx], cur.block[evictionListBlockIdx],
-				"expected eviction block at index [%d][%d] to be "+
-					"%s, but it is %s", i, blockIdx, expectedBlocks[i][blockIdx].TxnID.String(),
-				cur.block[evictionListBlockIdx].TxnID.String())
-
-			evictionListBlockIdx++
-
-			isEvictionListIdxStillValid :=
-				evictionListBlockIdx < blockSize && cur.block[evictionListBlockIdx].Valid()
-
-			if !isEvictionListIdxStillValid {
-				cur = cur.next
-				evictionListBlockIdx = 0
-				evictionListSize++
-			}
-		}
-	}
-
-	require.Nilf(t, cur, "expect eviction list to be fully iterated, but it was not")
-}
-
-func checkEvictionListShape(t *testing.T, cache *fifoCache, expectedBlockSizes []int) {
-	t.Helper()
-	cur := cache.mu.eviction.head
-
-	for i := range expectedBlockSizes {
-		require.NotNilf(t, cur, "expect an eviction list of size %d, but it has "+
-			"a size of %d", len(expectedBlockSizes), i-1)
-
-		actualBlockSize := 0
-		for blockIdx := 0; blockIdx < blockSize; blockIdx++ {
-			if !cur.block[blockIdx].Valid() {
-				break
-			}
-			actualBlockSize++
-		}
-
-		require.Equal(t, expectedBlockSizes[i], actualBlockSize,
-			"expected eviction list block at index [%d] to have a size "+
-				"of %d, but instead it has a size of %d",
-			i, expectedBlockSizes[i], actualBlockSize)
-
-		cur = cur.next
-	}
-}
-
-func checkExists(
-	t *testing.T, cache *fifoCache, expectedMaps ...map[uuid.UUID]roachpb.TransactionFingerprintID,
-) {
-	t.Helper()
-	for _, expected := range expectedMaps {
-		for expectedKey, expectedValue := range expected {
-			actualValue, found := cache.get(expectedKey)
-			require.True(t, found, "expected txnID %s to be present in "+
-				"the cache, but it was not found", expectedKey)
-			require.Equal(t, expectedValue, actualValue, "expected to find "+
-				"transaction fingerprint ID %d for txnID %s, but found %d instead",
-				expectedValue, expectedKey, actualValue)
-		}
-	}
-}
-
-func checkNotExist(
-	t *testing.T, cache *fifoCache, expectedMaps ...map[uuid.UUID]roachpb.TransactionFingerprintID,
-) {
-	t.Helper()
-	for _, expected := range expectedMaps {
-		for expectedKey := range expected {
-			_, found := cache.get(expectedKey)
-			require.False(t, found, "expected txnID %s to be not present in "+
-				"the cache, but it was found", expectedKey)
-		}
-	}
+			return ""
+		})
+	})
 }
 
 func cloneBlock(b *block) *block {
@@ -204,6 +129,8 @@ func cloneBlock(b *block) *block {
 	copy(newBlock[:], b[:])
 	return newBlock
 }
+
+var deterministicIntSource = uint128.FromInts(1, 1)
 
 func generateInputBlock(
 	size int,
@@ -216,10 +143,13 @@ func generateInputBlock(
 	expected = make(map[uuid.UUID]roachpb.TransactionFingerprintID)
 
 	for i := 0; i < size; i++ {
-		input[i].TxnID = uuid.FastMakeV4()
-		input[i].TxnFingerprintID = roachpb.TransactionFingerprintID(rand.Uint64())
+		input[i].TxnID = uuid.FromUint128(deterministicIntSource)
+		input[i].TxnFingerprintID =
+			roachpb.TransactionFingerprintID(deterministicIntSource.Lo + deterministicIntSource.Hi)
 
 		expected[input[i].TxnID] = input[i].TxnFingerprintID
+
+		deterministicIntSource = deterministicIntSource.Add(1)
 	}
 
 	return input, expected
