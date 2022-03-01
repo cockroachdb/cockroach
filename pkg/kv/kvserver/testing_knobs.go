@@ -395,6 +395,11 @@ type StoreTestingKnobs struct {
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool
+	// ThrottleEmptySnapshots includes empty snapshots for throttling.
+	ThrottleEmptySnapshots bool
+	// CountSendSnapshotsThrottling counts the number of snapshots currently
+	// waiting for the snapshot send semaphore.
+	CountSendSnapshotsThrottling func(int)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

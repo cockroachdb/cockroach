@@ -96,6 +96,15 @@ func (s channelServer) HandleSnapshot(
 	panic("unexpected HandleSnapshot")
 }
 
+func (s channelServer) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream kvserver.DelegateSnapshotResponseStream,
+	span *tracing.Span,
+) error {
+	panic("unimplemented")
+}
+
 // raftTransportTestContext contains objects needed to test RaftTransport.
 // Typical usage will add multiple nodes with AddNode, attach channels
 // to at least one store with ListenStore, and send messages with Send.
