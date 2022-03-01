@@ -160,6 +160,17 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 
+	origNumPlaceholders := stmt.NumPlaceholders
+	switch stmt.AST.(type) {
+	case *tree.Prepare:
+		// Special case: we're preparing a SQL-level PREPARE using the
+		// wire protocol. There's an ambiguity from the perspective of this code:
+		// any placeholders that are inside of the statement that we're preparing
+		// shouldn't be treated as placeholders to the PREPARE statement. So, we
+		// edit the NumPlaceholders field to be 0 here.
+		stmt.NumPlaceholders = 0
+	}
+
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		p := &ex.planner
@@ -205,6 +216,9 @@ func (ex *connExecutor) prepare(
 			},
 		}
 		prepared.Statement = stmt.Statement
+		// When we set our prepared statement, we need to make sure to propagate
+		// the original NumPlaceholders if we're preparing a PREPARE.
+		prepared.Statement.NumPlaceholders = origNumPlaceholders
 		prepared.StatementNoConstants = stmt.StmtNoConstants
 		prepared.StatementSummary = stmt.StmtSummary
 
@@ -258,10 +272,9 @@ func (ex *connExecutor) populatePrepared(
 	// only allows SELECT, INSERT, UPDATE, DELETE and VALUES statements to be
 	// prepared.
 	// See: https://www.postgresql.org/docs/current/static/sql-prepare.html
-	// However, we allow a large number of additional statements.
-	// As of right now, the optimizer only works on SELECT statements and will
-	// fallback for all others, so this should be safe for the foreseeable
-	// future.
+	// However, we must be able to handle every type of statement below because
+	// the Postgres extended protocol requires running statements via the prepare
+	// and execute paths.
 	flags, err := p.prepareUsingOptimizer(ctx)
 	if err != nil {
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
@@ -539,7 +552,20 @@ func (ex *connExecutor) execDescribe(
 
 		res.SetInferredTypes(ps.InferredTypes)
 
-		if stmtHasNoData(ps.AST) {
+		ast := ps.AST
+		if execute, ok := ast.(*tree.Execute); ok {
+			// If we're describing an EXECUTE, we need to look up the statement type
+			// of the prepared statement that the EXECUTE refers to, or else we'll
+			// return the wrong information for describe.
+			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(execute.Name)]
+			if !found {
+				return retErr(pgerror.Newf(
+					pgcode.InvalidSQLStatementName,
+					"unknown prepared statement %q", descCmd.Name))
+			}
+			ast = innerPs.AST
+		}
+		if stmtHasNoData(ast) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPrepStmtOutput(ctx, ps.Columns)

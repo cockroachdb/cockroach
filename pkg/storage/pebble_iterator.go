@@ -172,7 +172,7 @@ func (p *pebbleIterator) init(
 		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
 		// [min, max), i.e., exclusive on the upper bound.
-		p.options.BlockPropertyFilters = []pebble.BlockPropertyFilter{
+		p.options.PointKeyFilters = []pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
 				uint64(opts.MinTimestampHint.WallTime),
 				uint64(opts.MaxTimestampHint.WallTime)+1),
