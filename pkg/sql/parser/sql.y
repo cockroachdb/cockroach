@@ -6744,13 +6744,24 @@ targets:
   {
     $$.val = tree.TargetList{Tables: $2.tablePatterns()}
   }
+// TODO(knz): This should learn how to parse more complex expressions
+// and placeholders.
 | TENANT iconst64
   {
     tenID := uint64($2.int64())
     if tenID == 0 {
       return setErr(sqllex, errors.New("invalid tenant ID"))
     }
-    $$.val = tree.TargetList{Tenant: roachpb.MakeTenantID(tenID)}
+    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(tenID)}}
+  }
+| TENANT IDENT
+  {
+    // TODO(knz): This rule can go away once the main clause above supports
+    // arbitrary expressions.
+    if $2 != "_" {
+       return setErr(sqllex, errors.New("invalid syntax"))
+    }
+    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true}}
   }
 | DATABASE name_list
   {

@@ -333,6 +333,7 @@ targets ::=
 	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
 	| 'TENANT' iconst64
+	| 'TENANT' 'identifier'
 	| 'DATABASE' name_list
 
 role_spec_list ::=
