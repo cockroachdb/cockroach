@@ -75,7 +75,7 @@ func TestEventStore(t *testing.T) {
 		store.guard.ForceSync()
 		numOfEntries := 0
 
-		if err := store.forEachEvent(func(actual *contentionpb.ExtendedContentionEvent) error {
+		if err := store.ForEachEvent(func(actual *contentionpb.ExtendedContentionEvent) error {
 			numOfEntries++
 			expectedEvent, ok := expectedMap[actual.BlockingEvent.TxnMeta.ID]
 			if !ok {
@@ -114,7 +114,7 @@ func TestEventStore(t *testing.T) {
 
 	// Now that we've resolved all the txn fingerprint IDs, the event store has
 	// all the information we expect.
-	require.NoError(t, store.forEachEvent(
+	require.NoError(t, store.ForEachEvent(
 		func(actual *contentionpb.ExtendedContentionEvent) error {
 			expectedEvent, ok := expectedMap[actual.BlockingEvent.TxnMeta.ID]
 			require.True(t, ok, "expected to found resolved contention event "+

@@ -170,6 +170,7 @@ go_library(
         "//pkg/sql/physicalplan",
         "//pkg/sql/querycache",
         "//pkg/sql/roleoption",
+        "//pkg/sql/scheduledlogging",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scjob",
         "//pkg/sql/schemachanger/scrun",

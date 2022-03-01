@@ -460,6 +460,7 @@ crdb_internal       table_indexes
 crdb_internal       table_row_statistics
 crdb_internal       tables
 crdb_internal       tenant_usage_details
+crdb_internal       transaction_contention_events
 crdb_internal       transaction_statistics
 crdb_internal       zones
 information_schema  administrable_role_authorizations
@@ -780,6 +781,7 @@ table_indexes
 table_row_statistics
 tables
 tenant_usage_details
+transaction_contention_events
 transaction_statistics
 zones
 administrable_role_authorizations
@@ -1056,6 +1058,7 @@ triggers
 triggered_update_columns
 transforms
 transaction_statistics
+transaction_contention_events
 tenant_usage_details
 tablespaces_extensions
 tablespaces
@@ -1138,6 +1141,7 @@ system         crdb_internal       table_indexes                          SYSTEM
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       tenant_usage_details                   SYSTEM VIEW  NO                  1
+system         crdb_internal       transaction_contention_events          SYSTEM VIEW  NO                  1
 system         crdb_internal       transaction_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       zones                                  SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations      SYSTEM VIEW  NO                  1
@@ -2730,6 +2734,7 @@ NULL     public   system         crdb_internal       table_indexes              
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
+NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NO            YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NO            YES
@@ -3348,6 +3353,7 @@ NULL     public   system         crdb_internal       table_indexes              
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
+NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       zones                                  SELECT          NO            YES
 NULL     public   system         information_schema  administrable_role_authorizations      SELECT          NO            YES
