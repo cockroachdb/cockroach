@@ -121,7 +121,7 @@ func ingestionPlanHook(
 		}
 
 		// We only support a TENANT target, so error out if that is nil.
-		if ingestionStmt.Targets.Tenant == (roachpb.TenantID{}) {
+		if !ingestionStmt.Targets.TenantID.IsSet() {
 			return errors.Newf("no tenant specified in ingestion query: %s", ingestionStmt.String())
 		}
 
@@ -154,7 +154,7 @@ func ingestionPlanHook(
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
 
-		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.Tenant)
+		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.TenantID.TenantID)
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if ingestionStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
@@ -166,7 +166,7 @@ func ingestionPlanHook(
 
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
-			TenantID:      ingestionStmt.Targets.Tenant,
+			TenantID:      ingestionStmt.Targets.TenantID.TenantID,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
 		}

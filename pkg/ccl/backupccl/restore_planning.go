@@ -1109,7 +1109,7 @@ func restorePlanHook(
 
 	var newTenantIDFn func() (*roachpb.TenantID, error)
 	if restoreStmt.Options.AsTenant != nil {
-		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.Tenant.IsSet() {
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.TenantID.IsSet() {
 			err := errors.Errorf("%q can only be used when running RESTORE TENANT for a single tenant", restoreOptAsTenant)
 			return nil, nil, nil, false, err
 		}
@@ -1286,7 +1286,7 @@ func checkPrivilegesForRestore(
 			"only users with the admin role are allowed to restore full cluster backups")
 	}
 	// Do not allow tenant restores.
-	if restoreStmt.Targets.Tenant != (roachpb.TenantID{}) {
+	if restoreStmt.Targets.TenantID.IsSet() {
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			"only users with the admin role can perform RESTORE TENANT")
