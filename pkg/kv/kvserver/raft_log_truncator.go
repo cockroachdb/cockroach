@@ -380,19 +380,10 @@ func (r rangesByRangeID) Swap(i, j int) {
 // deadlock (see storage.Engine.RegisterFlushCompletedCallback).
 func (t *raftLogTruncator) durabilityAdvancedCallback() {
 	runTruncation := false
-	doneRunning := func() {}
 	t.mu.Lock()
 	if !t.mu.runningTruncation && len(t.mu.addRanges) > 0 {
 		runTruncation = true
 		t.mu.runningTruncation = true
-		doneRunning = func() {
-			t.mu.Lock()
-			defer t.mu.Unlock()
-			if !t.mu.runningTruncation {
-				panic("expected runningTruncation")
-			}
-			t.mu.runningTruncation = false
-		}
 	}
 	if !runTruncation && len(t.mu.addRanges) > 0 {
 		t.mu.queuedDurabilityCB = true
@@ -401,16 +392,28 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 	if !runTruncation {
 		return
 	}
+	doneRunning := func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if !t.mu.runningTruncation {
+			panic("expected runningTruncation")
+		}
+		t.mu.runningTruncation = false
+	}
 	if err := t.stopper.RunAsyncTask(t.ambientCtx, "raft-log-truncation",
 		func(ctx context.Context) {
-			defer doneRunning()
 			for {
 				t.durabilityAdvanced(ctx)
+				shouldReturn := false
 				t.mu.Lock()
 				queued := t.mu.queuedDurabilityCB
 				t.mu.queuedDurabilityCB = false
-				t.mu.Unlock()
 				if !queued {
+					t.mu.runningTruncation = false
+					shouldReturn = true
+				}
+				t.mu.Unlock()
+				if shouldReturn {
 					return
 				}
 			}
