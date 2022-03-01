@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -51,12 +52,14 @@ func buildOpaque(
 		if err := p.checkNoConflictingCursors(stmt); err != nil {
 			return nil, err
 		}
-		scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
-		if err != nil {
-			return nil, err
-		}
-		if usePlan {
-			plan = scPlan
+		if evalCtx.Settings.Version.IsActive(ctx, clusterversion.EnableDeclarativeSchemaChanger) {
+			scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
+			if err != nil {
+				return nil, err
+			}
+			if usePlan {
+				plan = scPlan
+			}
 		}
 	}
 	if plan == nil {
