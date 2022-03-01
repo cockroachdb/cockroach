@@ -1,0 +1,123 @@
+# 24240 bytes is enough for a fifoCache with 3 fully filled eviction block.
+init capacity=24240
+----
+cache_size: 0
+
+newInputBlock name=block1 percentageFilled=0.25
+----
+blockSize: 42
+
+insertBlock name=block1
+----
+cache_size: 5056
+
+verifyBlockExistence names=block1
+----
+
+inspectEvictionListShape
+----
+blockIdx: 0, blockSize: 42
+
+ensureEvictionBlockOrdering names=block1
+----
+blockIdx: 0, blockName: block1
+
+newInputBlock name=block2 percentageFilled=0.50
+----
+blockSize: 84
+
+insertBlock name=block2
+----
+cache_size: 11120
+
+verifyBlockExistence names=block1,block2
+----
+
+inspectEvictionListShape
+----
+blockIdx: 0, blockSize: 42
+blockIdx: 1, blockSize: 84
+
+ensureEvictionBlockOrdering names=block1,block2
+----
+blockIdx: 0, blockName: block1
+blockIdx: 1, blockName: block2
+
+newInputBlock name=block3 percentageFilled=1.0
+----
+blockSize: 168
+
+insertBlock name=block3
+----
+cache_size: 19200
+
+verifyBlockExistence names=block1,block2,block3
+----
+
+inspectEvictionListShape
+----
+blockIdx: 0, blockSize: 42
+blockIdx: 1, blockSize: 84
+blockIdx: 2, blockSize: 168
+
+ensureEvictionBlockOrdering names=block1,block2,block3
+----
+blockIdx: 0, blockName: block1
+blockIdx: 1, blockName: block2
+blockIdx: 2, blockName: block3
+
+# Any subsequent insertion will cause evictions
+
+newInputBlock name=block4 percentageFilled=1.0
+----
+blockSize: 168
+
+insertBlock name=block4
+----
+cache_size: 22224
+
+verifyBlockExistence names=block2,block3,block4
+----
+
+verifyBlockNonExistence names=block1
+----
+
+inspectEvictionListShape
+----
+blockIdx: 0, blockSize: 84
+blockIdx: 1, blockSize: 168
+blockIdx: 2, blockSize: 168
+
+ensureEvictionBlockOrdering names=block2,block3,block4
+----
+blockIdx: 0, blockName: block2
+blockIdx: 1, blockName: block3
+blockIdx: 2, blockName: block4
+
+# Inserting sparse blocks can cause premature eviction.
+
+newInputBlock name=block5 percentageFilled=0.01786
+----
+blockSize: 3
+
+insertBlock name=block5
+----
+cache_size: 20280
+
+verifyBlockExistence names=block3,block4,block5
+----
+
+verifyBlockNonExistence names=block1,block2
+----
+
+inspectEvictionListShape
+----
+blockIdx: 0, blockSize: 168
+blockIdx: 1, blockSize: 168
+blockIdx: 2, blockSize: 3
+
+ensureEvictionBlockOrdering names=block3,block4,block5
+----
+blockIdx: 0, blockName: block3
+blockIdx: 1, blockName: block4
+blockIdx: 2, blockName: block5
