@@ -17,6 +17,7 @@ go_test(
     data = [":testdata"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
