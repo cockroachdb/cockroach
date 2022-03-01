@@ -764,6 +764,10 @@ type Store struct {
 
 	// Semaphore to limit concurrent non-empty snapshot application.
 	snapshotApplySem chan struct{}
+	// Semaphore to limit concurrent non-empty snapshot sending.
+	initialSnapshotSendSem chan struct{}
+	// Semaphore to limit concurrent non-empty snapshot sending.
+	raftSnapshotSendSem chan struct{}
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1037,6 +1041,10 @@ type StoreConfig struct {
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
 
+	// concurrentSnapshotSendLimit specifies the maximum number of each type of
+	// snapshot that are permitted to be sent concurrently.
+	concurrentSnapshotSendLimit int
+
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
@@ -1111,6 +1119,10 @@ func (sc *StoreConfig) SetDefaults() {
 		// throughput.
 		sc.concurrentSnapshotApplyLimit =
 			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
+	}
+	if sc.concurrentSnapshotSendLimit == 0 {
+		sc.concurrentSnapshotSendLimit =
+			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", 1)
 	}
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
@@ -1198,7 +1210,8 @@ func NewStore(
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-
+	s.initialSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.raftSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {
