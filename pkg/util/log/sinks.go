@@ -31,8 +31,6 @@ type sinkOutputOptions struct {
 	// forceSync forces synchronous operation of this output operation.
 	// That is, it will block until the output has been handled.
 	forceSync bool
-	// format specifies the log entry format (e.g. json etc.).
-	format string
 }
 
 // logSink abstracts the destination of logging events, after all
