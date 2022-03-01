@@ -189,7 +189,7 @@ func (a *Allocator) ResetMaybeReallocate(
 		}
 		if useOldBatch {
 			reallocated = false
-			oldBatch.ResetInternalBatch()
+			a.ReleaseMemory(oldBatch.ResetInternalBatch())
 			newBatch = oldBatch
 		} else {
 			a.ReleaseMemory(oldBatchMemSize)
@@ -266,6 +266,8 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				// Flat bytes vector needs to be reset before the vector can be
 				// reused.
 				coldata.Reset(presentVec)
+			} else if presentVec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+				a.ReleaseMemory(presentVec.Datum().Reset())
 			}
 			return
 		}
@@ -428,15 +430,11 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 		case types.JsonFamily:
 			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
-			// In datum vec we need to account for memory underlying the struct
-			// that is the implementation of tree.Datum interface (for example,
-			// tree.DBoolFalse) as well as for the overhead of storing that
-			// implementation in the slice of tree.Datums. Note that if t is of
-			// variable size, the memory will be properly accounted in
-			// getVecMemoryFootprint.
-			// Note: keep the calculation here in line with datumVec.Size.
-			implementationSize, _ := tree.DatumTypeSize(t)
-			acc += int64(implementationSize) + memsize.DatumOverhead
+			// Initially, only []tree.Datum slice is allocated for the
+			// datum-backed vectors right away, so that's what we're including
+			// in the estimate. Later on, once the actual values are set, they
+			// will be accounted for properly.
+			acc += memsize.DatumOverhead
 		case
 			types.BoolFamily,
 			types.IntFamily,
@@ -523,57 +521,51 @@ type SetAccountingHelper struct {
 	// that we have already accounted for.
 	prevBytesLikeTotalSize int64
 
-	// varSizeVecIdxs stores the indices of all vectors with variable sized
-	// values except for the bytes-like ones.
-	varSizeVecIdxs util.FastIntSet
-	// decimalVecs and datumVecs store all decimal and datum-backed vectors,
-	// respectively. They are updated every time a new batch is allocated.
+	// decimalVecIdxs stores the indices of all decimal vectors.
+	decimalVecIdxs util.FastIntSet
+	// decimalVecs stores all decimal vectors. They are updated every time a new
+	// batch is allocated.
 	decimalVecs []coldata.Decimals
-	datumVecs   []coldata.DatumVec
-	// varSizeDatumSizes stores the amount of space we have accounted for for
-	// the corresponding "row" of variable length values in the last batch that
-	// the helper has touched. This is necessary to track because when the batch
-	// is reset, the vectors still have references to the old datums, so we need
-	// to adjust the accounting only by the delta. Similarly, once a new batch
-	// is allocated, we need to track the estimate that we have already
+	// decimalSizes stores the amount of space we have accounted for for the
+	// corresponding decimal values in the corresponding row of the last batch
+	// that the helper has touched. This is necessary to track because when the
+	// batch is reset, the vectors still have references to the old decimals, so
+	// we need to adjust the accounting only by the delta. Similarly, once a new
+	// batch is allocated, we need to track the estimate that we have already
 	// accounted for.
 	//
 	// Note that because ResetMaybeReallocate caps the capacity of the batch at
 	// coldata.BatchSize(), this slice will never exceed coldata.BatchSize() in
 	// size, and we choose to ignore it for the purposes of memory accounting.
-	varSizeDatumSizes []int64
-	// varSizeEstimatePerRow is the total estimated size of single values from
-	// varSizeVecIdxs vectors which is accounted for by EstimateBatchSizeBytes.
-	// It serves as the initial value for varSizeDatumSizes values.
-	varSizeEstimatePerRow int64
+	decimalSizes []int64
+
+	// varLenDatumVecIdxs stores the indices of all datum-backed vectors with
+	// variable-length values.
+	varLenDatumVecIdxs util.FastIntSet
+	// varLenDatumVecs stores all variable-sized datum-backed vectors. They are
+	// updated every time a new batch is allocated.
+	varLenDatumVecs []coldata.DatumVec
 }
 
 // Init initializes the helper.
 func (h *SetAccountingHelper) Init(allocator *Allocator, typs []*types.T) {
 	h.Allocator = allocator
 
-	numDecimalVecs := 0
 	for vecIdx, typ := range typs {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BytesFamily, types.JsonFamily:
 			h.bytesLikeVecIdxs.Add(vecIdx)
 		case types.DecimalFamily:
-			h.varSizeVecIdxs.Add(vecIdx)
-			h.varSizeEstimatePerRow += memsize.Decimal
-			numDecimalVecs++
+			h.decimalVecIdxs.Add(vecIdx)
 		case typeconv.DatumVecCanonicalTypeFamily:
-			estimate, isVarlen := tree.DatumTypeSize(typ)
-			if isVarlen {
-				h.varSizeVecIdxs.Add(vecIdx)
-				h.varSizeEstimatePerRow += int64(estimate) + memsize.DatumOverhead
-			}
+			h.varLenDatumVecIdxs.Add(vecIdx)
 		}
 	}
 
-	h.allFixedLength = h.bytesLikeVecIdxs.Empty() && h.varSizeVecIdxs.Empty()
+	h.allFixedLength = h.bytesLikeVecIdxs.Empty() && h.decimalVecIdxs.Empty() && h.varLenDatumVecIdxs.Empty()
 	h.bytesLikeVectors = make([]*coldata.Bytes, h.bytesLikeVecIdxs.Len())
-	h.decimalVecs = make([]coldata.Decimals, numDecimalVecs)
-	h.datumVecs = make([]coldata.DatumVec, h.varSizeVecIdxs.Len()-numDecimalVecs)
+	h.decimalVecs = make([]coldata.Decimals, h.decimalVecIdxs.Len())
+	h.varLenDatumVecs = make([]coldata.DatumVec, h.varLenDatumVecIdxs.Len())
 }
 
 func (h *SetAccountingHelper) getBytesLikeTotalSize() int64 {
@@ -616,23 +608,24 @@ func (h *SetAccountingHelper) ResetMaybeReallocate(
 			}
 			h.prevBytesLikeTotalSize = h.getBytesLikeTotalSize()
 		}
-		if !h.varSizeVecIdxs.Empty() {
+		if !h.decimalVecIdxs.Empty() {
 			h.decimalVecs = h.decimalVecs[:0]
-			h.datumVecs = h.datumVecs[:0]
-			for vecIdx, ok := h.varSizeVecIdxs.Next(0); ok; vecIdx, ok = h.varSizeVecIdxs.Next(vecIdx + 1) {
-				if vecs[vecIdx].CanonicalTypeFamily() == types.DecimalFamily {
-					h.decimalVecs = append(h.decimalVecs, vecs[vecIdx].Decimal())
-				} else {
-					h.datumVecs = append(h.datumVecs, vecs[vecIdx].Datum())
-				}
+			for vecIdx, ok := h.decimalVecIdxs.Next(0); ok; vecIdx, ok = h.decimalVecIdxs.Next(vecIdx + 1) {
+				h.decimalVecs = append(h.decimalVecs, vecs[vecIdx].Decimal())
 			}
-			if cap(h.varSizeDatumSizes) < newBatch.Capacity() {
-				h.varSizeDatumSizes = make([]int64, newBatch.Capacity())
-			} else {
-				h.varSizeDatumSizes = h.varSizeDatumSizes[:newBatch.Capacity()]
+			h.decimalSizes = make([]int64, newBatch.Capacity())
+			for i := range h.decimalSizes {
+				// In EstimateBatchSizeBytes, memsize.Decimal has already been
+				// accounted for for each decimal value, so we multiple that by
+				// the number of decimal vectors to get already included
+				// footprint of all decimal values in a single row.
+				h.decimalSizes[i] = int64(len(h.decimalVecs)) * memsize.Decimal
 			}
-			for i := range h.varSizeDatumSizes {
-				h.varSizeDatumSizes[i] = h.varSizeEstimatePerRow
+		}
+		if !h.varLenDatumVecIdxs.Empty() {
+			h.varLenDatumVecs = h.varLenDatumVecs[:0]
+			for vecIdx, ok := h.varLenDatumVecIdxs.Next(0); ok; vecIdx, ok = h.varLenDatumVecIdxs.Next(vecIdx + 1) {
+				h.varLenDatumVecs = append(h.varLenDatumVecs, vecs[vecIdx].Datum())
 			}
 		}
 	}
@@ -655,18 +648,25 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
 	}
 
-	if !h.varSizeVecIdxs.Empty() {
-		var newVarLengthDatumSize int64
+	if !h.decimalVecIdxs.Empty() {
+		var newDecimalSizes int64
 		for _, decimalVec := range h.decimalVecs {
 			d := decimalVec.Get(rowIdx)
-			newVarLengthDatumSize += int64(d.Size())
+			newDecimalSizes += int64(d.Size())
 		}
-		for _, datumVec := range h.datumVecs {
+		h.Allocator.AdjustMemoryUsage(newDecimalSizes - h.decimalSizes[rowIdx])
+		h.decimalSizes[rowIdx] = newDecimalSizes
+	}
+
+	if !h.varLenDatumVecIdxs.Empty() {
+		var newVarLengthDatumSize int64
+		for _, datumVec := range h.varLenDatumVecs {
 			datumSize := datumVec.Get(rowIdx).(tree.Datum).Size()
-			newVarLengthDatumSize += int64(datumSize) + memsize.DatumOverhead
+			// Note that we're ignoring the overhead of tree.Datum because it
+			// was already included in EstimateBatchSizeBytes.
+			newVarLengthDatumSize += int64(datumSize)
 		}
-		h.Allocator.AdjustMemoryUsage(newVarLengthDatumSize - h.varSizeDatumSizes[rowIdx])
-		h.varSizeDatumSizes[rowIdx] = newVarLengthDatumSize
+		h.Allocator.AdjustMemoryUsage(newVarLengthDatumSize)
 	}
 }
 

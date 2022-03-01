@@ -36,8 +36,6 @@ type DatumVec interface {
 	AppendSlice(src DatumVec, destIdx, srcStartIdx, srcEndIdx int)
 	// AppendVal appends the given tree.Datum value to the end of the vector.
 	AppendVal(v Datum)
-	// SetLength sets the length of the vector.
-	SetLength(l int)
 	// Len returns the length of the vector.
 	Len() int
 	// Cap returns the underlying capacity of the vector.
@@ -55,4 +53,7 @@ type DatumVec interface {
 	// be used when elements before startIdx are guaranteed not to have been
 	// modified.
 	Size(startIdx int) int64
+	// Reset resets the vector for reuse. It returns the number of bytes
+	// released.
+	Reset() int64
 }

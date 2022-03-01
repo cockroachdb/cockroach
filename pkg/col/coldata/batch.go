@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -68,8 +69,9 @@ type Batch interface {
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
 	// or memory blowup issues. It unsets the selection and sets the length to
-	// 0.
-	ResetInternalBatch()
+	// 0. Notably, it deeply resets the datum-backed vectors and returns the
+	// number of bytes released as a result of the reset.
+	ResetInternalBatch() int64
 	// String returns a pretty representation of this batch.
 	String() string
 }
@@ -126,6 +128,8 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 		b.b[i] = col
 		if col.IsBytesLike() {
 			b.bytesVecIdxs.Add(i)
+		} else if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+			b.datumVecIdxs.Add(i)
 		}
 	}
 	return b
@@ -202,6 +206,8 @@ type MemBatch struct {
 	// vectors and checking whether they are of Bytes type we store this slice
 	// separately.
 	bytesVecIdxs util.FastIntSet
+	// datumVecIdxs stores the indices of all datum-backed vectors in b.
+	datumVecIdxs util.FastIntSet
 	useSel       bool
 	// sel is - if useSel is true - a selection vector from upstream. A
 	// selection vector is a list of selected tuple indices in this memBatch's
@@ -271,6 +277,8 @@ func (m *MemBatch) SetLength(length int) {
 func (m *MemBatch) AppendCol(col Vec) {
 	if col.IsBytesLike() {
 		m.bytesVecIdxs.Add(len(m.b))
+	} else if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+		m.datumVecIdxs.Add(len(m.b))
 	}
 	m.b = append(m.b, col)
 }
@@ -315,12 +323,17 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 			m.bytesVecIdxs.Remove(i)
 		}
 	}
+	for i, ok := m.datumVecIdxs.Next(0); ok; i, ok = m.datumVecIdxs.Next(i + 1) {
+		if i >= len(typs) {
+			m.datumVecIdxs.Remove(i)
+		}
+	}
 	m.ResetInternalBatch()
 	m.SetLength(length)
 }
 
 // ResetInternalBatch implements the Batch interface.
-func (m *MemBatch) ResetInternalBatch() {
+func (m *MemBatch) ResetInternalBatch() int64 {
 	m.SetLength(0 /* length */)
 	m.SetSelection(false)
 	for _, v := range m.b {
@@ -331,6 +344,11 @@ func (m *MemBatch) ResetInternalBatch() {
 	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
 		Reset(m.b[i])
 	}
+	var released int64
+	for i, ok := m.datumVecIdxs.Next(0); ok; i, ok = m.datumVecIdxs.Next(i + 1) {
+		released += m.b[i].Datum().Reset()
+	}
+	return released
 }
 
 // String returns a pretty representation of this batch.
