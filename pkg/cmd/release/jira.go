@@ -11,10 +11,10 @@
 package main
 
 import (
-	"fmt"
-	"strings"
+  "fmt"
+  "strings"
 
-	"github.com/andygrunwald/go-jira"
+  "github.com/andygrunwald/go-jira"
 )
 
 const jiraBaseURL = "https://cockroachlabs.atlassian.net/"
@@ -70,104 +70,104 @@ Thank you\!
 `
 
 type jiraClient struct {
-	client *jira.Client
+  client *jira.Client
 }
 
 type trackingIssueTemplateArgs struct {
-	Version  string
-	SHA      string
-	Tag      string
-	SREIssue string
+  Version  string
+  SHA      string
+  Tag      string
+  SREIssue string
 }
 
 type sreIssueTemplateArgs struct {
-	Version string
-	Tag     string
+  Version string
+  Tag     string
 }
 
-type issueDetails struct {
-	ID           string
-	Key          string
-	TypeName     string
-	ProjectKey   string
-	Summary      string
-	Description  string
-	CustomFields jira.CustomFields
+type jiraIssue struct {
+  ID           string
+  Key          string
+  TypeName     string
+  ProjectKey   string
+  Summary      string
+  Description  string
+  CustomFields jira.CustomFields
 }
 
 // newJiraClient returns jira.Client for username and password (API token).
 // To generate an API token, go to https://id.atlassian.com/manage-profile/security/api-tokens.
 func newJiraClient(baseURL string, username string, password string) (*jiraClient, error) {
-	tp := jira.BasicAuthTransport{
-		Username: username,
-		Password: password,
-	}
-	client, err := jira.NewClient(tp.Client(), baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create Jira client: %w", err)
-	}
-	return &jiraClient{
-		client: client,
-	}, nil
+  tp := jira.BasicAuthTransport{
+    Username: username,
+    Password: password,
+  }
+  client, err := jira.NewClient(tp.Client(), baseURL)
+  if err != nil {
+    return nil, fmt.Errorf("cannot create Jira client: %w", err)
+  }
+  return &jiraClient{
+    client: client,
+  }, nil
 }
 
-// getIssueDetails stores a subset of details from jira.Issue into issueDetails.
-func (j *jiraClient) getIssueDetails(issueID string) (issueDetails, error) {
-	issue, _, err := j.client.Issue.Get(issueID, nil)
-	if err != nil {
-		return issueDetails{}, err
-	}
-	customFields, _, err := j.client.Issue.GetCustomFields(issueID)
-	if err != nil {
-		return issueDetails{}, err
-	}
-	return issueDetails{
-		ID:           issue.ID,
-		Key:          issue.Key,
-		TypeName:     issue.Fields.Type.Name,
-		ProjectKey:   issue.Fields.Project.Name,
-		Summary:      issue.Fields.Summary,
-		Description:  issue.Fields.Description,
-		CustomFields: customFields,
-	}, nil
+// getIssueDetails stores a subset of details from jira.Issue into jiraIssue.
+func (j *jiraClient) getIssueDetails(issueID string) (jiraIssue, error) {
+  issue, _, err := j.client.Issue.Get(issueID, nil)
+  if err != nil {
+    return jiraIssue{}, err
+  }
+  customFields, _, err := j.client.Issue.GetCustomFields(issueID)
+  if err != nil {
+    return jiraIssue{}, err
+  }
+  return jiraIssue{
+    ID:           issue.ID,
+    Key:          issue.Key,
+    TypeName:     issue.Fields.Type.Name,
+    ProjectKey:   issue.Fields.Project.Name,
+    Summary:      issue.Fields.Summary,
+    Description:  issue.Fields.Description,
+    CustomFields: customFields,
+  }, nil
 }
 
-func newIssue(details *issueDetails) *jira.Issue {
-	var issue jira.Issue
-	issue.Fields = &jira.IssueFields{}
-	issue.Fields.Project = jira.Project{
-		Key: details.ProjectKey,
-	}
-	issue.Fields.Type = jira.IssueType{
-		Name: details.TypeName,
-	}
-	issue.Fields.Summary = details.Summary
-	issue.Fields.Description = details.Description
+func newIssue(details *jiraIssue) *jira.Issue {
+  var issue jira.Issue
+  issue.Fields = &jira.IssueFields{}
+  issue.Fields.Project = jira.Project{
+    Key: details.ProjectKey,
+  }
+  issue.Fields.Type = jira.IssueType{
+    Name: details.TypeName,
+  }
+  issue.Fields.Summary = details.Summary
+  issue.Fields.Description = details.Description
 
-	if details.CustomFields != nil {
-		issue.Fields.Unknowns = make(map[string]interface{})
-		for key, value := range details.CustomFields {
-			issue.Fields.Unknowns[key] = map[string]string{"value": value}
-		}
-	}
-	return &issue
+  if details.CustomFields != nil {
+    issue.Fields.Unknowns = make(map[string]interface{})
+    for key, value := range details.CustomFields {
+      issue.Fields.Unknowns[key] = map[string]string{"value": value}
+    }
+  }
+  return &issue
 }
 
-func (d issueDetails) url() string {
-	return fmt.Sprintf("%s/browse/%s", strings.TrimSuffix(jiraBaseURL, "/"), d.Key)
+func (d jiraIssue) url() string {
+  return fmt.Sprintf("%s/browse/%s", strings.TrimSuffix(jiraBaseURL, "/"), d.Key)
 }
 
 // createJiraIssue creates a **real** JIRA issue.
-func createJiraIssue(client *jiraClient, issue *jira.Issue) (issueDetails, error) {
-	newIssue, _, err := client.client.Issue.Create(issue)
-	if err != nil {
-		return issueDetails{}, err
-	}
-	details, err := client.getIssueDetails(newIssue.ID)
-	if err != nil {
-		return issueDetails{}, err
-	}
-	return details, nil
+func createJiraIssue(client *jiraClient, issue *jira.Issue) (jiraIssue, error) {
+  newIssue, _, err := client.client.Issue.Create(issue)
+  if err != nil {
+    return jiraIssue{}, err
+  }
+  details, err := client.getIssueDetails(newIssue.ID)
+  if err != nil {
+    return jiraIssue{}, err
+  }
+  return details, nil
 }
 
 // createTrackingIssue creates a release tracking issue.
@@ -175,34 +175,34 @@ func createJiraIssue(client *jiraClient, issue *jira.Issue) (issueDetails, error
 // - https://cockroachlabs.atlassian.net/browse/REL-3
 // - https://cockroachlabs.atlassian.net/rest/api/2/issue/REL-3
 func createTrackingIssue(
-	client *jiraClient, release releaseInfo, sreIssue issueDetails, dryRun bool,
-) (issueDetails, error) {
-	templateArgs := trackingIssueTemplateArgs{
-		Version:  release.nextReleaseVersion,
-		Tag:      release.buildInfo.Tag,
-		SHA:      release.buildInfo.SHA,
-		SREIssue: sreIssue.Key,
-	}
-	description, err := templateToText(trackingIssueTemplate, templateArgs)
-	if err != nil {
-		return issueDetails{}, fmt.Errorf("cannot parse tracking issue template: %w", err)
-	}
-	summary := fmt.Sprintf("Release: %s", release.nextReleaseVersion)
-	projectKey := "RE"
-	if dryRun {
-		projectKey = dryRunProject
-	}
-	issue := newIssue(&issueDetails{
-		// TODO: remove the following when ready
-		// Before sending the post request, let's override
-		// the `REL` project with our test `RE` project.
-		ProjectKey: projectKey,
-		// TODO: switch to TypeName: "CRDB Release", which requires some fields to be set
-		TypeName:    "Task",
-		Summary:     summary,
-		Description: description,
-	})
-	return createJiraIssue(client, issue)
+  client *jiraClient, release releaseInfo, sreIssue jiraIssue, dryRun bool,
+) (jiraIssue, error) {
+  templateArgs := trackingIssueTemplateArgs{
+    Version:  release.nextReleaseVersion,
+    Tag:      release.buildInfo.Tag,
+    SHA:      release.buildInfo.SHA,
+    SREIssue: sreIssue.Key,
+  }
+  description, err := templateToText(trackingIssueTemplate, templateArgs)
+  if err != nil {
+    return jiraIssue{}, fmt.Errorf("cannot parse tracking issue template: %w", err)
+  }
+  summary := fmt.Sprintf("Release: %s", release.nextReleaseVersion)
+  projectKey := "RE"
+  if dryRun {
+    projectKey = dryRunProject
+  }
+  issue := newIssue(&jiraIssue{
+    // TODO: remove the following when ready
+    // Before sending the post request, let's override
+    // the `REL` project with our test `RE` project.
+    ProjectKey: projectKey,
+    // TODO: switch to TypeName: "CRDB Release", which requires some fields to be set
+    TypeName:    "Task",
+    Summary:     summary,
+    Description: description,
+  })
+  return createJiraIssue(client, issue)
 }
 
 // createSREIssue creates an SREOPS ticket to request release candidate qualification.
@@ -216,29 +216,29 @@ func createTrackingIssue(
 // explicitly specify which partition to use, so that we don't "overwrite" the
 // qualification of one release candidate by pushing a second release candidate
 // to the same cluster. Tracked in: https://cockroachlabs.atlassian.net/browse/RE-83
-func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (issueDetails, error) {
-	templateArgs := sreIssueTemplateArgs{
-		Version: release.nextReleaseVersion,
-		Tag:     release.buildInfo.Tag,
-	}
-	description, err := templateToHTML(sreIssueTemplate, templateArgs)
-	if err != nil {
-		return issueDetails{}, fmt.Errorf("cannot parse SRE issue template: %w", err)
-	}
-	projectKey := "SREOPS"
-	summary := fmt.Sprintf("Deploy %s to release qualification cluster", release.nextReleaseVersion)
-	customFields := make(jira.CustomFields)
-	customFields[customFieldHasSLAKey] = "Yes"
-	if dryRun {
-		projectKey = dryRunProject
-		customFields = nil
-	}
-	issue := newIssue(&issueDetails{
-		ProjectKey:   projectKey,
-		TypeName:     "Task",
-		Summary:      summary,
-		Description:  description,
-		CustomFields: customFields,
-	})
-	return createJiraIssue(client, issue)
+func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (jiraIssue, error) {
+  templateArgs := sreIssueTemplateArgs{
+    Version: release.nextReleaseVersion,
+    Tag:     release.buildInfo.Tag,
+  }
+  description, err := templateToHTML(sreIssueTemplate, templateArgs)
+  if err != nil {
+    return jiraIssue{}, fmt.Errorf("cannot parse SRE issue template: %w", err)
+  }
+  projectKey := "SREOPS"
+  summary := fmt.Sprintf("Deploy %s to release qualification cluster", release.nextReleaseVersion)
+  customFields := make(jira.CustomFields)
+  customFields[customFieldHasSLAKey] = "Yes"
+  if dryRun {
+    projectKey = dryRunProject
+    customFields = nil
+  }
+  issue := newIssue(&jiraIssue{
+    ProjectKey:   projectKey,
+    TypeName:     "Task",
+    Summary:      summary,
+    Description:  description,
+    CustomFields: customFields,
+  })
+  return createJiraIssue(client, issue)
 }
