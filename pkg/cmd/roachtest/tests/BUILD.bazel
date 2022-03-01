@@ -32,6 +32,7 @@ go_library(
         "disk_stall.go",
         "django.go",
         "django_blocklist.go",
+        "drain.go",
         "drop.go",
         "drt.go",
         "encryption.go",
