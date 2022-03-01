@@ -389,6 +389,26 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_row_stats_poll_interval`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			d, err := DatumAsDuration(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			if err := tabledesc.ValidateTTLRowStatsPollInterval(key, d); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.RowStatsPollInterval = d
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL.RowStatsPollInterval = 0
+			return nil
+		},
+	},
 	`exclude_data_from_backup`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
 			evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
