@@ -90,7 +90,7 @@ type KVSubscriber struct {
 		// populated while the exposed spanconfig.StoreReader appears static.
 		// Once sufficiently caught up, the fresh spanconfig.Store is swapped in
 		// and the old discarded. See type-level comment for more details.
-		internal spanconfig.Store
+		internal *spanconfigstore.Store
 		handlers []handler
 	}
 }
@@ -206,6 +206,26 @@ func (s *KVSubscriber) GetSpanConfigForKey(
 	defer s.mu.RUnlock()
 
 	return s.mu.internal.GetSpanConfigForKey(ctx, key)
+}
+
+// GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) GetProtectionTimestamps(
+	ctx context.Context, sp roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
+		func(_ roachpb.Span, config roachpb.SpanConfig) error {
+			for _, protection := range config.GCPolicy.ProtectionPolicies {
+				protectionTimestamps = append(protectionTimestamps, protection.ProtectedTimestamp)
+			}
+			return nil
+		}); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+
+	return protectionTimestamps, s.LastUpdated(), nil
 }
 
 func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update) {

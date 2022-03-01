@@ -403,7 +403,8 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				r3, _ := protect(t, s, p, ts(6), sp42)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 
-				protectionTimestamps, _ := c.GetProtectionTimestamps(ctx, sp42)
+				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp42)
+				require.NoError(t, err)
 				sort.Slice(protectionTimestamps, func(i, j int) bool {
 					return protectionTimestamps[i].Less(protectionTimestamps[j])
 				})
@@ -417,7 +418,8 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				r1, _ := protect(t, s, p, ts(5), sp43)
 				r2, _ := protect(t, s, p, ts(10), sp44)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
-				protectionTimestamps, _ := c.GetProtectionTimestamps(ctx, sp42)
+				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp42)
+				require.NoError(t, err)
 				require.Equal(t, []hlc.Timestamp(nil), protectionTimestamps)
 				cleanup(r1, r2)
 			},
@@ -435,7 +437,8 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				r6, _ := protect(t, s, p, ts(20), sp44)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 
-				protectionTimestamps, _ := c.GetProtectionTimestamps(ctx, sp4243)
+				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp4243)
+				require.NoError(t, err)
 				sort.Slice(protectionTimestamps, func(i, j int) bool {
 					return protectionTimestamps[i].Less(protectionTimestamps[j])
 				})
