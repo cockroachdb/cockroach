@@ -713,6 +713,26 @@ SET TRACING=off;
 			t.Errorf("did not expect contention event in controlled cluster, but it was found")
 		}
 	}
+
+	testutils.SucceedsWithin(t, func() error {
+		err = testHelper.testCluster().tenantContentionRegistry(1).FlushEventsForTest(ctx)
+		if err != nil {
+			return err
+		}
+
+		resp := &serverpb.TransactionContentionEventsResponse{}
+		testHelper.
+			testCluster().
+			tenantHTTPClient(t, 1).
+			GetJSON("/_status/transactioncontentionevents", resp)
+
+		if len(resp.Events) == 0 {
+			return errors.New("expected transaction contention events being populated, " +
+				"but it is not")
+		}
+
+		return nil
+	}, 5*time.Second)
 }
 
 func testIndexUsageForTenants(t *testing.T, testHelper *tenantTestHelper) {

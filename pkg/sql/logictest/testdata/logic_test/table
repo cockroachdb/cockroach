@@ -615,6 +615,7 @@ table_indexes                          NULL
 table_row_statistics                   NULL
 tables                                 NULL
 tenant_usage_details                   NULL
+transaction_contention_events          NULL
 transaction_statistics                 NULL
 zones                                  NULL
 administrable_role_authorizations      NULL
