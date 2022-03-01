@@ -11,10 +11,12 @@
 export const aggregationIntervalAttr = "aggregation_interval";
 export const aggregatedTsAttr = "aggregated_ts";
 export const appAttr = "app";
+export const appNamesAttr = "appNames";
 export const dashQueryString = "dash";
 export const dashboardNameAttr = "dashboard_name";
 export const databaseAttr = "database";
 export const databaseNameAttr = "database_name";
+export const fingerprintIDAttr = "fingerprint_id";
 export const implicitTxnAttr = "implicitTxn";
 export const nodeIDAttr = "node_id";
 export const nodeQueryString = "node";
