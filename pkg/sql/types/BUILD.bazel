@@ -6,7 +6,6 @@ go_library(
     name = "types",
     srcs = [
         "alias.go",
-        "minimum_type_version.go",
         "oid.go",
         "testutils.go",
         "types.go",
@@ -16,7 +15,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/types",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/geo/geopb",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",
@@ -35,19 +33,17 @@ go_test(
     name = "types_test",
     size = "small",
     srcs = [
-        "minimum_type_version_test.go",
+        "dep_test.go",
         "types_test.go",
         "types_text_marshal_test.go",
     ],
     embed = [":types"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/geo/geopb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
+        "//pkg/testutils/buildutil",
         "//pkg/util/protoutil",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
