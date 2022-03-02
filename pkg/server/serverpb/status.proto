@@ -447,6 +447,9 @@ message RangeInfo {
     int64 waiting_writers = 6;
   }
   repeated LockInfo top_k_locks_by_wait_queue_waiters = 21 [ (gogoproto.nullable) = false ];
+  Locality locality = 22;
+  bool is_leaseholder = 23;
+  bool lease_valid = 24;
 }
 
 message RangesRequest {
