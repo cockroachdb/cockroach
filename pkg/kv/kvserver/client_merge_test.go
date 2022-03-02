@@ -417,6 +417,7 @@ func TestStoreRangeMergeTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderShort(t)
+	skip.UnderRace(t)
 
 	testutils.RunTrueAndFalse(t, "disjoint-leaseholders", func(t *testing.T, disjointLeaseholders bool) {
 		testutils.RunTrueAndFalse(t, "through-snapshot", func(t *testing.T, throughSnapshot bool) {
@@ -4464,6 +4465,8 @@ func TestMergeQueue(t *testing.T) {
 func TestMergeQueueSeesNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
 
 	type test struct {
 		name                                                   string
