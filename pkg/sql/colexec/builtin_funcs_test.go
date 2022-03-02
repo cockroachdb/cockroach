@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO(harding): Add test for #76359 coverage.
 func TestBasicBuiltinFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -71,6 +72,34 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 			inputTuples:  colexectestutils.Tuples{{"Hello"}, {"The"}},
 			inputTypes:   []*types.T{types.String},
 			outputTuples: colexectestutils.Tuples{{"Hello", 5}, {"The", 3}},
+		},
+		{
+			desc:      "Substr",
+			expr:      "substr(@1, @2, @3)",
+			inputCols: []int{0},
+			inputTuples: colexectestutils.Tuples{
+				{"Hello", 1, 4},
+				{"Hello", 4, 2},
+				{"Hello", 3, 1},
+				{"Hello", -2, 10},
+				{"Hello", -2, 4},
+				{"Hello", 5, 2},
+				{"你好吗", 1, 2},
+				{"你好吗", 2, 1},
+				{"你好吗", 2, 2},
+				{"你好吗", 3, 4}},
+			inputTypes: []*types.T{types.String, types.Int, types.Int},
+			outputTuples: colexectestutils.Tuples{
+				{"Hello", 1, 4, "Hell"},
+				{"Hello", 4, 2, "lo"},
+				{"Hello", 3, 1, "l"},
+				{"Hello", -2, 10, "Hello"},
+				{"Hello", -2, 4, "H"},
+				{"Hello", 5, 2, "o"},
+				{"你好吗", 1, 2, "你好"},
+				{"你好吗", 2, 1, "好"},
+				{"你好吗", 2, 2, "好吗"},
+				{"你好吗", 3, 4, "吗"}},
 		},
 	}
 
