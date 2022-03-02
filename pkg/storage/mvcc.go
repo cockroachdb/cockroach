@@ -2210,10 +2210,16 @@ func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 		internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
 		internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
 		traceSpan.RecordStructured(&roachpb.ScanStats{
-			NumInterfaceSeeks: uint64(seeks),
-			NumInternalSeeks:  uint64(internalSeeks),
-			NumInterfaceSteps: uint64(steps),
-			NumInternalSteps:  uint64(internalSteps),
+			NumInterfaceSeeks:              uint64(seeks),
+			NumInternalSeeks:               uint64(internalSeeks),
+			NumInterfaceSteps:              uint64(steps),
+			NumInternalSteps:               uint64(internalSteps),
+			BlockBytes:                     stats.InternalStats.BlockBytes,
+			BlockBytesInCache:              stats.InternalStats.BlockBytesInCache,
+			KeyBytes:                       stats.InternalStats.KeyBytes,
+			ValueBytes:                     stats.InternalStats.ValueBytes,
+			PointCount:                     stats.InternalStats.PointCount,
+			PointsCoveredByRangeTombstones: stats.InternalStats.PointsCoveredByRangeTombstones,
 		})
 	}
 }

@@ -2912,4 +2912,12 @@ message ScanStats {
   uint64 num_internal_seeks = 2;
   uint64 num_interface_steps = 3;
   uint64 num_internal_steps = 4;
+  // Lower-level stats for the scan. See pebble.InternalIteratorStats for the
+  // meaning of these.
+  uint64 block_bytes = 5;
+  uint64 block_bytes_in_cache = 6;
+  uint64 key_bytes = 7;
+  uint64 value_bytes = 8;
+  uint64 point_count = 9;
+  uint64 points_covered_by_range_tombstones = 10;
 }

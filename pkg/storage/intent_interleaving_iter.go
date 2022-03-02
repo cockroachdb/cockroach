@@ -964,6 +964,7 @@ func (i *intentInterleavingIter) Stats() IteratorStats {
 		stats.Stats.ForwardStepCount[i] += intentStats.Stats.ForwardStepCount[i]
 		stats.Stats.ReverseStepCount[i] += intentStats.Stats.ReverseStepCount[i]
 	}
+	stats.Stats.InternalStats.Merge(intentStats.Stats.InternalStats)
 	return stats
 }
 
