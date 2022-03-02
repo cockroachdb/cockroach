@@ -11,11 +11,9 @@
 package scbuild
 
 import (
-	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -298,18 +296,10 @@ func (b *builderState) ResolveTypeRef(ref tree.ResolvableTypeReference) scpb.Typ
 	if err != nil {
 		panic(err)
 	}
-	return newTypeT(b.ctx, b.clusterSettings, toType)
+	return newTypeT(toType)
 }
 
-func newTypeT(ctx context.Context, settings *cluster.Settings, t *types.T) scpb.TypeT {
-	version := settings.Version.ActiveVersionOrEmpty(ctx)
-	supported := types.IsTypeSupportedInVersion(version, t)
-	if !supported {
-		panic(pgerror.Newf(pgcode.FeatureNotSupported,
-			"type %s is not supported until version upgrade is finalized", t.SQLString(),
-		))
-	}
-
+func newTypeT(t *types.T) scpb.TypeT {
 	m, err := typedesc.GetTypeDescriptorClosure(t)
 	if err != nil {
 		panic(err)
@@ -416,7 +406,7 @@ func (b *builderState) ComputedColumnExpression(
 	if err != nil {
 		panic(err)
 	}
-	return parsedExpr, newTypeT(b.ctx, b.clusterSettings, typ)
+	return parsedExpr, newTypeT(typ)
 }
 
 var _ scbuildstmt.ElementReferences = (*builderState)(nil)
