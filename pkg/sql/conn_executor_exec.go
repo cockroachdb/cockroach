@@ -1946,6 +1946,12 @@ func (ex *connExecutor) recordTransaction(
 	implicit bool,
 	txnStart time.Time,
 ) error {
+
+	txnEnd := timeutil.Now()
+	txnTime := txnEnd.Sub(txnStart)
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
+	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
+
 	if len(ex.extraTxnState.transactionStatementFingerprintIDs) == 0 {
 		// If the slice of transaction statement fingerprint IDs is empty, this
 		// means there is no statements that's being executed within this
@@ -1953,11 +1959,6 @@ func (ex *connExecutor) recordTransaction(
 		// meaningful.
 		return nil
 	}
-
-	txnEnd := timeutil.Now()
-	txnTime := txnEnd.Sub(txnStart)
-	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
-	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
 	txnServiceLat := ex.phaseTimes.GetTransactionServiceLatency()
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
