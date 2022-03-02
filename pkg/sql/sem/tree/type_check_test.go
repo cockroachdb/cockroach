@@ -244,7 +244,7 @@ func TestTypeCheckError(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{`'1' + '2'`, `unsupported binary operator:`},
+		{`'1' + '2'`, `ambiguous binary operator:`},
 		{`'a' + 0`, `unsupported binary operator:`},
 		{`1.1 # 3.1`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},

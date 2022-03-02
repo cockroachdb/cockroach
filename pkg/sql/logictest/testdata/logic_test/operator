@@ -3,3 +3,47 @@ SELECT |/ -1.0::float
 
 query error cannot take square root of a negative number
 SELECT |/ -1.0::decimal
+
+query I
+SELECT ~-1;
+----
+0
+
+query I
+SELECT ~0;
+----
+-1
+
+query I
+SELECT ~1;
+----
+-2
+
+query I
+SELECT ~2;
+----
+-3
+
+query T
+SELECT ~B'0';
+----
+1
+
+query T
+SELECT ~B'1';
+----
+0
+
+statement error lexical error
+SELECT ~B'2';
+
+statement error ambiguous unary operator
+SELECT ~'0';
+
+statement error ambiguous unary operator
+SELECT ~'1';
+
+query I
+SELECT ~2;
+----
+-3

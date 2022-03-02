@@ -397,3 +397,31 @@ func (u Update) Deletion() bool {
 func (u Update) Addition() bool {
 	return !u.Deletion()
 }
+
+// ProtectedTSReader is the read-only portion for querying protected
+// timestamp information. It doubles up as an adaptor interface for
+// protectedts.Cache.
+type ProtectedTSReader interface {
+	// GetProtectionTimestamps returns all protected timestamps that apply to any
+	// part of the given key span. The time at which this protected timestamp
+	// state is valid is returned as well.
+	GetProtectionTimestamps(ctx context.Context, sp roachpb.Span) (
+		protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp,
+	)
+}
+
+// EmptyProtectedTSReader returns a ProtectedTSReader which contains no records
+// and is always up-to date. This is intended for testing.
+func EmptyProtectedTSReader(c *hlc.Clock) ProtectedTSReader {
+	return (*emptyProtectedTSReader)(c)
+}
+
+type emptyProtectedTSReader hlc.Clock
+
+// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
+// interface.
+func (r *emptyProtectedTSReader) GetProtectionTimestamps(
+	_ context.Context, _ roachpb.Span,
+) ([]hlc.Timestamp, hlc.Timestamp) {
+	return nil, (*hlc.Clock)(r).Now()
+}
