@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -110,16 +111,41 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		newDescs := make(map[descpb.ID]*tree.UnresolvedName)
+		type targetInfo struct {
+			Desc        catalog.Descriptor
+			InitialScan bool
+		}
+
+		newTargets := make(map[descpb.ID]targetInfo)
 
 		for _, target := range AllTargets(prevDetails) {
 			desc := descResolver.DescByID[target.TableID]
-			newDescs[target.TableID] = tree.NewUnresolvedName(desc.GetName())
+
+			// ensure that we do not perform initial scans on existing targets
+			newTargets[target.TableID] = targetInfo{
+				Desc:        desc,
+				InitialScan: false,
+			}
 		}
 
 		for _, cmd := range alterChangefeedStmt.Cmds {
 			switch v := cmd.(type) {
 			case *tree.AlterChangefeedAddTarget:
+				targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedTargetOptions)
+				if err != nil {
+					return err
+				}
+				targetOpts, err := targetOptsFn()
+				_, withInitialScan := targetOpts[changefeedbase.OptInitialScan]
+				_, noInitialScan := targetOpts[changefeedbase.OptNoInitialScan]
+				if withInitialScan && noInitialScan {
+					return pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
+						changefeedbase.OptNoInitialScan,
+					)
+				}
+
 				for _, targetPattern := range v.Targets.Tables {
 					targetName, err := getTargetName(targetPattern)
 					if err != nil {
@@ -139,7 +165,13 @@ func alterChangefeedPlanHook(
 					if !found {
 						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
 					}
-					newDescs[desc.GetID()] = tree.NewUnresolvedName(desc.GetName())
+					// By default, we will not perform an initial scan on newly added
+					// targets. Hence, the user must explicitly state that they want an
+					// initial scan performed on the new targets
+					newTargets[desc.GetID()] = targetInfo{
+						Desc:        desc,
+						InitialScan: withInitialScan,
+					}
 				}
 			case *tree.AlterChangefeedDropTarget:
 				for _, targetPattern := range v.Targets.Tables {
@@ -161,7 +193,7 @@ func alterChangefeedPlanHook(
 					if !found {
 						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
 					}
-					delete(newDescs, desc.GetID())
+					delete(newTargets, desc.GetID())
 				}
 			case *tree.AlterChangefeedSetOptions:
 				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
@@ -224,12 +256,8 @@ func alterChangefeedPlanHook(
 			}
 		}
 
-		if len(newDescs) == 0 {
+		if len(newTargets) == 0 {
 			return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop all targets for changefeed job %d", jobID)
-		}
-
-		for _, targetName := range newDescs {
-			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, targetName)
 		}
 
 		for _, val := range optionsMap {
@@ -256,6 +284,26 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
+		var nonInitialScanDescs []catalog.Descriptor
+		for _, target := range newTargets {
+			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, tree.NewUnresolvedName(target.Desc.GetName()))
+			if !target.InitialScan {
+				nonInitialScanDescs = append(nonInitialScanDescs, target.Desc)
+			}
+		}
+
+		targets, tables, err := getTargetsAndTables(ctx, p, nonInitialScanDescs, opts)
+		if err != nil {
+			return err
+		}
+
+		// skipInitialScanTargetDetails contains all targets that the changefeed
+		// will not perform an initial scan on
+		skipInitialScanTargetDetails := jobspb.ChangefeedDetails{
+			TargetSpecifications: targets,
+			Tables:               tables,
+		}
+
 		jobRecord, err := createChangefeedJobRecord(
 			ctx,
 			p,
@@ -271,9 +319,21 @@ func alterChangefeedPlanHook(
 
 		newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
 
-		// We need to persist the statement time that was generated during the
-		// creation of the changefeed
-		newDetails.StatementTime = prevDetails.StatementTime
+		changefeedSpans, err := fetchSpansForTargets(ctx, p.ExecCfg(), AllTargets(skipInitialScanTargetDetails), newDetails.StatementTime)
+		if err != nil {
+			return err
+		}
+
+		progress := jobspb.Progress{
+			Progress: &jobspb.Progress_HighWater{},
+			Details: &jobspb.Progress_Changefeed{
+				Changefeed: &jobspb.ChangefeedProgress{
+					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
+						Spans: changefeedSpans,
+					},
+				},
+			},
+		}
 
 		newPayload := job.Payload()
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
@@ -284,6 +344,7 @@ func alterChangefeedPlanHook(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			ju.UpdatePayload(&newPayload)
+			ju.UpdateProgress(&progress)
 			return nil
 		})
 

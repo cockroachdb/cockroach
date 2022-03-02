@@ -129,3 +129,35 @@ ALTER CHANGEFEED 123 ADD foo  DROP bar  SET baz = 'qux'  UNSET quux, corge -- no
 ALTER CHANGEFEED (123) ADD (foo)  DROP (bar)  SET baz = ('qux')  UNSET quux, corge -- fully parenthesized
 ALTER CHANGEFEED _ ADD foo  DROP bar  SET baz = '_'  UNSET quux, corge -- literals removed
 ALTER CHANGEFEED 123 ADD _  DROP _  SET _ = 'qux'  UNSET _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo WITH opt
+----
+ALTER CHANGEFEED 123 ADD foo WITH opt
+ALTER CHANGEFEED (123) ADD (foo) WITH opt -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo WITH opt -- literals removed
+ALTER CHANGEFEED 123 ADD _ WITH _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar, baz WITH opt
+----
+ALTER CHANGEFEED 123 ADD foo, bar, baz WITH opt
+ALTER CHANGEFEED (123) ADD (foo), (bar), (baz) WITH opt -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo, bar, baz WITH opt -- literals removed
+ALTER CHANGEFEED 123 ADD _, _, _ WITH _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar WITH opt ADD baz WITH opt2
+----
+ALTER CHANGEFEED 123 ADD foo, bar WITH opt  ADD baz WITH opt2 -- normalized!
+ALTER CHANGEFEED (123) ADD (foo), (bar) WITH opt  ADD (baz) WITH opt2 -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo, bar WITH opt  ADD baz WITH opt2 -- literals removed
+ALTER CHANGEFEED 123 ADD _, _ WITH _  ADD _ WITH _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar, baz WITH opt SET qux = 'quux' DROP corge
+----
+ALTER CHANGEFEED 123 ADD foo, bar, baz WITH opt  SET qux = 'quux'  DROP corge -- normalized!
+ALTER CHANGEFEED (123) ADD (foo), (bar), (baz) WITH opt  SET qux = ('quux')  DROP (corge) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo, bar, baz WITH opt  SET qux = '_'  DROP corge -- literals removed
+ALTER CHANGEFEED 123 ADD _, _, _ WITH _  SET _ = 'quux'  DROP _ -- identifiers removed

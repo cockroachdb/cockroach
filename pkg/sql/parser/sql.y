@@ -4400,10 +4400,11 @@ alter_changefeed_cmds:
 
 alter_changefeed_cmd:
   // ALTER CHANGEFEED <job_id> ADD [TABLE] ...
-  ADD changefeed_targets
+  ADD changefeed_targets opt_with_options
   {
     $$.val = &tree.AlterChangefeedAddTarget{
       Targets: $2.targetList(),
+      Options: $3.kvOptions(),
     }
   }
   // ALTER CHANGEFEED <job_id> DROP [TABLE] ...
