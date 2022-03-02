@@ -731,3 +731,74 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 	updated := h.loadSchedule(t, schedule.ScheduleID())
 	require.Equal(t, "", updated.ScheduleStatus())
 }
+
+type blockUntilCancelledExecutor struct {
+	started, done chan struct{}
+}
+
+var _ ScheduledJobExecutor = (*blockUntilCancelledExecutor)(nil)
+
+func (e *blockUntilCancelledExecutor) ExecuteJob(
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	txn *kv.Txn,
+) error {
+	defer close(e.done)
+	close(e.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (e *blockUntilCancelledExecutor) NotifyJobTermination(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	jobStatus Status,
+	details jobspb.Details,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) error {
+	return nil
+}
+
+func (e *blockUntilCancelledExecutor) Metrics() metric.Struct {
+	return nil
+}
+
+func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const executorName = "block-until-canceled-executor"
+	ex := &blockUntilCancelledExecutor{
+		started: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: fastDaemonKnobs(overridePaceSetting(10 * time.Millisecond)),
+	}
+	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	defer ts.Stopper().Stop(context.Background())
+
+	// Create schedule which blocks until its context canceled due to disabled scheduler.
+	// We only need to create one schedule.  This is because
+	// scheduler executes its batch of schedules sequentially, and so, creating more
+	// than one doesn't change anything since we block.
+	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
+	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner(security.TestUserName())
+	schedule.SetNextRun(timeutil.Now())
+	schedule.SetExecutionDetails(executorName, jobspb.ExecutionArguments{})
+	require.NoError(t, schedule.Create(
+		context.Background(), ts.InternalExecutor().(sqlutil.InternalExecutor), nil))
+
+	<-ex.started
+	// Disable scheduler and verify all running schedules were canceled.
+	schedulerEnabledSetting.Override(&ts.ClusterSettings().SV, false)
+	<-ex.done
+}
