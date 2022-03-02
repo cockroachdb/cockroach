@@ -47,7 +47,7 @@ message ReplicaInfo {
   uint64 raft_applied_index = 4;
   uint64 raft_committed_index = 5;
   repeated DescriptorChangeInfo raft_log_descriptor_changes = 6 [(gogoproto.nullable) = false,
-    (gogoproto.jsontag) = ",omitempty"];
+    (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
 }
 
 // Collection of replica information gathered from a collect-info run on a single node.
