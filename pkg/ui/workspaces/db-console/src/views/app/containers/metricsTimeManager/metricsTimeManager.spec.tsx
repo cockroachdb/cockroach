@@ -41,7 +41,7 @@ describe("<MetricsTimeManager>", function() {
   it("resets time window immediately it is empty", function() {
     getManager();
     assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.firstCall.args[0], {
+    assert.deepEqual(spy.firstCall[0], {
       start: now().subtract(state.scale.windowSize),
       end: now(),
     });
@@ -57,7 +57,7 @@ describe("<MetricsTimeManager>", function() {
 
     getManager();
     assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.firstCall.args[0], {
+    assert.deepEqual(spy.firstCall[0], {
       start: now().subtract(state.scale.windowSize),
       end: now(),
     });
@@ -73,7 +73,7 @@ describe("<MetricsTimeManager>", function() {
 
     getManager();
     assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.firstCall.args[0], {
+    assert.deepEqual(spy.firstCall[0], {
       start: now().subtract(state.scale.windowSize),
       end: now(),
     });
@@ -93,7 +93,7 @@ describe("<MetricsTimeManager>", function() {
     return new Promise<void>((resolve, _reject) => {
       setTimeout(() => {
         assert.isTrue(spy.calledOnce);
-        assert.deepEqual(spy.firstCall.args[0], {
+        assert.deepEqual(spy.firstCall[0], {
           start: now().subtract(state.scale.windowSize),
           end: now(),
         });
@@ -129,7 +129,7 @@ describe("<MetricsTimeManager>", function() {
     return new Promise<void>((resolve, _reject) => {
       setTimeout(() => {
         assert.isTrue(spy.calledOnce);
-        assert.deepEqual(spy.firstCall.args[0], {
+        assert.deepEqual(spy.firstCall[0], {
           start: now().subtract(state.scale.windowSize),
           end: now(),
         });

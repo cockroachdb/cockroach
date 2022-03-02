@@ -32,7 +32,7 @@ describe("trackActivateDiagnostics", () => {
 
     track(spy)("whatever");
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
@@ -45,7 +45,7 @@ describe("trackActivateDiagnostics", () => {
 
     track(spy)(statement);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const fingerprint = get(sent, "properties.fingerprint");
 
     assert.isTrue(isString(fingerprint));

@@ -517,7 +517,7 @@ describe("metrics reducer", function() {
                     () =>
                       resolve(
                         createResponse(
-                          (effect.args[0] as TimeSeriesQueryRequestMessage)
+                          (effect[0] as TimeSeriesQueryRequestMessage)
                             .queries,
                           createDatapoints(3),
                         ),
@@ -585,7 +585,7 @@ describe("metrics reducer", function() {
                   throw fakeError;
                 }
                 return createResponse(
-                  (effect.args[0] as TimeSeriesQueryRequestMessage).queries,
+                  (effect[0] as TimeSeriesQueryRequestMessage).queries,
                   createDatapoints(3),
                 );
               }
@@ -640,7 +640,7 @@ describe("metrics reducer", function() {
                   return new Promise(_resolve => {});
                 }
                 return createResponse(
-                  (effect.args[0] as TimeSeriesQueryRequestMessage).queries,
+                  (effect[0] as TimeSeriesQueryRequestMessage).queries,
                   createDatapoints(3),
                 );
               }

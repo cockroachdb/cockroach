@@ -32,7 +32,7 @@ describe("trackTableSort", () => {
 
     track(spy)();
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
@@ -46,7 +46,7 @@ describe("trackTableSort", () => {
 
     track(spy)(tableName, title, "asc");
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const table = get(sent, "properties.tableName");
     const columnName = get(sent, "properties.columnName");
     const direction = get(sent, "properties.sortDirection");

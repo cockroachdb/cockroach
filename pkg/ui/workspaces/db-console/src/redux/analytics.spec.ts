@@ -93,7 +93,7 @@ describe("analytics listener", function() {
       } as Location);
 
       assert.isTrue(pageSpy.calledOnce);
-      assert.deepEqual(pageSpy.args[0][0], {
+      assert.deepEqual(pageSpy[0][0], {
         userId: clusterID,
         name: "/test/path",
         properties: {
@@ -117,8 +117,8 @@ describe("analytics listener", function() {
         pathname: "/test/path/2",
       } as Location);
 
-      assert.equal(pageSpy.callCount, 2);
-      assert.deepEqual(pageSpy.args[0][0], {
+      assert.equal(pageSpy.mock.calls.length, 2);
+      assert.deepEqual(pageSpy[0][0], {
         userId: clusterID,
         name: "/test/path",
         properties: {
@@ -126,7 +126,7 @@ describe("analytics listener", function() {
           search: "",
         },
       });
-      assert.deepEqual(pageSpy.args[1][0], {
+      assert.deepEqual(pageSpy[1][0], {
         userId: clusterID,
         name: "/test/path/2",
         properties: {
@@ -150,7 +150,7 @@ describe("analytics listener", function() {
       } as Location);
 
       assert.isTrue(pageSpy.calledOnce);
-      assert.deepEqual(pageSpy.args[0][0], {
+      assert.deepEqual(pageSpy[0][0], {
         userId: clusterID,
         name: "/test/[redacted]/path",
         properties: {
@@ -226,7 +226,7 @@ describe("analytics listener", function() {
 
         assert.isTrue(pageSpy.calledOnce);
 
-        const actualArgs = pageSpy.args[0][0];
+        const actualArgs = pageSpy[0][0];
         const expectedArgs = {
           userId: clusterID,
           name: expectedLocation.pathname,
@@ -318,7 +318,7 @@ describe("analytics listener", function() {
         sync.identify();
 
         assert.isTrue(identifySpy.calledOnce);
-        assert.deepEqual(identifySpy.args[0][0], {
+        assert.deepEqual(identifySpy[0][0], {
           userId: clusterID,
           traits: {
             version: "0.1",
@@ -385,7 +385,7 @@ describe("analytics listener", function() {
         },
         event: "test",
       };
-      const message = trackSpy.args[0][0];
+      const message = trackSpy[0][0];
 
       assert.isTrue(trackSpy.calledOnce);
       assert.deepEqual(message, expected);
@@ -413,7 +413,7 @@ describe("analytics listener", function() {
         },
         event: "test",
       };
-      const message = trackSpy.args[0][0];
+      const message = trackSpy[0][0];
 
       assert.isTrue(trackSpy.calledOnce);
       assert.deepEqual(message, expected);

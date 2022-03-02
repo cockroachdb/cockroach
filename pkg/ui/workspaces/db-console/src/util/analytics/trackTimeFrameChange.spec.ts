@@ -34,7 +34,7 @@ describe("trackPaginate", () => {
 
     track(spy)(direction);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(event === expected);
@@ -45,7 +45,7 @@ describe("trackPaginate", () => {
 
     track(spy)(direction);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const changeDirection = get(sent, "properties.direction");
 
     assert.isTrue(changeDirection === direction);

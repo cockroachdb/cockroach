@@ -34,7 +34,7 @@ describe("trackNetworkSort", () => {
 
     track(spy)(sortBy);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(event === expected);
@@ -45,7 +45,7 @@ describe("trackNetworkSort", () => {
 
     track(spy)(sortBy);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const sortedBy = get(sent, "properties.sortBy");
 
     assert.isTrue(sortedBy === sortBy);

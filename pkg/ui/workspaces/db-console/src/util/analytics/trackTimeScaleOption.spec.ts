@@ -34,7 +34,7 @@ describe("trackTimeScaleSelected", () => {
 
     track(spy)(scale);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(event === expected);
@@ -45,7 +45,7 @@ describe("trackTimeScaleSelected", () => {
 
     track(spy)(scale);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const timeScale = get(sent, "properties.timeScale");
 
     assert.isTrue(timeScale === scale);

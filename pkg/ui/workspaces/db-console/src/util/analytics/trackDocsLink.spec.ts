@@ -34,7 +34,7 @@ describe("trackDocsLink", () => {
 
     track(spy)(targetText);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(event === expected);
@@ -45,7 +45,7 @@ describe("trackDocsLink", () => {
 
     track(spy)(targetText);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const linkText = get(sent, "properties.linkText");
 
     assert.isTrue(linkText === targetText);

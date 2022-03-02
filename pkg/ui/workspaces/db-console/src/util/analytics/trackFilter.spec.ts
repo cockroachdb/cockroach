@@ -35,7 +35,7 @@ describe("trackFilter", () => {
 
     track(spy)(filter, filterValue);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(event === expected);
@@ -46,7 +46,7 @@ describe("trackFilter", () => {
 
     track(spy)(filter, filterValue);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const selectedFilter = get(sent, "properties.selectedFilter");
 
     assert.isTrue(selectedFilter === filterValue);

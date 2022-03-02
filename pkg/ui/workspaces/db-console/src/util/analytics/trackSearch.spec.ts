@@ -34,7 +34,7 @@ describe("trackSearch", () => {
 
     track(spy)(testSearchResults);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
@@ -46,7 +46,7 @@ describe("trackSearch", () => {
 
     track(spy)(testSearchResults);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const numberOfResults = get(sent, "properties.numberOfResults");
 
     assert.isTrue(isNumber(numberOfResults));

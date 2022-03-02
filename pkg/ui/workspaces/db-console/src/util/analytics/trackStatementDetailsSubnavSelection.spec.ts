@@ -34,7 +34,7 @@ describe("trackSubnavSelection", () => {
 
     track(spy)(subNavKey);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(event === expected);
@@ -45,7 +45,7 @@ describe("trackSubnavSelection", () => {
 
     track(spy)(subNavKey);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const selection = get(sent, "properties.selection");
 
     assert.isTrue(selection === subNavKey);

@@ -34,7 +34,7 @@ describe("trackPaginate", () => {
 
     track(spy)(testPage);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
@@ -46,7 +46,7 @@ describe("trackPaginate", () => {
 
     track(spy)(testPage);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.getCall(0)[0];
     const selectedPage = get(sent, "properties.selectedPage");
 
     assert.isTrue(isNumber(selectedPage));
