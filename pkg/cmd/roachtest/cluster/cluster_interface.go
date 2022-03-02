@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
@@ -127,4 +128,6 @@ type Cluster interface {
 	GitClone(
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error
+
+	FetchTimeseriesData(ctx context.Context, t test.Test) error
 }
