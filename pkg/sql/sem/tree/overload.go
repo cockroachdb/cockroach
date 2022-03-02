@@ -750,6 +750,10 @@ func typeCheckOverloadedExprs(
 		// The fourth heuristic is to prefer candidates that accepts the "best"
 		// mutual type in the resolvable type set of all constants.
 		if bestConstType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
+			// In case all overloads are filtered out at this step,
+			// keep track of previous overload indexes to return ambiguous error (>1 overloads)
+			// instead of unsupported error (0 overloads) when applicable.
+			prevOverloadIdxs := s.overloadIdxs
 			for _, i := range s.constIdxs {
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 					func(o overloadImpl) bool {
@@ -757,6 +761,13 @@ func typeCheckOverloadedExprs(
 					})
 			}
 			if ok, typedExprs, fns, err := checkReturn(ctx, semaCtx, &s); ok {
+				if len(fns) == 0 {
+					var overloadImpls []overloadImpl
+					for i := range prevOverloadIdxs {
+						overloadImpls = append(overloadImpls, s.overloads[i])
+					}
+					return typedExprs, overloadImpls, err
+				}
 				return typedExprs, fns, err
 			}
 			if homogeneousTyp != nil {

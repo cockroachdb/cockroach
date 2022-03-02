@@ -121,11 +121,25 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.Errorf("cluster setting '%s' is currently overridden by the operator", name)
 	}
 
+	value, err := p.getAndValidateTypedClusterSetting(ctx, name, n.Value, setting)
+	if err != nil {
+		return nil, err
+	}
+
+	csNode := setClusterSettingNode{
+		name: name, st: st, setting: setting, value: value,
+		versionUpgradeHook: p.execCfg.VersionUpgradeHook,
+	}
+	return &csNode, nil
+}
+
+func (p *planner) getAndValidateTypedClusterSetting(
+	ctx context.Context, name string, expr tree.Expr, setting settings.NonMaskedSetting,
+) (tree.TypedExpr, error) {
 	var value tree.TypedExpr
-	if n.Value != nil {
+	if expr != nil {
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
-		if _, ok := n.Value.(tree.DefaultVal); !ok {
-			expr := n.Value
+		if _, ok := expr.(tree.DefaultVal); !ok {
 			expr = paramparse.UnresolvedNameToStrVal(expr)
 
 			var requiredType *types.T
@@ -172,18 +186,12 @@ func (p *planner) SetClusterSetting(
 				}
 				return nil, err
 			}
-
 			value = typed
 		} else if _, isVersionSetting := setting.(*settings.VersionSetting); isVersionSetting {
 			return nil, errors.New("cannot RESET cluster version setting")
 		}
 	}
-
-	csNode := setClusterSettingNode{
-		name: name, st: st, setting: setting, value: value,
-		versionUpgradeHook: p.execCfg.VersionUpgradeHook,
-	}
-	return &csNode, nil
+	return value, nil
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {

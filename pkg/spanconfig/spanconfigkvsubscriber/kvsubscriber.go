@@ -229,8 +229,9 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	s.mu.lastUpdated = ts
 	handlers := s.mu.handlers
 	s.mu.Unlock()
-	for _, h := range handlers {
-		h.invoke(ctx, keys.EverythingSpan)
+	for i := range handlers {
+		handler := &handlers[i] // mutated by invoke
+		handler.invoke(ctx, keys.EverythingSpan)
 	}
 }
 
@@ -248,7 +249,8 @@ func (s *KVSubscriber) handlePartialUpdate(
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
-	for _, handler := range handlers {
+	for i := range handlers {
+		handler := &handlers[i] // mutated by invoke
 		for _, ev := range events {
 			target := ev.(*bufferEvent).Update.Target
 			handler.invoke(ctx, target.KeyspaceTargeted())

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -3517,10 +3518,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 			t.Helper()
 			testutils.SucceedsSoon(t, func() error {
 				for i := 0; i < tc.NumServers(); i++ {
-					ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-					if ptp.Iterate(ctx, tableKey, tableKey, func(record *ptpb.Record) (wantMore bool) {
-						return false
-					}).Less(min) {
+					ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
+					_, asOf := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
+					if asOf.Less(min) {
 						return errors.Errorf("not yet read")
 					}
 				}
@@ -3572,10 +3572,24 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}
 		refreshPastLeaseStart = func(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
-				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				l, _ := r.GetLease()
-				require.NoError(t, ptp.Refresh(ctx, l.Start.ToTimestamp().Next()))
+				require.NoError(
+					t,
+					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, l.Start.ToTimestamp().Next()),
+				)
+				r.ReadProtectedTimestamps(ctx)
+			}
+		}
+		refreshCacheAndUpdatePTSState = func(t *testing.T, nodeID roachpb.NodeID) {
+			for i := 0; i < tc.NumServers(); i++ {
+				if tc.Server(i).NodeID() != nodeID {
+					continue
+				}
+				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				require.NoError(t, ptp.Refresh(ctx, tc.Server(i).Clock().Now()))
+				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				r.ReadProtectedTimestamps(ctx)
 			}
 		}
@@ -3632,13 +3646,15 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}))
 		assertScanRejected(t)
 
-		require.NoError(t, ptp.Verify(ctx, rec.ID.GetUUID()))
+		desc, err := tc.LookupRange(tableKey)
+		require.NoError(t, err)
+		target, err := tc.FindRangeLeaseHolder(desc, nil)
+		require.NoError(t, err)
+		refreshCacheAndUpdatePTSState(t, target.NodeID)
 		assertScanOk(t)
 
 		// Transfer the lease and demonstrate that the query succeeds because we're
 		// cautious in the face of lease transfers.
-		desc, err := tc.LookupRange(tableKey)
-		require.NoError(t, err)
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 		assertScanOk(t)
 	})

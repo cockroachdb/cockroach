@@ -55,7 +55,6 @@ upsert {source=1, target=1}:Y
 # [/Min,/Tenant/2] corresponds to the system tenant targeting itself.
 updates
 ----
-[/Min,/Max)
 [/Min,/Tenant/2)
 
 # Ensure configs are correctly hydrated when we read them.
@@ -93,7 +92,6 @@ upsert {source=1, target=1}:V
 
 updates
 ----
-[/Min,/Max)
 [/Min,/Tenant/2)
 
 store-reader key=a
