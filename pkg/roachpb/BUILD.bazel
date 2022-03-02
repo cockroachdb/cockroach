@@ -34,6 +34,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geopb",
+        "//pkg/keysbase",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/util",
