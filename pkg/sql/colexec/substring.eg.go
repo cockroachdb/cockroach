@@ -10,6 +10,8 @@
 package colexec
 
 import (
+	"unicode/utf8"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -98,7 +100,7 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -133,7 +135,14 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -156,7 +165,12 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -180,7 +194,7 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -215,7 +229,14 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -238,7 +259,12 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -262,7 +288,7 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -297,7 +323,14 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -320,7 +353,12 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -344,7 +382,7 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int16()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -379,7 +417,14 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -402,7 +447,12 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -426,7 +476,7 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int16()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -461,7 +511,14 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -484,7 +541,12 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -508,7 +570,7 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int16()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -543,7 +605,14 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -566,7 +635,12 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -590,7 +664,7 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int32()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -625,7 +699,14 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -648,7 +729,12 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -672,7 +758,7 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int32()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -707,7 +793,14 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -730,7 +823,12 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
@@ -754,7 +852,7 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int32()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -789,7 +887,14 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
+				bytes := bytesVec.Get(rowIdx)
+				// FIXME: re-use?  memory accounting?
+				runes := make([]rune, 0, 8)
+				for i := 0; i < len(bytes); {
+					r, siz := utf8.DecodeRune(bytes[i:])
+					i += siz
+					runes = append(runes, r)
+				}
 				// Substring start is 1 indexed.
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
@@ -812,7 +917,12 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				offset := 0
+				out := make([]byte, len(bytes))
+				for i := start; i < end; i++ {
+					offset += utf8.EncodeRune(out[offset:], runes[i])
+				}
+				outputCol.Set(rowIdx, out[:offset])
 			}
 		},
 	)
