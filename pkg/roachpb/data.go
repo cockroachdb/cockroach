@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -57,7 +58,7 @@ var (
 	// KeyMin is a minimum key value which sorts before all other keys.
 	KeyMin = Key(RKeyMin)
 	// RKeyMax is a maximum key value which sorts after all other keys.
-	RKeyMax = RKey{0xff, 0xff}
+	RKeyMax = RKey(keysbase.KeyMax)
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
 
@@ -123,10 +124,7 @@ func (rk RKey) Next() RKey {
 // is added to the final byte and the carry propagated. The special
 // cases of nil and KeyMin always returns KeyMax.
 func (rk RKey) PrefixEnd() RKey {
-	if len(rk) == 0 {
-		return RKeyMax
-	}
-	return RKey(bytesPrefixEnd(rk))
+	return RKey(keysbase.PrefixEnd(rk))
 }
 
 func (rk RKey) String() string {
@@ -159,21 +157,6 @@ func BytesNext(b []byte) []byte {
 	return bn
 }
 
-func bytesPrefixEnd(b []byte) []byte {
-	// Switched to "make and copy" pattern in #4963 for performance.
-	end := make([]byte, len(b))
-	copy(end, b)
-	for i := len(end) - 1; i >= 0; i-- {
-		end[i] = end[i] + 1
-		if end[i] != 0 {
-			return end[:i+1]
-		}
-	}
-	// This statement will only be reached if the key is already a
-	// maximal byte string (i.e. already \xff...).
-	return b
-}
-
 // Clone returns a copy of the key.
 func (k Key) Clone() Key {
 	if k == nil {
@@ -202,10 +185,7 @@ func (k Key) IsPrev(m Key) bool {
 // is added to the final byte and the carry propagated. The special
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
-	if len(k) == 0 {
-		return Key(RKeyMax)
-	}
-	return Key(bytesPrefixEnd(k))
+	return Key(keysbase.PrefixEnd(k))
 }
 
 // Equal returns whether two keys are identical.
