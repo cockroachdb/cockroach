@@ -64,7 +64,7 @@ require (
 	github.com/elastic/gosigar v0.14.1
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
-	github.com/fraugster/parquet-go v0.6.1
+	github.com/fraugster/parquet-go v0.10.0
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.12.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
@@ -188,7 +188,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/abbot/go-http-auth v0.4.1-0.20181019201920-860ed7f246ff // indirect
 	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5 // indirect
-	github.com/apache/thrift v0.15.0 // indirect
+	github.com/apache/thrift v0.16.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.4.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.5.1 // indirect
@@ -268,7 +268,7 @@ require (
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-ieproxy v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.7 // indirect
+	github.com/mattn/go-runewidth v0.0.10 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
@@ -293,6 +293,7 @@ require (
 	github.com/pquerna/cachecontrol v0.0.0-20200921180117-858c6e7e6b7e // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
+	github.com/rivo/uniseg v0.1.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect

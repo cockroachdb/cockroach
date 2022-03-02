@@ -167,3 +167,15 @@ var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh
 func SchemaChangeErrorCounter(typ string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.schema_changer.errors.%s", typ))
 }
+
+// SetTableStorageParameter is to be incremented every time a table storage
+// parameter has been SET (through CREATE TABLE or ALTER TABLE).
+func SetTableStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.table_storage_parameter." + param + ".set")
+}
+
+// ResetTableStorageParameter is to be incremented every time a table storage
+// parameter has been RESET.
+func ResetTableStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.table_storage_parameter." + param + ".reset")
+}
