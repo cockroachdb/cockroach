@@ -1241,7 +1241,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) erro
 		}
 		return ioutil.WriteFile(tsDumpGob+"-run.sh", []byte(`#!/usr/bin/env bash
 
-COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
+COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure $*
 `), 0755)
 	})
 }
