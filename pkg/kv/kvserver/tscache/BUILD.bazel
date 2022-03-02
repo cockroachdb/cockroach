@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_andy_kimball_arenaskl//:arenaskl",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

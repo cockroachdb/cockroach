@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type stringMatcher interface {
@@ -253,7 +254,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 		if highWaterStamp, ok := is.highWaterStamps[i.NodeID]; ok && highWaterStamp >= i.OrigStamp {
 			// Report both timestamps in the crash.
 			log.Fatalf(context.Background(),
-				"high water stamp %d >= %d", log.Safe(highWaterStamp), log.Safe(i.OrigStamp))
+				"high water stamp %d >= %d", redact.Safe(highWaterStamp), redact.Safe(i.OrigStamp))
 		}
 	}
 	// Update info map.

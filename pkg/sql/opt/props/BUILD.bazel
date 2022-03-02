@@ -27,9 +27,9 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
-        "//pkg/util/log",
         "//pkg/util/timetz",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
 )

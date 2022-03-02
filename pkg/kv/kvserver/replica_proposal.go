@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
 )
@@ -226,7 +227,7 @@ func (r *Replica) leasePostApplyLocked(
 		switch {
 		case s2 < s1:
 			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
-				log.Safe(prevLease), log.Safe(newLease))
+				redact.Safe(prevLease), redact.Safe(newLease))
 		case s2 == s1:
 			// If the sequence numbers are the same, make sure they're actually
 			// the same lease. This can happen when callers are using
@@ -234,13 +235,13 @@ func (r *Replica) leasePostApplyLocked(
 			// splitPostApply. It can also happen during lease extensions.
 			if !prevLease.Equivalent(*newLease) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
-					log.Safe(prevLease), log.Safe(newLease))
+					redact.Safe(prevLease), redact.Safe(newLease))
 			}
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
 		case s2 > s1+1 && jumpOpt == assertNoLeaseJump:
 			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
-				log.Safe(prevLease), log.Safe(newLease))
+				redact.Safe(prevLease), redact.Safe(newLease))
 		}
 	}
 

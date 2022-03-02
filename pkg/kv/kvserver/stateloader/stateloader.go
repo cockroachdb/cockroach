@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -422,7 +423,7 @@ func (rsl StateLoader) SynthesizeHardState(
 
 	if oldHS.Commit > newHS.Commit {
 		return errors.Newf("can't decrease HardState.Commit from %d to %d",
-			log.Safe(oldHS.Commit), log.Safe(newHS.Commit))
+			redact.Safe(oldHS.Commit), redact.Safe(newHS.Commit))
 	}
 	if oldHS.Term > newHS.Term {
 		// The existing HardState is allowed to be ahead of us, which is

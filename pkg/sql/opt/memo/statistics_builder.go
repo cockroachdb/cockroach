@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var statsAnnID = opt.NewTableAnnID()
@@ -379,7 +379,7 @@ func (sb *statisticsBuilder) colStatFromInput(
 		return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}, sb.statsFromChild(e, 0 /* childIdx */)
 	}
 
-	panic(errors.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
+	panic(errors.AssertionFailedf("unsupported operator type %s", redact.Safe(e.Op())))
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
@@ -474,7 +474,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatLeaf(colSet, &rel.Stats, &rel.FuncDeps, rel.NotNullCols)
 	}
 
-	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", log.Safe(e.Op())))
+	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", redact.Safe(e.Op())))
 }
 
 // colStatLeaf creates a column statistic for a given column set (if it doesn't
@@ -2654,7 +2654,7 @@ func (sb *statisticsBuilder) copyColStat(
 ) *props.ColumnStatistic {
 	if !inputColStat.Cols.SubsetOf(colSet) {
 		panic(errors.AssertionFailedf(
-			"copyColStat colSet: %v inputColSet: %v\n", log.Safe(colSet), log.Safe(inputColStat.Cols),
+			"copyColStat colSet: %v inputColSet: %v\n", redact.Safe(colSet), redact.Safe(inputColStat.Cols),
 		))
 	}
 	colStat, _ := s.ColStats.Add(colSet)
@@ -2842,7 +2842,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 	default:
 		if !opt.IsJoinOp(e) {
-			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", log.Safe(e.Op())))
+			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", redact.Safe(e.Op())))
 		}
 
 		leftCols := e.Child(0).(RelExpr).Relational().OutputCols
@@ -2884,7 +2884,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			case *FullJoinExpr:
 				e = e.Memo().MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			default:
-				panic(errors.AssertionFailedf("join type %v not handled", log.Safe(e.Op())))
+				panic(errors.AssertionFailedf("join type %v not handled", redact.Safe(e.Op())))
 			}
 		}
 		return e.Relational().Stats.RowCount

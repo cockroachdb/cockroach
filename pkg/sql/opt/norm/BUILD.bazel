@@ -51,9 +51,9 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/json",
-        "//pkg/util/log",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -86,6 +86,7 @@ go_test(
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

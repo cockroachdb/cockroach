@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Operator describes the type of operation that a memo expression performs.
@@ -334,7 +334,7 @@ func AggregateIgnoresNulls(op Operator) bool {
 		return false
 
 	default:
-		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("unhandled op %s", redact.Safe(op)))
 	}
 }
 
@@ -359,7 +359,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 		return false
 
 	default:
-		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("unhandled op %s", redact.Safe(op)))
 	}
 }
 
@@ -389,7 +389,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		return false
 
 	default:
-		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("unhandled op %s", redact.Safe(op)))
 	}
 }
 
@@ -439,7 +439,7 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 		return false
 
 	default:
-		panic(errors.AssertionFailedf("unhandled ops: %s, %s", log.Safe(inner), log.Safe(outer)))
+		panic(errors.AssertionFailedf("unhandled ops: %s, %s", redact.Safe(inner), redact.Safe(outer)))
 	}
 }
 
@@ -461,7 +461,7 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 		return false
 
 	default:
-		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("unhandled op %s", redact.Safe(op)))
 	}
 }
 

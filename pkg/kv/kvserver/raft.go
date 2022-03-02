@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -120,29 +121,29 @@ func wrapNumbersAsSafe(v ...interface{}) {
 	for i := range v {
 		switch v[i].(type) {
 		case uint:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case uint8:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case uint16:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case uint32:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case uint64:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case int:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case int8:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case int16:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case int32:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case int64:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case float32:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		case float64:
-			v[i] = log.Safe(v[i])
+			v[i] = redact.Safe(v[i])
 		default:
 		}
 	}

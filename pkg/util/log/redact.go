@@ -138,11 +138,6 @@ func maybeRedactEntry(payload entryPayload, editor redactEditor) (res entryPaylo
 	return res
 }
 
-// Safe constructs a SafeFormatter / SafeMessager.
-// This is obsolete. Use redact.Safe directly.
-// TODO(knz): Remove this.
-var Safe = redact.Safe
-
 func init() {
 	// We consider booleans and numeric values to be always safe for
 	// reporting. A log call can opt out by using redact.Unsafe() around

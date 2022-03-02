@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3/tracker"
@@ -1023,7 +1024,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 	case errors.Is(err, apply.ErrRemoved):
 		return true
 	default:
-		log.FatalfDepth(ctx, 1, "%s: %+v", log.Safe(expl), err)
+		log.FatalfDepth(ctx, 1, "%s: %+v", redact.Safe(expl), err)
 		panic("unreachable")
 	}
 }

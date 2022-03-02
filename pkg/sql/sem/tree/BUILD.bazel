@@ -163,7 +163,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
-        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/pretty",
         "//pkg/util/ring",

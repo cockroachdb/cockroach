@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RelExpr is implemented by all operators tagged as Relational. Relational
@@ -750,7 +750,7 @@ func (m *MutationPrivate) MapToInputCols(cols opt.ColSet) opt.ColSet {
 	tabCols.ForEach(func(t opt.ColumnID) {
 		id := m.MapToInputID(t)
 		if id == 0 {
-			panic(errors.AssertionFailedf("could not find input column for %d", log.Safe(t)))
+			panic(errors.AssertionFailedf("could not find input column for %d", redact.Safe(t)))
 		}
 		inCols.Add(id)
 	})

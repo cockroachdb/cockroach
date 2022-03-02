@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // applyJoinNode implements apply join: the execution component of correlated
@@ -81,11 +81,11 @@ func newApplyJoinNode(
 ) (planNode, error) {
 	switch joinType {
 	case descpb.RightOuterJoin, descpb.FullOuterJoin:
-		return nil, errors.AssertionFailedf("unsupported right outer apply join: %d", log.Safe(joinType))
+		return nil, errors.AssertionFailedf("unsupported right outer apply join: %d", redact.Safe(joinType))
 	case descpb.ExceptAllJoin, descpb.IntersectAllJoin:
-		return nil, errors.AssertionFailedf("unsupported apply set op: %d", log.Safe(joinType))
+		return nil, errors.AssertionFailedf("unsupported apply set op: %d", redact.Safe(joinType))
 	case descpb.RightSemiJoin, descpb.RightAntiJoin:
-		return nil, errors.AssertionFailedf("unsupported right semi/anti apply join: %d", log.Safe(joinType))
+		return nil, errors.AssertionFailedf("unsupported right semi/anti apply join: %d", redact.Safe(joinType))
 	}
 
 	return &applyJoinNode{

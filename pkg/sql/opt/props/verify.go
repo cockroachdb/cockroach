@@ -12,8 +12,8 @@ package props
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Verify runs consistency checks against the shared properties, in order to
@@ -57,11 +57,11 @@ func (r *Relational) Verify() {
 
 	if !r.NotNullCols.SubsetOf(r.OutputCols) {
 		panic(errors.AssertionFailedf("not null cols %s not a subset of output cols %s",
-			log.Safe(r.NotNullCols), log.Safe(r.OutputCols)))
+			redact.Safe(r.NotNullCols), redact.Safe(r.OutputCols)))
 	}
 	if r.OuterCols.Intersects(r.OutputCols) {
 		panic(errors.AssertionFailedf("outer cols %s intersect output cols %s",
-			log.Safe(r.OuterCols), log.Safe(r.OutputCols)))
+			redact.Safe(r.OuterCols), redact.Safe(r.OutputCols)))
 	}
 	if r.FuncDeps.HasMax1Row() {
 		if r.Cardinality.Max > 1 {
@@ -72,7 +72,7 @@ func (r *Relational) Verify() {
 	if r.IsAvailable(PruneCols) {
 		if !r.Rule.PruneCols.SubsetOf(r.OutputCols) {
 			panic(errors.AssertionFailedf("prune cols %s must be a subset of output cols %s",
-				log.Safe(r.Rule.PruneCols), log.Safe(r.OutputCols)))
+				redact.Safe(r.Rule.PruneCols), redact.Safe(r.OutputCols)))
 		}
 	}
 }
@@ -86,12 +86,12 @@ func (r *Relational) VerifyAgainst(other *Relational) {
 	}
 
 	if !r.OutputCols.Equals(other.OutputCols) {
-		panic(errors.AssertionFailedf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
+		panic(errors.AssertionFailedf("output cols mismatch: %s vs %s", redact.Safe(r.OutputCols), redact.Safe(other.OutputCols)))
 	}
 
 	if r.Cardinality.Max < other.Cardinality.Min ||
 		r.Cardinality.Min > other.Cardinality.Max {
-		panic(errors.AssertionFailedf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
+		panic(errors.AssertionFailedf("cardinality mismatch: %s vs %s", redact.Safe(r.Cardinality), redact.Safe(other.Cardinality)))
 	}
 
 	// NotNullCols, FuncDeps are best effort, so they might differ.

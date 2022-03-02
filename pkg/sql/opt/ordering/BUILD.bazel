@@ -32,8 +32,8 @@ go_library(
         "//pkg/sql/opt/props",
         "//pkg/sql/sem/tree",
         "//pkg/util/buildutil",
-        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 )
 
 // addToTSCacheChecked adds the specified timestamp to the timestamp cache
@@ -346,7 +347,7 @@ func (r *Replica) applyTimestampCache(
 			if conflictingTxn != uuid.Nil {
 				conflictMsg = "conflicting txn: " + conflictingTxn.Short()
 			}
-			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, log.Safe(conflictMsg))
+			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, redact.Safe(conflictMsg))
 		}
 	}
 	return bumped

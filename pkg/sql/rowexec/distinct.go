@@ -269,7 +269,7 @@ func (d *distinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 				// Row is a duplicate input to an Upsert operation, so raise
 				// an error.
 				//
-				// TODO(knz): errorOnDup could be passed via log.Safe() if
+				// TODO(knz): errorOnDup could be passed via redact.Safe() if
 				// there was a guarantee that it does not contain PII. Or
 				// better yet, the caller would construct an `error` object to
 				// return here instead of a string.
@@ -319,7 +319,7 @@ func (d *sortedDistinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		if matched {
 			if d.errorOnDup != "" {
 				// Row is a duplicate input to an Upsert operation, so raise an error.
-				// TODO(knz): errorOnDup could be passed via log.Safe() if
+				// TODO(knz): errorOnDup could be passed via redact.Safe() if
 				// there was a guarantee that it does not contain PII.
 				err = pgerror.Newf(pgcode.CardinalityViolation, "%s", d.errorOnDup)
 				d.MoveToDraining(err)

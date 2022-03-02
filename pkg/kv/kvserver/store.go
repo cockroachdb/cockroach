@@ -1879,9 +1879,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return errors.AssertionFailedf(
 					"found RangeDescriptor for range %d at generation %d which does not"+
 						" contain this store %d",
-					log.Safe(desc.RangeID),
-					log.Safe(desc.Generation),
-					log.Safe(s.StoreID()))
+					redact.Safe(desc.RangeID),
+					redact.Safe(desc.Generation),
+					redact.Safe(s.StoreID()))
 			}
 
 			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
@@ -1908,9 +1908,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			} else {
 				return errors.AssertionFailedf("found newly constructed replica"+
 					" for range %d at generation %d with an invalid tenant ID in store %d",
-					log.Safe(desc.RangeID),
-					log.Safe(desc.Generation),
-					log.Safe(s.StoreID()))
+					redact.Safe(desc.RangeID),
+					redact.Safe(desc.Generation),
+					redact.Safe(s.StoreID()))
 			}
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
