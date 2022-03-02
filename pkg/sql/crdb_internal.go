@@ -4987,7 +4987,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					return nil
 				}
 				addRowForRole := func(role catpb.DefaultPrivilegesRole) error {
-					defaultPrivilegeDescriptor := dbContext.GetDefaultPrivilegeDescriptor()
+					defaultPrivilegeDescriptor := descriptor.GetDefaultPrivilegeDescriptor()
 					defaultPrivilegesForRole, found := defaultPrivilegeDescriptor.GetDefaultPrivilegesForRole(role)
 					if !found {
 						// If an entry is not found for the role, the role still has
