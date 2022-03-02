@@ -2172,13 +2172,6 @@ func (ex *connExecutor) recordTransactionFinish(
 	implicit bool,
 	txnStart time.Time,
 ) error {
-	if len(ex.extraTxnState.transactionStatementFingerprintIDs) == 0 {
-		// If the slice of transaction statement fingerprint IDs is empty, this
-		// means there is no statements that's being executed within this
-		// transaction. Hence, recording stats for this transaction is not
-		// meaningful.
-		return nil
-	}
 	recordingStart := timeutil.Now()
 	defer func() {
 		recordingOverhead := timeutil.Since(recordingStart)
@@ -2199,6 +2192,14 @@ func (ex *connExecutor) recordTransactionFinish(
 		TxnID:            ev.txnID,
 		TxnFingerprintID: transactionFingerprintID,
 	})
+
+	if len(ex.extraTxnState.transactionStatementFingerprintIDs) == 0 {
+		// If the slice of transaction statement fingerprint IDs is empty, this
+		// means there is no statements that's being executed within this
+		// transaction. Hence, recording stats for this transaction is not
+		// meaningful.
+		return nil
+	}
 
 	txnServiceLat := ex.phaseTimes.GetTransactionServiceLatency()
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
