@@ -36,7 +36,7 @@ CREATE TABLE t_child_regional (
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard
 # number calculated instead of looking at all possible shards.
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_child VALUES (123, 321);
 ----
 distribution: local
