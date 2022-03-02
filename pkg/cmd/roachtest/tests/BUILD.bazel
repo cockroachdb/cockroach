@@ -70,6 +70,7 @@ go_library(
         "mixed_version_jobs.go",
         "mixed_version_schemachange.go",
         "multitenant.go",
+        "multitenant_fairness.go",
         "multitenant_upgrade.go",
         "network.go",
         "nodejs_postgres.go",
