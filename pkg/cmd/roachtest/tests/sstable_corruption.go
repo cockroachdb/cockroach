@@ -43,7 +43,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// to have multiple ranges, and some sstables with only table keys.
 			t.Status("importing tpcc fixture")
 			c.Run(ctx, workloadNode,
-				"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false")
+				"./cockroach workload fixtures import tpcc --warehouses=500 --fks=false --checks=false")
 			return nil
 		})
 		m.Wait()
