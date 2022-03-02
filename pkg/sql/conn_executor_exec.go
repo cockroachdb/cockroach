@@ -1756,6 +1756,7 @@ func (ex *connExecutor) sessionStateBase64() (tree.Datum, error) {
 	_, isNoTxn := ex.machine.CurState().(stateNoTxn)
 	state, err := serializeSessionState(
 		!isNoTxn, ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
+		ex.server.cfg,
 	)
 	if err != nil {
 		return nil, err
