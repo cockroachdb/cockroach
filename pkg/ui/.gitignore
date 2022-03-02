@@ -26,3 +26,7 @@ dist_vendor/**
 !distoss/distoss_no_bazel.go
 !distoss/BUILD.bazel
 *manifest.json
+
+# Re-allow files containing '.test', since files called foo.test.js are idiomatic
+# in many JS testing frameworks.
+!*.test*
