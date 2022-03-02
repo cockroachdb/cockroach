@@ -22,6 +22,8 @@
 package colexec
 
 import (
+	"unicode/utf8"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -159,6 +161,22 @@ func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
 				} else if start > len(runes) {
 					start = len(runes)
 				}
+				count := 0
+				totalSize := 0
+				// Find the substring start in bytes offset.
+				for count < start && totalSize < len(runes) {
+					_, size := utf8.DecodeRune(runes[totalSize:])
+					totalSize += size
+					count++
+				}
+				start = totalSize
+				// Find the substring end in bytes offset.
+				for count < end && totalSize < len(runes) {
+					_, size := utf8.DecodeRune(runes[totalSize:])
+					totalSize += size
+					count++
+				}
+				end = totalSize
 				outputCol.Set(rowIdx, runes[start:end])
 			}
 		},
