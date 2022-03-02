@@ -870,6 +870,8 @@ func TestEngineScan1(t *testing.T) {
 				iter.Next()
 			}
 			stats := iter.Stats().Stats
+			// Setting non-deterministic InternalStats to empty.
+			stats.InternalStats = pebble.InternalIteratorStats{}
 			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
 				"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
 			iter.Close()
@@ -877,11 +879,15 @@ func TestEngineScan1(t *testing.T) {
 				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 			// pebble.Iterator is reused, but stats are reset.
 			stats = iter.Stats().Stats
+			// Setting non-deterministic InternalStats to empty.
+			stats.InternalStats = pebble.InternalIteratorStats{}
 			require.Equal(t, "(interface (dir, seek, step): (fwd, 0, 0), (rev, 0, 0)), "+
 				"(internal (dir, seek, step): (fwd, 0, 0), (rev, 0, 0))", stats.String())
 			iter.SeekGE(MVCCKey{Key: roachpb.Key("french")})
 			iter.SeekLT(MVCCKey{Key: roachpb.Key("server")})
 			stats = iter.Stats().Stats
+			// Setting non-deterministic InternalStats to empty.
+			stats.InternalStats = pebble.InternalIteratorStats{}
 			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 0), (rev, 1, 0)), "+
 				"(internal (dir, seek, step): (fwd, 1, 0), (rev, 1, 1))", stats.String())
 			iter.Close()
