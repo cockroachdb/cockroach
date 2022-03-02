@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -87,6 +88,16 @@ func nilLogger() *logger.Logger {
 		panic(err)
 	}
 	return l
+}
+
+func alwaysFailingClusterAllocator(
+	ctx context.Context,
+	t registry.TestSpec,
+	alloc *quotapool.IntAlloc,
+	artifactsDir string,
+	wStatus *workerStatus,
+) (*clusterImpl, error) {
+	return nil, errors.New("cluster creation failed")
 }
 
 func TestRunnerRun(t *testing.T) {
@@ -153,17 +164,50 @@ func TestRunnerRun(t *testing.T) {
 				cpuQuota:                  1000,
 				keepClustersOnTestFailure: false,
 			}
+			var clusterAllocator clusterAllocatorFn
+			// run without cluster allocator error injection
 			err := runner.Run(ctx, tests, 1, /* count */
-				defaultParallelism, copt, testOpts{}, lopt)
+				defaultParallelism, copt, testOpts{}, lopt, clusterAllocator)
 
-			if !testutils.IsError(err, c.expErr) {
-				t.Fatalf("expected err: %q, but found %v. Filters: %s", c.expErr, err, c.filters)
+			assertTestCompletion(t, tests, c.filters, runner.getCompletedTests(), err, c.expErr)
+
+			// N.B. skip the case of no matching tests
+			if len(tests) > 0 {
+				// run _with_ cluster allocator error injection
+				clusterAllocator = alwaysFailingClusterAllocator
+				err = runner.Run(ctx, tests, 1, /* count */
+					defaultParallelism, copt, testOpts{}, lopt, clusterAllocator)
+
+				assertTestCompletion(t, tests, c.filters, runner.getCompletedTests(), err, "some clusters could not be created")
 			}
 			out := stdout.String() + "\n" + stderr.String()
 			if exp := c.expOut; exp != "" && !strings.Contains(out, exp) {
 				t.Fatalf("'%s' not found in output:\n%s", exp, out)
 			}
 		})
+	}
+}
+
+// verifies that actual test completion conditions match the expected
+func assertTestCompletion(
+	t *testing.T,
+	tests []registry.TestSpec,
+	filters []string,
+	completed []completedTestInfo,
+	actualErr error,
+	expectedErr string,
+) {
+	require.True(t, len(completed) == len(tests))
+
+	for _, info := range completed {
+		if info.test == "pass" {
+			require.True(t, info.pass)
+		} else if info.test == "fail" {
+			require.True(t, !info.pass)
+		}
+	}
+	if !testutils.IsError(actualErr, expectedErr) {
+		t.Fatalf("expected err: %q, but found %v. Filters: %s", expectedErr, actualErr, filters)
 	}
 }
 
@@ -215,7 +259,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		},
 	}
 	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt)
+		defaultParallelism, copt, testOpts{}, lopt, nil /* clusterAllocator */)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -307,7 +351,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		stderr:       ioutil.Discard,
 		artifactsDir: "",
 	}
-	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, nil /* clusterAllocator */)
 }
 
 func TestExitCode(t *testing.T) {
