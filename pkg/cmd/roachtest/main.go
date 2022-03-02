@@ -415,7 +415,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	err = runner.Run(
 		ctx, tests, cfg.count, cfg.parallelism, opt,
 		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
-		lopt)
+		lopt, nil /* clusterAllocator */)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's

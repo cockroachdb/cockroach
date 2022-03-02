@@ -27,4 +27,5 @@ const (
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
 	OwnerTestEng       Owner = `test-eng`
+	OwnerDevInf        Owner = `dev-inf`
 )
