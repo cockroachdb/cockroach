@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -19,8 +20,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/lib/pq/oid"
+)
+
+var MaxSerializedSessionSize = settings.RegisterByteSizeSetting(
+	settings.TenantReadOnly,
+	"sql.session_transfer.max_session_size",
+	"if set to non-zero, then serializing a session will fail if it requires more"+
+		"than the specified size",
+	0,
+	settings.NonNegativeInt,
 )
 
 // SerializeSessionState is a wrapper for serializeSessionState, and uses the
@@ -31,6 +42,7 @@ func (p *planner) SerializeSessionState() (*tree.DBytes, error) {
 		!evalCtx.TxnImplicit,
 		evalCtx.PreparedStatementState,
 		p.SessionData(),
+		p.ExecCfg(),
 	)
 }
 
@@ -39,7 +51,10 @@ func (p *planner) SerializeSessionState() (*tree.DBytes, error) {
 // NOTE: This is used within an observer statement directly, and should not rely
 // on the planner because those statements do not get planned.
 func serializeSessionState(
-	inExplicitTxn bool, prepStmtsState tree.PreparedStatementState, sd *sessiondata.SessionData,
+	inExplicitTxn bool,
+	prepStmtsState tree.PreparedStatementState,
+	sd *sessiondata.SessionData,
+	execCfg *ExecutorConfig,
 ) (*tree.DBytes, error) {
 	if inExplicitTxn {
 		return nil, pgerror.Newf(
@@ -78,6 +93,16 @@ func serializeSessionState(
 	b, err := protoutil.Marshal(&m)
 	if err != nil {
 		return nil, err
+	}
+
+	maxSize := MaxSerializedSessionSize.Get(&execCfg.Settings.SV)
+	if maxSize > 0 && int64(len(b)) > maxSize {
+		return nil, pgerror.Newf(
+			pgcode.ProgramLimitExceeded,
+			"serialized session size %s exceeds max allowed size %s",
+			humanizeutil.IBytes(int64(len(b))),
+			humanizeutil.IBytes(maxSize),
+		)
 	}
 
 	return tree.NewDBytes(tree.DBytes(b)), nil
