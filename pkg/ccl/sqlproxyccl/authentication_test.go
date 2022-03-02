@@ -202,3 +202,57 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	require.True(t, errors.As(err, &codeErr))
 	require.Equal(t, codeBackendDisconnected, codeErr.code)
 }
+
+func TestReadTokenAuthResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("unexpected message", func(t *testing.T) {
+		cli, srv := net.Pipe()
+
+		go func() {
+			_, err := srv.Write((&pgproto3.BindComplete{}).Encode(nil))
+			require.NoError(t, err)
+		}()
+
+		err := readTokenAuthResult(cli)
+		require.Error(t, err)
+		codeErr := (*codeError)(nil)
+		require.True(t, errors.As(err, &codeErr))
+		require.Equal(t, codeBackendDisconnected, codeErr.code)
+	})
+
+	t.Run("error_response", func(t *testing.T) {
+		cli, srv := net.Pipe()
+
+		go func() {
+			_, err := srv.Write((&pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"}).Encode(nil))
+			require.NoError(t, err)
+		}()
+
+		err := readTokenAuthResult(cli)
+		require.Error(t, err)
+		codeErr := (*codeError)(nil)
+		require.True(t, errors.As(err, &codeErr))
+		require.Equal(t, codeAuthFailed, codeErr.code)
+	})
+
+	t.Run("successful", func(t *testing.T) {
+		cli, srv := net.Pipe()
+
+		go func() {
+			_, err := srv.Write((&pgproto3.AuthenticationOk{}).Encode(nil))
+			require.NoError(t, err)
+
+			_, err = srv.Write((&pgproto3.ParameterStatus{Name: "Server Version", Value: "1.3"}).Encode(nil))
+			require.NoError(t, err)
+
+			_, err = srv.Write((&pgproto3.BackendKeyData{ProcessID: uint32(42)}).Encode(nil))
+			require.NoError(t, err)
+
+			_, err = srv.Write((&pgproto3.ReadyForQuery{}).Encode(nil))
+			require.NoError(t, err)
+		}()
+
+		require.NoError(t, readTokenAuthResult(cli))
+	})
+}

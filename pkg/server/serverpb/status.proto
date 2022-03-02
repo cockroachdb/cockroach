@@ -1329,7 +1329,7 @@ message StatementDetailsRequest {
   // query, failed, implicitTxn and database. So we don't need to add them
   // to the request.
   string fingerprint_id = 1;
-  repeated string app_names = 2 [(gogoproto.nullable) = false];
+  repeated string app_names = 2;
   // Unix time range for aggregated statements.
   int64 start = 3 [(gogoproto.nullable) = true];
   int64 end = 4 [(gogoproto.nullable) = true];
@@ -1342,7 +1342,7 @@ message StatementDetailsResponse {
     // The value from the key_data cannot be replaced by the formatted value, because is used as is for
     // diagnostic bundle.
     string formatted_query = 2;
-    repeated string app_names = 3 [(gogoproto.nullable) = false];
+    repeated string app_names = 3;
     cockroach.sql.StatementStatistics stats = 4 [(gogoproto.nullable) = false];
     google.protobuf.Duration aggregation_interval = 5 [(gogoproto.nullable) = false,
       (gogoproto.stdduration) = true];
@@ -1563,6 +1563,16 @@ message TxnIDResolutionRequest {
 message TxnIDResolutionResponse {
   repeated cockroach.sql.contentionpb.ResolvedTxnID resolvedTxnIDs = 1 [
     (gogoproto.nullable) = false];
+}
+
+message TransactionContentionEventsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message TransactionContentionEventsResponse {
+  repeated cockroach.sql.contentionpb.ExtendedContentionEvent events = 1 [
+    (gogoproto.nullable) = false
+  ];
 }
 
 service Status {
@@ -1977,4 +1987,12 @@ service Status {
   //   Client is responsible to perform retries if the requested transaction ID
   //   is not returned in the RPC response.
   rpc TxnIDResolution(TxnIDResolutionRequest) returns (TxnIDResolutionResponse) {}
+
+  // TransactionContentionEvents returns a list of un-aggregated contention
+  // events sorted by the collection timestamp.
+  rpc TransactionContentionEvents(TransactionContentionEventsRequest) returns (TransactionContentionEventsResponse) {
+    option (google.api.http) = {
+      get: "/_status/transactioncontentionevents"
+    };
+  }
 }
