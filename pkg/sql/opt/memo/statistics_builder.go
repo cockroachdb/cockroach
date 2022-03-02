@@ -4160,6 +4160,7 @@ func hasInvertedJoinCond(filters FiltersExpr) bool {
 
 // numConjunctsInConstraint returns a rough estimate of the number of conjuncts
 // used to build the given constraint for the column at position nth.
+// Testing only.
 func (sb *statisticsBuilder) numConjunctsInConstraint(
 	c *constraint.Constraint, nth int,
 ) (numConjuncts float64) {
