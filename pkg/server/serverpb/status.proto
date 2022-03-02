@@ -1113,6 +1113,8 @@ message HotRangesRequest {
   // in the cluster.
   // API: PUBLIC ALPHA
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  int32 page_size = 2 [(gogoproto.nullable) = true];
+  string page_token = 3 [(gogoproto.nullable) = true];
 }
 
 // HotRangesResponse is the payload produced in response
@@ -1143,6 +1145,12 @@ message HotRangesResponse {
     // on this range.
     // API: PUBLIC ALPHA
     double queries_per_second = 2;
+    // LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range.
+    int32 leaseholder_node_id = 3 [
+      (gogoproto.customname) = "LeaseholderNodeID",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
   }
 
   // StoreResponse contains the part of a hot ranges report that
@@ -1189,6 +1197,57 @@ message HotRangesResponse {
     (gogoproto.customname) = "HotRangesByNodeID",
     (gogoproto.nullable) = false
   ];
+}
+
+// HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
+message HotRangesResponseV2 {
+  // HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
+  message HotRange {
+    // range_id indicates Range ID that's identified as hot range.
+    int32 range_id = 1 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+      (gogoproto.customname) = "RangeID"
+    ];
+    // node_id indicates the node that contains the current hot range.
+    int32 node_id = 2 [
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    // qps (queries per second) shows the amount of queries that interact with current range.
+    double qps = 3 [
+      (gogoproto.customname) = "QPS"
+    ];
+    // table_name indicates the SQL table that the range belongs to.
+    string table_name = 4;
+    // database_name indicates on database that has current hot range.
+    string database_name = 5;
+    // index_name indicates the index name for current range.
+    string index_name = 6;
+    // replica_node_ids specifies the list of node ids that contain replicas with current hot range.
+    repeated int32 replica_node_ids = 7 [
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    // leaseholder_node_id indicates the Node ID that is the current leaseholder for the given range.
+    int32 leaseholder_node_id = 8 [
+      (gogoproto.customname) = "LeaseholderNodeID",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    // schema_name provides the name of schema (if exists) for table in current range.
+    string schema_name = 9;
+  }
+  // Ranges contain list of hot ranges info that has highest number of QPS.
+  repeated HotRange ranges = 1;
+  // errors contains any errors that occurred during fan-out calls to other nodes.
+  map<int32, string> errors_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+  // NextPageToken represents next pagination token to request next slice of data.
+  string next_page_token = 3 [(gogoproto.nullable) = true];
 }
 
 message RangeRequest {
@@ -1877,6 +1936,14 @@ service Status {
       get : "/_status/hotranges"
     };
   }
+
+  rpc HotRangesV2(HotRangesRequest) returns (HotRangesResponseV2) {
+    option (google.api.http) = {
+      post : "/_status/v2/hotranges"
+      body : "*"
+    };
+  }
+
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
       get : "/_status/range/{range_id}"

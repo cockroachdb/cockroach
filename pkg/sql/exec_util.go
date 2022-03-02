@@ -1469,6 +1469,9 @@ type TTLTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
 	// current time.
 	AOSTDuration *time.Duration
+	// OnStatisticsError is a hook that takes in an error if gathering statistics
+	// generates an error.
+	OnStatisticsError func(err error)
 	// MockDescriptorVersionDuringDelete is a version to mock the delete descriptor
 	// as during delete.
 	MockDescriptorVersionDuringDelete *descpb.DescriptorVersion

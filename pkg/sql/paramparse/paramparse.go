@@ -15,10 +15,12 @@ package paramparse
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,6 +55,43 @@ func DatumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) 
 	err = errors.WithDetailf(err,
 		"%s is a %s", value, errors.Safe(val.ResolvedType()))
 	return 0, err
+}
+
+// DatumAsDuration transforms a tree.TypedExpr containing a Datum into a
+// time.Duration.
+func DatumAsDuration(
+	evalCtx *tree.EvalContext, name string, value tree.TypedExpr,
+) (time.Duration, error) {
+	val, err := value.Eval(evalCtx)
+	if err != nil {
+		return 0, err
+	}
+	var d duration.Duration
+	switch v := tree.UnwrapDatum(evalCtx, val).(type) {
+	case *tree.DString:
+		datum, err := tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), string(*v))
+		if err != nil {
+			return 0, err
+		}
+		d = datum.Duration
+	case *tree.DInterval:
+		d = v.Duration
+	default:
+		err = pgerror.Newf(pgcode.InvalidParameterValue,
+			"parameter %q requires a duration value", name)
+		err = errors.WithDetailf(err,
+			"%s is a %s", value, errors.Safe(val.ResolvedType()))
+		return 0, err
+	}
+
+	secs, ok := d.AsInt64()
+	if !ok {
+		return 0, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"invalid duration",
+		)
+	}
+	return time.Duration(secs) * time.Second, nil
 }
 
 // DatumAsInt transforms a tree.TypedExpr containing a Datum into an int.

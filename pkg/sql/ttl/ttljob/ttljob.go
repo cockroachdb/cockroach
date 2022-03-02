@@ -12,6 +12,7 @@ package ttljob
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"regexp"
 	"time"
@@ -21,16 +22,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -98,6 +104,8 @@ type RowLevelTTLAggMetrics struct {
 	RowSelections      *aggmetric.AggCounter
 	RowDeletions       *aggmetric.AggCounter
 	NumActiveRanges    *aggmetric.AggGauge
+	TotalRows          *aggmetric.AggGauge
+	TotalExpiredRows   *aggmetric.AggGauge
 
 	mu struct {
 		syncutil.Mutex
@@ -112,6 +120,8 @@ type rowLevelTTLMetrics struct {
 	RowSelections      *aggmetric.Counter
 	RowDeletions       *aggmetric.Counter
 	NumActiveRanges    *aggmetric.Gauge
+	TotalRows          *aggmetric.Gauge
+	TotalExpiredRows   *aggmetric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -134,6 +144,8 @@ func (m *RowLevelTTLAggMetrics) loadMetrics(relation string) rowLevelTTLMetrics 
 		RowSelections:      m.RowSelections.AddChild(relation),
 		RowDeletions:       m.RowDeletions.AddChild(relation),
 		NumActiveRanges:    m.NumActiveRanges.AddChild(relation),
+		TotalRows:          m.TotalRows.AddChild(relation),
+		TotalExpiredRows:   m.TotalExpiredRows.AddChild(relation),
 	}
 	m.mu.m[relation] = ret
 	return ret
@@ -202,6 +214,22 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Name:        "jobs.row_level_ttl.num_active_ranges",
 				Help:        "Number of active workers attempting to delete for row level TTL.",
 				Measurement: "num_active_workers",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalRows: b.Gauge(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.total_rows",
+				Help:        "Approximate number of rows on the TTL table.",
+				Measurement: "total_rows",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalExpiredRows: b.Gauge(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.total_expired_rows",
+				Help:        "Approximate number of rows that have expired the TTL on the TTL table.",
+				Measurement: "total_expired_rows",
 				Unit:        metric.Unit_COUNT,
 			},
 		),
@@ -344,6 +372,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		deleteRateLimit,
 	)
 
+	statsCloseCh := make(chan struct{})
 	ch := make(chan rangeToProcess, rangeConcurrency)
 	for i := 0; i < rangeConcurrency; i++ {
 		g.GoCtx(func(ctx context.Context) error {
@@ -377,9 +406,27 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		})
 	}
 
+	if ttlSettings.RowStatsPollInterval != 0 {
+		g.GoCtx(func(ctx context.Context) error {
+			// Do once initially to ensure we have some base statistics.
+			fetchStatistics(ctx, p.ExecCfg(), details, metrics, aostDuration)
+			// Wait until poll interval is reached, or early exit when we are done
+			// with the TTL job.
+			for {
+				select {
+				case <-statsCloseCh:
+					return nil
+				case <-time.After(ttlSettings.RowStatsPollInterval):
+					fetchStatistics(ctx, p.ExecCfg(), details, metrics, aostDuration)
+				}
+			}
+		})
+	}
+
 	if err := func() (retErr error) {
 		defer func() {
 			close(ch)
+			close(statsCloseCh)
 			retErr = errors.CombineErrors(retErr, g.Wait())
 		}()
 		done := false
@@ -473,6 +520,65 @@ func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 		return math.MaxInt64
 	}
 	return val
+}
+
+func fetchStatistics(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	details jobspb.RowLevelTTLDetails,
+	metrics rowLevelTTLMetrics,
+	aostDuration time.Duration,
+) {
+	if err := func() error {
+		aost, err := tree.MakeDTimestampTZ(timeutil.Now().Add(aostDuration), time.Microsecond)
+		if err != nil {
+			return err
+		}
+		for _, c := range []struct {
+			opName string
+			query  string
+			args   []interface{}
+			gauge  *aggmetric.Gauge
+		}{
+			{
+				opName: "ttl_num_rows",
+				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
+				gauge:  metrics.TotalRows,
+			},
+			{
+				opName: "ttl_num_expired_rows",
+				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + colinfo.TTLDefaultExpirationColumnName + ` < $1`,
+				args:   []interface{}{details.Cutoff},
+				gauge:  metrics.TotalExpiredRows,
+			},
+		} {
+			// User a super low quality of service (lower than TTL low), as we don't
+			// really care if statistics gets left behind and prefer the TTL job to
+			// have priority.
+			qosLevel := sessiondatapb.SystemLow
+			datums, err := execCfg.InternalExecutor.QueryRowEx(
+				ctx,
+				c.opName,
+				nil,
+				sessiondata.InternalExecutorOverride{
+					User:             security.RootUserName(),
+					QualityOfService: &qosLevel,
+				},
+				fmt.Sprintf(c.query, details.TableID, aost.String()),
+				c.args...,
+			)
+			if err != nil {
+				return err
+			}
+			c.gauge.Update(int64(tree.MustBeDInt(datums[0])))
+		}
+		return nil
+	}(); err != nil {
+		if onStatisticsError := execCfg.TTLTestingKnobs.OnStatisticsError; onStatisticsError != nil {
+			onStatisticsError(err)
+		}
+		log.Warningf(ctx, "failed to get statistics for table id %d: %s", details.TableID, err)
+	}
 }
 
 func runTTLOnRange(
