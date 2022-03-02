@@ -3511,14 +3511,15 @@ func (s *storeForTruncatorImpl) acquireReplicaForTruncator(
 		// can ignore it.
 		return nil
 	}
+	r.raftMu.Lock()
 	if isAlive := func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		return r.mu.destroyStatus.IsAlive()
 	}(); !isAlive {
+		r.raftMu.Unlock()
 		return nil
 	}
-	r.raftMu.Lock()
 	return (*raftTruncatorReplica)(r)
 }
 
