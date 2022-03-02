@@ -108,12 +108,15 @@ import (
 // - v22.1 and v22.2: If the setting has been changed to false the v22.1 nodes
 //   will do strongly coupled truncation and the v22.2 will do loosely
 //   coupled. This co-existence is correct.
+//
+// TODO(sumeer): flip the default back to true after
+// https://github.com/cockroachdb/cockroach/issues/77030 is fixed.
 var looselyCoupledTruncationEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"kv.raft_log.loosely_coupled_truncation.enabled",
 		"set to true to loosely couple the raft log truncation",
-		true)
+		false)
 	s.SetVisibility(settings.Reserved)
 	return s
 }()

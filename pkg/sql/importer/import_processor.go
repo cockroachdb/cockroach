@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -322,6 +323,11 @@ func makeInputConverter(
 	}
 }
 
+type tableAndIndex struct {
+	tableID catid.DescID
+	indexID catid.IndexID
+}
+
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
 func ingestKvs(
@@ -342,6 +348,11 @@ func ingestKvs(
 	} else if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
 		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster version")
 		writeAtBatchTimestamp = false
+	}
+
+	isPK := make(map[tableAndIndex]bool, len(spec.Tables))
+	for _, t := range spec.Tables {
+		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = true
 	}
 
 	flushSize := func() int64 { return bulk.IngestFileSize(flowCtx.Cfg.Settings) }
@@ -511,7 +522,7 @@ func ingestKvs(
 		// number of L0 (and total) files, but with a lower memory usage.
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				_, _, indexID, indexErr := flowCtx.Codec().DecodeIndexPrefix(kv.Key)
+				_, tableID, indexID, indexErr := flowCtx.Codec().DecodeIndexPrefix(kv.Key)
 				if indexErr != nil {
 					return indexErr
 				}
@@ -521,7 +532,7 @@ func ingestKvs(
 				// TODO(adityamaru): There is a potential optimization of plumbing the
 				// different putters, and differentiating based on their type. It might be
 				// more efficient than parsing every kv.
-				if indexID == 1 {
+				if isPK[tableAndIndex{tableID: catid.DescID(tableID), indexID: catid.IndexID(indexID)}] {
 					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in primary index")
