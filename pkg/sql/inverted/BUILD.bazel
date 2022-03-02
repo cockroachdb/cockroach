@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/inverted",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/keysbase",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -18,11 +18,15 @@ go_library(
 go_test(
     name = "inverted_test",
     size = "small",
-    srcs = ["expression_test.go"],
+    srcs = [
+        "dep_test.go",
+        "expression_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":inverted"],
     deps = [
         "//pkg/testutils",
+        "//pkg/testutils/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/treeprinter",
