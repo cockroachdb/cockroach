@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -375,6 +376,54 @@ func (s *jobScheduler) schedulerEnabledOnThisNode(ctx context.Context) bool {
 	return enabled
 }
 
+type syncCancelFunc struct {
+	syncutil.Mutex
+	context.CancelFunc
+}
+
+// newCancelWhenDisabled arranges for scheduler enabled setting callback to cancel
+// currently executing context.
+func newCancelWhenDisabled(sv *settings.Values) *syncCancelFunc {
+	sf := &syncCancelFunc{}
+	schedulerEnabledSetting.SetOnChange(sv, func(ctx context.Context) {
+		if !schedulerEnabledSetting.Get(sv) {
+			sf.Lock()
+			if sf.CancelFunc != nil {
+				sf.CancelFunc()
+			}
+			sf.Unlock()
+		}
+	})
+	return sf
+}
+
+// withCancelOnDisabled executes provided function with the context which will be cancelled
+// if scheduler is disabled.
+func (sf *syncCancelFunc) withCancelOnDisabled(
+	ctx context.Context, sv *settings.Values, f func(ctx context.Context) error,
+) error {
+	ctx, cancel := func() (context.Context, context.CancelFunc) {
+		sf.Lock()
+		defer sf.Unlock()
+
+		ctx, cancel := context.WithCancel(ctx)
+		sf.CancelFunc = cancel
+
+		if !schedulerEnabledSetting.Get(sv) {
+			cancel()
+		}
+
+		return ctx, func() {
+			sf.Lock()
+			defer sf.Unlock()
+			cancel()
+			sf.CancelFunc = nil
+		}
+	}()
+	defer cancel()
+	return f(ctx)
+}
+
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
@@ -383,6 +432,8 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 		if err := RegisterExecutorsMetrics(s.registry); err != nil {
 			log.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
+
+		whenDisabled := newCancelWhenDisabled(&s.Settings.SV)
 
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
 			getWaitPeriod(ctx, &s.Settings.SV, s.schedulerEnabledOnThisNode, jitter, s.TestingKnobs)) {
@@ -395,10 +446,11 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				}
 
 				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(&s.Settings.SV)
-				err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					return s.executeSchedules(ctx, maxSchedules, txn)
-				})
-				if err != nil {
+				if err := whenDisabled.withCancelOnDisabled(ctx, &s.Settings.SV, func(ctx context.Context) error {
+					return s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						return s.executeSchedules(ctx, maxSchedules, txn)
+					})
+				}); err != nil {
 					log.Errorf(ctx, "error executing schedules: %+v", err)
 				}
 
