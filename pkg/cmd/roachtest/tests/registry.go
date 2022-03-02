@@ -123,6 +123,7 @@ func RegisterTests(r registry.Registry) {
 	registerTPCHBench(r)
 	registerOverload(r)
 	registerMultiTenantUpgrade(r)
+	registerMultiTenantFairness(r)
 	registerVersionUpgradePublicSchema(r)
 	registerRemoveInvalidDatabasePrivileges(r)
 	registerValidateSystemSchemaAfterVersionUpgrade(r)
