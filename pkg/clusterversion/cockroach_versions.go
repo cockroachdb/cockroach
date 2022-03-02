@@ -309,6 +309,9 @@ const (
 	// can be used to construct schema change plan node.
 	EnableDeclarativeSchemaChanger
 
+	// RowLevelTTL is the version where we allow row level TTL tables.
+	RowLevelTTL
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -506,6 +509,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableDeclarativeSchemaChanger,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
+	},
+	{
+		Key:     RowLevelTTL,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
 	},
 
 	// *************************************************
