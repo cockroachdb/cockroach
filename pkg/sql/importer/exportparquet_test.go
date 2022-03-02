@@ -93,7 +93,7 @@ func validateParquetFile(
 	}
 	t.Logf("Schema: %s", fr.GetSchemaDefinition())
 
-	cols := fr.SchemaReader.GetSchemaDefinition().RootColumn.Children
+	cols := fr.GetSchemaDefinition().RootColumn.Children
 
 	if test.colFieldRepType != nil {
 		for i, col := range cols {

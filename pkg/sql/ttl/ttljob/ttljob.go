@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -252,6 +254,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			jobEnabled.Key(),
 		)
 	}
+
+	telemetry.Inc(sqltelemetry.RowLevelTTLExecuted)
 
 	var knobs sql.TTLTestingKnobs
 	if ttlKnobs := p.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
