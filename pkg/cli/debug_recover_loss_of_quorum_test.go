@@ -265,3 +265,51 @@ func createIntentOnRangeDescriptor(
 		t.Fatal(err)
 	}
 }
+
+// TestJsonSerialization verifies that all fields serialized in JSON could be
+// read back. This specific test addresses issues where default naming scheme
+// may not work in combination with other tags correctly. e.g. repeated used
+// with omitempty seem to use camelcase unless explicitly specified.
+func TestJsonSerialization(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	rt := roachpb.VOTER_INCOMING
+	nr := loqrecoverypb.NodeReplicaInfo{
+		Replicas: []loqrecoverypb.ReplicaInfo{
+			{
+				NodeID:  1,
+				StoreID: 2,
+				Desc: roachpb.RangeDescriptor{
+					RangeID:  3,
+					StartKey: roachpb.RKey(keys.MinKey),
+					EndKey:   roachpb.RKey(keys.MaxKey),
+					InternalReplicas: []roachpb.ReplicaDescriptor{
+						{
+							NodeID:    1,
+							StoreID:   2,
+							ReplicaID: 3,
+							Type:      &rt,
+						},
+					},
+					NextReplicaID: 1,
+					Generation:    2,
+				},
+				RaftAppliedIndex:   3,
+				RaftCommittedIndex: 4,
+				RaftLogDescriptorChanges: []loqrecoverypb.DescriptorChangeInfo{
+					{
+						ChangeType: 1,
+						Desc:       &roachpb.RangeDescriptor{},
+						OtherDesc:  &roachpb.RangeDescriptor{},
+					},
+				},
+			},
+		},
+	}
+	jsonpb := protoutil.JSONPb{Indent: "  "}
+	data, err := jsonpb.Marshal(nr)
+	require.NoError(t, err)
+
+	var nr2 loqrecoverypb.NodeReplicaInfo
+	require.NoError(t, jsonpb.Unmarshal(data, &nr2))
+}
