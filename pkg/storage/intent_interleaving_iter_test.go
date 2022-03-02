@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -367,6 +368,8 @@ func TestIntentInterleavingIter(t *testing.T) {
 						fmt.Fprintf(&b, "set-upper %s\n", string(makePrintableKey(MVCCKey{Key: k}).Key))
 					case "stats":
 						stats := iter.Stats()
+						// Setting non-deterministic InternalStats to empty.
+						stats.Stats.InternalStats = pebble.InternalIteratorStats{}
 						fmt.Fprintf(&b, "stats: %s\n", stats.Stats.String())
 					default:
 						fmt.Fprintf(&b, "unknown command: %s\n", d.Cmd)
