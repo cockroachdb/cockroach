@@ -136,7 +136,7 @@ type loggerDev struct{}
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 var Dev loggerDev
 
 // Dev and loggerDev implement ChannelLogger.
@@ -160,7 +160,7 @@ var _ ChannelLogger = Dev
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -184,7 +184,7 @@ func (loggerDev) Infof(ctx context.Context, format string, args ...interface{}) 
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -208,7 +208,7 @@ func (loggerDev) VInfof(ctx context.Context, level Level, format string, args ..
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -231,7 +231,7 @@ func (loggerDev) Info(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -255,7 +255,7 @@ func (loggerDev) InfofDepth(ctx context.Context, depth int, format string, args 
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -277,7 +277,7 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -301,7 +301,7 @@ func VInfof(ctx context.Context, level Level, format string, args ...interface{}
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -324,7 +324,7 @@ func Info(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -346,7 +346,7 @@ func InfofDepth(ctx context.Context, depth int, format string, args ...interface
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -370,7 +370,7 @@ func (loggerDev) Warningf(ctx context.Context, format string, args ...interface{
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -394,7 +394,7 @@ func (loggerDev) VWarningf(ctx context.Context, level Level, format string, args
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -417,7 +417,7 @@ func (loggerDev) Warning(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -441,7 +441,7 @@ func (loggerDev) WarningfDepth(ctx context.Context, depth int, format string, ar
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -463,7 +463,7 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -487,7 +487,7 @@ func VWarningf(ctx context.Context, level Level, format string, args ...interfac
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -510,7 +510,7 @@ func Warning(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -532,7 +532,7 @@ func WarningfDepth(ctx context.Context, depth int, format string, args ...interf
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -557,7 +557,7 @@ func (loggerDev) Errorf(ctx context.Context, format string, args ...interface{})
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -582,7 +582,7 @@ func (loggerDev) VErrorf(ctx context.Context, level Level, format string, args .
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -606,7 +606,7 @@ func (loggerDev) Error(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -631,7 +631,7 @@ func (loggerDev) ErrorfDepth(ctx context.Context, depth int, format string, args
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -654,7 +654,7 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -679,7 +679,7 @@ func VErrorf(ctx context.Context, level Level, format string, args ...interface{
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -703,7 +703,7 @@ func Error(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -726,7 +726,7 @@ func ErrorfDepth(ctx context.Context, depth int, format string, args ...interfac
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -751,7 +751,7 @@ func (loggerDev) Fatalf(ctx context.Context, format string, args ...interface{})
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -776,7 +776,7 @@ func (loggerDev) VFatalf(ctx context.Context, level Level, format string, args .
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -800,7 +800,7 @@ func (loggerDev) Fatal(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -825,7 +825,7 @@ func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -848,7 +848,7 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -873,7 +873,7 @@ func VFatalf(ctx context.Context, level Level, format string, args ...interface{
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -897,7 +897,7 @@ func Fatal(ctx context.Context, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -919,7 +919,7 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 func (loggerDev) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
 }
@@ -938,7 +938,7 @@ func (loggerDev) Shout(ctx context.Context, sev Severity, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
@@ -956,7 +956,7 @@ func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args .
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 func Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
 }
@@ -975,7 +975,7 @@ func Shout(ctx context.Context, sev Severity, msg string) {
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
@@ -1561,7 +1561,9 @@ func (loggerHealth) Warningf(ctx context.Context, format string, args ...interfa
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerHealth) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerHealth) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, format, args...)
 	}
@@ -1602,7 +1604,9 @@ func (loggerHealth) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerHealth) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerHealth) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.HEALTH, format, args...)
 }
 
@@ -1687,7 +1691,9 @@ func (loggerHealth) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerHealth) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerHealth) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.HEALTH, format, args...)
 }
 
@@ -1772,7 +1778,9 @@ func (loggerHealth) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerHealth) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerHealth) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.HEALTH, format, args...)
 }
 
@@ -1876,7 +1884,9 @@ func (loggerStorage) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerStorage) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerStorage) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.STORAGE, format, args...)
 }
 
@@ -1904,7 +1914,9 @@ func (loggerStorage) Warningf(ctx context.Context, format string, args ...interf
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerStorage) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerStorage) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, format, args...)
 	}
@@ -1933,7 +1945,9 @@ func (loggerStorage) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerStorage) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerStorage) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.STORAGE, format, args...)
 }
 
@@ -1994,7 +2008,9 @@ func (loggerStorage) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerStorage) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerStorage) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.STORAGE, format, args...)
 }
 
@@ -2055,7 +2071,9 @@ func (loggerStorage) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerStorage) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerStorage) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.STORAGE, format, args...)
 }
 
@@ -2187,7 +2205,9 @@ func (loggerSessions) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSessions) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSessions) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SESSIONS, format, args...)
 }
 
@@ -2231,7 +2251,9 @@ func (loggerSessions) Warningf(ctx context.Context, format string, args ...inter
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSessions) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSessions) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, format, args...)
 	}
@@ -2276,7 +2298,9 @@ func (loggerSessions) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSessions) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSessions) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SESSIONS, format, args...)
 }
 
@@ -2322,7 +2346,9 @@ func (loggerSessions) Errorf(ctx context.Context, format string, args ...interfa
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSessions) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSessions) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.SESSIONS, format, args...)
 	}
@@ -2369,7 +2395,9 @@ func (loggerSessions) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSessions) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSessions) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SESSIONS, format, args...)
 }
 
@@ -2415,7 +2443,9 @@ func (loggerSessions) Fatalf(ctx context.Context, format string, args ...interfa
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSessions) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSessions) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.SESSIONS, format, args...)
 	}
@@ -2462,7 +2492,9 @@ func (loggerSessions) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSessions) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSessions) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.SESSIONS, format, args...)
 }
 
@@ -2497,7 +2529,9 @@ func (loggerSessions) Shout(ctx context.Context, sev Severity, msg string) {
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
-func (loggerSessions) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerSessions) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.SESSIONS, format, args...)
 }
 
@@ -2574,7 +2608,9 @@ func (loggerSqlSchema) Infof(ctx context.Context, format string, args ...interfa
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSqlSchema) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlSchema) VInfof(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, format, args...)
 	}
@@ -2625,7 +2661,9 @@ func (loggerSqlSchema) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSqlSchema) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlSchema) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_SCHEMA, format, args...)
 }
 
@@ -2675,7 +2713,9 @@ func (loggerSqlSchema) Warningf(ctx context.Context, format string, args ...inte
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlSchema) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlSchema) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
 	}
@@ -2726,7 +2766,9 @@ func (loggerSqlSchema) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlSchema) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlSchema) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
 }
 
@@ -2778,7 +2820,9 @@ func (loggerSqlSchema) Errorf(ctx context.Context, format string, args ...interf
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSqlSchema) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlSchema) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
 	}
@@ -2831,7 +2875,9 @@ func (loggerSqlSchema) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSqlSchema) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlSchema) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
 }
 
@@ -2883,7 +2929,9 @@ func (loggerSqlSchema) Fatalf(ctx context.Context, format string, args ...interf
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSqlSchema) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlSchema) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.SQL_SCHEMA, format, args...)
 	}
@@ -2936,7 +2984,9 @@ func (loggerSqlSchema) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSqlSchema) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlSchema) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_SCHEMA, format, args...)
 }
 
@@ -2977,7 +3027,9 @@ func (loggerSqlSchema) Shout(ctx context.Context, sev Severity, msg string) {
 //
 // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
-func (loggerSqlSchema) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerSqlSchema) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_SCHEMA, format, args...)
 }
 
@@ -3045,7 +3097,9 @@ func (loggerUserAdmin) Infof(ctx context.Context, format string, args ...interfa
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerUserAdmin) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerUserAdmin) VInfof(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, format, args...)
 	}
@@ -3090,7 +3144,9 @@ func (loggerUserAdmin) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerUserAdmin) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerUserAdmin) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.USER_ADMIN, format, args...)
 }
 
@@ -3134,7 +3190,9 @@ func (loggerUserAdmin) Warningf(ctx context.Context, format string, args ...inte
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerUserAdmin) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerUserAdmin) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, format, args...)
 	}
@@ -3179,7 +3237,9 @@ func (loggerUserAdmin) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerUserAdmin) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerUserAdmin) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.USER_ADMIN, format, args...)
 }
 
@@ -3225,7 +3285,9 @@ func (loggerUserAdmin) Errorf(ctx context.Context, format string, args ...interf
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerUserAdmin) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerUserAdmin) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.USER_ADMIN, format, args...)
 	}
@@ -3272,7 +3334,9 @@ func (loggerUserAdmin) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerUserAdmin) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerUserAdmin) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.USER_ADMIN, format, args...)
 }
 
@@ -3318,7 +3382,9 @@ func (loggerUserAdmin) Fatalf(ctx context.Context, format string, args ...interf
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerUserAdmin) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerUserAdmin) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.USER_ADMIN, format, args...)
 	}
@@ -3365,7 +3431,9 @@ func (loggerUserAdmin) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerUserAdmin) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerUserAdmin) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.USER_ADMIN, format, args...)
 }
 
@@ -3400,7 +3468,9 @@ func (loggerUserAdmin) Shout(ctx context.Context, sev Severity, msg string) {
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
-func (loggerUserAdmin) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerUserAdmin) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.USER_ADMIN, format, args...)
 }
 
@@ -3462,7 +3532,9 @@ func (loggerPrivileges) Infof(ctx context.Context, format string, args ...interf
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerPrivileges) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerPrivileges) VInfof(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, format, args...)
 	}
@@ -3503,7 +3575,9 @@ func (loggerPrivileges) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerPrivileges) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerPrivileges) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.PRIVILEGES, format, args...)
 }
 
@@ -3543,7 +3617,9 @@ func (loggerPrivileges) Warningf(ctx context.Context, format string, args ...int
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerPrivileges) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerPrivileges) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, format, args...)
 	}
@@ -3584,7 +3660,9 @@ func (loggerPrivileges) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerPrivileges) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerPrivileges) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.PRIVILEGES, format, args...)
 }
 
@@ -3626,7 +3704,9 @@ func (loggerPrivileges) Errorf(ctx context.Context, format string, args ...inter
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerPrivileges) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerPrivileges) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.PRIVILEGES, format, args...)
 	}
@@ -3669,7 +3749,9 @@ func (loggerPrivileges) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerPrivileges) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerPrivileges) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.PRIVILEGES, format, args...)
 }
 
@@ -3711,7 +3793,9 @@ func (loggerPrivileges) Fatalf(ctx context.Context, format string, args ...inter
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerPrivileges) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerPrivileges) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.PRIVILEGES, format, args...)
 	}
@@ -3754,7 +3838,9 @@ func (loggerPrivileges) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerPrivileges) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerPrivileges) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.PRIVILEGES, format, args...)
 }
 
@@ -3785,7 +3871,9 @@ func (loggerPrivileges) Shout(ctx context.Context, sev Severity, msg string) {
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
-func (loggerPrivileges) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerPrivileges) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.PRIVILEGES, format, args...)
 }
 
@@ -3853,7 +3941,9 @@ func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...i
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSensitiveAccess) VInfof(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
 	}
@@ -3898,7 +3988,9 @@ func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSensitiveAccess) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
 }
 
@@ -3942,7 +4034,9 @@ func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args .
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSensitiveAccess) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
 	}
@@ -3987,7 +4081,9 @@ func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSensitiveAccess) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
 }
 
@@ -4033,7 +4129,9 @@ func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSensitiveAccess) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
 	}
@@ -4080,7 +4178,9 @@ func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSensitiveAccess) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
 }
 
@@ -4126,7 +4226,9 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSensitiveAccess) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.SENSITIVE_ACCESS, format, args...)
 	}
@@ -4173,7 +4275,9 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSensitiveAccess) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.SENSITIVE_ACCESS, format, args...)
 }
 
@@ -4208,7 +4312,9 @@ func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
-func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerSensitiveAccess) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.SENSITIVE_ACCESS, format, args...)
 }
 
@@ -4301,7 +4407,9 @@ func (loggerSqlExec) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlExec) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_EXEC, format, args...)
 }
 
@@ -4337,7 +4445,9 @@ func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interf
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlExec) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, format, args...)
 	}
@@ -4374,7 +4484,9 @@ func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlExec) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_EXEC, format, args...)
 }
 
@@ -4451,7 +4563,9 @@ func (loggerSqlExec) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlExec) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_EXEC, format, args...)
 }
 
@@ -4528,7 +4642,9 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlExec) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_EXEC, format, args...)
 }
 
@@ -4663,7 +4779,9 @@ func (loggerSqlPerf) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSqlPerf) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlPerf) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_PERF, format, args...)
 }
 
@@ -4705,7 +4823,9 @@ func (loggerSqlPerf) Warningf(ctx context.Context, format string, args ...interf
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlPerf) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlPerf) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, format, args...)
 	}
@@ -4748,7 +4868,9 @@ func (loggerSqlPerf) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlPerf) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlPerf) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_PERF, format, args...)
 }
 
@@ -4837,7 +4959,9 @@ func (loggerSqlPerf) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSqlPerf) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlPerf) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_PERF, format, args...)
 }
 
@@ -4926,7 +5050,9 @@ func (loggerSqlPerf) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSqlPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlPerf) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_PERF, format, args...)
 }
 
@@ -5009,7 +5135,9 @@ func (loggerSqlInternalPerf) Infof(ctx context.Context, format string, args ...i
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSqlInternalPerf) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) VInfof(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
 	}
@@ -5042,7 +5170,9 @@ func (loggerSqlInternalPerf) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerSqlInternalPerf) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
 }
 
@@ -5074,7 +5204,9 @@ func (loggerSqlInternalPerf) Warningf(ctx context.Context, format string, args .
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlInternalPerf) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
 	}
@@ -5107,7 +5239,9 @@ func (loggerSqlInternalPerf) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerSqlInternalPerf) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
 }
 
@@ -5141,7 +5275,9 @@ func (loggerSqlInternalPerf) Errorf(ctx context.Context, format string, args ...
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSqlInternalPerf) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
 	}
@@ -5176,7 +5312,9 @@ func (loggerSqlInternalPerf) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerSqlInternalPerf) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
 }
 
@@ -5210,7 +5348,9 @@ func (loggerSqlInternalPerf) Fatalf(ctx context.Context, format string, args ...
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSqlInternalPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.SQL_INTERNAL_PERF, format, args...)
 	}
@@ -5245,7 +5385,9 @@ func (loggerSqlInternalPerf) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerSqlInternalPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_INTERNAL_PERF, format, args...)
 }
 
@@ -5268,7 +5410,9 @@ func (loggerSqlInternalPerf) Shout(ctx context.Context, sev Severity, msg string
 // helping developers of CockroachDB itself. It exists as a separate
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
-func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerSqlInternalPerf) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, format, args...)
 }
 
@@ -5315,7 +5459,9 @@ func (loggerTelemetry) Infof(ctx context.Context, format string, args ...interfa
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerTelemetry) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerTelemetry) VInfof(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, format, args...)
 	}
@@ -5346,7 +5492,9 @@ func (loggerTelemetry) Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-func (loggerTelemetry) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerTelemetry) InfofDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.TELEMETRY, format, args...)
 }
 
@@ -5376,7 +5524,9 @@ func (loggerTelemetry) Warningf(ctx context.Context, format string, args ...inte
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerTelemetry) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerTelemetry) VWarningf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, format, args...)
 	}
@@ -5407,7 +5557,9 @@ func (loggerTelemetry) Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-func (loggerTelemetry) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerTelemetry) WarningfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.TELEMETRY, format, args...)
 }
 
@@ -5439,7 +5591,9 @@ func (loggerTelemetry) Errorf(ctx context.Context, format string, args ...interf
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerTelemetry) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerTelemetry) VErrorf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.TELEMETRY, format, args...)
 	}
@@ -5472,7 +5626,9 @@ func (loggerTelemetry) Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func (loggerTelemetry) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerTelemetry) ErrorfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.TELEMETRY, format, args...)
 }
 
@@ -5504,7 +5660,9 @@ func (loggerTelemetry) Fatalf(ctx context.Context, format string, args ...interf
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerTelemetry) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerTelemetry) VFatalf(
+	ctx context.Context, level Level, format string, args ...interface{},
+) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.TELEMETRY, format, args...)
 	}
@@ -5537,7 +5695,9 @@ func (loggerTelemetry) Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func (loggerTelemetry) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+func (loggerTelemetry) FatalfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.TELEMETRY, format, args...)
 }
 
@@ -5558,6 +5718,8 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 // The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
-func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+func (loggerTelemetry) Shoutf(
+	ctx context.Context, sev Severity, format string, args ...interface{},
+) {
 	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
 }

@@ -573,7 +573,7 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 
 	t := NewTracer()
 	if o.sv != nil {
-		t.Configure(ctx, o.sv)
+		t.configure(ctx, o.sv)
 	}
 	if o.useAfterFinishOpt != nil {
 		t.panicOnUseAfterFinish = o.useAfterFinishOpt.panicOnUseAfterFinish
@@ -681,9 +681,9 @@ func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) Trac
 	}
 }
 
-// Configure sets up the Tracer according to the cluster settings (and keeps
+// configure sets up the Tracer according to the cluster settings (and keeps
 // it updated if they change).
-func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
+func (t *Tracer) configure(ctx context.Context, sv *settings.Values) {
 	// traceProvider is captured by the function below.
 	var traceProvider *otelsdk.TracerProvider
 

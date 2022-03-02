@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 // production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
-// See [Configure logs](configure-logs.html#dev-channel).
+// See [configure logs](configure-logs.html#dev-channel).
 const DEV = logpb.Channel_DEV
 
 // OPS is used to report "point" operational events,
