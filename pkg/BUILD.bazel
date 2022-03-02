@@ -243,6 +243,7 @@ ALL_TESTS = [
     "//pkg/sql/colexec/colexectestutils:colexectestutils_test",
     "//pkg/sql/colexec/colexecutils:colexecutils_test",
     "//pkg/sql/colexec/colexecwindow:colexecwindow_test",
+    "//pkg/sql/colexec/execgen/cmd/execgen:execgen_test",
     "//pkg/sql/colexec/execgen:execgen_test",
     "//pkg/sql/colexec:colexec_test",
     "//pkg/sql/colexecerror:colexecerror_test",

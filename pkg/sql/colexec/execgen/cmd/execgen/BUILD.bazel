@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "execgen_lib",
@@ -82,4 +82,11 @@ go_binary(
     name = "execgen",
     embed = [":execgen_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "execgen_test",
+    srcs = ["dep_test.go"],
+    embed = [":execgen_lib"],
+    deps = ["//pkg/testutils/buildutil"],
 )
