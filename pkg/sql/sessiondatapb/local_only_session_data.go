@@ -237,6 +237,10 @@ const (
 	// session default_transaction_quality_of_service value.
 	SystemLow = QoSLevel(admission.LowPri)
 
+	// TTLStatsLow denotes a QoS level used internally by the TTL feature, which
+	// is not settable as a session default_transaction_quality_of_service value.
+	TTLStatsLow = QoSLevel(admission.TTLLowPri)
+
 	// TTLLow denotes a QoS level used internally by the TTL feature, which is not
 	// settable as a session default_transaction_quality_of_service value.
 	TTLLow = QoSLevel(admission.TTLLowPri)

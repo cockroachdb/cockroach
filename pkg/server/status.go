@@ -49,7 +49,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -2115,6 +2117,165 @@ func (s *statusServer) HotRanges(
 	return response, nil
 }
 
+type hotRangeReportMeta struct {
+	dbName         string
+	tableName      string
+	schemaName     string
+	indexNames     map[uint32]string
+	parentID       uint32
+	schemaParentID uint32
+}
+
+// HotRangesV2 returns hot ranges from all stores on requested node or all nodes in case
+// request message doesn't include specific node ID.
+func (s *statusServer) HotRangesV2(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponseV2, error) {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	size := int(req.PageSize)
+	start := paginationState{}
+
+	if len(req.PageToken) > 0 {
+		if err := start.UnmarshalText([]byte(req.PageToken)); err != nil {
+			return nil, err
+		}
+	}
+
+	rangeReportMetas := make(map[uint32]hotRangeReportMeta)
+	var descrs []catalog.Descriptor
+	var err error
+	if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(
+		ctx, s.sqlServer.internalExecutor, s.db,
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			all, err := descriptors.GetAllDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			descrs = all.OrderedDescriptors()
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	for _, desc := range descrs {
+		id := uint32(desc.GetID())
+		meta := hotRangeReportMeta{
+			indexNames: map[uint32]string{},
+		}
+		switch desc := desc.(type) {
+		case catalog.TableDescriptor:
+			meta.tableName = desc.GetName()
+			meta.parentID = uint32(desc.GetParentID())
+			meta.schemaParentID = uint32(desc.GetParentSchemaID())
+			for _, idx := range desc.AllIndexes() {
+				meta.indexNames[uint32(idx.GetID())] = idx.GetName()
+			}
+		case catalog.SchemaDescriptor:
+			meta.schemaName = desc.GetName()
+		case catalog.DatabaseDescriptor:
+			meta.dbName = desc.GetName()
+		}
+		rangeReportMetas[id] = meta
+	}
+
+	response := &serverpb.HotRangesResponseV2{
+		ErrorsByNodeID: make(map[roachpb.NodeID]string),
+	}
+
+	var requestedNodes []roachpb.NodeID
+	if len(req.NodeID) > 0 {
+		requestedNodeID, _, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		requestedNodes = []roachpb.NodeID{requestedNodeID}
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
+		resp, err := status.HotRanges(ctx, &remoteRequest)
+		if err != nil || resp == nil {
+			return nil, err
+		}
+		var ranges []*serverpb.HotRangesResponseV2_HotRange
+		for nodeID, hr := range resp.HotRangesByNodeID {
+			for _, store := range hr.Stores {
+				for _, r := range store.HotRanges {
+					var (
+						dbName, tableName, indexName, schemaName string
+						replicaNodeIDs                           []roachpb.NodeID
+					)
+					_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
+					if err != nil {
+						log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
+						continue
+					}
+					parent := rangeReportMetas[tableID].parentID
+					if parent != 0 {
+						tableName = rangeReportMetas[tableID].tableName
+						dbName = rangeReportMetas[parent].dbName
+					} else {
+						dbName = rangeReportMetas[tableID].dbName
+					}
+					schemaParent := rangeReportMetas[tableID].schemaParentID
+					schemaName = rangeReportMetas[schemaParent].schemaName
+					_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
+					if err == nil {
+						indexName = rangeReportMetas[tableID].indexNames[idxID]
+					}
+					for _, repl := range r.Desc.Replicas().Descriptors() {
+						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
+					}
+					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
+						RangeID:           r.Desc.RangeID,
+						NodeID:            nodeID,
+						QPS:               r.QueriesPerSecond,
+						TableName:         tableName,
+						SchemaName:        schemaName,
+						DatabaseName:      dbName,
+						IndexName:         indexName,
+						ReplicaNodeIds:    replicaNodeIDs,
+						LeaseholderNodeID: r.LeaseholderNodeID,
+					})
+				}
+			}
+		}
+		return ranges, nil
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		if resp == nil {
+			return
+		}
+		hotRanges := resp.([]*serverpb.HotRangesResponseV2_HotRange)
+		response.Ranges = append(response.Ranges, hotRanges...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.ErrorsByNodeID[nodeID] = err.Error()
+	}
+
+	next, err := s.paginatedIterateNodes(
+		ctx, "hotRanges", size, start, requestedNodes, dialFn,
+		nodeFn, responseFn, errorFn)
+
+	if err != nil {
+		return nil, err
+	}
+	var nextBytes []byte
+	if nextBytes, err = next.MarshalText(); err != nil {
+		return nil, err
+	}
+	response.NextPageToken = string(nextBytes)
+	return response, nil
+}
+
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
 	err := s.stores.VisitStores(func(store *kvserver.Store) error {
@@ -2124,6 +2285,10 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 			HotRanges: make([]serverpb.HotRangesResponse_HotRange, len(ranges)),
 		}
 		for i, r := range ranges {
+			replica, err := store.GetReplica(r.Desc.GetRangeID())
+			if err == nil {
+				storeResp.HotRanges[i].LeaseholderNodeID = replica.State(ctx).Lease.Replica.NodeID
+			}
 			storeResp.HotRanges[i].Desc = *r.Desc
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
 		}
