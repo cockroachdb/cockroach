@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // SettingsWatcher is used to watch for cluster settings changes with a
@@ -240,11 +241,11 @@ func (s *SettingsWatcher) handleKV(
 	if !s.codec.ForSystemTenant() {
 		setting, ok := settings.Lookup(name, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
 		if !ok {
-			log.Warningf(ctx, "unknown setting %s, skipping update", log.Safe(name))
+			log.Warningf(ctx, "unknown setting %s, skipping update", redact.Safe(name))
 			return nil
 		}
 		if setting.Class() != settings.TenantWritable {
-			log.Warningf(ctx, "ignoring read-only setting %s", log.Safe(name))
+			log.Warningf(ctx, "ignoring read-only setting %s", redact.Safe(name))
 			return nil
 		}
 	}
@@ -291,7 +292,7 @@ func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val setting
 	}
 
 	if err := s.mu.updater.Set(ctx, key, val); err != nil {
-		log.Warningf(ctx, "failed to set setting %s to %s: %v", log.Safe(key), val.Value, err)
+		log.Warningf(ctx, "failed to set setting %s to %s: %v", redact.Safe(key), val.Value, err)
 	}
 }
 
@@ -299,7 +300,7 @@ func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val setting
 func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
 	setting, ok := settings.Lookup(key, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
 	if !ok {
-		log.Warningf(ctx, "failed to find setting %s, skipping update", log.Safe(key))
+		log.Warningf(ctx, "failed to find setting %s, skipping update", redact.Safe(key))
 		return
 	}
 	ws, ok := setting.(settings.NonMaskedSetting)

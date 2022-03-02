@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -1068,7 +1068,7 @@ func checkReturn(
 			if des != nil && !typ.ResolvedType().Equivalent(des) {
 				return false, nil, nil, errors.AssertionFailedf(
 					"desired constant value type %s but set type %s",
-					log.Safe(des), log.Safe(typ.ResolvedType()),
+					redact.Safe(des), redact.Safe(typ.ResolvedType()),
 				)
 			}
 			s.typedExprs[i] = typ

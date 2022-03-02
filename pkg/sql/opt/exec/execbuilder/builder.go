@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ParallelScanResultThreshold is the number of results up to which, if the
@@ -195,7 +195,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
 		return execPlan{}, errors.AssertionFailedf(
-			"building execution for non-relational operator %s", log.Safe(e.Op()),
+			"building execution for non-relational operator %s", redact.Safe(e.Op()),
 		)
 	}
 
@@ -215,7 +215,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 	scalar, ok := b.e.(opt.ScalarExpr)
 	if !ok {
-		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", log.Safe(b.e.Op()))
+		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", redact.Safe(b.e.Op()))
 	}
 	var ctx buildScalarCtx
 	md := b.mem.Metadata()

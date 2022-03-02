@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // SelectStatement represents any SELECT statement.
@@ -984,7 +984,7 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	case treewindow.UnboundedFollowing:
 		ctx.WriteString("UNBOUNDED FOLLOWING")
 	default:
-		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
+		panic(errors.AssertionFailedf("unhandled case: %d", redact.Safe(node.BoundType)))
 	}
 }
 

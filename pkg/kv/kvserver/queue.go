@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -568,7 +569,7 @@ func (bq *baseQueue) Async(
 	ctx context.Context, opName string, wait bool, fn func(ctx context.Context, h queueHelper),
 ) {
 	if log.V(3) {
-		log.InfofDepth(ctx, 2, "%s", log.Safe(opName))
+		log.InfofDepth(ctx, 2, "%s", redact.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
 	bgCtx := bq.AnnotateCtx(context.Background())
@@ -581,7 +582,7 @@ func (bq *baseQueue) Async(
 		func(ctx context.Context) {
 			fn(ctx, baseQueueHelper{bq})
 		}); err != nil && bq.addLogN.ShouldLog() {
-		log.Infof(ctx, "rate limited in %s: %s", log.Safe(opName), err)
+		log.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
 	}
 }
 

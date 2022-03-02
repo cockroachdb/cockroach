@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // scope is used for the build process and maintains the variables that have
@@ -1431,7 +1431,7 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 			if !types.IsAdditiveType(requiredType) {
 				return pgerror.Newf(pgcode.Windowing,
 					"RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s",
-					log.Safe(requiredType))
+					redact.Safe(requiredType))
 			}
 			if types.IsDateTimeType(requiredType) {
 				// Spec: for datetime ordering columns, the required type is an 'interval'.

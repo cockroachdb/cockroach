@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,7 +58,7 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 					TestingEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
 						log.Eventf(args.Ctx, "%v", sensitiveString)
-						log.Eventf(args.Ctx, "%v", log.Safe(visibleString))
+						log.Eventf(args.Ctx, "%v", redact.Safe(visibleString))
 						return nil
 					},
 				},

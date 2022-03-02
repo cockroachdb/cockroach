@@ -276,15 +276,15 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	f := l.formatter
 	messages := make([]*buffer, 0, 6)
 	messages = append(messages,
-		makeStartLine(f, "file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		makeStartLine(f, "file created at: %s", redact.Safe(now.Format("2006/01/02 15:04:05"))),
 		makeStartLine(f, "running on machine: %s", fullHostName),
-		makeStartLine(f, "binary: %s", Safe(build.GetInfo().Short())),
+		makeStartLine(f, "binary: %s", redact.Safe(build.GetInfo().Short())),
 		makeStartLine(f, "arguments: %s", os.Args),
 	)
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
-	messages = append(messages, makeStartLine(f, "log format (utf8=\u2713): %s", Safe(f.formatterName())))
+	messages = append(messages, makeStartLine(f, "log format (utf8=\u2713): %s", redact.Safe(f.formatterName())))
 
 	if strings.HasPrefix(f.formatterName(), "crdb-") {
 		// For the crdb file formats, suggest the structure of each log line.

@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // unnestFuncs maps function names that are supported by
@@ -143,7 +143,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 				}
 				if len(vals) != 1 {
 					panic(errors.AssertionFailedf(
-						"ValueGenerator didn't return exactly one value: %v", log.Safe(vals)))
+						"ValueGenerator didn't return exactly one value: %v", redact.Safe(vals)))
 				}
 				val := c.f.ConstructConstVal(vals[0], vals[0].ResolvedType())
 				addValToOutRows(val, j, i)

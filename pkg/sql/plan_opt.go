@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
@@ -352,7 +353,7 @@ func (opc *optPlanningCtx) reset() {
 
 func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 	if log.VDepth(1, 1) {
-		log.InfofDepth(ctx, 1, "%s: %s", log.Safe(msg), opc.p.stmt)
+		log.InfofDepth(ctx, 1, "%s: %s", redact.Safe(msg), opc.p.stmt)
 	} else {
 		log.Event(ctx, msg)
 	}

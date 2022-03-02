@@ -888,7 +888,7 @@ func waitForShutdown(
 			// shutdown process.
 			log.Ops.Shoutf(shutdownCtx, severity.ERROR,
 				"received signal '%s' during shutdown, initiating hard shutdown%s",
-				log.Safe(sig), log.Safe(hardShutdownHint))
+				redact.Safe(sig), redact.Safe(hardShutdownHint))
 			handleSignalDuringShutdown(sig)
 			panic("unreachable")
 
@@ -1187,7 +1187,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"- %s\n"+
 				"- %s",
 			build.MakeIssueURL(53404),
-			log.Safe(docs.URL("secure-a-cluster.html")),
+			redact.Safe(docs.URL("secure-a-cluster.html")),
 		)
 	}
 
@@ -1201,7 +1201,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"For more information, see:\n\n" +
 				"- %s"
 			log.Shoutf(ctx, severity.WARNING, warningString,
-				log.Safe(docs.URL("cockroach-start.html#locality")))
+				redact.Safe(docs.URL("cockroach-start.html#locality")))
 		}
 	}
 

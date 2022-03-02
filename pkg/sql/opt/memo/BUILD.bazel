@@ -43,10 +43,10 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/json",
-        "//pkg/util/log",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
