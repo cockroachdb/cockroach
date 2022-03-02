@@ -162,9 +162,17 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 	},
 ).WithPublic()
 
-// enableTracingByDefault controls whether Tracers configured with
-// WithTracingMode(TracingModeFromEnv) generally create spans or not.
-var enableTracingByDefault = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
+// EnableActiveSpansRegistry controls Tracers configured as
+// WithTracingMode(TracingModeFromEnv) (which is the default). When enabled,
+// spans are allocated and registered with the active spans registry until
+// finished. When disabled, span creation is short-circuited for a small
+// performance improvement.
+var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"trace.span_registry.enable",
+	"if set, ongoing traces can be seen at https://<ui>/debug/tracez",
+	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
+).WithPublic()
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
 // if detected.
@@ -268,8 +276,6 @@ type Tracer struct {
 	noopSpan        *Span
 	sterileNoopSpan *Span
 
-	tracingDefault TracingMode
-
 	// backardsCompatibilityWith211, if set, makes the Tracer
 	// work with 21.1 remote nodes.
 	//
@@ -291,6 +297,11 @@ type Tracer struct {
 	// for all spans that the parent Tracer creates.
 	otelTracer unsafe.Pointer
 
+	// activeSpansRegistryEnabled controls whether spans are created and
+	// registered with activeSpansRegistry until they're Finish()ed. If not
+	// enabled, span creation is generally a no-op unless a recording span is
+	// explicitly requested.
+	activeSpansRegistryEnabled bool
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithParent(<non-nil>) option was supplied.
 	activeSpansRegistry *SpanRegistry
@@ -531,8 +542,9 @@ func NewTracer() *Tracer {
 	}
 
 	t := &Tracer{
-		stack:               string(debug.Stack()),
-		activeSpansRegistry: makeSpanRegistry(),
+		stack:                      string(debug.Stack()),
+		activeSpansRegistryEnabled: true,
+		activeSpansRegistry:        makeSpanRegistry(),
 		// These might be overridden in NewTracerWithOpt.
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
 		debugUseAfterFinish:   debugUseAfterFinish,
@@ -572,9 +584,6 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 	}
 
 	t := NewTracer()
-	if o.sv != nil {
-		t.Configure(ctx, o.sv)
-	}
 	if o.useAfterFinishOpt != nil {
 		t.panicOnUseAfterFinish = o.useAfterFinishOpt.panicOnUseAfterFinish
 		t.debugUseAfterFinish = o.useAfterFinishOpt.debugUseAfterFinish
@@ -583,7 +592,10 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 		t.spanReusePercent = *o.spanReusePercent
 	}
 	t.testing = o.knobs
-	t.tracingDefault = TracingMode(o.tracingDefault)
+	t.activeSpansRegistryEnabled = o.tracingDefault != TracingModeOnDemand
+	if o.sv != nil {
+		t.Configure(ctx, o.sv, o.tracingDefault)
+	}
 	return t
 }
 
@@ -591,7 +603,7 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 type tracerOptions struct {
 	sv                *settings.Values
 	knobs             TracerTestingKnobs
-	tracingDefault    tracingModeOpt
+	tracingDefault    TracingMode
 	useAfterFinishOpt *useAfterFinishOpt
 	// spanReusePercent, if not nil, controls the probability of span reuse. A
 	// negative value indicates that the default should come from the environment.
@@ -640,7 +652,7 @@ type tracingModeOpt TracingMode
 var _ TracerOption = tracingModeOpt(TracingModeFromEnv)
 
 func (o tracingModeOpt) apply(opt *tracerOptions) {
-	opt.tracingDefault = o
+	opt.tracingDefault = TracingMode(o)
 }
 
 // WithTracingMode configures the Tracer's tracing mode.
@@ -683,7 +695,7 @@ func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) Trac
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
 // it updated if they change).
-func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
+func (t *Tracer) Configure(ctx context.Context, sv *settings.Values, tracingDefault TracingMode) {
 	// traceProvider is captured by the function below.
 	var traceProvider *otelsdk.TracerProvider
 
@@ -694,6 +706,17 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 		otlpCollectorAddr := openTelemetryCollector.Get(sv)
 		zipkinAddr := ZipkinCollector.Get(sv)
 		enableRedactable := enableTraceRedactable.Get(sv)
+
+		switch tracingDefault {
+		case TracingModeFromEnv:
+			t.activeSpansRegistryEnabled = EnableActiveSpansRegistry.Get(sv)
+		case TracingModeOnDemand:
+			t.activeSpansRegistryEnabled = false
+		case TracingModeActiveSpansRegistry:
+			t.activeSpansRegistryEnabled = true
+		default:
+			panic(fmt.Sprintf("unrecognized tracing option: %v", tracingDefault))
+		}
 
 		t.SetRedactable(enableRedactable)
 
@@ -774,6 +797,7 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 
 	reconfigure(ctx)
 
+	EnableActiveSpansRegistry.SetOnChange(sv, reconfigure)
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	openTelemetryCollector.SetOnChange(sv, reconfigure)
 	ZipkinCollector.SetOnChange(sv, reconfigure)
@@ -991,16 +1015,8 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
-	switch t.tracingDefault {
-	case TracingModeFromEnv:
-		if enableTracingByDefault {
-			return true
-		}
-	case TracingModeActiveSpansRegistry:
+	if t.activeSpansRegistryEnabled {
 		return true
-	case TracingModeOnDemand:
-	default:
-		panic(fmt.Sprintf("unrecognized tracing option: %v", t.tracingDefault))
 	}
 	otelTracer := t.getOtelTracer()
 	return t.useNetTrace() || otelTracer != nil
