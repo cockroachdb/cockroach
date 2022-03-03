@@ -83,12 +83,12 @@ func TestCatchupScan(t *testing.T) {
 	// Put with no intent.
 	for _, kv := range []storage.MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1, kv2_2_2, kv2_5_3} {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := storage.MVCCPut(ctx, eng, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Put with an intent.
-	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, val, &txn); err != nil {
+	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn); err != nil {
 		t.Fatal(err)
 	}
 	testutils.RunTrueAndFalse(t, "useTBI", func(t *testing.T, useTBI bool) {

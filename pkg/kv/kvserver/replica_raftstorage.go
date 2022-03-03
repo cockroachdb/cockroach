@@ -661,7 +661,7 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = storage.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = storage.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
 		} else {
 			// We type assert `writer` to also be an engine.ReadWriter only in
 			// the case where we're replacing existing entries.
@@ -669,7 +669,7 @@ func (r *Replica) append(
 			if !ok {
 				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
 			}
-			err = storage.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = storage.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
 			return 0, 0, 0, err
@@ -690,7 +690,7 @@ func (r *Replica) append(
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
 			err := storage.MVCCDelete(ctx, eng, &diff, r.raftMu.stateLoader.RaftLogKey(i),
-				hlc.Timestamp{}, nil /* txn */)
+				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
 				return 0, 0, 0, err
 			}

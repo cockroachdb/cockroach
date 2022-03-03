@@ -581,6 +581,7 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 		nil, // ms
 		roachpb.Key("b"),
 		hlc.Timestamp{WallTime: 10}, // irrelevant
+		hlc.ClockTimestamp{},        // irrelevant
 		value,
 		nil, // txn
 	); err != nil {

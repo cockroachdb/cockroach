@@ -211,7 +211,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		defer batch.Close()
 		for i := 0; i < 10; i++ {
 			key := makeKey(nil, i)
-			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
+			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, hlc.ClockTimestamp{}, val, &txn1))
 		}
 		require.NoError(t, batch.Commit(true))
 	}()
