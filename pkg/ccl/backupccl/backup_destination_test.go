@@ -568,15 +568,12 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					writeLatest(t, collectionLoc, expectedSuffix)
 				}
 
-				// A remote incremental into the fourth full backup: BACKUP INTO LATEST
+				// An automatic incremental into the fourth full backup: BACKUP INTO LATEST
 				// IN collection, BUT simulating an old cluster that doesn't support
 				// dedicated incrementals subdir by default yet.
 				{
 					expectedSuffix := "/2020/12/25-120000.00"
 					expectedIncDir := "/20201225/123000.00"
-
-					expectedSuffix = "/2020/12/25-120000.00"
-					expectedIncDir = "/20201225/123000.00"
 					expectedSubdir := expectedSuffix
 					expectedDefault := fmt.Sprintf("nodelocal://1/%s%s%s?AUTH=implicit",
 						t.Name(),

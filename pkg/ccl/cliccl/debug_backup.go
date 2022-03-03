@@ -375,19 +375,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 		path = nodelocal.MakeLocalStorageURI(path)
 	}
 
-	var basepath string
-	var subdir string
-
-	// Split out the backup name from the base directory so we can search the
-	// default "incrementals" subdirectory.
-	matchResult := backupccl.BackupSubdirRE.FindStringSubmatch(path)
-	if matchResult == nil {
-		basepath = path
-		subdir = ""
-	} else {
-		basepath = matchResult[1]
-		subdir = matchResult[2]
-	}
+	basepath, subdir := backupccl.CollectionAndSubdir(path, "")
 
 	uri, err := url.Parse(basepath)
 	if err != nil {

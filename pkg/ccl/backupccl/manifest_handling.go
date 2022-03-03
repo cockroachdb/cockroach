@@ -727,10 +727,9 @@ func checkForLatestFileInCollection(
 	return true, nil
 }
 
-func resolveBackupManifestsDeprecatedSyntax(
+func resolveBackupManifestsExplicitIncrementals(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	baseStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
 	endTime hlc.Timestamp,

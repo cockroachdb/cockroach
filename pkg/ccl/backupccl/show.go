@@ -363,13 +363,15 @@ func showBackupPlanHook(
 		if len(explicitIncPath) > 0 {
 			explicitIncPaths = append(explicitIncPaths, explicitIncPath)
 		}
+
+		collection, computedSubdir := CollectionAndSubdir(dest, subdir)
 		incLocations, err := resolveIncrementalsBackupLocation(
 			ctx,
 			p.User(),
 			p.ExecCfg(),
 			explicitIncPaths,
-			[]string{dest},
-			subdir,
+			[]string{collection},
+			computedSubdir,
 		)
 		var incPaths []string
 		var incStore cloud.ExternalStorage

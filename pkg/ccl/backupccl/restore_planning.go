@@ -1465,15 +1465,17 @@ func doRestorePlan(
 	var memReserved int64
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 	if len(from) <= 1 {
-		// INTO-syntax.
+		// Incremental layers are not specified explicitly. They will be searched for automatically.
+		// This could be either INTO-syntax, OR TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
 			fullyResolvedIncrementalsDirectory, endTime, encryption, p.User(),
 		)
 	} else {
-		// Old, deprecated TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsDeprecatedSyntax(
-			ctx, &mem, baseStores, mkStore, from, endTime, encryption, p.User())
+		// Incremental layers are specified explicitly.
+		// This implies the old, deprecated TO-syntax.
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsExplicitIncrementals(
+			ctx, &mem, mkStore, from, endTime, encryption, p.User())
 	}
 
 	if err != nil {

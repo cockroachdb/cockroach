@@ -36,8 +36,25 @@ const (
 	URLSeparator = '/'
 )
 
-// BackupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
-var BackupSubdirRE = regexp.MustCompile(`(.*)/([0-9]{4}/[0-9]{2}/[0-9]{2}-[0-9]{6}.[0-9]{2}/?)$`)
+// backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
+var backupSubdirRE = regexp.MustCompile(`(.*)/([0-9]{4}/[0-9]{2}/[0-9]{2}-[0-9]{6}.[0-9]{2}/?)$`)
+
+// CollectionAndSubdir breaks up a path into those components, if applicable.
+// "Specific" commands, like BACKUP INTO and RESTORE FROM, don't need this.
+// "Vague" commands, like SHOW BACKUP and debug backup, sometimes do.
+func CollectionAndSubdir(path string, subdir string) (string, string) {
+	if subdir != "" {
+		return path, subdir
+	}
+
+	// Split out the backup name from the base directory so we can search the
+	// default "incrementals" subdirectory.
+	matchResult := backupSubdirRE.FindStringSubmatch(path)
+	if matchResult == nil {
+		return path, subdir
+	}
+	return matchResult[1], matchResult[2]
+}
 
 // FindPriorBackups finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
@@ -130,6 +147,8 @@ func JoinURLPath(args ...string) string {
 	return joined
 }
 
+// backupsFromLocation is a small helper function to retrieve all prior
+// backups from the specified location.
 func backupsFromLocation(
 	ctx context.Context, user security.SQLUsername, execCfg *sql.ExecutorConfig, loc string,
 ) ([]string, error) {
@@ -158,6 +177,10 @@ func resolveIncrementalsBackupLocation(
 		}
 
 		// Check we can read from this location, though we don't need the backups here.
+		// If we can't read, we want to throw the appropriate error so the caller
+		// knows this isn't a usable incrementals store.
+		// Some callers will abort, e.g. BACKUP. Others will proceed with a
+		// warning, e.g. SHOW and RESTORE.
 		_, err = backupsFromLocation(ctx, user, execCfg, incPaths[0])
 		if err != nil {
 			return nil, err
