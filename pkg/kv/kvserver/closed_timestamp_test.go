@@ -606,6 +606,8 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t)
+
 	for _, test := range []struct {
 		name string
 		// transferLease, if set, will be called while the RHS is subsumed in order
