@@ -164,7 +164,7 @@ func (r *Replica) executeWriteBatch(
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, st, ui, tok.Move(ctx))
+	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
@@ -382,6 +382,7 @@ func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	g *concurrency.Guard,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
@@ -395,7 +396,7 @@ func (r *Replica) evaluateWriteBatch(
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
 	if r.canAttempt1PCEvaluation(ctx, ba, g) {
-		res := r.evaluate1PC(ctx, idKey, ba, g)
+		res := r.evaluate1PC(ctx, idKey, ba, st, g)
 		switch res.success {
 		case onePCSucceeded:
 			return res.batch, res.stats, res.br, res.res, nil
@@ -427,7 +428,7 @@ func (r *Replica) evaluateWriteBatch(
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
 	defer rec.Release()
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, ui, g, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, st, ui, g, nil /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -467,7 +468,11 @@ type onePCResult struct {
 // efficient - we're avoiding writing the transaction record and writing and the
 // immediately deleting intents.
 func (r *Replica) evaluate1PC(
-	ctx context.Context, idKey kvserverbase.CmdIDKey, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context,
+	idKey kvserverbase.CmdIDKey,
+	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
+	g *concurrency.Guard,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
 
@@ -503,10 +508,10 @@ func (r *Replica) evaluate1PC(
 	ms := new(enginepb.MVCCStats)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, ui, g, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, st, ui, g, etArg.Deadline)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, ui, g)
+			ctx, idKey, rec, ms, &strippedBa, st, ui, g)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -596,6 +601,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	g *concurrency.Guard,
 	deadline *hlc.Timestamp,
@@ -611,7 +617,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, ui, g)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, st, ui, g)
 
 		var success bool
 		if pErr == nil {
@@ -639,11 +645,12 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	g *concurrency.Guard,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	batch, opLogger := r.newBatchedEngine(ba, g)
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, ui, false /* readOnly */)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, st, ui, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
 			res.LogicalOpLog = &kvserverpb.LogicalOpLog{

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -87,7 +88,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// the latches are released.
 
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, ui, g)
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, &st, ui, g)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -243,6 +244,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
@@ -294,7 +296,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			boundAccount.Clear(ctx)
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, ui, true /* readOnly */)
+		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, st, ui, true /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, g, nil /* deadline */) {
