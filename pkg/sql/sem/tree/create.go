@@ -49,6 +49,7 @@ type CreateDatabase struct {
 	SurvivalGoal    SurvivalGoal
 	Placement       DataPlacement
 	Owner           RoleSpec
+	SecondaryRegion Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -119,6 +120,11 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.Owner.Name != "" {
 		ctx.WriteString(" OWNER = ")
 		ctx.FormatNode(&node.Owner)
+	}
+
+	if node.SecondaryRegion != "" {
+		ctx.WriteString(" SECONDARY REGION ")
+		ctx.FormatNode(&node.SecondaryRegion)
 	}
 }
 

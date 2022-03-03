@@ -29,3 +29,13 @@ func (regions RegionNames) ToStrings() []string {
 	}
 	return ret
 }
+
+// Contains returns true if the NameList contains the name.
+func (regions RegionNames) Contains(name RegionName) bool {
+	for _, r := range regions {
+		if r == name {
+			return true
+		}
+	}
+	return false
+}

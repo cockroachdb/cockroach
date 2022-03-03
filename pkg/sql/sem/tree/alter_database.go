@@ -178,3 +178,35 @@ func (node *AlterDatabaseAlterSuperRegion) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&region)
 	}
 }
+
+// AlterDatabaseSecondaryRegion represents a
+// ALTER DATABASE SET SECONDARY REGION ... statement.
+type AlterDatabaseSecondaryRegion struct {
+	DatabaseName    Name
+	SecondaryRegion Name
+}
+
+var _ Statement = &AlterDatabaseSecondaryRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseSecondaryRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" SET SECONDARY REGION ")
+	node.SecondaryRegion.Format(ctx)
+}
+
+// AlterDatabaseDropSecondaryRegion represents a
+// ALTER DATABASE DROP SECONDARY REGION statement.
+type AlterDatabaseDropSecondaryRegion struct {
+	DatabaseName Name
+}
+
+var _ Statement = &AlterDatabaseDropSecondaryRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseDropSecondaryRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" DROP SECONDARY REGION ")
+}

@@ -119,6 +119,7 @@ func (p *planner) createDatabase(
 		database.PrimaryRegion,
 		database.Regions,
 		database.Placement,
+		database.SecondaryRegion,
 	)
 	if err != nil {
 		return nil, false, err
@@ -357,6 +358,7 @@ var InitializeMultiRegionMetadataCCL = func(
 	primaryRegion catpb.RegionName,
 	regions []tree.Name,
 	dataPlacement tree.DataPlacement,
+	secondaryRegion catpb.RegionName,
 ) (*multiregion.RegionConfig, error) {
 	return nil, sqlerrors.NewCCLRequiredError(
 		errors.New("creating multi-region databases requires a CCL binary"),
@@ -404,6 +406,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	primaryRegion tree.Name,
 	regions []tree.Name,
 	placement tree.DataPlacement,
+	secondaryRegion tree.Name,
 ) (*multiregion.RegionConfig, error) {
 	if !p.execCfg.Codec.ForSystemTenant() &&
 		!SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.execCfg.Settings.SV) {
@@ -446,6 +449,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		catpb.RegionName(primaryRegion),
 		regions,
 		placement,
+		catpb.RegionName(secondaryRegion),
 	)
 	if err != nil {
 		return nil, err

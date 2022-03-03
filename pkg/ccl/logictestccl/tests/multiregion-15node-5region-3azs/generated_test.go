@@ -59,6 +59,13 @@ func runCCLLogicTest(t *testing.T, file string) {
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }
 
+func TestCCLLogic_secondary_region(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "secondary_region")
+}
+
 func TestCCLLogic_super_regions(
 	t *testing.T,
 ) {
