@@ -245,7 +245,7 @@ func TestReplicationStatsReport(t *testing.T) {
 		{
 			name: "simple no violations",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
@@ -262,7 +262,7 @@ func TestReplicationStatsReport(t *testing.T) {
 						},
 						zone: &zone{
 							// Change replication options so that db1 gets a report entry.
-							replicas: 3,
+							voters: 3,
 						},
 					},
 					{
@@ -326,7 +326,7 @@ func TestReplicationStatsReport(t *testing.T) {
 		{
 			name: "simple violations",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
@@ -381,7 +381,7 @@ func TestReplicationStatsReport(t *testing.T) {
 		{
 			name: "joint consensus",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
