@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -374,7 +375,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeDescTxn:  func() error { return writeMore() },
+			RunBeforeDescTxn:  func(_ jobspb.JobID) error { return writeMore() },
 			BackfillChunkSize: chunkSize,
 		},
 	}

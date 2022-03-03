@@ -52,10 +52,9 @@ func TestTrace(t *testing.T) {
 		{
 			name: "zipkin",
 			init: func(ctx context.Context) (context.Context, *tracing.Span) {
-				tr := tracing.NewTracer()
 				st := cluster.MakeTestingClusterSettings()
 				tracing.ZipkinCollector.Override(ctx, &st.SV, "127.0.0.1:9000000")
-				tr.Configure(ctx, &st.SV)
+				tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 				return tr.StartSpanCtx(context.Background(), "foo")
 			},
 			check: func(t *testing.T, ctx context.Context, sp *tracing.Span, tr *tracing.Tracer) {
