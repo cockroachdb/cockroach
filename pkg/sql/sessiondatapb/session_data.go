@@ -51,33 +51,6 @@ func (c DataConversionConfig) GetFloatPrec() int {
 	return int(nDigits)
 }
 
-func (f BytesEncodeFormat) String() string {
-	switch f {
-	case BytesEncodeHex:
-		return "hex"
-	case BytesEncodeEscape:
-		return "escape"
-	case BytesEncodeBase64:
-		return "base64"
-	default:
-		return fmt.Sprintf("invalid (%d)", f)
-	}
-}
-
-// BytesEncodeFormatFromString converts a string into a BytesEncodeFormat.
-func BytesEncodeFormatFromString(val string) (_ BytesEncodeFormat, ok bool) {
-	switch strings.ToUpper(val) {
-	case "HEX":
-		return BytesEncodeHex, true
-	case "ESCAPE":
-		return BytesEncodeEscape, true
-	case "BASE64":
-		return BytesEncodeBase64, true
-	default:
-		return -1, false
-	}
-}
-
 func (m VectorizeExecMode) String() string {
 	switch m {
 	case VectorizeOn, VectorizeUnset:
