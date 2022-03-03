@@ -1153,6 +1153,19 @@ message ResolveIntentRequest {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "IgnoredSeqNums"
   ];
+  // An optional clock observation from the intent's leaseholder node that was
+  // captured at some point before the intent's transaction was pushed and found
+  // to be PENDING. The clock observation is used to forward the intent's local
+  // timestamp during intent resolution.
+  //
+  // If the clock observation was captured from a different node than the node
+  // which evaluates the ResolveIntent request, it will be ignored and the
+  // intent's local timestamp will not be changed. If the observation was not
+  // ignored in these cases then intent resolution could be allowed to push the
+  // local timestamp of an intent above the clock on its current leaseholder.
+  // This could lead to stale reads if that leaseholder later served an observed
+  // timestamp with a clock reading below the intent's local timestamp.
+  ObservedTimestamp clock_while_pending = 6 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -1184,6 +1197,19 @@ message ResolveIntentRangeRequest {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "IgnoredSeqNums"
   ];
+  // An optional clock observation from the intent's leaseholder node that was
+  // captured at some point before the intent's transaction was pushed and found
+  // to be PENDING. The clock observation is used to forward the intent's local
+  // timestamp during intent resolution.
+  //
+  // If the clock observation was captured from a different node than the node
+  // which evaluates the ResolveIntentRange request, it will be ignored and the
+  // intent's local timestamp will not be changed. If the observation was not
+  // ignored in these cases then intent resolution could be allowed to push the
+  // local timestamp of an intent above the clock on its current leaseholder.
+  // This could lead to stale reads if that leaseholder later served an observed
+  // timestamp with a clock reading below the intent's local timestamp.
+  ObservedTimestamp clock_while_pending = 7 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeResponse is the return value from the
