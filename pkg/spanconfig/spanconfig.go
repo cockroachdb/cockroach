@@ -281,20 +281,6 @@ type Splitter interface {
 	Splits(ctx context.Context, table catalog.TableDescriptor) (int, error)
 }
 
-// Record ties a target to its corresponding config.
-type Record struct {
-	// Target specifies the target (keyspan(s)) the config applies over.
-	Target Target
-
-	// Config is the set of attributes that apply over the corresponding target.
-	Config roachpb.SpanConfig
-}
-
-// IsEmpty returns true if the receiver is an empty Record.
-func (r *Record) IsEmpty() bool {
-	return r.Target.isEmpty() && r.Config.IsEmpty()
-}
-
 // SQLUpdate captures either a descriptor or a protected timestamp update.
 // It is the unit emitted by the SQLWatcher.
 type SQLUpdate struct {
@@ -386,31 +372,43 @@ type Update Record
 
 // Deletion constructs an update that represents a deletion over the given
 // target.
-func Deletion(target Target) Update {
-	return Update{
-		Target: target,
-		Config: roachpb.SpanConfig{}, // delete
+func Deletion(target Target) (Update, error) {
+	record, err := MakeRecord(target, roachpb.SpanConfig{}) // delete
+	if err != nil {
+		return Update{}, err
 	}
+	return Update(record), nil
 }
 
 // Addition constructs an update that represents adding the given config over
 // the given target.
-func Addition(target Target, conf roachpb.SpanConfig) Update {
-	return Update{
-		Target: target,
-		Config: conf,
+func Addition(target Target, conf roachpb.SpanConfig) (Update, error) {
+	record, err := MakeRecord(target, conf)
+	if err != nil {
+		return Update{}, err
 	}
+	return Update(record), nil
 }
 
 // Deletion returns true if the update corresponds to a span config being
 // deleted.
 func (u Update) Deletion() bool {
-	return u.Config.IsEmpty()
+	return u.config.IsEmpty()
 }
 
 // Addition returns true if the update corresponds to a span config being added.
 func (u Update) Addition() bool {
 	return !u.Deletion()
+}
+
+// GetTarget returns the underlying spanconfig.Record target.
+func (u Update) GetTarget() Target {
+	return u.target
+}
+
+// GetConfig returns the underlying spanconfig.Record config.
+func (u Update) GetConfig() roachpb.SpanConfig {
+	return u.config
 }
 
 // ProtectedTSReader is the read-only portion for querying protected
