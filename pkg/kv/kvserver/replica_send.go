@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -450,17 +451,20 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			LockSpans:       lockSpans,  // nil if g != nil
 		}, requestEvalKind)
 		if pErr != nil {
-			if errors.HasType(pErr.GoError(), (*poison.PoisonedError)(nil)) {
-				brErr := r.breaker.Signal().Err()
-				if brErr == nil {
-					// The breaker may have healed in the meantime.
-					//
-					// TODO(tbg): it would be nicer if poisoning took an err and it
-					// came wrapped with the PoisonedError instead. Or we could
-					// retry the request.
-					brErr = r.replicaUnavailableError()
-				}
-				pErr = roachpb.NewError(errors.CombineErrors(brErr, pErr.GoError()))
+			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
+				// NB: we make the breaker error (which may be nil at this point, but
+				// usually is not) a secondary error, meaning it is not in the error
+				// chain. That is fine; the important bits to investigate
+				// programmatically are the ReplicaUnavailableError (which contains the
+				// descriptor) and the *PoisonedError (which contains the concrete
+				// subspan that caused this request to fail). We mark
+				// circuit.ErrBreakerOpen into the chain as well so that we have the
+				// invariant that all replica circuit breaker errors contain both
+				// ErrBreakerOpen and ReplicaUnavailableError.
+				pErr = roachpb.NewError(r.replicaUnavailableError(errors.CombineErrors(
+					errors.Mark(poisonErr, circuit.ErrBreakerOpen),
+					r.breaker.Signal().Err(),
+				)))
 			}
 			return nil, pErr
 		} else if resp != nil {

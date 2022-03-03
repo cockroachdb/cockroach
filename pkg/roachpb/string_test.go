@@ -156,8 +156,12 @@ func TestReplicaUnavailableError(t *testing.T) {
 	set.AddReplica(rDesc)
 	desc := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax, set)
 
-	var err = roachpb.NewReplicaUnavailableError(desc, rDesc)
+	errSlowProposal := errors.New("slow proposal")
+	var err = roachpb.NewReplicaUnavailableError(errSlowProposal, desc, rDesc)
 	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
+	// Sanity check that Unwrap() was implemented.
+	require.True(t, errors.Is(err, errSlowProposal), "%+v", err)
+	require.True(t, errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)), "%+v", err)
 
 	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
 	echotest.Require(t, s, filepath.Join("testdata", "replica_unavailable_error.txt"))
