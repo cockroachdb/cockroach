@@ -1565,6 +1565,7 @@ message AdminScatterResponse {
   }
   reserved 2;
   repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
+  storage.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
 }
 
 // AdminVerifyProtectedTimestampRequest is the argument to the

@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
