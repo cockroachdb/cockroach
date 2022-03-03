@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -95,6 +96,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("txn_id_resolution", func(t *testing.T) {
 		testTxnIDResolutionRPC(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_ranges", func(t *testing.T) {
+		testTenantRangesRPC(ctx, t, testHelper)
 	})
 }
 
@@ -977,4 +982,61 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 		sqlConn := helper.testCluster().tenantConn(0 /* idx */)
 		run(sqlConn, status, 1 /* coordinatorNodeID */)
 	})
+}
+
+func testTenantRangesRPC(_ context.Context, t *testing.T, helper *tenantTestHelper) {
+	tenantA := helper.testCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
+	keyPrefixForA := keys.MakeTenantPrefix(helper.testCluster().tenant(0).tenant.RPCContext().TenantID)
+	keyPrefixEndForA := keyPrefixForA.PrefixEnd()
+
+	tenantB := helper.controlCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
+	keyPrefixForB := keys.MakeTenantPrefix(helper.controlCluster().tenant(0).tenant.RPCContext().TenantID)
+	keyPrefixEndForB := keyPrefixForB.PrefixEnd()
+
+	resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.RangesByLocality)
+	for localityKey, rangeList := range resp.RangesByLocality {
+		require.NotEmpty(t, localityKey)
+		for _, r := range rangeList.Ranges {
+			assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
+			assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+		}
+	}
+
+	resp, err = tenantB.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.RangesByLocality)
+	for localityKey, rangeList := range resp.RangesByLocality {
+		require.NotEmpty(t, localityKey)
+		for _, r := range rangeList.Ranges {
+			assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
+			assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+		}
+	}
+}
+
+// assertStartKeyInRange compares the pretty printed startKey with the provided
+// tenantPrefix key, ensuring that the startKey starts with the tenantPrefix.
+func assertStartKeyInRange(t *testing.T, startKey string, tenantPrefix roachpb.Key) {
+	require.Truef(t, strings.Index(startKey, tenantPrefix.String()) == 0,
+		fmt.Sprintf("start key %s is outside of the tenant's keyspace (prefix: %v)",
+			startKey, tenantPrefix.String()))
+}
+
+// assertEndKeyInRange compares the pretty printed endKey with the provided
+// tenantPrefix and tenantPrefixEnd keys. Ensures that the key starts with
+// either the tenantPrefix, or the tenantPrefixEnd (valid as end keys are
+// exclusive).
+func assertEndKeyInRange(
+	t *testing.T, endKey string, tenantPrefix roachpb.Key, tenantPrefixEnd roachpb.Key,
+) {
+	require.Truef(t,
+		strings.Index(endKey, tenantPrefix.String()) == 0 ||
+			strings.Index(endKey, tenantPrefixEnd.String()) == 0 ||
+			// Possible if the tenant's ranges fall at the end of the entire keyspace
+			// range within the cluster.
+			endKey == "/Max",
+		fmt.Sprintf("end key %s is outside of the tenant's keyspace (prefix: %v, prefixEnd: %v)",
+			endKey, tenantPrefix.String(), tenantPrefixEnd.String()))
 }
