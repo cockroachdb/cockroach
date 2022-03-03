@@ -250,10 +250,11 @@ func EntriesToRecords(entries []roachpb.SpanConfigEntry) ([]Record, error) {
 		if err != nil {
 			return nil, err
 		}
-		records = append(records, Record{
-			Target: target,
-			Config: entry.Config,
-		})
+		record, err := MakeRecord(target, entry.Config)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 	return records, nil
 }

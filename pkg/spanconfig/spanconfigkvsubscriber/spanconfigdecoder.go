@@ -87,10 +87,7 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, err
 		}
 	}
 
-	return spanconfig.Record{
-		Target: spanconfig.DecodeTarget(rawSp),
-		Config: conf,
-	}, nil
+	return spanconfig.MakeRecord(spanconfig.DecodeTarget(rawSp), conf)
 }
 
 func (sd *spanConfigDecoder) translateEvent(

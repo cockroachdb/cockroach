@@ -128,12 +128,11 @@ func TestDataDriven(t *testing.T) {
 				var results []string
 				_ = store.ForEachOverlappingSpanConfig(ctx, span,
 					func(sp roachpb.Span, conf roachpb.SpanConfig) error {
-						results = append(results,
-							spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
-								Target: spanconfig.MakeTargetFromSpan(sp),
-								Config: conf,
-							}),
-						)
+						record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(sp), conf)
+						if err != nil {
+							return err
+						}
+						results = append(results, spanconfigtestutils.PrintSpanConfigRecord(t, record))
 						return nil
 					},
 				)

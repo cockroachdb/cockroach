@@ -105,10 +105,11 @@ func (k *KVAccessor) GetSpanConfigRecords(
 			return nil, err
 		}
 
-		records = append(records, spanconfig.Record{
-			Target: spanconfig.DecodeTarget(span),
-			Config: conf,
-		})
+		record, err := spanconfig.MakeRecord(spanconfig.DecodeTarget(span), conf)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 	if err != nil {
 		return nil, err

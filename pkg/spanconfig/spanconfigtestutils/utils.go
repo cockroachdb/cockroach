@@ -134,10 +134,10 @@ func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
 	if len(parts) != 2 {
 		t.Fatalf("expected single %q separator", ":")
 	}
-	return spanconfig.Record{
-		Target: ParseTarget(t, parts[0]),
-		Config: ParseConfig(t, parts[1]),
-	}
+	record, err := spanconfig.MakeRecord(ParseTarget(t, parts[0]),
+		ParseConfig(t, parts[1]))
+	require.NoError(t, err)
+	return record
 }
 
 // ParseKVAccessorGetArguments is a helper function that parses datadriven

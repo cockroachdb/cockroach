@@ -161,15 +161,14 @@ func CreateTenantRecord(
 	tenantSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
 
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
-	toUpsert := []spanconfig.Record{
-		{
-			Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
-				Key:    tenantPrefix,
-				EndKey: tenantPrefix.Next(),
-			}),
-			Config: tenantSpanConfig,
-		},
+	record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
+		Key:    tenantPrefix,
+		EndKey: tenantPrefix.Next(),
+	}), tenantSpanConfig)
+	if err != nil {
+		return err
 	}
+	toUpsert := []spanconfig.Record{record}
 	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
 	return scKVAccessor.UpdateSpanConfigRecords(
 		ctx, nil /* toDelete */, toUpsert,

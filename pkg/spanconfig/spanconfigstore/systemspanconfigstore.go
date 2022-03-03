@@ -139,10 +139,11 @@ func (s *systemSpanConfigStore) iterate(f func(record spanconfig.Record) error) 
 	sort.Sort(spanconfig.Targets(targets))
 
 	for _, target := range targets {
-		if err := f(spanconfig.Record{
-			Target: target,
-			Config: s.store[target.GetSystemTarget()],
-		}); err != nil {
+		record, err := spanconfig.MakeRecord(target, s.store[target.GetSystemTarget()])
+		if err != nil {
+			return err
+		}
+		if err := f(record); err != nil {
 			return err
 		}
 	}

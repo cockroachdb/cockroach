@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -272,12 +273,27 @@ type Splitter interface {
 }
 
 // Record ties a target to its corresponding config.
+//
+// Use `MakeRecord` to construct a new Record instead of directly reaching for
+// this struct to ensure proper validation.
 type Record struct {
 	// Target specifies the target (keyspan(s)) the config applies over.
 	Target Target
 
 	// Config is the set of attributes that apply over the corresponding target.
 	Config roachpb.SpanConfig
+}
+
+// MakeRecord returns a Record with the specified Target and SpanConfig. If the
+// Record targets a SystemTarget, we also validate the SpanConfig.
+func MakeRecord(target Target, cfg roachpb.SpanConfig) (Record, error) {
+	if target.IsSystemTarget() {
+		if err := cfg.ValidateSystemTargetSpanConfig(); err != nil {
+			return Record{},
+				errors.AssertionFailedf("failed to validate SystemTarget SpanConfig: %+v", err.Error())
+		}
+	}
+	return Record{Target: target, Config: cfg}, nil
 }
 
 // IsEmpty returns true if the receiver is an empty Record.
