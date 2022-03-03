@@ -161,18 +161,18 @@ func TestDataDriven(t *testing.T) {
 				records, _, err := sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
 				require.NoError(t, err)
 				sort.Slice(records, func(i, j int) bool {
-					return records[i].Target.Less(records[j].Target)
+					return records[i].GetTarget().Less(records[j].GetTarget())
 				})
 
 				var output strings.Builder
 				for _, record := range records {
 					switch {
-					case record.Target.IsSpanTarget():
-						output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSpan(),
-							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)))
-					case record.Target.IsSystemTarget():
-						output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSystemTarget(),
-							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.Config)))
+					case record.GetTarget().IsSpanTarget():
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSpan(),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig())))
+					case record.GetTarget().IsSystemTarget():
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSystemTarget(),
+							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.GetConfig())))
 					default:
 						panic("unsupported target type")
 					}
@@ -185,12 +185,12 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 
 				sort.Slice(records, func(i, j int) bool {
-					return records[i].Target.Less(records[j].Target)
+					return records[i].GetTarget().Less(records[j].GetTarget())
 				})
 				var output strings.Builder
 				for _, record := range records {
-					output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSpan(),
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)))
+					output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSpan(),
+						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig())))
 				}
 				return output.String()
 

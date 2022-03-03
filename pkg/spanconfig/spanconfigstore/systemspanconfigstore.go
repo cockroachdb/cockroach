@@ -47,26 +47,26 @@ func (s *systemSpanConfigStore) apply(
 
 	for _, update := range updates {
 		if update.Addition() {
-			conf, found := s.store[update.Target.GetSystemTarget()]
+			conf, found := s.store[update.GetTarget().GetSystemTarget()]
 			if found {
-				if conf.Equal(update.Config) {
+				if conf.Equal(update.GetConfig()) {
 					// no-op.
 					continue
 				}
-				deleted = append(deleted, update.Target.GetSystemTarget())
+				deleted = append(deleted, update.GetTarget().GetSystemTarget())
 			}
 
-			s.store[update.Target.GetSystemTarget()] = update.Config
+			s.store[update.GetTarget().GetSystemTarget()] = update.GetConfig()
 			added = append(added, spanconfig.Record(update))
 		}
 
 		if update.Deletion() {
-			_, found := s.store[update.Target.GetSystemTarget()]
+			_, found := s.store[update.GetTarget().GetSystemTarget()]
 			if !found {
 				continue // no-op
 			}
-			delete(s.store, update.Target.GetSystemTarget())
-			deleted = append(deleted, update.Target.GetSystemTarget())
+			delete(s.store, update.GetTarget().GetSystemTarget())
+			deleted = append(deleted, update.GetTarget().GetSystemTarget())
 		}
 	}
 
@@ -139,10 +139,11 @@ func (s *systemSpanConfigStore) iterate(f func(record spanconfig.Record) error) 
 	sort.Sort(spanconfig.Targets(targets))
 
 	for _, target := range targets {
-		if err := f(spanconfig.Record{
-			Target: target,
-			Config: s.store[target.GetSystemTarget()],
-		}); err != nil {
+		record, err := spanconfig.MakeRecord(target, s.store[target.GetSystemTarget()])
+		if err != nil {
+			return err
+		}
+		if err := f(record); err != nil {
 			return err
 		}
 	}
@@ -154,11 +155,11 @@ func (s *systemSpanConfigStore) iterate(f func(record spanconfig.Record) error) 
 // and duplicate targets do not exist.
 func (s *systemSpanConfigStore) validateApplyArgs(updates []spanconfig.Update) error {
 	for _, update := range updates {
-		if !update.Target.IsSystemTarget() {
+		if !update.GetTarget().IsSystemTarget() {
 			return errors.AssertionFailedf("expected update to system target update")
 		}
 
-		if update.Target.GetSystemTarget().IsReadOnly() {
+		if update.GetTarget().GetSystemTarget().IsReadOnly() {
 			return errors.AssertionFailedf("invalid system target update")
 		}
 	}
@@ -166,7 +167,7 @@ func (s *systemSpanConfigStore) validateApplyArgs(updates []spanconfig.Update) e
 	sorted := make([]spanconfig.Update, len(updates))
 	copy(sorted, updates)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Target.Less(sorted[j].Target)
+		return sorted[i].GetTarget().Less(sorted[j].GetTarget())
 	})
 	updates = sorted // re-use the same variable
 
@@ -175,11 +176,11 @@ func (s *systemSpanConfigStore) validateApplyArgs(updates []spanconfig.Update) e
 			continue
 		}
 
-		if updates[i].Target.Equal(updates[i-1].Target) {
+		if updates[i].GetTarget().Equal(updates[i-1].GetTarget()) {
 			return errors.Newf(
 				"found duplicate updates %s and %s",
-				updates[i-1].Target,
-				updates[i].Target,
+				updates[i-1].GetTarget(),
+				updates[i].GetTarget(),
 			)
 		}
 	}

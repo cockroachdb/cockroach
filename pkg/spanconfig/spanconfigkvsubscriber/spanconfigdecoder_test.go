@@ -71,10 +71,10 @@ func TestDecodeSpanTargets(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Truef(t, span.Equal(got.Target.GetSpan()),
-		"expected span=%s, got span=%s", span, got.Target.GetSpan())
-	require.Truef(t, conf.Equal(got.Config),
-		"expected config=%s, got config=%s", conf, got.Config)
+	require.Truef(t, span.Equal(got.GetTarget().GetSpan()),
+		"expected span=%s, got span=%s", span, got.GetTarget().GetSpan())
+	require.Truef(t, conf.Equal(got.GetConfig()),
+		"expected config=%s, got config=%s", conf, got.GetConfig())
 }
 
 // TestSpanConfigDecoder verifies that we can decode system target rows stored
@@ -149,9 +149,9 @@ func TestDecodeSystemTargets(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		require.Equal(t, conf, got.Config)
-		require.True(t, got.Target.IsSystemTarget())
-		require.Equal(t, systemTarget, got.Target.GetSystemTarget())
+		require.Equal(t, conf, got.GetConfig())
+		require.True(t, got.GetTarget().IsSystemTarget())
+		require.Equal(t, systemTarget, got.GetTarget().GetSystemTarget())
 	}
 }
 

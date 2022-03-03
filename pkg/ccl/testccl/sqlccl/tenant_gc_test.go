@@ -70,12 +70,9 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	// keyspace.
 	systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(tenantID, tenantID)
 	require.NoError(t, err)
-	err = tenantKVAccessor.UpdateSpanConfigRecords(ctx, nil /* toDelete */, []spanconfig.Record{
-		{
-			Target: spanconfig.MakeTargetFromSystemTarget(systemTarget),
-			Config: roachpb.SpanConfig{}, // Doesn't matter
-		},
-	})
+	rec, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSystemTarget(systemTarget), roachpb.SpanConfig{})
+	require.NoError(t, err)
+	err = tenantKVAccessor.UpdateSpanConfigRecords(ctx, nil /* toDelete */, []spanconfig.Record{rec})
 	require.NoError(t, err)
 
 	// Ensure there are 2 configs for the tenant -- one that spans its entire

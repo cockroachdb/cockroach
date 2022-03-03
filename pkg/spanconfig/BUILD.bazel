@@ -4,6 +4,7 @@ go_library(
     name = "spanconfig",
     srcs = [
         "protectedts_state_reader.go",
+        "record.go",
         "spanconfig.go",
         "systemtarget.go",
         "target.go",
@@ -30,6 +31,7 @@ go_test(
     name = "spanconfig_test",
     srcs = [
         "protectedts_state_reader_test.go",
+        "record_test.go",
         "target_test.go",
     ],
     embed = [":spanconfig"],

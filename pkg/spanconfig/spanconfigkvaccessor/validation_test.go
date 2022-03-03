@@ -35,6 +35,12 @@ func TestValidateUpdateArgs(t *testing.T) {
 		return spanconfig.MakeTargetFromSystemTarget(target)
 	}
 
+	makeRecord := func(target spanconfig.Target, cfg roachpb.SpanConfig) spanconfig.Record {
+		record, err := spanconfig.MakeRecord(target, cfg)
+		require.NoError(t, err)
+		return record
+	}
+
 	for _, tc := range []struct {
 		toDelete []spanconfig.Target
 		toUpsert []spanconfig.Record
@@ -54,21 +60,17 @@ func TestValidateUpdateArgs(t *testing.T) {
 		},
 		{
 			toUpsert: []spanconfig.Record{
-				{
-					Target: spanconfig.MakeTargetFromSpan(
-						roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
-					),
-				},
+				makeRecord(spanconfig.MakeTargetFromSpan(
+					roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
+				), roachpb.SpanConfig{}),
 			},
 			expErr: "invalid span: a",
 		},
 		{
 			toUpsert: []spanconfig.Record{
-				{
-					Target: spanconfig.MakeTargetFromSpan(
-						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
-					),
-				},
+				makeRecord(spanconfig.MakeTargetFromSpan(
+					roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+				), roachpb.SpanConfig{}),
 			},
 			expErr: "invalid span: {b-a}",
 		},
@@ -90,16 +92,12 @@ func TestValidateUpdateArgs(t *testing.T) {
 		},
 		{
 			toUpsert: []spanconfig.Record{ // overlapping spans in the same list
-				{
-					Target: spanconfig.MakeTargetFromSpan(
-						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-					),
-				},
-				{
-					Target: spanconfig.MakeTargetFromSpan(
-						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
-					),
-				},
+				makeRecord(spanconfig.MakeTargetFromSpan(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+				), roachpb.SpanConfig{}),
+				makeRecord(spanconfig.MakeTargetFromSpan(
+					roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+				), roachpb.SpanConfig{}),
 			},
 			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
@@ -110,16 +108,12 @@ func TestValidateUpdateArgs(t *testing.T) {
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 			},
 			toUpsert: []spanconfig.Record{
-				{
-					Target: spanconfig.MakeTargetFromSpan(
-						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
-					),
-				},
-				{
-					Target: spanconfig.MakeTargetFromSpan(
-						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
-					),
-				},
+				makeRecord(spanconfig.MakeTargetFromSpan(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				), roachpb.SpanConfig{}),
+				makeRecord(spanconfig.MakeTargetFromSpan(
+					roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+				), roachpb.SpanConfig{}),
 			},
 			expErr: "",
 		},
@@ -132,11 +126,8 @@ func TestValidateUpdateArgs(t *testing.T) {
 		{
 			// Duplicate in toUpsert.
 			toUpsert: []spanconfig.Record{
-				{
-					Target: makeTenantTarget(10),
-				},
-				{
-					Target: makeTenantTarget(10)},
+				makeRecord(makeTenantTarget(10), roachpb.SpanConfig{}),
+				makeRecord(makeTenantTarget(10), roachpb.SpanConfig{}),
 			},
 			expErr: "duplicate system targets .* in the same list",
 		},
@@ -173,12 +164,10 @@ func TestValidateUpdateArgs(t *testing.T) {
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
 			},
 			toUpsert: []spanconfig.Record{
-				{
-					Target: makeTenantTarget(20),
-				},
-				{
-					Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
-				},
+				makeRecord(makeTenantTarget(10), roachpb.SpanConfig{}),
+				makeRecord(makeTenantTarget(20), roachpb.SpanConfig{}),
+				makeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+					roachpb.SpanConfig{}),
 			},
 			expErr: "",
 		},
@@ -194,11 +183,9 @@ func TestValidateUpdateArgs(t *testing.T) {
 		{
 			// Read only targets are not valid upsert args.
 			toUpsert: []spanconfig.Record{
-				{
-					Target: spanconfig.MakeTargetFromSystemTarget(
-						spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
-					),
-				},
+				makeRecord(spanconfig.MakeTargetFromSystemTarget(
+					spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
+				), roachpb.SpanConfig{}),
 			},
 			expErr: "cannot use read only system target .* as an update argument",
 		},

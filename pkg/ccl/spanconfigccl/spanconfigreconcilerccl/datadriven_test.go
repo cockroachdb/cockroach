@@ -208,18 +208,18 @@ func TestDataDriven(t *testing.T) {
 				)
 				require.NoError(t, err)
 				sort.Slice(records, func(i, j int) bool {
-					return records[i].Target.Less(records[j].Target)
+					return records[i].GetTarget().Less(records[j].GetTarget())
 				})
 
 				lines := make([]string, len(records))
 				for i, record := range records {
 					switch {
-					case record.Target.IsSpanTarget():
-						lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSpan(),
-							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config))
-					case record.Target.IsSystemTarget():
-						lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSystemTarget(),
-							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.Config))
+					case record.GetTarget().IsSpanTarget():
+						lines[i] = fmt.Sprintf("%-42s %s", record.GetTarget().GetSpan(),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig()))
+					case record.GetTarget().IsSystemTarget():
+						lines[i] = fmt.Sprintf("%-42s %s", record.GetTarget().GetSystemTarget(),
+							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.GetConfig()))
 					default:
 						panic("unsupported target type")
 					}
