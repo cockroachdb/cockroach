@@ -1,0 +1,29 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.sessiondatapb;
+option go_package = "lex";
+
+import "gogoproto/gogo.proto";
+
+// BytesEncodeFormat is the configuration for bytes to string conversions.
+enum BytesEncodeFormat {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // BytesEncodeHex uses the hex format: e'abc\n'::BYTES::STRING -> '\x61626312'.
+  // This is the default, for compatibility with PostgreSQL.
+  BytesEncodeHex = 0;
+  // BytesEncodeEscape uses the escaped format: e'abc\n'::BYTES::STRING -> 'abc\012'.
+  BytesEncodeEscape = 1;
+  // BytesEncodeBase64 uses base64 encoding.
+  BytesEncodeBase64 = 2;
+}
