@@ -1865,6 +1865,10 @@ func handleTTLStorageParamChange(
 			}
 		}
 	case before == nil && after != nil:
+		if err := checkTTLEnabledForCluster(params.ctx, params.p.ExecCfg().Settings); err != nil {
+			return err
+		}
+
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		tableDesc.RowLevelTTL = nil
