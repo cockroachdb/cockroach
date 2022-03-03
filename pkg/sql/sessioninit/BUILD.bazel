@@ -46,5 +46,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
     ],
 )

@@ -12,6 +12,7 @@ package sessioninit
 
 import (
 	"context"
+	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
@@ -53,6 +55,9 @@ type Cache struct {
 	authInfoCache map[security.SQLUsername]AuthInfo
 	// settingsCache is a mapping from (dbID, username) to default settings.
 	settingsCache map[SettingsCacheKey][]string
+	// populateCacheGroup is used to ensure that there is at most one in-flight
+	// request for populating each cache entry.
+	populateCacheGroup singleflight.Group
 }
 
 // AuthInfo contains data that is used to perform an authentication attempt.
@@ -159,16 +164,23 @@ func (a *Cache) GetAuthInfo(
 				return nil
 			}
 
-			// Lookup the data outside the lock.
-			aInfo, err = readFromSystemTables(
-				ctx,
-				txn,
-				ie,
-				username,
+			// Lookup the data outside the lock, with at most one request in-flight
+			// for each user.
+			aInfoInterface, _, err := a.populateCacheGroup.Do(
+				username.Normalized(),
+				func() (interface{}, error) {
+					return readFromSystemTables(
+						ctx,
+						txn,
+						ie,
+						username,
+					)
+				},
 			)
 			if err != nil {
 				return err
 			}
+			aInfo = aInfoInterface.(AuthInfo)
 
 			finishedLoop := a.writeAuthInfoBackToCache(
 				ctx,
@@ -318,17 +330,24 @@ func (a *Cache) GetDefaultSettings(
 				return nil
 			}
 
-			// Lookup the data outside the lock.
-			settingsEntries, err = readFromSystemTables(
-				ctx,
-				txn,
-				ie,
-				username,
-				databaseID,
+			// Lookup the data outside the lock, with at most one request in-flight
+			// for each user+database.
+			settingsEntriesInterface, _, err := a.populateCacheGroup.Do(
+				fmt.Sprintf("%s-%d", username.Normalized(), databaseID),
+				func() (interface{}, error) {
+					return readFromSystemTables(
+						ctx,
+						txn,
+						ie,
+						username,
+						databaseID,
+					)
+				},
 			)
 			if err != nil {
 				return err
 			}
+			settingsEntries = settingsEntriesInterface.([]SettingsCacheEntry)
 
 			finishedLoop := a.writeDefaultSettingsBackToCache(
 				ctx,
