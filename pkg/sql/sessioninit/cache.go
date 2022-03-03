@@ -12,6 +12,7 @@ package sessioninit
 
 import (
 	"context"
+	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/logtags"
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
@@ -53,6 +57,10 @@ type Cache struct {
 	authInfoCache map[security.SQLUsername]AuthInfo
 	// settingsCache is a mapping from (dbID, username) to default settings.
 	settingsCache map[SettingsCacheKey][]string
+	// populateCacheGroup is used to ensure that there is at most one in-flight
+	// request for populating each cache entry.
+	populateCacheGroup singleflight.Group
+	stopper            *stop.Stopper
 }
 
 // AuthInfo contains data that is used to perform an authentication attempt.
@@ -83,9 +91,10 @@ type SettingsCacheEntry struct {
 }
 
 // NewCache initializes a new sessioninit.Cache.
-func NewCache(account mon.BoundAccount) *Cache {
+func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 	return &Cache{
 		boundAccount: account,
+		stopper:      stopper,
 	}
 }
 
@@ -159,16 +168,19 @@ func (a *Cache) GetAuthInfo(
 				return nil
 			}
 
-			// Lookup the data outside the lock.
-			aInfo, err = readFromSystemTables(
-				ctx,
-				txn,
-				ie,
-				username,
-			)
+			// Lookup the data outside the lock, with at most one request in-flight
+			// for each user. The user and role_options table versions are also part
+			// of the request key so that we don't read data from an old version
+			// of either table.
+			val, err := a.loadCacheValue(
+				ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
+				func(loadCtx context.Context) (interface{}, error) {
+					return readFromSystemTables(loadCtx, txn, ie, username)
+				})
 			if err != nil {
 				return err
 			}
+			aInfo = val.(AuthInfo)
 
 			finishedLoop := a.writeAuthInfoBackToCache(
 				ctx,
@@ -198,6 +210,33 @@ func (a *Cache) readAuthInfoFromCache(
 	a.clearCacheIfStale(ctx, usersTableVersion, roleOptionsTableVersion, a.dbRoleSettingsTableVersion)
 	ai, foundAuthInfo := a.authInfoCache[username]
 	return ai, foundAuthInfo
+}
+
+// loadCacheValue loads the value for the given requestKey using the provided
+// function. It ensures that there is only at most one in-flight request for
+// each key at any time.
+func (a *Cache) loadCacheValue(
+	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
+) (interface{}, error) {
+	ch, _ := a.populateCacheGroup.DoChan(requestKey, func() (interface{}, error) {
+		// Use a different context to fetch, so that it isn't possible for
+		// one query to timeout and cause all the goroutines that are waiting
+		// to get a timeout error.
+		loadCtx, cancel := a.stopper.WithCancelOnQuiesce(
+			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
+		)
+		defer cancel()
+		return fn(loadCtx)
+	})
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return AuthInfo{}, res.Err
+		}
+		return res.Val, nil
+	case <-ctx.Done():
+		return AuthInfo{}, ctx.Err()
+	}
 }
 
 // writeAuthInfoBackToCache tries to put the fetched AuthInfo into the
@@ -318,17 +357,20 @@ func (a *Cache) GetDefaultSettings(
 				return nil
 			}
 
-			// Lookup the data outside the lock.
-			settingsEntries, err = readFromSystemTables(
-				ctx,
-				txn,
-				ie,
-				username,
-				databaseID,
+			// Lookup the data outside the lock, with at most one request in-flight
+			// for each user+database. The db_role_settings table version is also part
+			// of the request key so that we don't read data from an old version
+			// of the table.
+			val, err := a.loadCacheValue(
+				ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", username.Normalized(), databaseID, dbRoleSettingsTableVersion),
+				func(loadCtx context.Context) (interface{}, error) {
+					return readFromSystemTables(loadCtx, txn, ie, username, databaseID)
+				},
 			)
 			if err != nil {
 				return err
 			}
+			settingsEntries = val.([]SettingsCacheEntry)
 
 			finishedLoop := a.writeDefaultSettingsBackToCache(
 				ctx,
