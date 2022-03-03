@@ -151,6 +151,8 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	//   node or a SQL server, using a valid root or node client cert.
 	// - incoming connections from another KV node into a KV node, using
 	//   a node client cert.
+	// - calls coming through the gRPC gateway, from an HTTP client. The gRPC
+	//   gateway uses a connection dialed as the node user.
 	//
 	// In both cases, we must check that the client cert is either root
 	// or node.
