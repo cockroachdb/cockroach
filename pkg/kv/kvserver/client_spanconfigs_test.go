@@ -77,8 +77,9 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	)
 	require.Empty(t, deleted)
 	require.Len(t, added, 1)
-	require.True(t, added[0].Target.GetSpan().Equal(span))
-	require.True(t, added[0].Config.Equal(conf))
+	require.True(t, added[0].GetTarget().GetSpan().Equal(span))
+	addedCfg := added[0].GetConfig()
+	require.True(t, addedCfg.Equal(conf))
 
 	require.NotNil(t, mockSubscriber.callback)
 	mockSubscriber.callback(ctx, span) // invoke the callback

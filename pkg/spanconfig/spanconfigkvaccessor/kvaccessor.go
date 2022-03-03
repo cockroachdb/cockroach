@@ -105,10 +105,11 @@ func (k *KVAccessor) GetSpanConfigRecords(
 			return nil, err
 		}
 
-		records = append(records, spanconfig.Record{
-			Target: spanconfig.DecodeTarget(span),
-			Config: conf,
-		})
+		record, err := spanconfig.MakeRecord(spanconfig.DecodeTarget(span), conf)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 	if err != nil {
 		return nil, err
@@ -322,14 +323,15 @@ func (k *KVAccessor) constructUpsertStmtAndArgs(
 	upsertValues := make([]string, len(toUpsert))
 	upsertQueryArgs := make([]interface{}, len(toUpsert)*3)
 	for i, record := range toUpsert {
-		marshaled, err := protoutil.Marshal(&record.Config)
+		cfg := record.GetConfig()
+		marshaled, err := protoutil.Marshal(&cfg)
 		if err != nil {
 			return "", nil, err
 		}
 
 		startKeyIdx, endKeyIdx, configIdx := i*3, (i*3)+1, (i*3)+2
-		upsertQueryArgs[startKeyIdx] = record.Target.Encode().Key
-		upsertQueryArgs[endKeyIdx] = record.Target.Encode().EndKey
+		upsertQueryArgs[startKeyIdx] = record.GetTarget().Encode().Key
+		upsertQueryArgs[endKeyIdx] = record.GetTarget().Encode().EndKey
 		upsertQueryArgs[configIdx] = marshaled
 		upsertValues[i] = fmt.Sprintf("($%d::BYTES, $%d::BYTES, $%d::BYTES)",
 			startKeyIdx+1, endKeyIdx+1, configIdx+1) // prepared statement placeholders (1-indexed)
@@ -384,8 +386,8 @@ func (k *KVAccessor) constructValidationStmtAndArgs(
 		}
 
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		validationQueryArgs[startKeyIdx] = entry.Target.Encode().Key
-		validationQueryArgs[endKeyIdx] = entry.Target.Encode().EndKey
+		validationQueryArgs[startKeyIdx] = entry.GetTarget().Encode().Key
+		validationQueryArgs[endKeyIdx] = entry.GetTarget().Encode().EndKey
 
 		fmt.Fprintf(&validationInnerStmtBuilder, `
 SELECT count(*) = 1 FROM (
@@ -415,7 +417,7 @@ func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Reco
 	targetsToUpdate := func(recs []spanconfig.Record) []spanconfig.Target {
 		targets := make([]spanconfig.Target, len(recs))
 		for i, ent := range recs {
-			targets[i] = ent.Target
+			targets[i] = ent.GetTarget()
 		}
 		return targets
 	}(toUpsert)
