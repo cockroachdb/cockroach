@@ -167,13 +167,13 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 0
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		if err := batch.Commit(true); err != nil {

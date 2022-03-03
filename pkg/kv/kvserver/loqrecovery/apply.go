@@ -257,7 +257,7 @@ func applyReplicaUpdate(
 		// A crude form of the intent resolution process: abort the
 		// transaction by deleting its record.
 		txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
-		if err := storage.MVCCDelete(ctx, readWriter, &ms, txnKey, hlc.Timestamp{}, nil); err != nil {
+		if err := storage.MVCCDelete(ctx, readWriter, &ms, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		update := roachpb.LockUpdate{
@@ -285,7 +285,8 @@ func applyReplicaUpdate(
 
 	if err := storage.MVCCPutProto(
 		ctx, readWriter, &ms, key, clock.Now(),
-		nil /* txn */, &newDesc); err != nil {
+		hlc.ClockTimestamp{}, nil /* txn */, &newDesc,
+	); err != nil {
 		return PrepareReplicaReport{}, err
 	}
 	report.Descriptor = newDesc

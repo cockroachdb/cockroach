@@ -59,7 +59,7 @@ func TestRefreshError(t *testing.T) {
 			},
 			ReadTimestamp: ts2,
 		}
-		if err := storage.MVCCPut(ctx, db, nil, k, txn.ReadTimestamp, v, txn); err != nil {
+		if err := storage.MVCCPut(ctx, db, nil, k, txn.ReadTimestamp, hlc.ClockTimestamp{}, v, txn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -120,7 +120,7 @@ func TestRefreshTimestampBounds(t *testing.T) {
 	ts3 := hlc.Timestamp{WallTime: 3}
 
 	// Write to a key at time ts2.
-	require.NoError(t, storage.MVCCPut(ctx, db, nil, k, ts2, v, nil))
+	require.NoError(t, storage.MVCCPut(ctx, db, nil, k, ts2, hlc.ClockTimestamp{}, v, nil))
 
 	for _, tc := range []struct {
 		from, to hlc.Timestamp

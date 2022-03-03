@@ -158,7 +158,7 @@ func (rsl StateLoader) SetLease(
 	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
 ) error {
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeLeaseKey(),
-		hlc.Timestamp{}, nil, &lease)
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &lease)
 }
 
 // LoadRangeAppliedState loads the Range applied state.
@@ -213,7 +213,8 @@ func (rsl StateLoader) SetRangeAppliedState(
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in C.MVCCComputeStats and ComputeStatsForRange.
 	ms := (*enginepb.MVCCStats)(nil)
-	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
+	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &as)
 }
 
 // SetMVCCStats overwrites the MVCC stats. This needs to perform a read on the
@@ -264,8 +265,8 @@ func (rsl StateLoader) SetGCThreshold(
 	if threshold == nil {
 		return errors.New("cannot persist nil GCThreshold")
 	}
-	return storage.MVCCPutProto(ctx, readWriter, ms,
-		rsl.RangeGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
+	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeGCThresholdKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, threshold)
 }
 
 // LoadVersion loads the replica version.
@@ -285,8 +286,8 @@ func (rsl StateLoader) SetVersion(
 	ms *enginepb.MVCCStats,
 	version *roachpb.Version,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, ms,
-		rsl.RangeVersionKey(), hlc.Timestamp{}, nil, version)
+	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeVersionKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, version)
 }
 
 // The rest is not technically part of ReplicaState.
@@ -347,7 +348,8 @@ func (rsl StateLoader) SetRaftTruncatedState(
 		writer,
 		nil, /* ms */
 		rsl.RaftTruncatedStateKey(),
-		hlc.Timestamp{}, /* timestamp */
+		hlc.Timestamp{},      /* timestamp */
+		hlc.ClockTimestamp{}, /* localTimestamp */
 		truncState,
 		nil, /* txn */
 	)
@@ -377,7 +379,8 @@ func (rsl StateLoader) SetHardState(
 		writer,
 		nil, /* ms */
 		rsl.RaftHardStateKey(),
-		hlc.Timestamp{}, /* timestamp */
+		hlc.Timestamp{},      /* timestamp */
+		hlc.ClockTimestamp{}, /* localTimestamp */
 		&hs,
 		nil, /* txn */
 	)
@@ -451,7 +454,8 @@ func (rsl StateLoader) SetRaftReplicaID(
 		writer,
 		nil, /* ms */
 		rsl.RaftReplicaIDKey(),
-		hlc.Timestamp{}, /* timestamp */
+		hlc.Timestamp{},      /* timestamp */
+		hlc.ClockTimestamp{}, /* localTimestamp */
 		&rid,
 		nil, /* txn */
 	)

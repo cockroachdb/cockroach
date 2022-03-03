@@ -265,7 +265,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		StoreID:   1,
 	}
 	if err := storage.MVCCPutProto(
-		ctx, e, nil /* ms */, keys.StoreIdentKey(), hlc.Timestamp{}, nil /* txn */, &sIdent,
+		ctx, e, nil /* ms */, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &sIdent,
 	); err != nil {
 		t.Fatal(err)
 	}

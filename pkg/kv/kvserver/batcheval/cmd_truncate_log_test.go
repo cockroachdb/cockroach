@@ -31,7 +31,7 @@ func putTruncatedState(
 	key := keys.RaftTruncatedStateKey(rangeID)
 	if err := storage.MVCCPutProto(
 		context.Background(), eng, nil, key,
-		hlc.Timestamp{}, nil /* txn */, &truncState,
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &truncState,
 	); err != nil {
 		t.Fatal(err)
 	}

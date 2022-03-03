@@ -282,7 +282,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	var err error
 	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
 		s := (*Store)(v)
-		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi)
+		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, bi)
 		return err == nil
 	})
 	return err
