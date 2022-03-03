@@ -354,6 +354,23 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
+	// Ensure the secondary region is not being dropped
+	if dbDesc.RegionConfig.SecondaryRegion == catpb.RegionName(n.Region) {
+		return nil, errors.WithHintf(
+			pgerror.Newf(
+				pgcode.InvalidDatabaseDefinition,
+				"cannot drop region %q",
+				dbDesc.RegionConfig.SecondaryRegion,
+			),
+			"You must designate another region as the secondary region using "+
+				"ALTER DATABASE %s SECONDARY REGION <region name> or remove the secondary region "+
+				"using ALTER DATABASE %s DROP SECONDARY REGION in order to drop region %q",
+			dbDesc.GetName(),
+			dbDesc.GetName(),
+			n.Region,
+		)
+	}
+
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
 
@@ -916,6 +933,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		n.n.PrimaryRegion,
 		[]tree.Name{n.n.PrimaryRegion},
 		tree.DataPlacementUnspecified,
+		tree.SecondaryRegionNotSpecifiedName,
 	)
 	if err != nil {
 		return err
@@ -1358,7 +1376,6 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-
 	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
@@ -1658,3 +1675,237 @@ func (p *planner) addSuperRegion(
 		desc,
 	)
 }
+
+type alterDatabaseSecondaryRegion struct {
+	n    *tree.AlterDatabaseSecondaryRegion
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseSecondaryRegion(
+	ctx context.Context, n *tree.AlterDatabaseSecondaryRegion,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseSecondaryRegion{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidDatabaseDefinition,
+				"database must be multi-region to support a secondary region",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	// Verify that the secondary region is part of the region list.
+	prevRegionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	// If we're setting the secondary region to the current secondary region,
+	// there is nothing to be done.
+	if prevRegionConfig.SecondaryRegion() == catpb.RegionName(n.n.SecondaryRegion) {
+		return nil
+	}
+
+	if !prevRegionConfig.Regions().Contains(catpb.RegionName(n.n.SecondaryRegion)) {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.InvalidDatabaseDefinition,
+				"region %s has not been added to the database",
+				n.n.SecondaryRegion.String(),
+			),
+			"you must add the region to the database before setting it as secondary region, using "+
+				"ALTER DATABASE %s ADD REGION %s",
+			n.n.DatabaseName.String(),
+			n.n.SecondaryRegion.String(),
+		)
+	}
+
+	// The secondary region cannot be the current primary region.
+	if prevRegionConfig.PrimaryRegion() == catpb.RegionName(n.n.SecondaryRegion) {
+		return pgerror.New(pgcode.InvalidDatabaseDefinition,
+			"the secondary region cannot be the same as the current primary region",
+		)
+	}
+
+	// Get the type descriptor for the multi-region enum.
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+		params.ctx,
+		params.p.txn,
+		n.desc.RegionConfig.RegionEnumID)
+	if err != nil {
+		return err
+	}
+
+	// To update the secondary region we need to modify the database descriptor,
+	// update the multi-region enum, and write a new zone configuration.
+	n.desc.RegionConfig.SecondaryRegion = catpb.RegionName(n.n.SecondaryRegion)
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Update the secondary region in the type descriptor, and write it back out.
+	typeDesc.RegionConfig.SecondaryRegion = catpb.RegionName(n.n.SecondaryRegion)
+	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
+		return err
+	}
+
+	updatedRegionConfig, err := SynthesizeRegionConfig(
+		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		updatedRegionConfig,
+		params.p.txn,
+		params.p.execCfg,
+		params.p.Descriptors(),
+	); err != nil {
+		return err
+	}
+
+	// Update all regional and regional by row tables.
+	return params.p.refreshZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+	)
+}
+
+func (n *alterDatabaseSecondaryRegion) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseSecondaryRegion) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseSecondaryRegion) Close(context.Context)        {}
+
+type alterDatabaseDropSecondaryRegion struct {
+	n    *tree.AlterDatabaseDropSecondaryRegion
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseDropSecondaryRegion(
+	ctx context.Context, n *tree.AlterDatabaseDropSecondaryRegion,
+) (planNode, error) {
+
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseDropSecondaryRegion{n: n, desc: dbDesc}, nil
+
+}
+
+func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidDatabaseDefinition,
+				"database must be multi-region to support a secondary region",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	// TODO(e-mbrown): Add DROP SECONDARY REGION IF EXIST syntax
+	if n.desc.RegionConfig.SecondaryRegion == "" {
+		return pgerror.Newf(pgcode.UndefinedParameter,
+			"database %s doesn't have a secondary region defined", n.desc.GetName(),
+		)
+	}
+
+	typeID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	if err != nil {
+		return err
+	}
+
+	n.desc.RegionConfig.SecondaryRegion = ""
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Update the secondary region in the type descriptor, and write it back out.
+	typeDesc.RegionConfig.SecondaryRegion = ""
+	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
+		return err
+	}
+
+	updatedRegionConfig, err := SynthesizeRegionConfig(
+		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		updatedRegionConfig,
+		params.p.txn,
+		params.p.execCfg,
+		params.p.Descriptors(),
+	); err != nil {
+		return err
+	}
+
+	// Update all regional and regional by row tables.
+	if err := params.p.refreshZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *alterDatabaseDropSecondaryRegion) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseDropSecondaryRegion) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseDropSecondaryRegion) Close(context.Context)        {}

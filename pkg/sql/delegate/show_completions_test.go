@@ -44,7 +44,7 @@ func TestCompletions(t *testing.T) {
 		{
 			stmt: "se",
 			expectedCompletions: []string{
-				"SEARCH", "SECOND", "SECURITY", "SELECT", "SEQUENCE", "SEQUENCES",
+				"SEARCH", "SECOND", "SECONDARY", "SECURITY", "SELECT", "SEQUENCE", "SEQUENCES",
 				"SERIALIZABLE", "SERVER", "SESSION", "SESSIONS", "SESSION_USER",
 				"SET", "SETOF", "SETS", "SETTING", "SETTINGS",
 			},
