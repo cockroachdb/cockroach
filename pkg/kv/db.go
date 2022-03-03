@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -583,24 +585,44 @@ func (db *DB) AdminSplit(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+type SplitAndScatterReply struct {
+	Timing struct {
+		Split   time.Duration
+		Scatter time.Duration
+	}
+	Stats *enginepb.MVCCStats
+}
+
 // SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
 func (db *DB) SplitAndScatter(
 	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key,
-) error {
+) (SplitAndScatterReply, error) {
+	beforeSplit := timeutil.Now()
 	b := &Batch{}
 	b.adminSplit(key, expirationTime, predicateKeys)
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
-		return err
+		return SplitAndScatterReply{}, err
 	}
+	beforeScatter := timeutil.Now()
 
 	scatterReq := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
 		RandomizeLeases: true,
 	}
-	if _, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
-		return pErr.GoError()
+	raw, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq)
+	if pErr != nil {
+		return SplitAndScatterReply{}, pErr.GoError()
 	}
-	return nil
+	reply := SplitAndScatterReply{}
+	reply.Timing.Split = beforeScatter.Sub(beforeSplit)
+	reply.Timing.Scatter = timeutil.Since(beforeScatter)
+	resp, ok := raw.(*roachpb.AdminScatterResponse)
+	if !ok {
+		return reply, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
+	}
+	reply.Stats = resp.MVCCStats
+
+	return reply, nil
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.
