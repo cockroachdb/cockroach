@@ -185,6 +185,10 @@ message SpanConfig {
   bool exclude_data_from_backup = 11;
 
   // Next ID: 12
+  //
+  // When adding a field, also add a check a to `ValidateSystemTargetSpanConfig`
+  // if it is not expected to be set on a SpanConfig corresponding to a
+  // SystemTarget.
 }
 
 // SystemSpanConfigTarget specifies the target of system span configurations.

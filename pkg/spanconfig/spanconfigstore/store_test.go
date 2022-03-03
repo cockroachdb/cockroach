@@ -89,7 +89,7 @@ func TestDataDriven(t *testing.T) {
 
 				sort.Sort(spanconfig.Targets(deleted))
 				sort.Slice(added, func(i, j int) bool {
-					return added[i].Target.Less(added[j].Target)
+					return added[i].GetTarget().Less(added[j].GetTarget())
 				})
 
 				var b strings.Builder
@@ -128,12 +128,11 @@ func TestDataDriven(t *testing.T) {
 				var results []string
 				_ = store.ForEachOverlappingSpanConfig(ctx, span,
 					func(sp roachpb.Span, conf roachpb.SpanConfig) error {
-						results = append(results,
-							spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
-								Target: spanconfig.MakeTargetFromSpan(sp),
-								Config: conf,
-							}),
-						)
+						record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(sp), conf)
+						if err != nil {
+							return err
+						}
+						results = append(results, spanconfigtestutils.PrintSpanConfigRecord(t, record))
 						return nil
 					},
 				)
@@ -205,8 +204,9 @@ func TestStoreClone(t *testing.T) {
 	require.Equal(t, len(originalRecords), len(clonedRecords))
 	for i := 0; i < len(originalRecords); i++ {
 		require.True(
-			t, originalRecords[i].Target.Equal(clonedRecords[i].Target),
+			t, originalRecords[i].GetTarget().Equal(clonedRecords[i].GetTarget()),
 		)
-		require.True(t, originalRecords[i].Config.Equal(clonedRecords[i].Config))
+		originalConfig := originalRecords[i].GetConfig()
+		require.True(t, originalConfig.Equal(clonedRecords[i].GetConfig()))
 	}
 }

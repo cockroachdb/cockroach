@@ -70,15 +70,18 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	span := repl.Desc().RSpan().AsRawSpanWithNoLocals()
 	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
 
+	add, err := spanconfig.Addition(spanconfig.MakeTargetFromSpan(span), conf)
+	require.NoError(t, err)
 	deleted, added := spanConfigStore.Apply(
 		ctx,
 		false, /* dryrun */
-		spanconfig.Addition(spanconfig.MakeTargetFromSpan(span), conf),
+		add,
 	)
 	require.Empty(t, deleted)
 	require.Len(t, added, 1)
-	require.True(t, added[0].Target.GetSpan().Equal(span))
-	require.True(t, added[0].Config.Equal(conf))
+	require.True(t, added[0].GetTarget().GetSpan().Equal(span))
+	addedCfg := added[0].GetConfig()
+	require.True(t, addedCfg.Equal(conf))
 
 	require.NotNil(t, mockSubscriber.callback)
 	mockSubscriber.callback(ctx, span) // invoke the callback

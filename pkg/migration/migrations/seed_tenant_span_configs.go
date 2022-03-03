@@ -67,12 +67,12 @@ func seedTenantSpanConfigsMigration(
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.Next(),
 			}
-			toUpsert := []spanconfig.Record{
-				{
-					Target: spanconfig.MakeTargetFromSpan(tenantSeedSpan),
-					Config: tenantSpanConfig,
-				},
+			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(tenantSeedSpan),
+				tenantSpanConfig)
+			if err != nil {
+				return err
 			}
+			toUpsert := []spanconfig.Record{record}
 			scRecords, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{tenantTarget})
 			if err != nil {
 				return err
