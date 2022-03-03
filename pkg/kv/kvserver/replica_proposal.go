@@ -659,6 +659,7 @@ func (r *Replica) evaluateProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	g *concurrency.Guard,
 ) (*result.Result, bool, *roachpb.Error) {
@@ -676,7 +677,7 @@ func (r *Replica) evaluateProposal(
 	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, ui, g)
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, st, ui, g)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -772,11 +773,11 @@ func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
-	st kvserverpb.LeaseStatus,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	g *concurrency.Guard,
 ) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, ui, g)
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, st, ui, g)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
@@ -785,7 +786,7 @@ func (r *Replica) requestToProposal(
 		doneCh:      make(chan proposalResult, 1),
 		Local:       &res.Local,
 		Request:     ba,
-		leaseStatus: st,
+		leaseStatus: *st,
 	}
 
 	if needConsensus {
