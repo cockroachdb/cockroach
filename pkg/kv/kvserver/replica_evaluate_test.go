@@ -665,6 +665,7 @@ func TestEvaluateBatch(t *testing.T) {
 				d.MockEvalCtx.EvalContext(),
 				&d.ms,
 				&d.ba,
+				nil, /* st */
 				uncertainty.Interval{},
 				d.readOnly,
 			)
