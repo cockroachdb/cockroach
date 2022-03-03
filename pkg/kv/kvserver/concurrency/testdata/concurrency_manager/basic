@@ -226,7 +226,7 @@ debug-advance-clock ts=123
 on-txn-updated txn=txn2 status=pending ts=18,1
 ----
 [-] update txn: increasing timestamp of txn2
-[2] sequence req5: resolving intent "k" for txn 00000002 with PENDING status
+[2] sequence req5: resolving intent "k" for txn 00000002 with PENDING status and clock observation {1 246.000000000,0}
 [2] sequence req5: lock wait-queue event: done waiting
 [2] sequence req5: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 123.000s
 [2] sequence req5: acquiring latches
