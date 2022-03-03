@@ -279,6 +279,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 			// mock this out for a consistent string below.
 			diff[0].Timestamp = hlc.Timestamp{Logical: 987, WallTime: 123}
+			diff[0].LocalTimestamp = hlc.ClockTimestamp{Logical: 678, WallTime: 234}
 
 			act := diff.String()
 
@@ -286,6 +287,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 +++ follower
 +0.000000123,987 "e"
 +    ts:1970-01-01 00:00:00.000000123 +0000 UTC
++    localTs:0.000000234,678
 +    value:"\x00\x00\x00\x00\x01T"
 +    raw mvcc_key/value: 6500000000000000007b000003db0d 000000000154
 `

@@ -1577,7 +1577,7 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 		for j := 0; j < numVersions; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: int64(j + 1)}
-			require.NoError(b, batch.PutMVCC(MVCCKey{key, ts}, value))
+			require.NoError(b, batch.PutMVCC(MVCCKey{Key: key, Timestamp: ts}, value))
 		}
 		require.NoError(b, batch.Commit(false))
 	}

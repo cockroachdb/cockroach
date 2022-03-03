@@ -24,10 +24,23 @@ import (
 type ReplicaSnapshotDiff struct {
 	// LeaseHolder is set to true of this kv pair is only present on the lease
 	// holder.
-	LeaseHolder bool
-	Key         roachpb.Key
-	Timestamp   hlc.Timestamp
-	Value       []byte
+	LeaseHolder    bool
+	Key            roachpb.Key
+	Timestamp      hlc.Timestamp
+	LocalTimestamp hlc.ClockTimestamp
+	Value          []byte
+}
+
+func makeReplicaSnapshotDiff(
+	leaseholder bool, kv roachpb.RaftSnapshotData_KeyValue,
+) ReplicaSnapshotDiff {
+	return ReplicaSnapshotDiff{
+		LeaseHolder:    leaseholder,
+		Key:            kv.Key,
+		Timestamp:      kv.Timestamp,
+		LocalTimestamp: kv.LocalTimestamp,
+		Value:          kv.Value,
+	}
 }
 
 // ReplicaSnapshotDiffSlice groups multiple ReplicaSnapshotDiff records and
@@ -45,6 +58,7 @@ func (rsds ReplicaSnapshotDiffSlice) SafeFormat(buf redact.SafePrinter, _ rune) 
 		}
 		const format = `%s%s %s
 %s    ts:%s
+%s    localTs:%s
 %s    value:%s
 %s    raw mvcc_key/value: %x %x
 `
@@ -52,6 +66,7 @@ func (rsds ReplicaSnapshotDiffSlice) SafeFormat(buf redact.SafePrinter, _ rune) 
 		buf.Printf(format,
 			prefix, d.Timestamp, d.Key,
 			prefix, d.Timestamp.GoTime(),
+			prefix, d.LocalTimestamp,
 			prefix, SprintMVCCKeyValue(storage.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
 			prefix, storage.EncodeMVCCKey(mvccKey), d.Value)
 	}
@@ -78,11 +93,11 @@ func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 		}
 
 		addLeaseHolder := func() {
-			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
+			diff = append(diff, makeReplicaSnapshotDiff(true, e))
 			i++
 		}
 		addReplica := func() {
-			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
+			diff = append(diff, makeReplicaSnapshotDiff(false, v))
 			j++
 		}
 
@@ -122,7 +137,7 @@ func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 				} else {
 					addReplica()
 				}
-			} else if !bytes.Equal(e.Value, v.Value) {
+			} else if !bytes.Equal(e.Value, v.Value) || !e.LocalTimestamp.Equal(v.LocalTimestamp) {
 				addLeaseHolder()
 				addReplica()
 			} else {

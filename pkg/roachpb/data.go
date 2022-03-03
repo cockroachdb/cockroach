@@ -946,6 +946,7 @@ func MakeTransaction(
 // occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
+	// TODO(nvanbenschoten): remove this when we remove synthetic timestamps.
 	if !t.ReadTimestamp.Synthetic {
 		ts.Forward(t.ReadTimestamp)
 	}

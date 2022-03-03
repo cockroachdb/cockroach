@@ -41,7 +41,7 @@ func TestGCIterator(t *testing.T) {
 				Key: storage.MVCCKey{
 					Key:       k,
 					Timestamp: hlc.Timestamp{WallTime: ts * time.Nanosecond.Nanoseconds()},
-				},
+				}.Normalize(),
 				Value: val,
 			},
 			txn: txn,
