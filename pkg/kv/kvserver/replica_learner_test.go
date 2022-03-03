@@ -312,6 +312,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t) // Takes 90s.
+	skip.UnderRace(t)
 
 	runTest := func(t *testing.T, replicaType roachpb.ReplicaType) {
 		var rejectSnapshots int64
