@@ -1227,16 +1227,15 @@ func (r *Replica) refreshProposalsLocked(
 	// request got added in while the probe was about to shut down, there will
 	// be regular attempts at healing the breaker.
 	if maxSlowProposalDuration > 0 && r.breaker.Signal().Err() == nil {
-		log.Warningf(ctx,
-			"have been waiting %.2fs for slow proposal %s",
-			maxSlowProposalDuration.Seconds(), maxSlowProposalDurationRequest,
-		)
+		err := errors.Errorf("have been waiting %.2fs for slow proposal %s",
+			maxSlowProposalDuration.Seconds(), maxSlowProposalDurationRequest)
+		log.Warningf(ctx, "%s", err)
 		// NB: this is async because we're holding lots of locks here, and we want
 		// to avoid having to pass all the information about the replica into the
 		// breaker (since the breaker needs access to this information at will to
 		// power the probe anyway). Over time, we anticipate there being multiple
 		// mechanisms which trip the breaker.
-		r.breaker.TripAsync()
+		r.breaker.TripAsync(err)
 	}
 
 	if log.V(1) && len(reproposals) > 0 {
