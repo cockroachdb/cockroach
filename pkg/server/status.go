@@ -3188,8 +3188,6 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 func userFromContext(ctx context.Context) (res security.SQLUsername, err error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		// If the incoming context has metadata but no attached web session user,
-		// it's a gRPC / internal SQL connection which has root on the cluster.
 		return security.RootUserName(), nil
 	}
 	usernames, ok := md[webSessionUserKeyStr]
