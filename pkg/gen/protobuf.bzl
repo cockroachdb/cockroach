@@ -20,6 +20,7 @@ PROTOBUF_SRCS = [
   "//pkg/kv/kvnemesis:kvnemesis_go_proto",
   "//pkg/kv/kvserver/closedts/ctpb:ctpb_go_proto",
   "//pkg/kv/kvserver/concurrency/lock:lock_go_proto",
+  "//pkg/kv/kvserver/concurrency/poison:poison_go_proto",
   "//pkg/kv/kvserver/kvserverpb:kvserverpb_go_proto",
   "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_go_proto",
   "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_go_proto",

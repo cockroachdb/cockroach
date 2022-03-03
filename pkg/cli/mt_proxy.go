@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -147,7 +148,7 @@ func waitForSignals(
 			}
 
 			log.Ops.Shoutf(ctx, severity.ERROR,
-				"received signal '%s' during shutdown, initiating hard shutdown", log.Safe(sig))
+				"received signal '%s' during shutdown, initiating hard shutdown", redact.Safe(sig))
 			panic("terminate")
 		case <-stopper.IsStopped():
 			const msgDone = "server shutdown completed"

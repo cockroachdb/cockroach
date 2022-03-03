@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CheckExpr does sanity checking on an Expr. This function is only defined in
@@ -67,7 +67,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		for i := 0; i < e.ChildCount(); i++ {
 			child := e.Child(i)
 			if opt.IsListItemOp(child) {
-				panic(errors.AssertionFailedf("non-list op contains item op: %s", log.Safe(child.Op())))
+				panic(errors.AssertionFailedf("non-list op contains item op: %s", redact.Safe(child.Op())))
 			}
 		}
 	}
@@ -102,13 +102,13 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			// Check that column is not both passthrough and synthesized.
 			if t.Passthrough.Contains(item.Col) {
 				panic(errors.AssertionFailedf(
-					"both passthrough and synthesized have column %d", log.Safe(item.Col)))
+					"both passthrough and synthesized have column %d", redact.Safe(item.Col)))
 			}
 
 			// Check that columns aren't passed through in projection expressions.
 			if v, ok := item.Element.(*VariableExpr); ok {
 				if v.Col == item.Col {
-					panic(errors.AssertionFailedf("projection passes through column %d", log.Safe(item.Col)))
+					panic(errors.AssertionFailedf("projection passes through column %d", redact.Safe(item.Col)))
 				}
 			}
 		}
@@ -158,7 +158,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 			default:
 				if !opt.IsAggregateOp(scalar) {
-					panic(errors.AssertionFailedf("aggregate contains illegal op: %s", log.Safe(scalar.Op())))
+					panic(errors.AssertionFailedf("aggregate contains illegal op: %s", redact.Safe(scalar.Op())))
 				}
 			}
 		}
@@ -187,7 +187,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			case opt.FirstAggOp, opt.ConstAggOp:
 
 			default:
-				panic(errors.AssertionFailedf("distinct-on contains %s", log.Safe(item.Agg.Op())))
+				panic(errors.AssertionFailedf("distinct-on contains %s", redact.Safe(item.Agg.Op())))
 			}
 		}
 
@@ -199,7 +199,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
 			switch item.Agg.Op() {
 			case opt.FirstAggOp:
-				panic(errors.AssertionFailedf("group-by contains %s", log.Safe(item.Agg.Op())))
+				panic(errors.AssertionFailedf("group-by contains %s", redact.Safe(item.Agg.Op())))
 			}
 		}
 
@@ -351,14 +351,14 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			// The left side cannot depend on the right side columns.
 			if left.Relational().OuterCols.Intersects(right.Relational().OutputCols) {
 				panic(errors.AssertionFailedf(
-					"%s left side has outer cols in right side", log.Safe(e.Op()),
+					"%s left side has outer cols in right side", redact.Safe(e.Op()),
 				))
 			}
 
 			// The reverse is allowed but only for apply variants.
 			if !opt.IsJoinApplyOp(e) {
 				if right.Relational().OuterCols.Intersects(left.Relational().OutputCols) {
-					panic(errors.AssertionFailedf("%s is correlated", log.Safe(e.Op())))
+					panic(errors.AssertionFailedf("%s is correlated", redact.Safe(e.Op())))
 				}
 			}
 			checkFilters(*e.Child(2).(*FiltersExpr))
@@ -377,7 +377,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 func (m *Memo) checkColListLen(colList opt.OptionalColList, expectedLen int, listName string) {
 	if len(colList) != expectedLen {
 		panic(errors.AssertionFailedf("column list %s expected length = %d, actual length = %d",
-			listName, log.Safe(expectedLen), len(colList)))
+			listName, redact.Safe(expectedLen), len(colList)))
 	}
 }
 
@@ -415,7 +415,7 @@ func checkExprOrdering(e opt.Expr) {
 				if outCols := e.(RelExpr).Relational().OutputCols; !outCols.SubsetOf(ordering.ColSet()) {
 					panic(errors.AssertionFailedf(
 						"ordering for streaming set ops must include all output columns %v (op: %s, outcols: %v)",
-						log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
+						redact.Safe(ordering), redact.Safe(e.Op()), redact.Safe(outCols),
 					))
 				}
 			}
@@ -426,7 +426,7 @@ func checkExprOrdering(e opt.Expr) {
 	if outCols := e.(RelExpr).Relational().OutputCols; !ordering.SubsetOfCols(outCols) {
 		panic(errors.AssertionFailedf(
 			"invalid ordering %v (op: %s, outcols: %v)",
-			log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
+			redact.Safe(ordering), redact.Safe(e.Op()), redact.Safe(outCols),
 		))
 	}
 }
@@ -451,13 +451,13 @@ func checkErrorOnDup(e RelExpr) {
 		e.Op() != opt.EnsureUpsertDistinctOnOp &&
 		e.Private().(*GroupingPrivate).ErrorOnDup != "" {
 		panic(errors.AssertionFailedf(
-			"%s should never set ErrorOnDup to a non-empty string", log.Safe(e.Op())))
+			"%s should never set ErrorOnDup to a non-empty string", redact.Safe(e.Op())))
 	}
 	if (e.Op() == opt.EnsureDistinctOnOp ||
 		e.Op() == opt.EnsureUpsertDistinctOnOp) &&
 		e.Private().(*GroupingPrivate).ErrorOnDup == "" {
 		panic(errors.AssertionFailedf(
-			"%s should never leave ErrorOnDup as an empty string", log.Safe(e.Op())))
+			"%s should never leave ErrorOnDup as an empty string", redact.Safe(e.Op())))
 	}
 }
 
@@ -468,13 +468,13 @@ func checkNullsAreDistinct(e RelExpr) {
 		e.Op() != opt.EnsureUpsertDistinctOnOp &&
 		e.Private().(*GroupingPrivate).NullsAreDistinct {
 		panic(errors.AssertionFailedf(
-			"%s should never set NullsAreDistinct to true", log.Safe(e.Op())))
+			"%s should never set NullsAreDistinct to true", redact.Safe(e.Op())))
 	}
 	if (e.Op() == opt.UpsertDistinctOnOp ||
 		e.Op() == opt.EnsureUpsertDistinctOnOp) &&
 		!e.Private().(*GroupingPrivate).NullsAreDistinct {
 		panic(errors.AssertionFailedf(
-			"%s should never set NullsAreDistinct to false", log.Safe(e.Op())))
+			"%s should never set NullsAreDistinct to false", redact.Safe(e.Op())))
 	}
 }
 
@@ -495,7 +495,7 @@ func checkOutputCols(e opt.Expr) {
 		cols := rel.Relational().OutputCols
 		if set.Intersects(cols) {
 			panic(errors.AssertionFailedf(
-				"%s RelExpr children have intersecting columns", log.Safe(e.Op()),
+				"%s RelExpr children have intersecting columns", redact.Safe(e.Op()),
 			))
 		}
 

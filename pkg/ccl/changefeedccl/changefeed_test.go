@@ -4227,8 +4227,8 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	db := tc.ServerConn(1)
+	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", time.Millisecond)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
@@ -4439,19 +4439,22 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	skip.UnderRace(t, "Takes too long with race enabled")
 
 	shouldDrain := true
-	knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{
-		DrainFast:  true,
-		Changefeed: &TestingKnobs{},
-		Flowinfra: &flowinfra.TestingKnobs{
-			FlowRegistryDraining: func() bool {
-				if shouldDrain {
-					shouldDrain = false
-					return true
-				}
-				return false
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			DrainFast:  true,
+			Changefeed: &TestingKnobs{},
+			Flowinfra: &flowinfra.TestingKnobs{
+				FlowRegistryDraining: func() bool {
+					if shouldDrain {
+						shouldDrain = false
+						return true
+					}
+					return false
+				},
 			},
 		},
-	}}
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
 
 	sinkDir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -4466,9 +4469,9 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	db := tc.ServerConn(1)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	serverutils.SetClusterSetting(t, tc, "kv.rangefeed.enabled", true)
+	serverutils.SetClusterSetting(t, tc, "kv.closed_timestamp.target_duration", time.Second)
+	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", 10*time.Millisecond)
 
 	sqlutils.CreateTable(
 		t, db, "foo",
@@ -4491,9 +4494,9 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	defer closeFeed(t, feed)
 
 	// At this point, the job created by feed will fail to start running on node 0 due to draining
-	// registry.  However, this job will be retried, and it should succeeded.
+	// registry.  However, this job will be retried, and it should succeed.
 	// Note: This test is a bit unrealistic in that if the registry is draining, that
-	// means that the server is draining (i.e being shut down).  We don't do a full shutdown
+	// means that the server is draining (i.e. being shut down).  We don't do a full shutdown
 	// here, but we are simulating a restart by failing to start a flow the first time around.
 	assertPayloads(t, feed, []string{
 		`foo: [1]->{"after": {"k": 1, "v": 1}}`,

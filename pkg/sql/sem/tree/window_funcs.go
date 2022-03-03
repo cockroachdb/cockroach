@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // IndexedRows are rows with the corresponding indices.
@@ -212,7 +212,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
-				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
 	case treewindow.ROWS:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
@@ -239,7 +239,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
-				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
 	case treewindow.GROUPS:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
@@ -268,7 +268,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
-				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
 	default:
 		return 0, errors.AssertionFailedf("unexpected WindowFrameMode: %d", wfr.Frame.Mode)
@@ -406,7 +406,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
-				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
 	case treewindow.ROWS:
 		if wfr.Frame.Bounds.EndBound == nil {
@@ -437,7 +437,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
-				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
 	case treewindow.GROUPS:
 		if wfr.Frame.Bounds.EndBound == nil {
@@ -471,11 +471,11 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
-				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
 	default:
 		return 0, errors.AssertionFailedf(
-			"unexpected WindowFrameMode: %d", log.Safe(wfr.Frame.Mode))
+			"unexpected WindowFrameMode: %d", redact.Safe(wfr.Frame.Mode))
 	}
 }
 

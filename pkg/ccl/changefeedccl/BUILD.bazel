@@ -108,6 +108,7 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_google_btree//:btree",
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_shopify_sarama//:sarama",

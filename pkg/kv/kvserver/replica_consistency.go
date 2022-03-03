@@ -253,7 +253,7 @@ func (r *Replica) CheckConsistency(
 				if !haveDelta {
 					return resp, nil
 				}
-				log.Fatalf(ctx, "found a delta of %+v", log.Safe(delta))
+				log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
 			}
 		}
 

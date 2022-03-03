@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

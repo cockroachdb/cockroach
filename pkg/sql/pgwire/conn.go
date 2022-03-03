@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -281,7 +282,7 @@ func (c *conn) serveImpl(
 	defer func() { _ = c.conn.Close() }()
 
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
-		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
+		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	}

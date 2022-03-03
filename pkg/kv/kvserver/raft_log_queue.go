@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -707,14 +708,14 @@ func (rlq *raftLogQueue) process(
 
 	// Can and should the raft logs be truncated?
 	if !decision.ShouldTruncate() {
-		log.VEventf(ctx, 3, "%s", log.Safe(decision.String()))
+		log.VEventf(ctx, 3, "%s", redact.Safe(decision.String()))
 		return false, nil
 	}
 
 	if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-		log.Infof(ctx, "%v", log.Safe(decision.String()))
+		log.Infof(ctx, "%v", redact.Safe(decision.String()))
 	} else {
-		log.VEventf(ctx, 1, "%v", log.Safe(decision.String()))
+		log.VEventf(ctx, 1, "%v", redact.Safe(decision.String()))
 	}
 	b := &kv.Batch{}
 	truncRequest := &roachpb.TruncateLogRequest{

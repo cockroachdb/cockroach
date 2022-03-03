@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
@@ -167,7 +167,7 @@ func (h *IndexedVarHelper) AppendSlot() int {
 func (h *IndexedVarHelper) checkIndex(idx int) {
 	if idx < 0 || idx >= len(h.vars) {
 		panic(errors.AssertionFailedf(
-			"invalid var index %d (columns: %d)", log.Safe(idx), log.Safe(len(h.vars))))
+			"invalid var index %d (columns: %d)", redact.Safe(idx), redact.Safe(len(h.vars))))
 	}
 }
 
@@ -245,17 +245,17 @@ var unboundContainer = &unboundContainerType{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarEval(idx int, _ *EvalContext) (Datum, error) {
-	return nil, errors.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1))
+	return nil, errors.AssertionFailedf("unbound ordinal reference @%d", redact.Safe(idx+1))
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarResolvedType(idx int) *types.T {
-	panic(errors.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
+	panic(errors.AssertionFailedf("unbound ordinal reference @%d", redact.Safe(idx+1)))
 }
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	panic(errors.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
+	panic(errors.AssertionFailedf("unbound ordinal reference @%d", redact.Safe(idx+1)))
 }
 
 type typeContainer struct {

@@ -11,8 +11,8 @@
 package treewindow
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // WindowFrameMode indicates which mode of framing is used.
@@ -133,7 +133,7 @@ func (node WindowFrameExclusion) String() string {
 	case ExcludeTies:
 		return "EXCLUDE TIES"
 	default:
-		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node)))
+		panic(errors.AssertionFailedf("unhandled case: %d", redact.Safe(node)))
 	}
 }
 
@@ -163,6 +163,6 @@ func WindowModeName(mode WindowFrameMode) string {
 	case GROUPS:
 		return "GROUPS"
 	default:
-		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(mode)))
+		panic(errors.AssertionFailedf("unhandled case: %d", redact.Safe(mode)))
 	}
 }

@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // FuncDepSet is a set of functional dependencies (FDs) that encode useful
@@ -1596,15 +1596,15 @@ func (f *FuncDepSet) Verify() {
 		fd := &f.deps[i]
 
 		if fd.from.Intersects(fd.to) {
-			panic(errors.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", log.Safe(f), log.Safe(i)))
+			panic(errors.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", redact.Safe(f), redact.Safe(i)))
 		}
 
 		if fd.isConstant() {
 			if i != 0 {
-				panic(errors.AssertionFailedf("expected constant FD to be first FD in set: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected constant FD to be first FD in set: %s (%d)", redact.Safe(f), redact.Safe(i)))
 			}
 			if !fd.strict {
-				panic(errors.AssertionFailedf("expected constant FD to be strict: %s", log.Safe(f)))
+				panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 			}
 		}
 
@@ -1614,11 +1614,11 @@ func (f *FuncDepSet) Verify() {
 			}
 
 			if fd.from.Len() != 1 {
-				panic(errors.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", redact.Safe(f), redact.Safe(i)))
 			}
 
 			if !f.ComputeEquivClosure(fd.from).Equals(fd.from.Union(fd.to)) {
-				panic(errors.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", redact.Safe(f), redact.Safe(i)))
 			}
 		}
 	}
@@ -1632,7 +1632,7 @@ func (f *FuncDepSet) Verify() {
 			allCols := f.ColSet()
 			allCols.UnionWith(f.key)
 			if !f.ComputeClosure(f.key).Equals(allCols) {
-				panic(errors.AssertionFailedf("expected closure of FD key to include all known cols: %s", log.Safe(f)))
+				panic(errors.AssertionFailedf("expected closure of FD key to include all known cols: %s", redact.Safe(f)))
 			}
 		}
 
@@ -1804,7 +1804,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 	// Delegate constant dependency.
 	if from.Empty() {
 		if !strict {
-			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", log.Safe(f)))
+			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 		}
 		f.AddConstants(to)
 		return
