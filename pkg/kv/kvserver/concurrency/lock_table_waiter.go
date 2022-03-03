@@ -97,11 +97,12 @@ var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
 
 // lockTableWaiterImpl is an implementation of lockTableWaiter.
 type lockTableWaiterImpl struct {
-	st      *cluster.Settings
-	clock   *hlc.Clock
-	stopper *stop.Stopper
-	ir      IntentResolver
-	lt      lockTable
+	nodeDesc *roachpb.NodeDescriptor
+	st       *cluster.Settings
+	clock    *hlc.Clock
+	stopper  *stop.Stopper
+	ir       IntentResolver
+	lt       lockTable
 
 	// When set, WriteIntentError are propagated instead of pushing
 	// conflicting transactions.
@@ -458,6 +459,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// Construct the request header and determine which form of push to use.
 	h := w.pushHeader(req)
 	var pushType roachpb.PushTxnType
+	var beforePushObs roachpb.ObservedTimestamp
 	switch req.WaitPolicy {
 	case lock.WaitPolicy_Block:
 		// This wait policy signifies that the request wants to wait until the
@@ -469,6 +471,24 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		switch ws.guardAccess {
 		case spanset.SpanReadOnly:
 			pushType = roachpb.PUSH_TIMESTAMP
+			beforePushObs = roachpb.ObservedTimestamp{
+				NodeID:    w.nodeDesc.NodeID,
+				Timestamp: w.clock.NowAsClockTimestamp(),
+			}
+			// TODO(nvanbenschoten): because information about the local_timestamp
+			// leading the MVCC timestamp of an intent is lost, we also need to push
+			// the intent up to the top of the transaction's local uncertainty limit
+			// on this node. This logic currently lives in pushHeader, but we could
+			// simplify it when removing synthetic timestamps and then move it out
+			// here.
+			//
+			// We could also explore adding a preserve_local_timestamp flag to
+			// MVCCValue that would explicitly storage the local timestamp even in
+			// cases where it would normally be omitted. This could be set during
+			// intent resolution when a push observation is provided. Or we could
+			// not persist this, but still preserve the local timestamp when the
+			// adjusting the intent, accepting that the intent would then no longer
+			// round-trip and would lose the local timestamp if rewritten later.
 			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
 
 		case spanset.SpanReadWrite:
@@ -532,12 +552,98 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// We always poison due to limitations of the API: not poisoning equals
 	// clearing the AbortSpan, and if our pushee transaction first got pushed
 	// for timestamp (by us), then (by someone else) aborted and poisoned, and
-	// then we run the below code, we're clearing the AbortSpan illegaly.
+	// then we run the below code, we're clearing the AbortSpan illegally.
 	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended up
 	// with the responsibility to abort the intents (for example if we find the
 	// transaction aborted). To do better here, we need per-intent information
 	// on whether we need to poison.
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
+	if pusheeTxn.Status == roachpb.PENDING {
+		// The pushee was still PENDING at the time that the push observed its
+		// transaction record. It is safe to use the clock observation we gathered
+		// before initiating the push during intent resolution, as we know that this
+		// observation must have been made before the pushee committed (implicitly
+		// or explicitly) and acknowledged its client, assuming it does commit at
+		// some point.
+		//
+		// This observation can be used to forward the local timestamp of the intent
+		// when intent resolution forwards its version timestamp. This is important,
+		// as it prevents the pusher, who has an even earlier observed timestamp
+		// from this node, from considering this intent to be uncertain after the
+		// resolution succeeds and the pusher returns to read.
+		//
+		// For example, consider a reader with a read timestamp of 10, a global
+		// uncertainty limit of 25, and a local uncertainty limit (thanks to an
+		// observed timestamp) of 15. The reader conflicts with an intent that has a
+		// version timestamp and local timestamp of 8. The reader observes the local
+		// clock at 16 before pushing and then succeeds in pushing the intent's
+		// holder txn to timestamp 11 (read_timestamp + 1). If the reader were to
+		// resolve the intent to timestamp 11 but leave its local timestamp at 8
+		// then the reader would consider the value "uncertain" upon re-evaluation.
+		// However, if the reader also updates the value's local timestamp to 16
+		// during intent resolution then it will not consider the value to be
+		// "uncertain".
+		//
+		// Unfortunately, this does not quite work as written, as the MVCC key
+		// encoding logic normalizes (as an optimization) keys with
+		//  local timestamp >= mvcc timestamp
+		// to
+		//  local timestamp == mvcc timestamp
+		// To work around this, the pusher must also push the mvcc timestamp of the
+		// intent above its own local uncertainty limit. In the example above, this
+		// would mean pushing the intent's holder txn to timestamp 16 as well. The
+		// logic that handles this is in pushHeader.
+		//
+		// Note that it would be incorrect to update the intent's local timestamp if
+		// the pushee was found to be committed (implicitly or explicitly), as the
+		// pushee may have already acknowledged its client by the time the clock
+		// observation was taken and the value should be considered uncertain. Doing
+		// so could allow the pusher to serve a stale read.
+		//
+		// For example, if we used the observation after the push found a committed
+		// pushee, we would be susceptible to a stale read that looks like:
+		// 1. txn1 writes intent on key k @ ts 10, on node N
+		// 2. txn1 commits @ ts 15, acks client
+		// 3. txn1's async intent resolution of key k stalls
+		// 4. txn2 begins after txn1 with read timestamp @ 11
+		// 5. txn2 collects observed timestamp @ 12 from node N
+		// 6. txn2 encounters intent on key k, observes clock @ ts 13, pushes, finds
+		//    committed record, resolves intent with observation. Committed version
+		//    now has mvcc timestamp @ 15 and local timestamp @ 13
+		// 7. txn2 reads @ 11 with local uncertainty limit @ 12, fails to observe
+		//    key k's new version. Stale read!
+		//
+		// More subtly, it would also be incorrect to update the intent's local
+		// timestamp using an observation captured _after_ the push completed, even
+		// if it had found a PENDING record. This is because this ordering makes no
+		// guarantee that the clock observation is captured before the pushee
+		// commits and acknowledges its client. This could not lead to the pusher
+		// serving a stale read, but it could lead to other transactions serving
+		// stale reads.
+		//
+		// For example, if we captured the observation after the push completed, we
+		// would be susceptible to a stale read that looks like:
+		// 1. txn1 writes intent on key k @ ts 10, on node N
+		// 2. txn2 (concurrent with txn1, so no risk of stale read itself) encounters
+		//    intent on key k, pushes, finds pending record and pushes to timestamp 14
+		// 3. txn1 commits @ ts 15, acks client
+		// 4. txn1's async intent resolution of key k stalls
+		// 5. txn3 begins after txn1 with read timestamp @ 11
+		// 6. txn3 collects observed timestamp @ 12 from node N
+		// 7. txn2 observes clock @ 13 _after_ push, resolves intent (still pending)
+		//    with observation. Intent now has mvcc timestamp @ 14 and local
+		//    timestamp @ 13
+		// 8. txn3 reads @ 11 with local uncertainty limit @ 12, fails to observe
+		//    key k's intent so it does not resolve it to committed. Stale read!
+		//
+		// There is some inherent raciness here, because the lease may move between
+		// when we push and when the reader later read. In such cases, the reader's
+		// local uncertainty limit may exceed the intent's local timestamp during
+		// the subsequent read and it may need to push again. However, we expect to
+		// eventually succeed in reading, either after lease movement subsides or
+		// after the reader's read timestamp surpasses its global uncertainty limit.
+		resolve.ClockWhilePending = beforePushObs
+	}
 	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
