@@ -3066,7 +3066,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 					for _, shard := range splitAtShards {
 						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
 						splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
-						if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+						if _, err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
 							return err
 						}
 					}
@@ -3075,7 +3075,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 					for _, partPrefix := range partitionKeyPrefixes {
 						for _, shard := range splitAtShards {
 							splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
-							if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+							if _, err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
 								return err
 							}
 						}
