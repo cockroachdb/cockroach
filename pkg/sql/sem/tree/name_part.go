@@ -118,6 +118,16 @@ func (l *NameList) Format(ctx *FmtCtx) {
 	}
 }
 
+// Contains returns true if the NameList contains the name.
+func (nl NameList) Contains(name Name) bool {
+	for _, n := range nl {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 // ArraySubscript corresponds to the syntax `<name>[ ... ]`.
 type ArraySubscript struct {
 	Begin Expr
