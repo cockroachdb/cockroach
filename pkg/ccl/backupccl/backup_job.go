@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
@@ -819,17 +818,15 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		// The checkpoint in the base directory should only exist if the cluster
-		// version isn't BackupDoesNotOverwriteLatestAndCheckpoint.
-		if !cfg.Settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-			err = exportStore.Delete(ctx, backupProgressDirectory)
-			if err != nil {
-				return err
-			}
+		// We first attempt to delete from base directory to account for older
+		// backups, and then from the progress directory.
+		err = exportStore.Delete(ctx, backupManifestCheckpointName)
+		if err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
 		}
 		return exportStore.Delete(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName)
 	}(); err != nil {
-		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}
 }
 

@@ -9815,3 +9815,24 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 		})
 	})
 }
+
+// TestUserfileNormalizationIncrementalShowBackup tests to see that file
+// paths given by SHOW BACKUP on Incremental Backups work on userfiles.
+// Specifically we are looking to see that no normalization is needed
+// for filepaths, as userfiles do not support file system semnatics.
+func TestUserfileNormalizationIncrementalShowBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	const userfile = "'userfile:///a'"
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	query := fmt.Sprintf("BACKUP bank TO %s", userfile)
+	sqlDB.Exec(t, query)
+	query = fmt.Sprintf("BACKUP bank TO %s", userfile)
+	sqlDB.Exec(t, query)
+	query = fmt.Sprintf("SHOW BACKUP %s", userfile)
+	sqlDB.Exec(t, query)
+}
