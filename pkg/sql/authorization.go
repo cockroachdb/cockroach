@@ -30,8 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // MembershipCache is a shared cache for role membership information.
@@ -40,6 +43,17 @@ type MembershipCache struct {
 	tableVersion descpb.DescriptorVersion
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[security.SQLUsername]userRoleMembership
+	// populateCacheGroup ensures that there is at most one request in-flight
+	// for each key.
+	populateCacheGroup singleflight.Group
+	stopper            *stop.Stopper
+}
+
+// NewMembershipCache initializes a new MembershipCache.
+func NewMembershipCache(stopper *stop.Stopper) *MembershipCache {
+	return &MembershipCache{
+		stopper: stopper,
+	}
 }
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
@@ -347,12 +361,33 @@ func (p *planner) MemberOfWithAdminOption(
 			return userMapping, nil
 		}
 
-		// Lookup memberships outside the lock.
-		memberships, err := p.resolveMemberOfWithAdminOption(
-			ctx, member, nil, /* txn */
-			useSingleQueryForRoleMembershipCache.Get(p.ExecCfg().SV()))
-		if err != nil {
-			return nil, err
+		// Lookup memberships outside the lock, with at most one request in-flight
+		// for each user The role_memberships table versions is also part
+		// of the request key so that we don't read data from an old version
+		// of the table.
+		ch, _ := roleMembersCache.populateCacheGroup.DoChan(
+			fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
+			func() (interface{}, error) {
+				// Use a different context to fetch, so that it isn't possible for
+				// one query to timeout and cause all the goroutines that are waiting
+				// to get a timeout error.
+				ctx, cancel := roleMembersCache.stopper.WithCancelOnQuiesce(
+					logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+				defer cancel()
+				return p.resolveMemberOfWithAdminOption(
+					ctx, member, nil, /* txn */
+					useSingleQueryForRoleMembershipCache.Get(p.ExecCfg().SV()))
+			},
+		)
+		var memberships map[security.SQLUsername]bool
+		select {
+		case res := <-ch:
+			if res.Err != nil {
+				return nil, res.Err
+			}
+			memberships = res.Val.(map[security.SQLUsername]bool)
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 
 		// Update membership.

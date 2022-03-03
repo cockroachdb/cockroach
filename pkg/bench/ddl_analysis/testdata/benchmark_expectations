@@ -50,8 +50,8 @@ exp,benchmark
 24,Grant/grant_all_on_1_table
 30,Grant/grant_all_on_2_tables
 36,Grant/grant_all_on_3_tables
-21,GrantRole/grant_1_role
-24,GrantRole/grant_2_roles
+17,GrantRole/grant_1_role
+19,GrantRole/grant_2_roles
 2,ORMQueries/activerecord_type_introspection_query
 2,ORMQueries/django_table_introspection_1_table
 2,ORMQueries/django_table_introspection_4_tables
@@ -63,8 +63,8 @@ exp,benchmark
 24,Revoke/revoke_all_on_1_table
 30,Revoke/revoke_all_on_2_tables
 36,Revoke/revoke_all_on_3_tables
-20,RevokeRole/revoke_1_role
-22,RevokeRole/revoke_2_roles
+17,RevokeRole/revoke_1_role
+19,RevokeRole/revoke_2_roles
 1,SystemDatabaseQueries/select_system.users_with_empty_database_name
 1,SystemDatabaseQueries/select_system.users_with_schema_name
 2,SystemDatabaseQueries/select_system.users_without_schema_name
