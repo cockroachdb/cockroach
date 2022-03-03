@@ -14,6 +14,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/redact"
 )
 
@@ -256,6 +257,36 @@ func (meta *MVCCMetadata) GetIntentValue(seq TxnSeq) ([]byte, bool) {
 	return nil, false
 }
 
+// GetLocalTimestamp returns the local timestamp of the most recent versioned
+// value. If the local timestamp is not set explicitly, its implicit value is
+// returned.
+func (meta *MVCCMetadata) GetLocalTimestamp() hlc.ClockTimestamp {
+	if meta.LocalTimestamp == nil {
+		if meta.Timestamp.ToTimestamp().Synthetic {
+			return hlc.MinClockTimestamp
+		}
+		return hlc.ClockTimestamp(meta.Timestamp.ToTimestamp())
+	}
+	return *meta.LocalTimestamp
+}
+
+// SetLocalTimestamp sets the local timestamp field to the provided value.
+//
+// The alloc field is optional and can be used to avoid a heap allocation in
+// some cases. If supplied, the referenced memory must not be modified while
+// the MVCCMetadata is in use.
+func (meta *MVCCMetadata) SetLocalTimestamp(localTs hlc.ClockTimestamp, alloc *hlc.ClockTimestamp) {
+	if localTs.IsEmpty() {
+		meta.LocalTimestamp = nil
+	} else {
+		if alloc == nil {
+			alloc = new(hlc.ClockTimestamp)
+		}
+		*alloc = localTs
+		meta.LocalTimestamp = alloc
+	}
+}
+
 // String implements the fmt.Stringer interface.
 func (m MVCCMetadata_SequencedIntent) String() string {
 	return redact.StringWithoutMarkers(m)
@@ -278,13 +309,13 @@ func (meta *MVCCMetadata) String() string {
 func (meta *MVCCMetadata) SafeFormat(w redact.SafePrinter, _ rune) {
 	expand := w.Flag('+')
 
-	w.Printf("txn={%s} ts=%s del=%t klen=%d vlen=%d",
-		meta.Txn,
-		meta.Timestamp,
-		meta.Deleted,
-		meta.KeyBytes,
-		meta.ValBytes,
-	)
+	w.Printf("txn={%s} ts=%s", meta.Txn, meta.Timestamp)
+
+	if meta.LocalTimestamp != nil {
+		w.Printf(" localTs=%s", meta.LocalTimestamp)
+	}
+
+	w.Printf(" del=%t klen=%d vlen=%d", meta.Deleted, meta.KeyBytes, meta.ValBytes)
 
 	if len(meta.RawBytes) > 0 {
 		if expand {

@@ -34,10 +34,10 @@ func TestCatchupScan(t *testing.T) {
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
-		testValue3 = []byte("val3")
-		testValue4 = []byte("val4")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
+		testValue4 = roachpb.MakeValueFromString("val4")
 
 		ts1 = hlc.Timestamp{WallTime: 1, Logical: 0}
 		ts2 = hlc.Timestamp{WallTime: 2, Logical: 0}
@@ -46,7 +46,7 @@ func TestCatchupScan(t *testing.T) {
 		ts5 = hlc.Timestamp{WallTime: 4, Logical: 0}
 	)
 
-	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp,
+	makeTxn := func(key roachpb.Key, val roachpb.Value, ts hlc.Timestamp,
 	) (roachpb.Transaction, roachpb.Value) {
 		txnID := uuid.MakeV4()
 		txnMeta := enginepb.TxnMeta{
@@ -59,12 +59,12 @@ func TestCatchupScan(t *testing.T) {
 				TxnMeta:       txnMeta,
 				ReadTimestamp: ts,
 			}, roachpb.Value{
-				RawBytes: val,
+				RawBytes: val.RawBytes,
 			}
 	}
 
-	makeKTV := func(key roachpb.Key, ts hlc.Timestamp, value []byte) storage.MVCCKeyValue {
-		return storage.MVCCKeyValue{Key: storage.MVCCKey{Key: key, Timestamp: ts}, Value: value}
+	makeKTV := func(key roachpb.Key, ts hlc.Timestamp, value roachpb.Value) storage.MVCCKeyValue {
+		return storage.MVCCKeyValue{Key: storage.MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
 	}
 	// testKey1 has an intent and provisional value that will be skipped. Both
 	// testKey1 and testKey2 have a value that is older than what we need with

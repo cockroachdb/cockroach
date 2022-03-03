@@ -190,7 +190,6 @@ func setupKeysWithIntent(
 	txnIDWithLatestVersion := adjustTxnID(numVersions)
 	otherTxnWithLatestVersion := txnIDCount + 2
 	otherTxnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(otherTxnWithLatestVersion)))
-	val := []byte("value")
 	var rvLockUpdate roachpb.LockUpdate
 	for i := 1; i <= numVersions; i++ {
 		// Assign txn IDs in a deterministic way that will mimic the end result of
@@ -236,7 +235,7 @@ func setupKeysWithIntent(
 				}
 			}
 		}
-		value := roachpb.Value{RawBytes: val}
+		value := roachpb.MakeValueFromString("value")
 		batch := eng.NewBatch()
 		for j := 0; j < numIntentKeys; j++ {
 			putTxn := &txn
@@ -1521,7 +1520,9 @@ func runExportToSst(
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
 
 		for j := 0; j < numRevisions; j++ {
-			err := batch.PutMVCC(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
+			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}
+			mvccValue := MVCCValue{Value: roachpb.MakeValueFromString("foobar")}
+			err := batch.PutMVCC(mvccKey, mvccValue)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1564,10 +1565,11 @@ func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap bool) {
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-	value := make([]byte, 128)
-	for i := range value {
-		value[i] = 'a'
+	valueBuf := make([]byte, 128)
+	for i := range valueBuf {
+		valueBuf[i] = 'a'
 	}
+	value := MVCCValue{Value: roachpb.MakeValueFromBytes(valueBuf)}
 
 	eng := setupMVCCInMemPebble(b, "")
 	defer eng.Close()
@@ -1577,7 +1579,7 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 		for j := 0; j < numVersions; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: int64(j + 1)}
-			require.NoError(b, batch.PutMVCC(MVCCKey{key, ts}, value))
+			require.NoError(b, batch.PutMVCC(MVCCKey{Key: key, Timestamp: ts}, value))
 		}
 		require.NoError(b, batch.Commit(false))
 	}
@@ -1605,7 +1607,7 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 			sstEnd.Key = append([]byte(nil), mvccKey.Key...)
 			sstEnd.Timestamp = mvccKey.Timestamp
 		}
-		require.NoError(b, sstWriter.Put(mvccKey, value))
+		require.NoError(b, sstWriter.PutMVCC(mvccKey, value))
 	}
 	sstWriter.Close()
 

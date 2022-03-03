@@ -1245,9 +1245,21 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Engine interface.
-func (p *Pebble) PutMVCC(key MVCCKey, value []byte) error {
+func (p *Pebble) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return p.put(key, encValue)
+}
+
+// PutRawMVCC implements the Engine interface.
+func (p *Pebble) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return p.put(key, value)
 }
@@ -2070,7 +2082,11 @@ func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value []byte) error {
+func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value MVCCValue) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) PutRawMVCC(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
@@ -2285,7 +2301,6 @@ func pebbleExportToSst(
 			break
 		}
 
-		unsafeValue := iter.UnsafeValue()
 		isNewKey := !options.ExportAllRevisions || !unsafeKey.Key.Equal(curKey)
 		if trackKeyBoundary && options.ExportAllRevisions && isNewKey {
 			curKey = append(curKey[:0], unsafeKey.Key...)
@@ -2318,10 +2333,27 @@ func pebbleExportToSst(
 			}
 		}
 
-		// Skip tombstone (len=0) records when start time is zero (non-incremental)
-		// and we are not exporting all versions.
-		skipTombstones := !options.ExportAllRevisions && options.StartTS.IsEmpty()
-		if len(unsafeValue) > 0 || !skipTombstones {
+		unsafeValue := iter.UnsafeValue()
+		skip := false
+		if unsafeKey.IsValue() {
+			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
+			if !ok && err == nil {
+				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
+			}
+			if err != nil {
+				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
+			}
+
+			// Export only the inner roachpb.Value, not the MVCCValue header.
+			unsafeValue = mvccValue.Value.RawBytes
+
+			// Skip tombstone records when start time is zero (non-incremental)
+			// and we are not exporting all versions.
+			skipTombstones := !options.ExportAllRevisions && options.StartTS.IsEmpty()
+			skip = skipTombstones && mvccValue.IsTombstone()
+		}
+
+		if !skip {
 			if err := rows.Count(unsafeKey.Key); err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
@@ -2350,7 +2382,7 @@ func pebbleExportToSst(
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
-				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
+				if err := sstWriter.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}

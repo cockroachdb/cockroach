@@ -168,8 +168,18 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		}
 		return
 	}
+	mvccVal, err := DecodeMVCCValue(v1)
+	if err != nil {
+		fmt.Fprintf(b, "output: value decoding: %s\n", err)
+		return
+	}
+	mvccValBytes, err := mvccVal.Value.GetBytes()
+	if err != nil {
+		fmt.Fprintf(b, "output: value decoding: %s\n", err)
+		return
+	}
 	fmt.Fprintf(b, "output: value k=%s ts=%s v=%s\n",
-		string(k1.Key), k1.Timestamp, string(v1))
+		string(k1.Key), k1.Timestamp, string(mvccValBytes))
 }
 
 // TestIntentInterleavingIter is a datadriven test consisting of two commands:
@@ -299,7 +309,8 @@ func TestIntentInterleavingIter(t *testing.T) {
 						var value string
 						d.ScanArgs(t, "v", &value)
 						mvccKey := MVCCKey{Key: key, Timestamp: ts}
-						if err := batch.PutMVCC(mvccKey, []byte(value)); err != nil {
+						mvccValue := MVCCValue{Value: roachpb.MakeValueFromString(value)}
+						if err := batch.PutMVCC(mvccKey, mvccValue); err != nil {
 							return err.Error()
 						}
 					}
@@ -567,7 +578,7 @@ func writeRandomData(
 		if kv.Key.Timestamp.IsEmpty() {
 			panic("timestamp should not be empty")
 		} else {
-			require.NoError(t, batch.PutMVCC(kv.Key, kv.Value))
+			require.NoError(t, batch.PutRawMVCC(kv.Key, kv.Value))
 		}
 	}
 	require.NoError(t, batch.Commit(true))
@@ -785,7 +796,9 @@ func writeBenchData(
 		}
 		for j := versionsPerKey; j >= 1; j-- {
 			require.NoError(b, batch.PutMVCC(
-				MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j)}}, []byte("value")))
+				MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j)}},
+				MVCCValue{Value: roachpb.MakeValueFromString("value")},
+			))
 		}
 	}
 	require.NoError(b, batch.Commit(true))
