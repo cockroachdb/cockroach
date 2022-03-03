@@ -31,13 +31,8 @@ var _ fmt.Formatter = (*ReplicaUnavailableError)(nil)
 
 // SafeFormatError implements errors.SafeFormatter.
 func (e *ReplicaUnavailableError) SafeFormatError(p errors.Printer) error {
-	e.printTo(p.Printf)
+	p.Printf("replica %s unable to serve request to %s", e.Replica, e.Desc)
 	return nil
-}
-
-// See https://github.com/cockroachdb/errors/issues/88.
-func (e *ReplicaUnavailableError) printTo(printf func(string, ...interface{})) {
-	printf("replica %s unable to serve request to %s", e.Replica, e.Desc)
 }
 
 // Format implements fmt.Formatter.
@@ -45,9 +40,5 @@ func (e *ReplicaUnavailableError) Format(s fmt.State, verb rune) { errors.Format
 
 // Error implements error.
 func (e *ReplicaUnavailableError) Error() string {
-	var s string
-	e.printTo(func(format string, args ...interface{}) {
-		s = fmt.Sprintf(format, args...)
-	})
-	return s
+	return fmt.Sprint(e)
 }
