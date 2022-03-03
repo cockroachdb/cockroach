@@ -1623,6 +1623,178 @@ Tier represents one level of the locality hierarchy.
 
 
 
+## TenantRanges
+
+`GET /_status/tenant_ranges`
+
+TenantRanges requests internal details about all range replicas within
+the tenant's keyspace.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ranges_by_locality | [TenantRangesResponse.RangesByLocalityEntry](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangesResponse.RangesByLocalityEntry) | repeated | ranges_by_locality maps each range replica to its specified availability zone, as defined within the replica's locality metadata (default key `az`). Replicas without the default available zone key set will fall under the `locality-unset` key. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangesResponse.RangesByLocalityEntry"></a>
+#### TenantRangesResponse.RangesByLocalityEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.TenantRangesResponse-string) |  |  |  |
+| value | [TenantRangesResponse.TenantRangeList](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangesResponse.TenantRangeList) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangesResponse.TenantRangeList"></a>
+#### TenantRangesResponse.TenantRangeList
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ranges | [TenantRangeInfo](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangeInfo) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangeInfo"></a>
+#### TenantRangeInfo
+
+TenantRangeInfo provides metadata about a specific range replica,
+where concepts not considered to be relevant within the tenant
+abstraction (e.g. NodeIDs) are omitted. Instead, Locality information
+is used to distinguish replicas.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| range_id | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The ID of the Range. | [reserved](#support-status) |
+| span | [PrettySpan](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.PrettySpan) |  | The pretty-printed key span of the range. | [reserved](#support-status) |
+| locality | [Locality](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.Locality) |  | Any locality information associated with this specific replica. | [reserved](#support-status) |
+| is_leaseholder | [bool](#cockroach.server.serverpb.TenantRangesResponse-bool) |  | Whether the range's specific replica is a leaseholder. | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.TenantRangesResponse-bool) |  | Whether the range's specific replica holds a valid lease. | [reserved](#support-status) |
+| range_stats | [RangeStatistics](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.RangeStatistics) |  | Statistics about the range replica, e.g. QPS, WPS. | [reserved](#support-status) |
+| mvcc_stats | [cockroach.storage.enginepb.MVCCStats](#cockroach.server.serverpb.TenantRangesResponse-cockroach.storage.enginepb.MVCCStats) |  | MVCC stats about the range replica, e.g. live_bytes. | [reserved](#support-status) |
+| read_latches | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | Read count as reported by the range replica's spanlatch.Manager. | [reserved](#support-status) |
+| write_latches | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | Write count as reported by the range replica's spanlatch.Manager. | [reserved](#support-status) |
+| locks | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The number of locks as reported by the range replica's lockTable. | [reserved](#support-status) |
+| locks_with_wait_queues | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The number of locks with non-empty wait-queues as reported by the range replica's lockTable | [reserved](#support-status) |
+| lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The aggregate number of waiters in wait-queues across all locks as reported by the range replica's lockTable | [reserved](#support-status) |
+| top_k_locks_by_wait_queue_waiters | [TenantRangeInfo.LockInfo](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangeInfo.LockInfo) | repeated | The top-k locks with the most waiters (readers + writers) in their wait-queue, ordered in descending order. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.PrettySpan"></a>
+#### PrettySpan
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| start_key | [string](#cockroach.server.serverpb.TenantRangesResponse-string) |  |  | [reserved](#support-status) |
+| end_key | [string](#cockroach.server.serverpb.TenantRangesResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.Locality"></a>
+#### Locality
+
+Locality is an ordered set of key value Tiers that describe a node's
+location. The tier keys should be the same across all nodes.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| tiers | [Tier](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.Tier) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.Tier"></a>
+#### Tier
+
+Tier represents one level of the locality hierarchy.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.TenantRangesResponse-string) |  | Key is the name of tier and should match all other nodes. | [reserved](#support-status) |
+| value | [string](#cockroach.server.serverpb.TenantRangesResponse-string) |  | Value is node specific value corresponding to the key. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.RangeStatistics"></a>
+#### RangeStatistics
+
+RangeStatistics describes statistics reported by a range. For internal use
+only.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| queries_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangeInfo.LockInfo"></a>
+#### TenantRangeInfo.LockInfo
+
+LockInfo provides metadata about the state of a single lock
+in the range replica's lockTable.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| pretty_key | [string](#cockroach.server.serverpb.TenantRangesResponse-string) |  | The lock's key in pretty format. | [reserved](#support-status) |
+| key | [bytes](#cockroach.server.serverpb.TenantRangesResponse-bytes) |  | The lock's key. | [reserved](#support-status) |
+| held | [bool](#cockroach.server.serverpb.TenantRangesResponse-bool) |  | Is the lock actively held by a transaction, or just a reservation? | [reserved](#support-status) |
+| waiters | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The number of waiters in the lock's wait queue. | [reserved](#support-status) |
+| waiting_readers | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The number of waiting readers in the lock's wait queue. | [reserved](#support-status) |
+| waiting_writers | [int64](#cockroach.server.serverpb.TenantRangesResponse-int64) |  | The number of waiting writers in the lock's wait queue. | [reserved](#support-status) |
+
+
+
+
+
+
 ## Gossip
 
 `GET /_status/gossip/{node_id}`
