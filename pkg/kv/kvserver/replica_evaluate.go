@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -148,6 +149,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	readOnly bool,
 ) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
@@ -268,7 +270,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, baHeader, args, reply, ui)
+			ctx, readWriter, rec, ms, baHeader, args, reply, st, ui)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -475,16 +477,22 @@ func evaluateCommand(
 	h roachpb.Header,
 	args roachpb.Request,
 	reply roachpb.Response,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
 
 	if cmd, ok := batcheval.LookupCommand(args.Method()); ok {
+		var now hlc.ClockTimestamp
+		if st != nil {
+			now = st.Now
+		}
 		cArgs := batcheval.CommandArgs{
 			EvalCtx:     rec,
 			Header:      h,
 			Args:        args,
+			Now:         now,
 			Stats:       ms,
 			Uncertainty: ui,
 		}
