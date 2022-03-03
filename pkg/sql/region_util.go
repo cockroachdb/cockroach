@@ -154,7 +154,7 @@ func zoneConfigForMultiRegionDatabase(
 		return zonepb.ZoneConfig{}, err
 	}
 
-	leasePreferences := synthesizeLeasePreferences(regionConfig.PrimaryRegion())
+	leasePreferences := makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig)
 
 	zc := zonepb.ZoneConfig{
 		NumReplicas:                 &numReplicas,
@@ -269,12 +269,19 @@ func zoneConfigForMultiRegionPartition(
 	zc.VoterConstraints = voterConstraints
 	zc.NullVoterConstraintsIsEmpty = true
 
-	leasePreferences := synthesizeLeasePreferences(partitionRegion)
+	var leasePreferences []zonepb.LeasePreference
+
+	if regionConfig.HasSecondaryRegion() {
+		leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(partitionRegion, regionConfig.SecondaryRegion())
+	} else {
+		leasePreferences = synthesizeLeasePreferences(partitionRegion)
+	}
 	zc.LeasePreferences = leasePreferences
 	zc.InheritedLeasePreferences = false
 
 	zc = regionConfig.ApplyZoneConfigExtensionForRegionalIn(zc, partitionRegion)
 	return zc, err
+
 }
 
 // maxFailuresBeforeUnavailability returns the maximum number of individual
@@ -321,13 +328,22 @@ func getNumVotersAndNumReplicas(
 			panic(errors.AssertionFailedf("unknown data placement: %v", regionConfig.Placement()))
 		}
 	case descpb.SurvivalGoal_REGION_FAILURE:
-		// <(quorum - 1) voters in the home region> + <1 replica for every other
-		// region>
+		// The primary and secondary region each have two voters.
+		// maxFailuresBeforeUnavailability(numVotersForZoneSurvival) = 2.
+		// We have 5 voters for survival mode region failure such that we can
+		// get quorum with 2 voters in the primary region + one voter outside.
+		// Every other region has one replica.
+
+		numRegionsWithTwoVoters := int32(1)
+		if regionConfig.HasSecondaryRegion() {
+			numRegionsWithTwoVoters = 2
+		}
+
 		numVoters = numVotersForRegionSurvival
 		// We place the maximum concurrent replicas that can fail before a range
 		// outage in the home region, and ensure that there's at least one replica
 		// in all other regions.
-		numReplicas = maxFailuresBeforeUnavailability(numVotersForRegionSurvival) + (numRegions - 1)
+		numReplicas = numRegionsWithTwoVoters*maxFailuresBeforeUnavailability(numVotersForRegionSurvival) + (numRegions - numRegionsWithTwoVoters)
 		if numReplicas < numVoters {
 			// NumReplicas cannot be less than NumVoters. If we have <= 4 regions, all
 			// replicas will be voting replicas.
@@ -427,7 +443,7 @@ func synthesizeVoterConstraints(
 				// +--------------------+   +-------------------+    +--------------------+
 				//
 				NumReplicas: maxFailuresBeforeUnavailability(numVoters),
-				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
+				Constraints: makeConstraintsWithSecondaryRegion(region, regionConfig),
 			},
 		}, nil
 	default:
@@ -473,6 +489,22 @@ func synthesizeReplicaConstraints(
 // the `lease_preferences` field to be set for the primary region of a
 // multi-region database or the home region of a table in such a database.
 func synthesizeLeasePreferences(region catpb.RegionName) []zonepb.LeasePreference {
+	return []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
+	}
+}
+
+// synthesizeLeasePreferencesWithSecondaryRegion generates a LeasePreferences clause representing
+// the `lease_preferences` field to be set for the primary region and secondary region of a
+// multi-region database or the home region of a table in such a database .
+func synthesizeLeasePreferencesWithSecondaryRegion(
+	region catpb.RegionName, secondaryRegion catpb.RegionName,
+) []zonepb.LeasePreference {
+	if region != secondaryRegion {
+		return []zonepb.LeasePreference{
+			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region), makeRequiredConstraintForRegion(secondaryRegion)}},
+		}
+	}
 	return []zonepb.LeasePreference{
 		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
 	}
@@ -582,6 +614,7 @@ func zoneConfigForMultiRegionTable(
 
 		zc = regionConfig.ApplyZoneConfigExtensionForRegionalIn(zc, affinityRegion)
 		return zc, nil
+
 	case *catpb.LocalityConfig_RegionalByRow_:
 		// We purposely do not set anything here at table level - this should be done at
 		// partition level instead.
@@ -589,6 +622,30 @@ func zoneConfigForMultiRegionTable(
 	default:
 		return zonepb.ZoneConfig{}, errors.AssertionFailedf(
 			"unexpected unknown locality type %T", localityConfig.Locality)
+	}
+}
+
+// makeConstraintsWithSecondaryRegion returns a list of constraints.
+// A constraint is added for the region passed in and a secondary lease
+// preference is added if the regionConfig has a secondary region.
+func makeConstraintsWithSecondaryRegion(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) []zonepb.Constraint {
+	constraints := []zonepb.Constraint{makeRequiredConstraintForRegion(region)}
+	if regionConfig.HasSecondaryRegion() && region != regionConfig.SecondaryRegion() {
+		constraints = append(constraints, makeRequiredConstraintForRegion(regionConfig.SecondaryRegion()))
+	}
+	return constraints
+}
+
+// makeLeasePreferences returns a list of lease preference constraints.
+// A constraint is added for the region passed in and a secondary lease
+// preference is added if the regionConfig has a secondary region.
+func makeLeasePreferences(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) []zonepb.LeasePreference {
+	return []zonepb.LeasePreference{
+		{Constraints: makeConstraintsWithSecondaryRegion(region, regionConfig)},
 	}
 }
 
@@ -777,6 +834,23 @@ func prepareZoneConfigForMultiRegionTable(
 		}
 		hasNewSubzones = newHasNewSubzones || hasNewSubzones
 		newZoneConfig = modifiedNewZoneConfig
+	}
+
+	if regionConfig.HasSecondaryRegion() {
+
+		var newLeasePreferences []zonepb.LeasePreference
+		switch {
+		case table.IsLocalityRegionalByTable():
+			localityConfig := table.TableDesc().LocalityConfig.GetRegionalByTable()
+			if region := localityConfig.Region; region != nil {
+				newLeasePreferences = makeLeasePreferences(*region, regionConfig)
+			} else {
+				newLeasePreferences = makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig)
+			}
+		default:
+			newLeasePreferences = makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig)
+		}
+		newZoneConfig.LeasePreferences = newLeasePreferences
 	}
 
 	// Mark the NumReplicas as 0 if we have subzones but no other features
@@ -1215,6 +1289,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 		dbDesc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			return p.validateZoneConfigForMultiRegionTable(
+				dbDesc,
 				tbDesc,
 				zoneConfigs[tbDesc.GetID()],
 				zoneConfigForMultiRegionValidator,
@@ -1366,6 +1441,7 @@ func SynthesizeRegionConfig(
 		superRegions,
 		zoneCfgExtensions,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
+		multiregion.WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
 	)
 
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
@@ -1806,6 +1882,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	if err != nil {
 		return err
 	}
+	regionConfig := dbDesc.GetRegionConfig()
 
 	same, mismatch, err := currentZoneConfig.DiffWithZone(
 		expectedZoneConfig,
@@ -1821,6 +1898,11 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 			dbName.String(),
 			mismatch.Field,
 		)
+	}
+
+	if regionConfig != nil && regionConfig.SecondaryRegion != "" {
+		leasePreferences := synthesizeLeasePreferencesWithSecondaryRegion(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
+		expectedZoneConfig.LeasePreferences = leasePreferences
 	}
 
 	return nil
@@ -1857,6 +1939,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	}
 
 	return p.validateZoneConfigForMultiRegionTable(
+		dbDesc,
 		desc,
 		currentZoneConfig,
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
@@ -1871,6 +1954,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 // the multi-region fields of the table's zone configuration
 // matches what is expected for the given table.
 func (p *planner) validateZoneConfigForMultiRegionTable(
+	dbDesc catalog.DatabaseDescriptor,
 	desc catalog.TableDescriptor,
 	currentZoneConfig *zonepb.ZoneConfig,
 	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
@@ -1982,6 +2066,26 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	// expected as the current zone config is no longer a placeholder.
 	if currentZoneConfig.IsSubzonePlaceholder() && isPlaceholderZoneConfigForMultiRegion(expectedZoneConfig) {
 		expectedZoneConfig.NumReplicas = proto.Int32(0)
+	}
+
+	regionConfig := dbDesc.GetRegionConfig()
+	var leasePreferences []zonepb.LeasePreference
+	if regionConfig != nil {
+		if regionConfig.SecondaryRegion != "" {
+			switch {
+			case desc.IsLocalityRegionalByTable():
+				rbt := desc.GetLocalityConfig().GetRegionalByTable()
+				if rbt.Region != nil {
+					leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(*rbt.Region, regionConfig.SecondaryRegion)
+				} else {
+					leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
+				}
+			default:
+				leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
+			}
+
+			expectedZoneConfig.LeasePreferences = leasePreferences
+		}
 	}
 
 	// Compare the two zone configs to see if anything is amiss.
