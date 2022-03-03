@@ -163,6 +163,7 @@ type MockEvalCtx struct {
 	ClusterSettings    *cluster.Settings
 	Desc               *roachpb.RangeDescriptor
 	StoreID            roachpb.StoreID
+	NodeID             roachpb.NodeID
 	Clock              *hlc.Clock
 	Stats              enginepb.MVCCStats
 	QPS                float64
@@ -208,7 +209,7 @@ func (m *mockEvalCtxImpl) GetConcurrencyManager() concurrency.Manager {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) NodeID() roachpb.NodeID {
-	panic("unimplemented")
+	return m.MockEvalCtx.NodeID
 }
 func (m *mockEvalCtxImpl) GetNodeLocality() roachpb.Locality {
 	panic("unimplemented")
