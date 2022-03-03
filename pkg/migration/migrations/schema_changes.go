@@ -94,7 +94,7 @@ func migrateTable(
 				log.Infof(ctx, "waiting for the mutation job %v to complete", mutation.JobID)
 				// TODO(cameron): Remove this knob conditional once the related migration code has been removed.
 				// See pkg/migration/testing_knobs.go for more details.
-				if d.TestingKnobs.BeforeWaitInRetryJobsWithExponentialBackoffMigration != nil {
+				if d.TestingKnobs != nil && d.TestingKnobs.BeforeWaitInRetryJobsWithExponentialBackoffMigration != nil {
 					d.TestingKnobs.BeforeWaitInRetryJobsWithExponentialBackoffMigration(jobspb.JobID(mutation.JobID))
 				}
 				if _, err := d.InternalExecutor.Exec(ctx, "migration-mutations-wait",
