@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
 
 // ClientVisibleRetryError is to be implemented by errors visible by
@@ -654,27 +655,69 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...Rang
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
 
-// NewAmbiguousResultError initializes a new AmbiguousResultError with
-// an explanatory message.
-func NewAmbiguousResultError(msg string) *AmbiguousResultError {
-	return &AmbiguousResultError{Message: msg}
-}
-
 // NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
 // an explanatory format and set of arguments.
 func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
-	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
+	return NewAmbiguousResultError(errors.Errorf(format, args...))
 }
 
+// NewAmbiguousResultError returns an AmbiguousResultError wrapping (via
+// errors.Wrapper) the supplied error.
+func NewAmbiguousResultError(err error) *AmbiguousResultError {
+	return &AmbiguousResultError{
+		EncodedError:      errors.EncodeError(context.Background(), err),
+		DeprecatedMessage: err.Error(),
+	}
+}
+
+var _ errors.SafeFormatter = (*AmbiguousResultError)(nil)
+var _ fmt.Formatter = (*AmbiguousResultError)(nil)
+var _ errors.Wrapper = func() errors.Wrapper {
+	aErr := (*AmbiguousResultError)(nil)
+	typeKey := errors.GetTypeKey(aErr)
+	errors.RegisterWrapperEncoder(typeKey, func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
+		errors.As(err, &payload)
+		return "", nil, payload
+	})
+	errors.RegisterWrapperDecoder(typeKey, func(ctx context.Context, cause error, msgPrefix string, safeDetails []string, payload proto.Message) error {
+		return payload.(*AmbiguousResultError)
+	})
+
+	return aErr
+}()
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *AmbiguousResultError) SafeFormatError(p errors.Printer) error {
+	p.Printf("result is ambiguous: %s", e.unwrapOrDefault())
+	return nil
+}
+
+// Format implements fmt.Formatter.
+func (e *AmbiguousResultError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// Error implements error.
 func (e *AmbiguousResultError) Error() string {
-	return e.message(nil)
+	return fmt.Sprint(e)
+}
+
+// Unwrap implements errors.Wrapper.
+func (e *AmbiguousResultError) Unwrap() error {
+	if e.EncodedError.Error == nil {
+		return nil
+	}
+	return errors.DecodeError(context.Background(), e.EncodedError)
+}
+
+func (e *AmbiguousResultError) unwrapOrDefault() error {
+	cause := e.Unwrap()
+	if cause == nil {
+		return errors.New("unknown cause") // can be removed in 22.2
+	}
+	return cause
 }
 
 func (e *AmbiguousResultError) message(_ *Error) string {
-	if e.WrappedErr != nil {
-		return fmt.Sprintf("result is ambiguous (%v)", e.WrappedErr)
-	}
-	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
+	return fmt.Sprintf("result is ambiguous: %v", e.unwrapOrDefault())
 }
 
 // Type is part of the ErrorDetailInterface.

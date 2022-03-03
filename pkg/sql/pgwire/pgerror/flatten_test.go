@@ -92,7 +92,7 @@ func TestFlatten(t *testing.T) {
 			},
 		},
 		{
-			errors.Wrap(&roachpb.AmbiguousResultError{Message: "woo"}, ""),
+			errors.Wrap(roachpb.NewAmbiguousResultErrorf("woo"), ""),
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckRegexpEqual(e.Message, "result is ambiguous.*woo")
 				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.StatementCompletionUnknown)
