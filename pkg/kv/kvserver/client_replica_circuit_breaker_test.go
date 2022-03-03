@@ -933,11 +933,9 @@ func (cbt *circuitBreakerTest) sendViaDistSender(
 func (*circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
 	t.Helper()
 	t.Log(err)
-	// We also accept an ambiguous result wrapping a breaker error; this occurs
-	// when the breaker trips while a write is already inflight.
-	if aErr := (*roachpb.AmbiguousResultError)(nil); errors.As(err, &aErr) && aErr.WrappedErr != nil {
-		err = aErr.WrappedErr.GoError()
-	}
+	// NB: we will see AmbiguousResultError here when proposals are inflight while
+	// the breaker trips. These are wrapping errors, so the assertions below will
+	// look through them.
 	require.True(t, errors.Is(err, circuit.ErrBreakerOpen), "%+v", err)
 	require.True(t, errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)), "%+v", err)
 }
