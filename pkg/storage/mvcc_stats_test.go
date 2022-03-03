@@ -97,7 +97,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			// Put a value.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, value, nil); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -122,7 +122,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts3},
 				ReadTimestamp: ts3,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -180,7 +180,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			}
 			// Write an intent at t=1s.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -262,7 +262,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			}
 			// Write an intent.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -352,7 +352,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 
 			// Write an intent.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -417,7 +417,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, m2ValSize, 64)
 
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -470,7 +470,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}
 
 			// Write a deletion tombstone intent.
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -528,7 +528,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, m2ValSize, 54)
 
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -580,7 +580,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			ts3 := hlc.Timestamp{WallTime: 3e9}
 
 			// Write a non-transactional tombstone at t=1s.
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil /* txn */); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -604,7 +604,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
 				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -724,7 +724,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 			// Write a non-transactional value at t=1s.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, value, nil /* txn */); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -754,7 +754,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
 				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -835,7 +835,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				require.EqualValues(t, vVal2Size, 14)
 
 				txn.WriteTimestamp.Forward(ts3)
-				if err := MVCCPut(ctx, engine, &aggMS, key, txn.ReadTimestamp, val2, txn); err != nil {
+				if err := MVCCPut(ctx, engine, &aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
 					t.Fatal(err)
 				}
 
@@ -894,10 +894,10 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			// Write tombstones at ts1 and ts2.
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts2, nil); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -975,7 +975,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			}
 			// Write an intent at 2s+1.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1020,7 +1020,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 					{Sequence: 0, Value: value.RawBytes},
 				},
 			}).Size())
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1068,7 +1068,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 
 			// Write a value at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, val1, nil /* txn */); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, val1, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1094,7 +1094,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 
 			// Delete the value at ts5.
 
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts2, nil /* txn */); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1161,7 +1161,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 
 			// Write an intent at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val1, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val1, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1210,7 +1210,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mVal2Size, 64)
 
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val2, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1251,7 +1251,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 			// Write a system intent at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val1, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val1, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1321,7 +1321,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 			// Write a value at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, val1, nil /* txn */); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, val1, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1347,7 +1347,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 			// Put another value at ts2.
 
-			if err := MVCCPut(ctx, engine, aggMS, key, ts2, val2, nil /* txn */); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, val2, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1495,7 +1495,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	actions := make(map[string]func(*state) string)
 
 	actions["Put"] = func(s *state) string {
-		if err := MVCCPut(ctx, s.eng, s.MS, s.key, s.TS, s.rngVal(), s.Txn); err != nil {
+		if err := MVCCPut(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), s.Txn); err != nil {
 			return err.Error()
 		}
 		return ""
@@ -1503,13 +1503,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	actions["InitPut"] = func(s *state) string {
 		failOnTombstones := (s.rng.Intn(2) == 0)
 		desc := fmt.Sprintf("failOnTombstones=%t", failOnTombstones)
-		if err := MVCCInitPut(ctx, s.eng, s.MS, s.key, s.TS, s.rngVal(), failOnTombstones, s.Txn); err != nil {
+		if err := MVCCInitPut(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), failOnTombstones, s.Txn); err != nil {
 			return desc + ": " + err.Error()
 		}
 		return desc
 	}
 	actions["Del"] = func(s *state) string {
-		if err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, s.Txn); err != nil {
+		if err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.Txn); err != nil {
 			return err.Error()
 		}
 		return ""
@@ -1525,7 +1525,9 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		} else {
 			keyMin = keys.LocalMax
 		}
-		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, keyMin, keyMax, max, s.TS, s.Txn, returnKeys); err != nil {
+		if _, _, _, err := MVCCDeleteRange(
+			ctx, s.eng, s.MS, keyMin, keyMax, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
+		); err != nil {
 			return desc + ": " + err.Error()
 		}
 		return desc

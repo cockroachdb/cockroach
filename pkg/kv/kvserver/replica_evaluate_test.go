@@ -712,7 +712,7 @@ func writeABCDEFIntents(t *testing.T, d *data, txn *roachpb.Transaction) {
 func writeABCDEFWith(t *testing.T, eng storage.Engine, ts hlc.Timestamp, txn *roachpb.Transaction) {
 	for _, k := range []string{"a", "b", "c", "d", "e", "f"} {
 		require.NoError(t, storage.MVCCPut(
-			context.Background(), eng, nil /* ms */, roachpb.Key(k), ts,
+			context.Background(), eng, nil /* ms */, roachpb.Key(k), ts, hlc.ClockTimestamp{},
 			roachpb.MakeValueFromString("value-"+k), txn))
 	}
 }
