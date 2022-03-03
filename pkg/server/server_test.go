@@ -1169,7 +1169,10 @@ func TestAssertEnginesEmpty(t *testing.T) {
 		Key:       []byte{0xde, 0xad, 0xbe, 0xef},
 		Timestamp: hlc.Timestamp{WallTime: 100},
 	}
-	require.NoError(t, batch.PutMVCC(key, []byte("foo")))
+	value := storage.MVCCValue{
+		Value: roachpb.MakeValueFromString("foo"),
+	}
+	require.NoError(t, batch.PutMVCC(key, value))
 	require.NoError(t, batch.Commit(false))
 	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
 }

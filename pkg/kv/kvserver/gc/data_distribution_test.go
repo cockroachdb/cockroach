@@ -52,7 +52,7 @@ func (ds dataDistribution) setupTest(
 			if kv.Key.Timestamp.IsEmpty() {
 				require.NoError(t, eng.PutUnversioned(kv.Key.Key, kv.Value))
 			} else {
-				require.NoError(t, eng.PutMVCC(kv.Key, kv.Value))
+				require.NoError(t, eng.PutRawMVCC(kv.Key, kv.Value))
 			}
 		} else {
 			// TODO(ajwerner): Decide if using MVCCPut is worth it.
@@ -84,7 +84,7 @@ func (ds dataDistribution) setupTest(
 func newDataDistribution(
 	tsDist func() hlc.Timestamp,
 	keyDist func() roachpb.Key,
-	valueDist func() []byte,
+	valueDist func() roachpb.Value,
 	versionsPerKey func() int,
 	intentFrac float64,
 	totalKeys int,
@@ -146,7 +146,7 @@ func newDataDistribution(
 		}
 		return storage.MVCCKeyValue{
 			Key:   storage.MVCCKey{Key: key, Timestamp: ts},
-			Value: valueDist(),
+			Value: valueDist().RawBytes,
 		}, txn, true
 	}
 }
@@ -218,20 +218,24 @@ func uniformTimestampDistribution(from, to int64, rng *rand.Rand) func() hlc.Tim
 }
 
 // returns a uniform length random value distribution.
-func uniformValueDistribution(min, max int, deleteFrac float64, rng *rand.Rand) func() []byte {
+func uniformValueDistribution(
+	min, max int, deleteFrac float64, rng *rand.Rand,
+) func() roachpb.Value {
 	if min > max {
 		panic(fmt.Errorf("min (%d) > max (%d)", min, max))
 	}
 	n := (max - min) + 1
-	return func() []byte {
+	return func() roachpb.Value {
 		if rng.Float64() < deleteFrac {
-			return nil
+			return roachpb.Value{}
 		}
-		value := make([]byte, min+rng.Intn(n))
-		if _, err := rng.Read(value); err != nil {
+		b := make([]byte, min+rng.Intn(n))
+		if _, err := rng.Read(b); err != nil {
 			panic(err)
 		}
-		return value
+		var v roachpb.Value
+		v.SetBytes(b)
+		return v
 	}
 }
 

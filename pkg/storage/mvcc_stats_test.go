@@ -35,6 +35,7 @@ import (
 // implementations and errors on mismatch with any of them. It is used for global
 // keys.
 func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVCCStats) {
+	t.Helper()
 	assertEqImpl(t, rw, debug, true /* globalKeys */, ms, expMS)
 }
 
@@ -137,6 +138,13 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// The initial write used the simple MVCCValue encoding. When resolved to
+			// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+			// that it now uses the extended MVCCValue encoding.
+			vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
+			vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+			vValSize += vValHeaderSize                                       // 23
+
 			expAggMS := enginepb.MVCCStats{
 				LastUpdateNanos: 4e9,
 				LiveBytes:       0,
@@ -146,7 +154,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 				// The implicit meta record (deletion tombstone) counts for len("a")+1=2.
 				// Two versioned keys count for 2*vKeySize.
 				KeyBytes: mKeySize + 2*vKeySize,
-				ValBytes: vValSize, // the initial write (10)
+				ValBytes: vValSize,
 				// No GCBytesAge has been accrued yet, as the value just got non-live at 4s.
 				GCBytesAge: 0,
 			}
@@ -185,7 +193,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			}
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			mValSize := int64((&enginepb.MVCCMetadata{    // 44
+			mValSize := int64((&enginepb.MVCCMetadata{    // 46
 				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
@@ -196,11 +204,11 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos:      1e9,
-				LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(44[+2])+12+10 = 68[+2]
+				LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+10 = 68[+2]
 				LiveCount:            1,
 				KeyBytes:             mKeySize + vKeySize, // 2+12 =14
 				KeyCount:             1,
-				ValBytes:             mValSize + vValSize, // (44[+2])+10 = 54[+2]
+				ValBytes:             mValSize + vValSize, // (46[+2])+10 = 54[+2]
 				ValCount:             1,
 				IntentCount:          1,
 				SeparatedIntentCount: 1,
@@ -220,9 +228,16 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// The initial write used the simple MVCCValue encoding. When resolved to
+			// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+			// that it now uses the extended MVCCValue encoding.
+			vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
+			vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+			vValSize += vValHeaderSize                                       // 23
+
 			expAggMS := enginepb.MVCCStats{
 				LastUpdateNanos: 4e9,
-				LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+20 = 24
+				LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+23 = 37
 				LiveCount:       1,
 				KeyCount:        1,
 				ValCount:        1,
@@ -267,7 +282,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			}
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			mValSize := int64((&enginepb.MVCCMetadata{    // 44
+			mValSize := int64((&enginepb.MVCCMetadata{    // 46
 				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
@@ -278,11 +293,11 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos:      1e9,
-				LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(44[+2])+12+10 = 68[+2]
+				LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+10 = 70[+2]
 				LiveCount:            1,
 				KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
 				KeyCount:             1,
-				ValBytes:             mValSize + vValSize, // (44[+2])+10 = 54[+2]
+				ValBytes:             mValSize + vValSize, // (46[+2])+10 = 54[+2]
 				ValCount:             1,
 				IntentAge:            0,
 				IntentCount:          1,
@@ -300,12 +315,19 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			// Account for removal of TxnDidNotUpdateMeta
+			// Account for removal of TxnDidNotUpdateMeta.
 			mValSize -= 2
+
+			// The initial write used the simple MVCCValue encoding. When resolved to
+			// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+			// that it now uses the extended MVCCValue encoding.
+			vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
+			vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+			vValSize += vValHeaderSize                                       // 23
 
 			expAggMS := enginepb.MVCCStats{
 				LastUpdateNanos: 4e9,
-				LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+44+12+20 = 78
+				LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+54+12+23 = 91
 				LiveCount:       1,
 				KeyCount:        1,
 				ValCount:        1,
@@ -313,7 +335,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 				// One versioned key counts for vKeySize.
 				KeyBytes: mKeySize + vKeySize,
 				// The intent is still there, so we see mValSize.
-				ValBytes:             vValSize + mValSize, // 44+10 = 54
+				ValBytes:             mValSize + vValSize, // 54+23 = 69
 				IntentAge:            0,                   // this was once erroneously positive
 				IntentCount:          1,                   // still there
 				SeparatedIntentCount: 1,
@@ -647,11 +669,18 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 					t.Fatal(err)
 				}
 
+				// The initial write used the simple MVCCValue encoding. When resolved to
+				// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+				// that it now uses the extended MVCCValue encoding.
+				vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts2)}
+				vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+				vValSize := vValHeaderSize + 0                                   // tombstone, so just a header
+
 				expAggMS := enginepb.MVCCStats{
 					LastUpdateNanos: 3e9,
 					KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 					KeyCount:        1,
-					ValBytes:        0,
+					ValBytes:        vValSize,
 					ValCount:        2,
 					IntentCount:     0,
 					IntentBytes:     0,
@@ -980,7 +1009,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			}
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			m1ValSize := int64((&enginepb.MVCCMetadata{   // 44
+			m1ValSize := int64((&enginepb.MVCCMetadata{   // 46
 				Timestamp: ts201.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -990,11 +1019,11 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos:      2e9 + 1,
-				LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(44[+2])+12+10 = 68[+2]
+				LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+10 = 68[+2]
 				LiveCount:            1,
 				KeyBytes:             mKeySize + vKeySize, // 14
 				KeyCount:             1,
-				ValBytes:             m1ValSize + vValSize, // (44[+2])+10 = 54[+2]
+				ValBytes:             m1ValSize + vValSize, // (46[+2])+10 = 54[+2]
 				ValCount:             1,
 				IntentCount:          1,
 				SeparatedIntentCount: 1,

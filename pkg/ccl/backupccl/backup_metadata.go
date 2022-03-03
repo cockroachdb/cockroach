@@ -187,7 +187,7 @@ func writeDescsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 					b = bytes
 				}
 			}
-			if err := sst.PutMVCC(storage.MVCCKey{Key: k, Timestamp: i.Time}, b); err != nil {
+			if err := sst.PutRawMVCC(storage.MVCCKey{Key: k, Timestamp: i.Time}, b); err != nil {
 				return err
 			}
 
@@ -214,7 +214,7 @@ func writeDescsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 					return err
 				}
 			} else {
-				if err := sst.PutMVCC(storage.MVCCKey{Key: k, Timestamp: m.StartTime}, b); err != nil {
+				if err := sst.PutRawMVCC(storage.MVCCKey{Key: k, Timestamp: m.StartTime}, b); err != nil {
 					return err
 				}
 			}
@@ -340,7 +340,7 @@ func writeNamesToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 		}
 		k := encodeNameSSTKey(rev.parent, rev.parentSchema, rev.name)
 		v := encoding.EncodeUvarintAscending(nil, uint64(rev.id))
-		if err := sst.PutMVCC(storage.MVCCKey{Key: k, Timestamp: rev.ts}, v); err != nil {
+		if err := sst.PutRawMVCC(storage.MVCCKey{Key: k, Timestamp: rev.ts}, v); err != nil {
 			return err
 		}
 	}
@@ -384,7 +384,7 @@ func writeSpansToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 			}
 		} else {
 			k := storage.MVCCKey{Key: encodeSpanSSTKey(sp), Timestamp: ts}
-			if err := sst.PutMVCC(k, nil); err != nil {
+			if err := sst.PutRawMVCC(k, nil); err != nil {
 				return err
 			}
 		}

@@ -165,9 +165,24 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 // An error is returned if it is not greater than any previously added entry
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
-func (fw *SSTWriter) PutMVCC(key MVCCKey, value []byte) error {
+func (fw *SSTWriter) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return fw.put(key, encValue)
+}
+
+// PutRawMVCC implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
+func (fw *SSTWriter) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return fw.put(key, value)
 }

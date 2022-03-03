@@ -438,9 +438,21 @@ func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Batch interface.
-func (p *pebbleBatch) PutMVCC(key MVCCKey, value []byte) error {
+func (p *pebbleBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return p.put(key, encValue)
+}
+
+// PutRawMVCC implements the Batch interface.
+func (p *pebbleBatch) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return p.put(key, value)
 }

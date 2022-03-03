@@ -102,6 +102,15 @@ func heartbeatArgs(
 	}, roachpb.Header{Txn: txn}
 }
 
+func endTxnArgs(txn *roachpb.Transaction, commit bool) (*roachpb.EndTxnRequest, roachpb.Header) {
+	return &roachpb.EndTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
+		},
+		Commit: commit,
+	}, roachpb.Header{Txn: txn}
+}
+
 func pushTxnArgs(
 	pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType,
 ) *roachpb.PushTxnRequest {

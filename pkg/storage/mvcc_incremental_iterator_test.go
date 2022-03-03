@@ -39,13 +39,11 @@ import (
 
 const all, latest = true, false
 
-func makeKVT(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
-	return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
+func makeKVT(key roachpb.Key, value roachpb.Value, ts hlc.Timestamp) MVCCKeyValue {
+	return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
 }
 
-func makeKVTxn(
-	key roachpb.Key, val []byte, ts hlc.Timestamp,
-) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
+func makeKVTxn(key roachpb.Key, ts hlc.Timestamp) (roachpb.Transaction, roachpb.Intent) {
 	txnID := uuid.MakeV4()
 	txnMeta := enginepb.TxnMeta{
 		Key:            key,
@@ -53,12 +51,12 @@ func makeKVTxn(
 		Epoch:          1,
 		WriteTimestamp: ts,
 	}
-	return roachpb.Transaction{
-			TxnMeta:       txnMeta,
-			ReadTimestamp: ts,
-		}, roachpb.Value{
-			RawBytes: val,
-		}, roachpb.MakeIntent(&txnMeta, key)
+	txn := roachpb.Transaction{
+		TxnMeta:       txnMeta,
+		ReadTimestamp: ts,
+	}
+	intent := roachpb.MakeIntent(&txnMeta, key)
+	return txn, intent
 }
 
 func intents(intents ...roachpb.Intent) []roachpb.Intent {
@@ -506,10 +504,10 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
-		testValue3 = []byte("val3")
-		testValue4 = []byte("val4")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
+		testValue4 = roachpb.MakeValueFromString("val4")
 
 		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
 		// as upper/lower-bound during iterator initialization.
@@ -525,7 +523,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv2_4_4 := makeKVT(testKey2, testValue4, ts4)
-	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
+	kv1_3Deleted := makeKVT(testKey1, roachpb.Value{}, ts3)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -596,8 +594,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 				},
 				ReadTimestamp: ts4,
 			}
-			txn1Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, txn1Val, &txn1); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
 				t.Fatal(err)
 			}
 
@@ -644,10 +641,10 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
-		testValue3 = []byte("val3")
-		testValue4 = []byte("val4")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
+		testValue4 = roachpb.MakeValueFromString("val4")
 
 		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
 		// as upper/lower-bound during iterator initialization.
@@ -662,7 +659,7 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
-	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
+	kv1_3Deleted := makeKVT(testKey1, roachpb.Value{}, ts3)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -730,8 +727,7 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 				},
 				ReadTimestamp: ts4,
 			}
-			txn1Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, txn1Val, &txn1); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
 				t.Fatal(err)
 			}
 
@@ -776,8 +772,8 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 		testKey2 = roachpb.Key("/db2")
 		testKey3 = roachpb.Key("/db3")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
 
 		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
 		// as upper/lower-bound during iterator initialization.
@@ -869,9 +865,9 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
-		testValue3 = []byte("val3")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
 
 		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
 		// as upper/lower-bound during iterator initialization.
@@ -882,28 +878,12 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
-		txnID := uuid.MakeV4()
-		txnMeta := enginepb.TxnMeta{
-			Key:            key,
-			ID:             txnID,
-			Epoch:          1,
-			WriteTimestamp: ts,
-		}
-		return roachpb.Transaction{
-				TxnMeta:       txnMeta,
-				ReadTimestamp: ts,
-			}, roachpb.Value{
-				RawBytes: val,
-			}, roachpb.MakeIntent(&txnMeta, key)
-	}
-
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv1_3_3 := makeKVT(testKey1, testValue3, ts3)
 	kv2_1_1 := makeKVT(testKey2, testValue1, ts1)
 	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
-	txn, val, intent2_2_2 := makeTxn(testKey2, testValue2, ts2)
+	txn, intent2_2_2 := makeKVTxn(testKey2, ts2)
 
 	intentErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{intent2_2_2}}
 
@@ -916,7 +896,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := MVCCPut(ctx, e, nil, txn.TxnMeta.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn); err != nil {
+		if err := MVCCPut(ctx, e, nil, txn.TxnMeta.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, testValue2, &txn); err != nil {
 			t.Fatal(err)
 		}
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1065,10 +1045,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
-		testValue3 = []byte("val3")
-		testValue4 = []byte("val4")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
+		testValue4 = roachpb.MakeValueFromString("val4")
 
 		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
 		// as upper/lower-bound during iterator initialization.
@@ -1085,7 +1065,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 	kv1_4_4 := makeKVT(testKey1, testValue4, ts4)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
-	kv1Deleted3 := makeKVT(testKey1, nil, ts3)
+	kv1Deleted3 := makeKVT(testKey1, roachpb.Value{}, ts3)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name+"-latest", func(t *testing.T) {
@@ -1120,12 +1100,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1Deleted3, kv2_2_2)))
 
 			// Exercise intent handling.
-			txn1, txn1Val, intentErr1 := makeKVTxn(testKey1, testValue4, ts4)
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, txn1Val, &txn1); err != nil {
+			txn1, intentErr1 := makeKVTxn(testKey1, ts4)
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2, txn2Val, intentErr2 := makeKVTxn(testKey2, testValue4, ts4)
-			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, txn2Val, &txn2); err != nil {
+			txn2, intentErr2 := makeKVTxn(testKey2, ts4)
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents-1",
@@ -1188,12 +1168,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1Deleted3, kv1_2_2, kv2_2_2)))
 
 			// Exercise intent handling.
-			txn1, txn1Val, intentErr1 := makeKVTxn(testKey1, testValue4, ts4)
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, txn1Val, &txn1); err != nil {
+			txn1, intentErr1 := makeKVTxn(testKey1, ts4)
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2, txn2Val, intentErr2 := makeKVTxn(testKey2, testValue4, ts4)
-			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, txn2Val, &txn2); err != nil {
+			txn2, intentErr2 := makeKVTxn(testKey2, ts4)
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn2); err != nil {
 				t.Fatal(err)
 			}
 			// Single intent tests are verifying behavior when intent collection is not enabled.

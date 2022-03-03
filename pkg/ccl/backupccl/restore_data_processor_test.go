@@ -81,20 +81,23 @@ func slurpSSTablesLatestKey(
 			if !sst.UnsafeKey().Less(end) {
 				break
 			}
-			var ok bool
-			var newKv storage.MVCCKeyValue
 			key := sst.UnsafeKey()
-			newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
-			newKv.Key.Key = append(newKv.Key.Key, key.Key...)
-			newKv.Key.Timestamp = key.Timestamp
-			newKv.Key.Key, ok = kr.rewriteKey(newKv.Key.Key)
-			if !ok {
-				t.Fatalf("could not rewrite key: %s", newKv.Key.Key)
+			value, err := storage.DecodeMVCCValue(sst.UnsafeValue())
+			if err != nil {
+				t.Fatal(err)
 			}
-			v := roachpb.Value{RawBytes: newKv.Value}
-			v.ClearChecksum()
-			v.InitChecksum(newKv.Key.Key)
-			if err := batch.PutMVCC(newKv.Key, v.RawBytes); err != nil {
+			newKey := key
+			newKey.Key = append([]byte(nil), newKey.Key...)
+			var ok bool
+			newKey.Key, ok = kr.rewriteKey(newKey.Key)
+			if !ok {
+				t.Fatalf("could not rewrite key: %s", newKey.Key)
+			}
+			newValue := value
+			newValue.Value.RawBytes = append([]byte(nil), newValue.Value.RawBytes...)
+			newValue.Value.ClearChecksum()
+			newValue.Value.InitChecksum(newKey.Key)
+			if err := batch.PutMVCC(newKey, newValue); err != nil {
 				t.Fatal(err)
 			}
 			sst.Next()

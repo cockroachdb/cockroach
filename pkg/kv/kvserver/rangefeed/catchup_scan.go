@@ -157,10 +157,11 @@ func (i *CatchUpIterator) CatchUpScan(
 		}
 
 		unsafeKey := i.UnsafeKey()
-		unsafeVal := i.UnsafeValue()
+		unsafeValRaw := i.UnsafeValue()
+		var unsafeVal []byte
 		if !unsafeKey.IsValue() {
 			// Found a metadata key.
-			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
+			if err := protoutil.Unmarshal(unsafeValRaw, &meta); err != nil {
 				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
 			}
 			if !meta.IsInline() {
@@ -195,6 +196,12 @@ func (i *CatchUpIterator) CatchUpScan(
 			// iterators may result in the rangefeed not
 			// seeing some intermediate values.
 			unsafeVal = meta.RawBytes
+		} else {
+			mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
+			if err != nil {
+				return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
+			}
+			unsafeVal = mvccVal.Value.RawBytes
 		}
 
 		// Ignore the version if it's not inline and its timestamp is at

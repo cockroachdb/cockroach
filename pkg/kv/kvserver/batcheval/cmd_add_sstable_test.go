@@ -1117,7 +1117,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		{"e", 1, "e"},
 		{"z", 2, "zzzzzz"},
 	} {
-		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 	}
 
 	sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{
@@ -1228,7 +1228,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		{"y", 5, "yyy"},
 		{"z", 2, "zz"},
 	} {
-		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 	}
 
 	// This test ensures accuracy of MVCCStats in the situation that successive
@@ -1270,7 +1270,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	// ingesting the perfectly shadowing KVs (same ts and same value) in the
 	// second SST.
 	for _, kv := range kvs {
-		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 	}
 
 	// Evaluate the second SST. Both the KVs are perfectly shadowing and should

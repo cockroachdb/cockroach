@@ -277,7 +277,7 @@ func UpdateSSTTimestamps(
 			return nil, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, from, key.Key)
 		}
-		err = writer.PutMVCC(MVCCKey{Key: iter.UnsafeKey().Key, Timestamp: to}, iter.UnsafeValue())
+		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, iter.UnsafeValue())
 		if err != nil {
 			return nil, err
 		}

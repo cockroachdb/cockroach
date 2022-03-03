@@ -341,10 +341,10 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer sstWriter.Close()
 	require.NoError(t, sstWriter.PutMVCC(
 		storage.MVCCKey{Key: roachpb.Key("b"), Timestamp: ts6},
-		expVal6b.RawBytes))
+		storage.MVCCValue{Value: expVal6b}))
 	require.NoError(t, sstWriter.PutMVCC(
 		storage.MVCCKey{Key: roachpb.Key("q"), Timestamp: ts6},
-		expVal6q.RawBytes))
+		storage.MVCCValue{Value: expVal6q}))
 	require.NoError(t, sstWriter.Finish())
 	expSST := sstFile.Data()
 	expSSTSpan := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("r")}
@@ -357,11 +357,11 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Ingest an SSTable as writes.
 	ts7 := ts.Clock().Now().Add(0, 7)
 
-	expVal7b := roachpb.Value{Timestamp: ts7}
+	expVal7b := roachpb.Value{}
 	expVal7b.SetInt(7)
 	expVal7b.InitChecksum(roachpb.Key("b"))
 
-	expVal7q := roachpb.Value{Timestamp: ts7}
+	expVal7q := roachpb.Value{}
 	expVal7q.SetInt(7)
 	expVal7q.InitChecksum(roachpb.Key("q"))
 
@@ -370,10 +370,10 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer sstWriter.Close()
 	require.NoError(t, sstWriter.PutMVCC(
 		storage.MVCCKey{Key: roachpb.Key("b"), Timestamp: ts7},
-		expVal7b.RawBytes))
+		storage.MVCCValue{Value: expVal7b}))
 	require.NoError(t, sstWriter.PutMVCC(
 		storage.MVCCKey{Key: roachpb.Key("q"), Timestamp: ts7},
-		expVal7q.RawBytes))
+		storage.MVCCValue{Value: expVal7q}))
 	require.NoError(t, sstWriter.Finish())
 
 	_, _, _, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
@@ -391,6 +391,8 @@ func TestReplicaRangefeed(t *testing.T) {
 	expVal5 := roachpb.Value{Timestamp: ts5}
 	expVal5.SetInt(25)
 	expVal5.InitChecksum(roachpb.Key("b"))
+	expVal7b.Timestamp = ts7
+	expVal7q.Timestamp = ts7
 	expVal1NoTS, expVal4NoTS := expVal1, expVal4
 	expVal1NoTS.Timestamp, expVal4NoTS.Timestamp = hlc.Timestamp{}, hlc.Timestamp{}
 	expEvents = append(expEvents, []*roachpb.RangeFeedEvent{

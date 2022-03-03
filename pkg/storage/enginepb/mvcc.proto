@@ -58,7 +58,7 @@ message MVCCMetadata {
     // the IntentHistory.
     optional int32 sequence = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnSeq"];
     // Value is the value written to the key as part of the transaction at
-    // the above Sequence.
+    // the above Sequence. Value uses the roachpb.Value encoding.
     optional bytes value = 2;
   }
 

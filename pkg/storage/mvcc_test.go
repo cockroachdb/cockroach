@@ -960,23 +960,24 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			err := engine.PutMVCC(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			value := MVCCValue{Value: roachpb.MakeValueFromString("foobar")}
+			err := engine.PutMVCC(MVCCKey{Key: testKey1, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey2, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey2, Timestamp: hlc.Timestamp{WallTime: 3}}, value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey3, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey4, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -997,7 +998,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				UpperBound: testKey5,
 			})
 			defer iter.Close()
-			iter.SeekGE(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}})
+			iter.SeekGE(MVCCKey{Key: testKey1, Timestamp: hlc.Timestamp{WallTime: 5}})
 			iter.Next() // key2/5
 
 			// Lay down an intent on key3, which will go at key3/0 and sort before key3/5.
@@ -4137,8 +4138,8 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		// non-decreasing due to tsIndex.
 		versions := rng.Intn(3) + 1
 		for j := 0; j < versions; j++ {
-			val := generateBytes(rng, 20, 30)
-			put.values = append(put.values, roachpb.Value{RawBytes: val})
+			val := roachpb.MakeValueFromBytes(generateBytes(rng, 20, 30))
+			put.values = append(put.values, val)
 			put.seqs = append(put.seqs, seq)
 			seq++
 			index := rng.Intn(len(timestamps))
@@ -4261,8 +4262,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 			key: key,
 		}
 		for j := 0; j < 2; j++ {
-			val := generateBytes(rng, 20, 30)
-			put.values = append(put.values, roachpb.Value{RawBytes: val})
+			val := roachpb.MakeValueFromBytes(generateBytes(rng, 20, 30))
+			put.values = append(put.values, val)
 			put.seqs = append(put.seqs, seq)
 			seq++
 			put.writeTS = append(put.writeTS, timestamps[j])
@@ -4310,8 +4311,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	}
 	// Do another put for all these keys. These will also be in the memtable.
 	for i := 0; i < 100; i++ {
-		puts[i].values = append(puts[i].values[:0],
-			roachpb.Value{RawBytes: generateBytes(rng, 2, 3)})
+		val := roachpb.MakeValueFromBytes(generateBytes(rng, 2, 3))
+		puts[i].values = append(puts[i].values[:0], val)
 		puts[i].seqs = append(puts[i].seqs[:0], seq)
 		seq++
 		puts[i].writeTS = append(puts[i].writeTS[:0], timestamps[2])

@@ -611,7 +611,8 @@ func TestEngineTimeBound(t *testing.T) {
 			for i, time := range times {
 				s := fmt.Sprintf("%02d", i)
 				key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
-				if err := engine.PutMVCC(key, []byte(s)); err != nil {
+				value := MVCCValue{Value: roachpb.MakeValueFromString(s)}
+				if err := engine.PutMVCC(key, value); err != nil {
 					t.Fatal(err)
 				}
 			}

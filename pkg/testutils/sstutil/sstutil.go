@@ -41,12 +41,12 @@ func MakeSST(t *testing.T, st *cluster.Settings, kvs []KV) ([]byte, roachpb.Key,
 			end = kv.Key()
 		}
 		if kv.Timestamp().IsEmpty() {
-			meta := &enginepb.MVCCMetadata{RawBytes: kv.ValueBytes()}
+			meta := &enginepb.MVCCMetadata{RawBytes: kv.Value().RawBytes}
 			metaBytes, err := protoutil.Marshal(meta)
 			require.NoError(t, err)
 			require.NoError(t, writer.PutUnversioned(kv.Key(), metaBytes))
 		} else {
-			require.NoError(t, writer.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+			require.NoError(t, writer.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 		}
 	}
 	require.NoError(t, writer.Finish())
@@ -73,8 +73,9 @@ func ScanSST(t *testing.T, sst []byte) []KV {
 		}
 
 		k := iter.UnsafeKey()
-		v := roachpb.Value{RawBytes: iter.UnsafeValue()}
-		value, err := v.GetBytes()
+		v, err := storage.DecodeMVCCValue(iter.UnsafeValue())
+		require.NoError(t, err)
+		value, err := v.Value.GetBytes()
 		require.NoError(t, err)
 		kvs = append(kvs, KV{
 			KeyString:     string(k.Key),

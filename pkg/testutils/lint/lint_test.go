@@ -1052,6 +1052,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
+			":!storage/mvcc_value.go",
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scplan/internal/scgraphviz/graphviz.go",
 		)
@@ -1096,6 +1097,7 @@ func TestLint(t *testing.T) {
 			":!util/hlc/timestamp.go",
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
+			":!storage/mvcc_value.go",
 			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {

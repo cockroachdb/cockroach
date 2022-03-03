@@ -140,6 +140,38 @@ message IgnoredSeqNumRange {
   int32 end = 2 [(gogoproto.casttype) = "TxnSeq"];
 }
 
+// MVCCValueHeader holds MVCC-level metadata for a versioned value.
+// Used by storage.MVCCValue.
+message MVCCValueHeader {
+  option (gogoproto.equal) = true;
+
+  // The local clock timestamp records the value of the local HLC clock on the
+  // leaseholder when the key was originally written. It is used to make claims
+  // about the relative real time ordering of the key-value's writer and readers
+  // when comparing a reader's uncertainty interval (and observed timestamps) to
+  // the key-value. Ignoring edge cases, readers with an observed timestamp from
+  // the key-value's leaseholder that is greater than the local clock timestamp
+  // stored in the key cannot make claims about real time ordering and must
+  // consider it possible that the key-value's write occurred before the read
+  // began. However, readers with an observed timestamp from the key-value's
+  // leaseholder that is less than the clock timestamp can claim that the reader
+  // captured that observed timestamp before the key-value was written and
+  // therefore can consider the key-value's write to have been concurrent with
+  // the read. In doing so, the reader can avoid an uncertainty restart. For
+  // more, see pkg/kv/kvserver/observedts/doc.go.
+  //
+  // If the local timestamp is empty, it is assumed to be equal to the key's
+  // version timestamp. This property is used to avoid storing the local clock
+  // timestamp in the common case where the HLC clock on the leaseholder is
+  // greater than or equal to the version timestamp at the time that it is
+  // written. If is safe for the local clock timestamp to be rounded down, as
+  // this will simply lead to additional uncertainty restarts. However, it is
+  // not safe for the local clock timestamp to be rounded up, as this could lead
+  // to stale reads.
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
 // encodings for most fields that make it more efficient to store negative
 // values. This makes the encodings incompatible.
