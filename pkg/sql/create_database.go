@@ -135,6 +135,43 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
+	if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName && n.SecondaryRegion != tree.SecondaryRegionNotSpecifiedName {
+		return nil, pgerror.New(
+			pgcode.InvalidDatabaseDefinition,
+			"PRIMARY REGION must be specified when using SECONDARY REGION",
+		)
+	}
+
+	if n.PrimaryRegion != tree.PrimaryRegionNotSpecifiedName && n.SecondaryRegion == n.PrimaryRegion {
+		return nil, pgerror.New(
+			pgcode.InvalidDatabaseDefinition,
+			"SECONDARY REGION can not be the same as the PRIMARY REGION",
+		)
+	}
+
+	if n.SecondaryRegion != tree.SecondaryRegionNotSpecifiedName {
+		found := false
+		for _, r := range n.Regions {
+			if r == n.SecondaryRegion {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, errors.WithHintf(
+				pgerror.Newf(pgcode.InvalidName,
+					"region %s has not been added to the database",
+					n.SecondaryRegion.String(),
+				),
+				"you must add the region to the database before setting it as primary region, using "+
+					"ALTER DATABASE %s ADD REGION %s",
+				n.Name.String(),
+				n.SecondaryRegion.String(),
+			)
+		}
+	}
+
 	return &createDatabaseNode{n: n}, nil
 }
 

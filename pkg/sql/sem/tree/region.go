@@ -44,6 +44,10 @@ const (
 	// locality config.
 	// TODO(#59455): clean this up to use something nicer.
 	PrimaryRegionNotSpecifiedName Name = ""
+	// SecondaryRegionNotSpecifiedName is the string denoting the lack of secondary region
+	//in the locality config.
+	// TODO(#59455): clean this up to use something nicer.
+	SecondaryRegionNotSpecifiedName Name = ""
 )
 
 // Locality defines the locality for a given table.
