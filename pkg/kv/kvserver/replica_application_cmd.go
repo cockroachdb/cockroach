@@ -122,9 +122,7 @@ func (c *replicatedCmd) Ctx() context.Context {
 // AckErrAndFinish implements the apply.Command interface.
 func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	if c.IsLocal() {
-		c.response.Err = roachpb.NewError(
-			roachpb.NewAmbiguousResultError(
-				err.Error()))
+		c.response.Err = roachpb.NewError(roachpb.NewAmbiguousResultError(err))
 	}
 	return c.AckOutcomeAndFinish(ctx)
 }

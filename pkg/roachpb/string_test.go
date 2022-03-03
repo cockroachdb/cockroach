@@ -150,7 +150,6 @@ func TestSpansString(t *testing.T) {
 
 func TestReplicaUnavailableError(t *testing.T) {
 	ctx := context.Background()
-	var _ = (*roachpb.ReplicaUnavailableError)(nil)
 	rDesc := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3}
 	var set roachpb.ReplicaSet
 	set.AddReplica(rDesc)
@@ -165,4 +164,16 @@ func TestReplicaUnavailableError(t *testing.T) {
 
 	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
 	echotest.Require(t, s, filepath.Join("testdata", "replica_unavailable_error.txt"))
+}
+
+func TestAmbiguousResultError(t *testing.T) {
+	ctx := context.Background()
+
+	wrapped := errors.Errorf("boom with a %s", redact.Unsafe("secret"))
+	var err error = roachpb.NewAmbiguousResultError(wrapped)
+	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
+	require.True(t, errors.Is(err, wrapped), "%+v", err)
+
+	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
+	echotest.Require(t, s, filepath.Join("testdata", "ambiguous_result_error.txt"))
 }

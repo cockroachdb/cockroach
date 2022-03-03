@@ -9,6 +9,7 @@ load(":gen.bzl", "batch_gen")
 go_library(
     name = "roachpb",
     srcs = [
+        "ambiguous_result_error.go",
         "api.go",
         "app_stats.go",
         "batch.go",

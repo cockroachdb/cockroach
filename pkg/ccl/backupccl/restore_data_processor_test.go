@@ -221,7 +221,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				if r < 0 {
 					return nil
 				}
-				return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
+				return roachpb.NewError(roachpb.NewAmbiguousResultErrorf("%d", r))
 			},
 		},
 	}}

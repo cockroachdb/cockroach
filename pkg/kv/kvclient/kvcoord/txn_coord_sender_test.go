@@ -670,7 +670,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
 		key := roachpb.Key("a")
-		are := roachpb.NewAmbiguousResultError("very ambiguous")
+		are := roachpb.NewAmbiguousResultErrorf("very ambiguous")
 		knobs := &kvserver.StoreTestingKnobs{
 			TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 				for _, req := range ba.Requests {
