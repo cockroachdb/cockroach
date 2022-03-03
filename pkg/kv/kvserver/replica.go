@@ -1303,7 +1303,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			pretty.Diff(diskState, r.mu.state))
 		r.mu.state.Desc, diskState.Desc = nil, nil
 		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
-			log.Safe(pretty.Diff(diskState, r.mu.state)))
+			redact.Safe(pretty.Diff(diskState, r.mu.state)))
 	}
 	if r.isInitializedRLocked() {
 		if !r.startKey.Equal(r.mu.state.Desc.StartKey) {

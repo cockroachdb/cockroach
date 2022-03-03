@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -398,7 +399,7 @@ func handleNodeDecommissionSelf(
 			cliflags.NodeDecommissionSelf.Name)
 	}
 
-	log.Infof(ctx, "%s node %d", log.Safe(command), localNodeID)
+	log.Infof(ctx, "%s node %d", redact.Safe(command), localNodeID)
 	return []roachpb.NodeID{localNodeID}, nil
 }
 

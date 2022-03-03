@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type buildScalarCtx struct {
@@ -92,7 +92,7 @@ func init() {
 func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
 	fn := scalarBuildFuncMap[scalar.Op()]
 	if fn == nil {
-		return nil, errors.AssertionFailedf("unsupported op %s", log.Safe(scalar.Op()))
+		return nil, errors.AssertionFailedf("unsupported op %s", redact.Safe(scalar.Op()))
 	}
 	return fn(b, ctx, scalar)
 }
@@ -128,7 +128,7 @@ func (b *Builder) indexedVar(
 ) tree.TypedExpr {
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
-		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
+		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", redact.Safe(colID)))
 	}
 	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)
 }
@@ -211,7 +211,7 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 		return tree.NewTypedIsNotNullExpr(expr), nil
 
 	default:
-		panic(errors.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
+		panic(errors.AssertionFailedf("invalid op %s", redact.Safe(scalar.Op())))
 	}
 }
 

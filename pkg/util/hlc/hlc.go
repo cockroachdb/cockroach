@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TODO(Tobias): Figure out if it would make sense to save some
@@ -339,8 +340,8 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 			log.Fatalf(
 				ctx,
 				"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
-				log.Safe(float64(-interval)/1e9),
-				log.Safe(float64(toleratedForwardClockJump)/1e9),
+				redact.Safe(float64(-interval)/1e9),
+				redact.Safe(float64(toleratedForwardClockJump)/1e9),
 			)
 		}
 	}
@@ -384,8 +385,8 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 		log.Fatalf(
 			context.TODO(),
 			"wall time %d is not allowed to be greater than upper bound of %d.",
-			log.Safe(c.mu.timestamp.WallTime),
-			log.Safe(c.mu.wallTimeUpperBound),
+			redact.Safe(c.mu.timestamp.WallTime),
+			redact.Safe(c.mu.wallTimeUpperBound),
 		)
 	}
 }

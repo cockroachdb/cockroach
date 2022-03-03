@@ -609,7 +609,7 @@ func (ds *DistSender) getRoutingInfo(
 		}
 		if !containsFn(returnToken.Desc(), descKey) {
 			log.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
-				"desc: %s, key: %s, reverse: %t", returnToken.Desc(), descKey, log.Safe(useReverseScan))
+				"desc: %s, key: %s, reverse: %t", returnToken.Desc(), descKey, redact.Safe(useReverseScan))
 		}
 	}
 
@@ -764,7 +764,7 @@ func (ds *DistSender) Send(
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
 		log.Fatalf(ctx, "batch with MaxSpanRequestKeys=%d, TargetBytes=%d needs splitting",
-			log.Safe(ba.MaxSpanRequestKeys), log.Safe(ba.TargetBytes))
+			redact.Safe(ba.MaxSpanRequestKeys), redact.Safe(ba.TargetBytes))
 	}
 	var singleRplChunk [1]*roachpb.BatchResponse
 	rplChunks := singleRplChunk[:0:1]

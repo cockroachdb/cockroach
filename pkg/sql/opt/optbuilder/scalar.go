@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -748,7 +748,7 @@ func (b *Builder) constructComparison(
 		}
 		return b.factory.ConstructOverlaps(left, right)
 	}
-	panic(errors.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp.Operator)))
+	panic(errors.AssertionFailedf("unhandled comparison operator: %s", redact.Safe(cmp.Operator)))
 }
 
 func (b *Builder) constructBinary(
@@ -790,7 +790,7 @@ func (b *Builder) constructBinary(
 	case treebin.JSONFetchTextPath:
 		return b.factory.ConstructFetchTextPath(left, right)
 	}
-	panic(errors.AssertionFailedf("unhandled binary operator: %s", log.Safe(bin)))
+	panic(errors.AssertionFailedf("unhandled binary operator: %s", redact.Safe(bin)))
 }
 
 func (b *Builder) constructUnary(
@@ -808,7 +808,7 @@ func (b *Builder) constructUnary(
 	case tree.UnaryCbrt:
 		return b.factory.ConstructUnaryCbrt(input)
 	}
-	panic(errors.AssertionFailedf("unhandled unary operator: %s", log.Safe(un)))
+	panic(errors.AssertionFailedf("unhandled unary operator: %s", redact.Safe(un)))
 }
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create

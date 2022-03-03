@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -268,10 +269,10 @@ func PushTxn(
 			s = "failed to push"
 		}
 		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
-			args.PusherTxn.Short(), log.Safe(s),
-			log.Safe(pushType),
+			args.PusherTxn.Short(), redact.Safe(s),
+			redact.Safe(pushType),
 			args.PusheeTxn.Short(),
-			log.Safe(reason),
+			redact.Safe(reason),
 			reply.PusheeTxn.LastActive())
 	}
 

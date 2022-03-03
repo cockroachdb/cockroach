@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ColumnDefDescs contains the non-error return values for MakeColumnDefDescs.
@@ -409,7 +409,7 @@ func (desc *wrapper) collectConstraintInfo(
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving table %d referenced in foreign key",
-					log.Safe(fk.ReferencedTableID))
+					redact.Safe(fk.ReferencedTableID))
 			}
 			referencedColumnNames, err := other.NamesForColumnIDs(fk.ReferencedColumnIDs)
 			if err != nil {
@@ -445,7 +445,7 @@ func (desc *wrapper) collectConstraintInfo(
 				col, err := desc.FindColumnWithID(colID)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-						"error finding column %d in table %s", log.Safe(colID), desc.Name)
+						"error finding column %d in table %s", redact.Safe(colID), desc.Name)
 				}
 				detail.Columns = append(detail.Columns, col.GetName())
 			}

@@ -146,7 +146,7 @@ func (h *UpsertDistinctHelper) MaybeEmitErrorOnDup(origLen, updatedLen int) {
 	if h.ErrorOnDup != "" && origLen > updatedLen {
 		// At least one duplicate row was removed from the batch, so we raise an
 		// error.
-		// TODO(yuzefovich): ErrorOnDup could be passed via log.Safe() if there
+		// TODO(yuzefovich): ErrorOnDup could be passed via redact.Safe() if there
 		// was a guarantee that it does not contain PII.
 		colexecerror.ExpectedError(pgerror.Newf(pgcode.CardinalityViolation, "%s", h.ErrorOnDup))
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // BoundAccount and BytesMonitor together form the mechanism by which
@@ -423,7 +424,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 		logcrash.ReportOrPanic(
 			ctx, &mm.settings.SV,
 			"%s: unexpected %d leftover bytes",
-			log.Safe(mm.name), log.Safe(mm.mu.curAllocated))
+			redact.Safe(mm.name), redact.Safe(mm.mu.curAllocated))
 		mm.releaseBytes(ctx, mm.mu.curAllocated)
 	}
 

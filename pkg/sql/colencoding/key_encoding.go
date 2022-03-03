@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // DecodeKeyValsToCols decodes the values that are part of the key, writing the
@@ -99,7 +99,7 @@ func decodeTableKeyToCol(
 	scratch []byte,
 ) (_ []byte, _ bool, retScratch []byte, _ error) {
 	if (dir != descpb.IndexDescriptor_ASC) && (dir != descpb.IndexDescriptor_DESC) {
-		return nil, false, scratch, errors.AssertionFailedf("invalid direction: %d", log.Safe(dir))
+		return nil, false, scratch, errors.AssertionFailedf("invalid direction: %d", redact.Safe(dir))
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {

@@ -230,7 +230,7 @@ func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Respo
 	// them.
 	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
 		log.Event(ctx, "waiting on latches without acquiring")
-		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans)
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
@@ -380,6 +380,15 @@ func shouldIgnoreLatches(req Request) bool {
 // only waits on existing latches without acquiring any new ones.
 func shouldWaitOnLatchesWithoutAcquiring(req Request) bool {
 	return req.isSingle(roachpb.Barrier)
+}
+
+// PoisonReq implements the RequestSequencer interface.
+func (m *managerImpl) PoisonReq(g *Guard) {
+	// NB: g.lg == nil is the case for requests that ignore latches, see
+	// shouldIgnoreLatches.
+	if g.lg != nil {
+		m.lm.Poison(g.lg)
+	}
 }
 
 // FinishReq implements the RequestSequencer interface.

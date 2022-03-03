@@ -108,17 +108,19 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 	return false
 }
 
-// bypassReplicaCircuitBreakerForBatch returns whether the provided
-// BatchRequest bypasses the per-Replica circuit breaker. This is the
-// case if any request in the batch is requesting to do so.
-func bypassReplicaCircuitBreakerForBatch(ba *roachpb.BatchRequest) bool {
+// signallerForBatch returns the signaller to use for this batch. This is the
+// Replica's breaker's signaller except if any request in the batch uses
+// poison.Policy_Wait, in which case it's a neverTripSignaller. In particular,
+// `(signaller).C() == nil` signals that the request bypasses the circuit
+// breakers.
+func (r *Replica) signallerForBatch(ba *roachpb.BatchRequest) signaller {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		if roachpb.BypassesReplicaCircuitBreaker(req) {
-			return true
+			return neverTripSignaller{}
 		}
 	}
-	return false
+	return r.breaker.Signal()
 }
 
 // shouldBackpressureWrites returns whether writes to the range should be

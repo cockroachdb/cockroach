@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 //go:generate mockgen -destination=mocks_generated_test.go --package=rangefeed . DB
@@ -299,7 +300,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		}
 		if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {
 			log.Warningf(ctx, "rangefeed failed %d times, restarting: %v",
-				log.Safe(i), err)
+				redact.Safe(i), err)
 		}
 		if ctx.Err() != nil {
 			log.VEventf(ctx, 1, "exiting rangefeed")

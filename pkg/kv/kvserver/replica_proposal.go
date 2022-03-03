@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
 )
@@ -158,6 +159,16 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr
 		proposal.doneCh = nil
+		// Need to remove any span from the proposal, as the signalled caller
+		// will likely finish it, and if we then end up applying this proposal
+		// we'll try to make a ChildSpan off `proposal.ctx` and this will
+		// trigger the Span use-after-finish assertions.
+		//
+		// See: https://github.com/cockroachdb/cockroach/pull/76858#issuecomment-1048179588
+		//
+		// NB: `proposal.ec.repl` might already have been cleared if we arrive here
+		// through finishApplication.
+		proposal.ctx = context.Background()
 	}
 }
 
@@ -226,7 +237,7 @@ func (r *Replica) leasePostApplyLocked(
 		switch {
 		case s2 < s1:
 			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
-				log.Safe(prevLease), log.Safe(newLease))
+				redact.Safe(prevLease), redact.Safe(newLease))
 		case s2 == s1:
 			// If the sequence numbers are the same, make sure they're actually
 			// the same lease. This can happen when callers are using
@@ -234,13 +245,13 @@ func (r *Replica) leasePostApplyLocked(
 			// splitPostApply. It can also happen during lease extensions.
 			if !prevLease.Equivalent(*newLease) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
-					log.Safe(prevLease), log.Safe(newLease))
+					redact.Safe(prevLease), redact.Safe(newLease))
 			}
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
 		case s2 > s1+1 && jumpOpt == assertNoLeaseJump:
 			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
-				log.Safe(prevLease), log.Safe(newLease))
+				redact.Safe(prevLease), redact.Safe(newLease))
 		}
 	}
 
