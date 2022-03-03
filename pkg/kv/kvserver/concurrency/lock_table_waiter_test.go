@@ -115,11 +115,12 @@ func setupLockTableWaiterTest() (
 		signal: make(chan struct{}, 1),
 	}
 	w := &lockTableWaiterImpl{
-		st:      st,
-		clock:   hlc.NewClock(manual.UnixNano, time.Nanosecond),
-		stopper: stop.NewStopper(),
-		ir:      ir,
-		lt:      &mockLockTable{},
+		nodeDesc: &roachpb.NodeDescriptor{NodeID: 1},
+		st:       st,
+		clock:    hlc.NewClock(manual.UnixNano, time.Nanosecond),
+		stopper:  stop.NewStopper(),
+		ir:       ir,
+		lt:       &mockLockTable{},
 	}
 	return w, ir, guard, manual
 }
@@ -367,6 +368,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
+						require.Zero(t, intent.ClockWhilePending)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -550,6 +552,7 @@ func testErrorWaitPush(
 					require.Equal(t, keyA, intent.Key)
 					require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 					require.Equal(t, roachpb.ABORTED, intent.Status)
+					require.Zero(t, intent.ClockWhilePending)
 					g.state = waitingState{kind: doneWaiting}
 					g.notify()
 					return nil
@@ -736,6 +739,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
+						require.Zero(t, intent.ClockWhilePending)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -856,6 +860,7 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 		require.Equal(t, keyA, intents[0].Key)
 		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
 		require.Equal(t, roachpb.ABORTED, intents[0].Status)
+		require.Zero(t, intents[0].ClockWhilePending)
 		return err1
 	}
 	err := w.WaitOn(ctx, req, g)
