@@ -41,6 +41,8 @@ message RaftSnapshotData {
     optional bytes key = 1;
     optional bytes value = 2;
     optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp local_timestamp = 4 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   }
   repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "KV"];

@@ -200,10 +200,18 @@ func normalizeEngineKeyVersionForCompare(a []byte) []byte {
 	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
 	const withLogical = withWall + mvccEncodedTimeLogicalLen
 	const withSynthetic = withLogical + mvccEncodedTimeSyntheticLen
-	if len(a) == withSynthetic {
-		// Strip the synthetic bit component from the timestamp version. The
-		// presence of the synthetic bit does not affect key ordering or equality.
-		a = a[:withLogical]
+	const withLocalWall = withLogical + mvccEncodedTimeWallLen
+	const withLocalLogical = withLocalWall + mvccEncodedTimeLogicalLen
+	if len(a) > withLogical {
+		if len(a) == withSynthetic || len(a) == withLocalWall || len(a) == withLocalLogical {
+			// If the timestamp is synthetic, strip the synthetic bit component from
+			// the timestamp version. The presence of the synthetic bit does not
+			// affect key ordering or equality. Similarly, if the version contains a
+			// local timestamp, with or without a logical component, strip it. These
+			// conditions are mutually exclusive, as a key with a synthetic timestamp
+			// will never include a local timestamp.
+			a = a[:withLogical]
+		}
 	}
 	if len(a) == withLogical {
 		// If the timestamp version contains a logical timestamp component that is
@@ -387,7 +395,7 @@ func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error
 			return nil //nolint:returnerrcheck
 		}
 		if meta.Txn != nil {
-			ts := encodeMVCCTimestamp(meta.Timestamp.ToTimestamp())
+			ts := encodeMVCCTimestamp(meta.Timestamp.ToTimestamp(), hlc.ClockTimestamp{})
 			t.updateBounds(ts)
 		}
 	}
@@ -1578,8 +1586,8 @@ func (p *Pebble) Compact() error {
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key) error {
-	bufStart := EncodeMVCCKey(MVCCKey{start, hlc.Timestamp{}})
-	bufEnd := EncodeMVCCKey(MVCCKey{end, hlc.Timestamp{}})
+	bufStart := EncodeMVCCKey(MakeMVCCMetadataKey(start))
+	bufEnd := EncodeMVCCKey(MakeMVCCMetadataKey(end))
 	return p.db.Compact(bufStart, bufEnd, true /* parallel */)
 }
 

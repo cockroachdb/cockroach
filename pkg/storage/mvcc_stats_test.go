@@ -300,8 +300,10 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			// Account for removal of TxnDidNotUpdateMeta
+			// Account for removal of TxnDidNotUpdateMeta.
 			mValSize -= 2
+			// Account for addition of LocalTimestamp.
+			mValSize += 8
 
 			expAggMS := enginepb.MVCCStats{
 				LastUpdateNanos: 4e9,

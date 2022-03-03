@@ -25,6 +25,8 @@ import (
 // code out from abstract interfaces -- See #30114 and #30001.
 
 // SplitMVCCKey returns the key and timestamp components of an encoded MVCC key.
+// For MVCC keys with a local timestamp, that is also included in the timestamp
+// component.
 func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	if len(mvccKey) == 0 {
 		return nil, nil, false
@@ -42,32 +44,48 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	return key, ts, true
 }
 
-// DecodeKey decodes an key/timestamp from its serialized representation.
-func DecodeKey(encodedKey []byte) ([]byte, hlc.Timestamp, error) {
+// DecodeKey decodes a key, MVCC timestamp, and local timestamp from its
+// serialized representation.
+func DecodeKey(encodedKey []byte) ([]byte, hlc.Timestamp, hlc.ClockTimestamp, error) {
 	key, encodedTS, ok := SplitMVCCKey(encodedKey)
 	if !ok {
-		return nil, hlc.Timestamp{}, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
+		return nil, hlc.Timestamp{}, hlc.ClockTimestamp{}, errors.Errorf(
+			"invalid encoded mvcc key: %x", encodedKey)
 	}
 	// NB: This logic is duplicated with storage.decodeMVCCTimestamp() to avoid the
 	// overhead of an additional function call (~13%).
 	var timestamp hlc.Timestamp
+	var localTimestamp hlc.ClockTimestamp
 	switch len(encodedTS) {
 	case 0:
 		// No-op.
 	case 8:
 		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+		localTimestamp = hlc.ClockTimestamp(timestamp) // see MVCCKey.Normalize
 	case 12:
 		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
 		timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		localTimestamp = hlc.ClockTimestamp(timestamp) // see MVCCKey.Normalize
 	case 13:
 		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
 		timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		// TODO(nvanbenschoten): In v23.1, remove the Synthetic flag.
 		timestamp.Synthetic = encodedTS[12] != 0
+		localTimestamp = hlc.MinClockTimestamp // see MVCCKey.Normalize
+	case 20:
+		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+		timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		localTimestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[12:20]))
+	case 24:
+		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+		timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		localTimestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[12:20]))
+		localTimestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[20:24]))
 	default:
-		return nil, hlc.Timestamp{}, errors.Errorf(
+		return nil, hlc.Timestamp{}, hlc.ClockTimestamp{}, errors.Errorf(
 			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, encodedTS)
 	}
-	return key, timestamp, nil
+	return key, timestamp, localTimestamp, nil
 }
 
 // kvLenSize is the number of bytes in the length prefix for each key/value
@@ -78,24 +96,32 @@ const kvLenSize = 8
 
 // ScanDecodeKeyValue decodes a key/value pair from a binary stream, such as in
 // an MVCCScan "batch" (this is not the RocksDB batch repr format), returning
-// the key/value, the timestamp, and the suffix of data remaining in the batch.
+// the key/value, the version timestamp, the local timestamp, and the suffix of
+// data remaining in the batch.
 func ScanDecodeKeyValue(
 	repr []byte,
-) (key []byte, ts hlc.Timestamp, value []byte, orepr []byte, err error) {
+) (
+	key []byte,
+	ts hlc.Timestamp,
+	localTs hlc.ClockTimestamp,
+	value []byte,
+	orepr []byte,
+	err error,
+) {
 	if len(repr) < kvLenSize {
-		return key, ts, nil, repr, errors.Errorf("unexpected batch EOF")
+		return key, ts, localTs, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
 	valSize := binary.LittleEndian.Uint32(repr)
 	keyEnd := binary.LittleEndian.Uint32(repr[4:kvLenSize]) + kvLenSize
 	if (keyEnd + valSize) > uint32(len(repr)) {
-		return key, ts, nil, nil, errors.Errorf("expected %d bytes, but only %d remaining",
-			keyEnd+valSize, len(repr))
+		return key, ts, localTs, nil, nil, errors.Errorf(
+			"expected %d bytes, but only %d remaining", keyEnd+valSize, len(repr))
 	}
 	rawKey := repr[kvLenSize:keyEnd]
 	value = repr[keyEnd : keyEnd+valSize]
 	repr = repr[keyEnd+valSize:]
-	key, ts, err = DecodeKey(rawKey)
-	return key, ts, value, repr, err
+	key, ts, localTs, err = DecodeKey(rawKey)
+	return key, ts, localTs, value, repr, err
 }
 
 // ScanDecodeKeyValueNoTS decodes a key/value pair from a binary stream, such as

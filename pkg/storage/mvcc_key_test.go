@@ -68,12 +68,13 @@ func TestMVCCKeys(t *testing.T) {
 func TestMVCCKeyCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a1 := MVCCKey{roachpb.Key("a"), hlc.Timestamp{Logical: 1}}
-	a2 := MVCCKey{roachpb.Key("a"), hlc.Timestamp{Logical: 2}}
-	b0 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 0}}
-	b1 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 1}}
-	b2 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 2}}
-	b2S := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 2, Synthetic: true}}
+	a1 := MVCCKey{Key: roachpb.Key("a"), Timestamp: hlc.Timestamp{Logical: 1}}
+	a2 := MVCCKey{Key: roachpb.Key("a"), Timestamp: hlc.Timestamp{Logical: 2}}
+	b0 := MVCCKey{Key: roachpb.Key("b"), Timestamp: hlc.Timestamp{Logical: 0}}
+	b1 := MVCCKey{Key: roachpb.Key("b"), Timestamp: hlc.Timestamp{Logical: 1}}
+	b2 := MVCCKey{Key: roachpb.Key("b"), Timestamp: hlc.Timestamp{Logical: 2}}
+	b2S := MVCCKey{Key: roachpb.Key("b"), Timestamp: hlc.Timestamp{Logical: 2, Synthetic: true}}
+	b2L := MVCCKey{Key: roachpb.Key("b"), Timestamp: hlc.Timestamp{Logical: 2}, LocalTimestamp: hlc.ClockTimestamp{Logical: 1}}
 
 	testcases := map[string]struct {
 		a      MVCCKey
@@ -89,6 +90,7 @@ func TestMVCCKeyCompare(t *testing.T) {
 		"set time gt empty":   {b1, b0, 1},  // empty MVCC timestamps sort before non-empty
 		"key time precedence": {a1, b2, -1}, // a before b, but 2 before 1; key takes precedence
 		"synthetic equal":     {b2, b2S, 0}, // synthetic bit does not affect ordering
+		"local equal":         {b2, b2L, 0}, // local timestamp does not affect ordering
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -155,27 +157,208 @@ func (k randMVCCKey) Generate(r *rand.Rand, size int) reflect.Value {
 		// NB: the zero timestamp cannot be synthetic.
 		k.Timestamp.Synthetic = r.Intn(2) != 0
 	}
+	if r.Intn(2) != 0 {
+		k.LocalTimestamp.WallTime = r.Int63n(5)
+		k.LocalTimestamp.Logical = r.Int31n(5)
+	}
 	return reflect.ValueOf(k)
 }
 
-func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
+func TestEncodeDecodeMVCCKeyAndTimestampsWithLength(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testcases := map[string]struct {
 		key     string
 		ts      hlc.Timestamp
+		localTs hlc.ClockTimestamp
 		encoded string // hexadecimal
 	}{
-		"empty":                  {"", hlc.Timestamp{}, "00"},
-		"only key":               {"foo", hlc.Timestamp{}, "666f6f00"},
-		"no key":                 {"", hlc.Timestamp{WallTime: 1643550788737652545}, "0016cf10bc0505574109"},
-		"walltime":               {"foo", hlc.Timestamp{WallTime: 1643550788737652545}, "666f6f0016cf10bc0505574109"},
-		"logical":                {"foo", hlc.Timestamp{Logical: 65535}, "666f6f0000000000000000000000ffff0d"},
-		"synthetic":              {"foo", hlc.Timestamp{Synthetic: true}, "666f6f00000000000000000000000000010e"},
-		"walltime and logical":   {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535}, "666f6f0016cf10bc050557410000ffff0d"},
-		"walltime and synthetic": {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Synthetic: true}, "666f6f0016cf10bc0505574100000000010e"},
-		"logical and synthetic":  {"foo", hlc.Timestamp{Logical: 65535, Synthetic: true}, "666f6f0000000000000000000000ffff010e"},
-		"all":                    {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true}, "666f6f0016cf10bc050557410000ffff010e"},
+		"empty": {
+			key:     "",
+			ts:      hlc.Timestamp{},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "00",
+		},
+		"only key": {
+			key:     "foo",
+			ts:      hlc.Timestamp{},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f00",
+		},
+		"no key": {
+			key:     "",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "0016cf10bc0505574109",
+		},
+		"walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f0016cf10bc0505574109",
+		},
+		"logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Logical: 65535},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f0000000000000000000000ffff0d",
+		},
+		"synthetic": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Synthetic: true},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f00000000000000000000000000010e",
+		},
+		"walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f0016cf10bc050557410000ffff0d",
+		},
+		"walltime and synthetic": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Synthetic: true},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f0016cf10bc0505574100000000010e",
+		},
+		"logical and synthetic": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Logical: 65535, Synthetic: true},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f0000000000000000000000ffff010e",
+		},
+		"walltime, logical, and synthetic": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true},
+			localTs: hlc.ClockTimestamp{},
+			encoded: "666f6f0016cf10bc050557410000ffff010e",
+		},
+		"no timestamp, local walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545},
+			// Implicit local timestamp.
+			encoded: "666f6f00",
+		},
+		"no timestamp, local logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{},
+			localTs: hlc.ClockTimestamp{Logical: 65535},
+			// Implicit local timestamp.
+			encoded: "666f6f00",
+		},
+		"no timestamp, local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65535},
+			// Implicit local timestamp.
+			encoded: "666f6f00",
+		},
+		"walltime, smaller local walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652544},
+			encoded: "666f6f0016cf10bc050557410000000016cf10bc0505574015",
+		},
+		"walltime, larger local walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652546},
+			// Implicit local timestamp.
+			encoded: "666f6f0016cf10bc0505574109",
+		},
+		"walltime, local logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{Logical: 65535},
+			encoded: "666f6f0016cf10bc050557410000000000000000000000000000ffff19",
+		},
+		"walltime, smaller local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652544, Logical: 65535},
+			encoded: "666f6f0016cf10bc050557410000000016cf10bc050557400000ffff19",
+		},
+		"walltime, larger local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65535},
+			// Implicit local timestamp.
+			encoded: "666f6f0016cf10bc0505574109",
+		},
+		"logical, local walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Logical: 65535},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545},
+			// Implicit local timestamp.
+			encoded: "666f6f0000000000000000000000ffff0d",
+		},
+		"logical, smaller local logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Logical: 65535},
+			localTs: hlc.ClockTimestamp{Logical: 65534},
+			encoded: "666f6f0000000000000000000000ffff00000000000000000000fffe19",
+		},
+		"logical, larger local logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Logical: 65535},
+			localTs: hlc.ClockTimestamp{Logical: 65536},
+			// Implicit local timestamp.
+			encoded: "666f6f0000000000000000000000ffff0d",
+		},
+		"logical, local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{Logical: 65535},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65535},
+			// Implicit local timestamp.
+			encoded: "666f6f0000000000000000000000ffff0d",
+		},
+		"walltime and logical, smaller local walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652544},
+			encoded: "666f6f0016cf10bc050557410000ffff16cf10bc0505574015",
+		},
+		"walltime and logical, larger local walltime": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652546},
+			// Implicit local timestamp.
+			encoded: "666f6f0016cf10bc050557410000ffff0d",
+		},
+		"walltime and logical, local logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+			localTs: hlc.ClockTimestamp{Logical: 65535},
+			encoded: "666f6f0016cf10bc050557410000ffff00000000000000000000ffff19",
+		},
+		"walltime and logical, smaller local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65534},
+			encoded: "666f6f0016cf10bc050557410000ffff16cf10bc050557410000fffe19",
+		},
+		"walltime and logical, larger local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65536},
+			// Implicit local timestamp.
+			encoded: "666f6f0016cf10bc050557410000ffff0d",
+		},
+		"walltime, logical, and synthetic, smaller local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65534},
+			// Implicit local timestamp.
+			encoded: "666f6f0016cf10bc050557410000ffff010e",
+		},
+		"walltime, logical, and synthetic, larger local walltime and logical": {
+			key:     "foo",
+			ts:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true},
+			localTs: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65536},
+			// Implicit local timestamp.
+			encoded: "666f6f0016cf10bc050557410000ffff010e",
+		},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -187,17 +370,26 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 				expect = nil
 			}
 
-			mvccKey := MVCCKey{Key: []byte(tc.key), Timestamp: tc.ts}
+			mvccKey := MVCCKey{
+				Key:            []byte(tc.key),
+				Timestamp:      tc.ts,
+				LocalTimestamp: tc.localTs,
+			}
 
 			encoded := EncodeMVCCKey(mvccKey)
 			require.Equal(t, expect, encoded)
 			require.Equal(t, len(encoded), encodedMVCCKeyLength(mvccKey))
 			require.Equal(t, len(encoded),
-				encodedMVCCKeyPrefixLength(mvccKey.Key)+encodedMVCCTimestampSuffixLength(mvccKey.Timestamp))
+				encodedMVCCKeyPrefixLength(mvccKey.Key)+
+					encodedMVCCTimestampSuffixLength(mvccKey.Timestamp, mvccKey.LocalTimestamp))
 
+			expDecoded := mvccKey.Normalize()
 			decoded, err := DecodeMVCCKey(encoded)
 			require.NoError(t, err)
-			require.Equal(t, mvccKey, decoded)
+			require.Equal(t, expDecoded, decoded)
+
+			encoded = EncodeMVCCKey(decoded)
+			require.Equal(t, expect, encoded)
 
 			// Test EncodeMVCCKeyPrefix.
 			expectPrefix, err := hex.DecodeString(tc.encoded[:2*len(tc.key)+2])
@@ -212,11 +404,11 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 				expectTS = nil
 			}
 
-			encodedTS := EncodeMVCCTimestampSuffix(tc.ts)
+			encodedTS := EncodeMVCCTimestampSuffix(tc.ts, tc.localTs)
 			require.Equal(t, expectTS, encodedTS)
-			require.Equal(t, len(encodedTS), encodedMVCCTimestampSuffixLength(tc.ts))
+			require.Equal(t, len(encodedTS), encodedMVCCTimestampSuffixLength(tc.ts, tc.localTs))
 
-			decodedTS, err := decodeMVCCTimestampSuffix(encodedTS)
+			decodedTS, _, err := decodeMVCCTimestampSuffix(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
 
@@ -225,11 +417,11 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 				expectTS = expectTS[:len(expectTS)-1]
 			}
 
-			encodedTS = encodeMVCCTimestamp(tc.ts)
+			encodedTS = encodeMVCCTimestamp(tc.ts, tc.localTs)
 			require.Equal(t, expectTS, encodedTS)
-			require.Equal(t, len(encodedTS), encodedMVCCTimestampLength(tc.ts))
+			require.Equal(t, len(encodedTS), encodedMVCCTimestampLength(tc.ts, tc.localTs))
 
-			decodedTS, err = decodeMVCCTimestamp(encodedTS)
+			decodedTS, _, err = decodeMVCCTimestamp(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
 		})
@@ -245,17 +437,61 @@ func TestDecodeUnnormalizedMVCCKey(t *testing.T) {
 		equalToNormal bool
 	}{
 		"zero logical": {
-			encoded:       "666f6f0016cf10bc05055741000000000d",
-			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 0}},
+			encoded: "666f6f0016cf10bc05055741000000000d",
+			expected: MVCCKey{
+				Key:            []byte("foo"),
+				Timestamp:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 0},
+				LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 0},
+			},
 			equalToNormal: true,
 		},
 		"zero walltime and logical": {
-			encoded:  "666f6f000000000000000000000000000d",
-			expected: MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 0}},
+			encoded: "666f6f000000000000000000000000000d",
+			expected: MVCCKey{
+				Key:            []byte("foo"),
+				Timestamp:      hlc.Timestamp{WallTime: 0, Logical: 0},
+				LocalTimestamp: hlc.ClockTimestamp{WallTime: 0, Logical: 0},
+			},
 			// We could normalize this form in EngineKeyEqual and EngineKeyCompare,
 			// but doing so is not worth losing the fast-path byte comparison between
 			// keys that only contain (at most) a walltime.
 			equalToNormal: false,
+		},
+		"zero local logical": {
+			encoded: "666f6f0016cf10bc050557410000ffff16cf10bc050557410000000019",
+			expected: MVCCKey{
+				Key:            []byte("foo"),
+				Timestamp:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+				LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 0},
+			},
+			equalToNormal: true,
+		},
+		"zero local walltime and logical": {
+			encoded: "666f6f0016cf10bc050557410000ffff00000000000000000000000019",
+			expected: MVCCKey{
+				Key:            []byte("foo"),
+				Timestamp:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+				LocalTimestamp: hlc.ClockTimestamp{WallTime: 0, Logical: 0},
+			},
+			equalToNormal: true,
+		},
+		"larger local walltime": {
+			encoded: "666f6f0016cf10bc050557410000ffff16cf10bc0505574215",
+			expected: MVCCKey{
+				Key:            []byte("foo"),
+				Timestamp:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+				LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652546, Logical: 0},
+			},
+			equalToNormal: true,
+		},
+		"larger local walltime and logical": {
+			encoded: "666f6f0016cf10bc050557410000ffff16cf10bc050557420000ffff19",
+			expected: MVCCKey{
+				Key:            []byte("foo"),
+				Timestamp:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535},
+				LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652546, Logical: 65535},
+			},
+			equalToNormal: true,
 		},
 	}
 	for name, tc := range testcases {
@@ -274,6 +510,29 @@ func TestDecodeUnnormalizedMVCCKey(t *testing.T) {
 			require.Equal(t, tc.equalToNormal, EngineKeyCompare(encoded, reencoded) == 0)
 		})
 	}
+}
+
+// TestEncodeDecodeMVCCKeySyntheticAndLocalDoesNotRoundTrip demonstrates that an
+// MVCC key that has an MVCC timestamp with a synthetic bit and a local timestamp
+// does not perfectly round trip. This is intentional, as the synthetic bit
+// supersedes the local timestamp.
+func TestEncodeDecodeMVCCKeySyntheticAndLocalDoesNotRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mvccKey := MVCCKey{
+		Key:            []byte("key"),
+		Timestamp:      hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true},
+		LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 65535},
+	}
+
+	encoded := EncodeMVCCKey(mvccKey)
+	decoded, err := DecodeMVCCKey(encoded)
+	require.NoError(t, err)
+
+	// The key does not round trip because it drops the local timestamp.
+	require.NotEqual(t, mvccKey, decoded)
+	mvccKey.LocalTimestamp = hlc.MinClockTimestamp
+	require.Equal(t, mvccKey, decoded)
 }
 
 func TestDecodeMVCCKeyErrors(t *testing.T) {
@@ -315,7 +574,7 @@ func TestDecodeMVCCTimestampSuffixErrors(t *testing.T) {
 			encoded, err := hex.DecodeString(tc.encoded)
 			require.NoError(t, err)
 
-			_, err = decodeMVCCTimestampSuffix(encoded)
+			_, _, err = decodeMVCCTimestampSuffix(encoded)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.expectErr)
 		})
@@ -331,20 +590,26 @@ func BenchmarkEncodeMVCCKey(b *testing.B) {
 		"long":  bytes.Repeat([]byte{1}, 4096),
 	}
 	timestamps := map[string]hlc.Timestamp{
-		"empty":            {},
-		"walltime":         {WallTime: 1643550788737652545},
-		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
-		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
+		"empty":                      {},
+		"walltime":                   {WallTime: 1643550788737652545},
+		"walltime+logical":           {WallTime: 1643550788737652545, Logical: 4096},
+		"walltime+logical+synthetic": {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
 	}
 	buf := make([]byte, 0, 65536)
 	for keyDesc, key := range keys {
 		for tsDesc, ts := range timestamps {
-			mvccKey := MVCCKey{Key: key, Timestamp: ts}
-			b.Run(fmt.Sprintf("key=%s/ts=%s", keyDesc, tsDesc), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					EncodeMVCCKeyToBuf(buf, mvccKey)
+			for localTsDesc, localTs := range timestamps {
+				if localTs.Synthetic {
+					continue // local timestamp cannot be synthetic
 				}
-			})
+				mvccKey := MVCCKey{Key: key, Timestamp: ts, LocalTimestamp: hlc.ClockTimestamp(localTs)}
+				name := fmt.Sprintf("key=%s/ts=%s/localTs=%s", keyDesc, tsDesc, localTsDesc)
+				b.Run(name, func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						EncodeMVCCKeyToBuf(buf, mvccKey)
+					}
+				})
+			}
 		}
 	}
 	benchmarkEncodeMVCCKeyResult = buf // avoid compiler optimizing away function call
@@ -359,24 +624,32 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 		"long":  bytes.Repeat([]byte{1}, 4096),
 	}
 	timestamps := map[string]hlc.Timestamp{
-		"empty":            {},
-		"walltime":         {WallTime: 1643550788737652545},
-		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
-		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
+		"empty":                      {},
+		"walltime":                   {WallTime: 1643550788737652545},
+		"walltime+logical":           {WallTime: 1643550788737652545, Logical: 4096},
+		"walltime+logical+synthetic": {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
 	}
 	var mvccKey MVCCKey
 	var err error
 	for keyDesc, key := range keys {
 		for tsDesc, ts := range timestamps {
-			encoded := EncodeMVCCKey(MVCCKey{Key: key, Timestamp: ts})
-			b.Run(fmt.Sprintf("key=%s/ts=%s", keyDesc, tsDesc), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					mvccKey, err = DecodeMVCCKey(encoded)
-					if err != nil { // for performance
-						require.NoError(b, err)
-					}
+			for localTsDesc, localTs := range timestamps {
+				if localTs.Synthetic {
+					continue // local timestamp cannot be synthetic
 				}
-			})
+				encoded := EncodeMVCCKey(MVCCKey{
+					Key: key, Timestamp: ts, LocalTimestamp: hlc.ClockTimestamp(localTs),
+				})
+				name := fmt.Sprintf("key=%s/ts=%s/localTs=%s", keyDesc, tsDesc, localTsDesc)
+				b.Run(name, func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						mvccKey, err = DecodeMVCCKey(encoded)
+						if err != nil { // for performance
+							require.NoError(b, err)
+						}
+					}
+				})
+			}
 		}
 	}
 	benchmarkDecodeMVCCKeyResult = mvccKey // avoid compiler optimizing away function call

@@ -389,6 +389,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			for i := range kvs {
 				if i < len(expectedKVs) {
 					expectedKVs[i].Key.Timestamp = kvs[i].Key.Timestamp
+					expectedKVs[i].Key.LocalTimestamp = hlc.ClockTimestamp{}
 				}
 			}
 

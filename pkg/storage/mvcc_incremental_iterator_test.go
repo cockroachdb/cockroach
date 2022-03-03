@@ -40,7 +40,7 @@ import (
 const all, latest = true, false
 
 func makeKVT(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
-	return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
+	return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}.Normalize(), Value: value}
 }
 
 func makeKVTxn(
@@ -1372,14 +1372,14 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	kvs, err := slurpKVsInTimeRange(db, kA, ts0, ts1)
 	require.NoError(t, err)
 	require.Equal(t, []MVCCKeyValue{
-		{Key: MVCCKey{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
+		{Key: MVCCKey{Key: kA, Timestamp: ts1, LocalTimestamp: hlc.ClockTimestamp(ts1)}, Value: vA1.RawBytes},
 	}, kvs)
 	// kA has a value at ts2. Again the intent is too new (ts3), so ignore.
 	kvs, err = slurpKVsInTimeRange(db, kA, ts0, ts2)
 	require.NoError(t, err)
 	require.Equal(t, []MVCCKeyValue{
-		{Key: MVCCKey{Key: kA, Timestamp: ts2}, Value: vA2.RawBytes},
-		{Key: MVCCKey{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
+		{Key: MVCCKey{Key: kA, Timestamp: ts2, LocalTimestamp: hlc.ClockTimestamp(ts2)}, Value: vA2.RawBytes},
+		{Key: MVCCKey{Key: kA, Timestamp: ts1, LocalTimestamp: hlc.ClockTimestamp(ts1)}, Value: vA1.RawBytes},
 	}, kvs)
 	// At ts3, we should see the new intent
 	_, err = slurpKVsInTimeRange(db, kA, ts0, ts3)
@@ -1391,7 +1391,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	kvs, err = slurpKVsInTimeRange(db, kB, ts0, ts1)
 	require.NoError(t, err)
 	require.Equal(t, []MVCCKeyValue{
-		{Key: MVCCKey{Key: kB, Timestamp: ts1}, Value: vB1.RawBytes},
+		{Key: MVCCKey{Key: kB, Timestamp: ts1, LocalTimestamp: hlc.ClockTimestamp(ts1)}, Value: vB1.RawBytes},
 	}, kvs)
 
 	// Sanity check that we see the still unresolved intent for kC ts1.

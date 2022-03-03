@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -146,8 +147,8 @@ func (p *pebbleIterator) init(
 	doClone := iterToClone != nil
 	if !opts.MaxTimestampHint.IsEmpty() {
 		doClone = false
-		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint))
-		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint))
+		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint, hlc.ClockTimestamp{}))
+		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint, hlc.ClockTimestamp{}))
 		p.options.TableFilter = func(userProps map[string]string) bool {
 			tableMinTS := userProps["crdb.ts.min"]
 			if len(tableMinTS) == 0 {

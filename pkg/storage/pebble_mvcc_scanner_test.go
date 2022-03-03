@@ -113,7 +113,11 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	}))
 	expectedKVs := make([]kv, len(keys))
 	for i := range expectedKVs {
-		expectedKVs[i].k = MVCCKey{Key: keys[i], Timestamp: hlc.Timestamp{WallTime: 2}}
+		expectedKVs[i].k = MVCCKey{
+			Key:            keys[i],
+			Timestamp:      hlc.Timestamp{WallTime: 2},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 2},
+		}
 		expectedKVs[i].v = []byte("2")
 	}
 	require.Equal(t, expectedKVs, kvs)
