@@ -345,11 +345,12 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curUnsafeKey MVCCKey
-	curRawKey    []byte
-	curValue     []byte
-	results      pebbleResults
-	intents      pebble.Batch
+	curUnsafeKey   MVCCKey
+	curRawKey      []byte
+	curUnsafeValue MVCCValue
+	curRawValue    []byte
+	results        pebbleResults
+	intents        pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -548,11 +549,19 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 // continue.
 func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 	if !p.curUnsafeKey.Timestamp.IsEmpty() {
+		if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
+			return false
+		} else if extended {
+			if !p.decodeCurrentValueExtended() {
+				return false
+			}
+		}
+
 		// ts < read_ts
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 		}
 
 		// ts == read_ts
@@ -573,7 +582,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 
 			// 3. There is no intent and our read timestamp is equal to the most
 			// recent version's timestamp.
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 		}
 
 		// ts > read_ts
@@ -595,7 +604,8 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
+			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey)
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 
@@ -613,13 +623,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		return p.seekVersion(ctx, p.ts, false)
 	}
 
-	if len(p.curValue) == 0 {
-		p.err = errors.Errorf("zero-length mvcc metadata")
-		return false
-	}
-	err := protoutil.Unmarshal(p.curValue, &p.meta)
-	if err != nil {
-		p.err = errors.Wrap(err, "unable to decode MVCCMetadata")
+	if !p.decodeCurrentMetadata() {
 		return false
 	}
 	if len(p.meta.RawBytes) != 0 {
@@ -675,11 +679,11 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// p.intents is a pebble.Batch which grows its byte slice capacity in
 		// chunks to amortize allocations. The memMonitor is under-counting here
 		// by only accounting for the key and value bytes.
-		if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curValue))); p.err != nil {
+		if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curRawValue))); p.err != nil {
 			p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
 			return false
 		}
-		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
+		p.err = p.intents.Set(p.curRawKey, p.curRawValue, nil)
 		if p.err != nil {
 			return false
 		}
@@ -703,11 +707,11 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// p.intents is a pebble.Batch which grows its byte slice capacity in
 		// chunks to amortize allocations. The memMonitor is under-counting here
 		// by only accounting for the key and value bytes.
-		if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curValue))); p.err != nil {
+		if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curRawValue))); p.err != nil {
 			p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
 			return false
 		}
-		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
+		p.err = p.intents.Set(p.curRawKey, p.curRawValue, nil)
 		if p.err != nil {
 			return false
 		}
@@ -899,19 +903,19 @@ func (p *pebbleMVCCScanner) advanceKeyAtNewKey(key []byte) bool {
 // p.tombstones is true. Advances to the next key unless we've reached the max
 // results limit.
 func (p *pebbleMVCCScanner) addAndAdvance(
-	ctx context.Context, key roachpb.Key, rawKey []byte, val []byte,
+	ctx context.Context, key roachpb.Key, rawKey []byte, rawValue []byte,
 ) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
-	if len(val) == 0 && !p.tombstones {
+	if len(rawValue) == 0 && !p.tombstones {
 		return p.advanceKey()
 	}
 
 	// Check if adding the key would exceed a limit.
 	if p.targetBytes > 0 && (p.results.bytes >= p.targetBytes || (p.targetBytesAvoidExcess &&
-		p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(val))) > p.targetBytes)) {
+		p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(rawValue))) > p.targetBytes)) {
 		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
-		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(val)))
+		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(rawValue)))
 
 	} else if p.maxKeys > 0 && p.results.count >= p.maxKeys {
 		p.resumeReason = roachpb.RESUME_KEY_LIMIT
@@ -943,7 +947,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 		}
 	}
 
-	if err := p.results.put(ctx, rawKey, val, p.memAccount); err != nil {
+	if err := p.results.put(ctx, rawKey, rawValue, p.memAccount); err != nil {
 		p.err = errors.Wrapf(err, "scan with start key %s", p.start)
 		return false
 	}
@@ -999,8 +1003,15 @@ func (p *pebbleMVCCScanner) seekVersion(
 		}
 		if p.curUnsafeKey.Timestamp.LessEq(seekTS) {
 			p.incrementItersBeforeSeek()
+			if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
+				return false
+			} else if extended {
+				if !p.decodeCurrentValueExtended() {
+					return false
+				}
+			}
 			if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
-				return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
+				return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 			}
 			// Iterate through uncertainty interval. Though we found a value in
 			// the interval, it may not be uncertainty. This is because seekTS
@@ -1010,7 +1021,8 @@ func (p *pebbleMVCCScanner) seekVersion(
 			// are only uncertain if their timestamps are synthetic. Meanwhile,
 			// any value with a time in the range (ts, uncertainty.LocalLimit]
 			// is uncertain.
-			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
+			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey)
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 		}
@@ -1024,13 +1036,21 @@ func (p *pebbleMVCCScanner) seekVersion(
 		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
 			return p.advanceKeyAtNewKey(origKey)
 		}
+		if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
+			return false
+		} else if extended {
+			if !p.decodeCurrentValueExtended() {
+				return false
+			}
+		}
 		if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 		}
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty
 		// error.
-		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
+		localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey)
+		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 			return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 		}
 		if !p.iterNext() {
@@ -1039,7 +1059,9 @@ func (p *pebbleMVCCScanner) seekVersion(
 	}
 }
 
-// Updates cur{RawKey, Key, TS} to match record the iterator is pointing to.
+// Updates cur{RawKey, UnsafeKey, RawValue} to match record the iterator is
+// pointing to. Callers should call decodeCurrent{Metadata, Value} to decode
+// the raw value if they need it.
 func (p *pebbleMVCCScanner) updateCurrent() bool {
 	if !p.iterValid() {
 		return false
@@ -1050,10 +1072,43 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	var err error
 	p.curUnsafeKey, err = DecodeMVCCKey(p.curRawKey)
 	if err != nil {
-		panic(err)
+		p.err = errors.Wrap(err, "unable to decode MVCCKey")
+		return false
 	}
-	p.curValue = p.parent.UnsafeValue()
+	p.curRawValue = p.parent.UnsafeValue()
+
+	// Reset decoded value to avoid bugs.
+	if util.RaceEnabled {
+		p.meta = enginepb.MVCCMetadata{}
+		p.curUnsafeValue = MVCCValue{}
+	}
 	return true
+}
+
+func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
+	if len(p.curRawValue) == 0 {
+		p.err = errors.Errorf("zero-length mvcc metadata")
+		return false
+	}
+	err := protoutil.Unmarshal(p.curRawValue, &p.meta)
+	if err != nil {
+		p.err = errors.Wrap(err, "unable to decode MVCCMetadata")
+		return false
+	}
+	return true
+}
+
+//gcassert:inline
+func (p *pebbleMVCCScanner) tryDecodeCurrentValueSimple() (extended, valid bool) {
+	var simple bool
+	p.curUnsafeValue, simple, p.err = tryDecodeSimpleMVCCValue(p.curRawValue)
+	return !simple, p.err == nil
+}
+
+//gcassert:inline
+func (p *pebbleMVCCScanner) decodeCurrentValueExtended() bool {
+	p.curUnsafeValue, p.err = decodeExtendedMVCCValue(p.curRawValue)
+	return p.err == nil
 }
 
 func (p *pebbleMVCCScanner) iterValid() bool {
@@ -1138,9 +1193,9 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 		// curRawKey, curKey and curValue to point to this saved data. We use a
 		// single buffer for this purpose: savedBuf.
 		p.savedBuf = append(p.savedBuf[:0], p.curRawKey...)
-		p.savedBuf = append(p.savedBuf, p.curValue...)
+		p.savedBuf = append(p.savedBuf, p.curRawValue...)
 		p.curRawKey = p.savedBuf[:len(p.curRawKey)]
-		p.curValue = p.savedBuf[len(p.curRawKey):]
+		p.curRawValue = p.savedBuf[len(p.curRawKey):]
 		// The raw key is always a prefix of the encoded MVCC key. Take advantage of this to
 		// sub-slice the raw key directly, instead of calling SplitMVCCKey.
 		p.curUnsafeKey.Key = p.curRawKey[:len(p.curUnsafeKey.Key)]

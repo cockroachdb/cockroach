@@ -273,8 +273,12 @@ func makeValidator(kvs *Engine) (*validator, error) {
 			err = errors.CombineErrors(err, iterErr)
 			return
 		}
-		v := roachpb.Value{RawBytes: value}
-		if v.GetTag() != roachpb.ValueType_UNKNOWN {
+		v, decodeErr := storage.DecodeMVCCValue(value)
+		if err != nil {
+			err = errors.CombineErrors(err, decodeErr)
+			return
+		}
+		if v.Value.GetTag() != roachpb.ValueType_UNKNOWN {
 			valueStr := mustGetStringValue(value)
 			if existing, ok := kvByValue[valueStr]; ok {
 				// TODO(dan): This may be too strict. Some operations (db.Run on a
@@ -287,7 +291,7 @@ func makeValidator(kvs *Engine) (*validator, error) {
 			// globally over a run, so there's a 1:1 relationship between a value that
 			// was written and the operation that wrote it.
 			kvByValue[valueStr] = storage.MVCCKeyValue{Key: key, Value: value}
-		} else if len(value) == 0 {
+		} else if !v.Value.IsPresent() {
 			rawKey := string(key.Key)
 			if _, ok := tombstonesForKey[rawKey]; !ok {
 				tombstonesForKey[rawKey] = make(map[hlc.Timestamp]bool)
@@ -914,14 +918,18 @@ func resultIsErrorStr(r Result, msgRE string) bool {
 }
 
 func mustGetStringValue(value []byte) string {
-	if len(value) == 0 {
-		return `<nil>`
-	}
-	v, err := roachpb.Value{RawBytes: value}.GetBytes()
+	v, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		panic(errors.Wrapf(err, "decoding %x", value))
 	}
-	return string(v)
+	if v.IsTombstone() {
+		return `<nil>`
+	}
+	b, err := v.Value.GetBytes()
+	if err != nil {
+		panic(errors.Wrapf(err, "decoding %x", value))
+	}
+	return string(b)
 }
 
 func validReadTimes(

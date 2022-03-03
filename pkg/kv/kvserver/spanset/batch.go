@@ -612,11 +612,18 @@ func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value []byte) error {
+func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value storage.MVCCValue) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}
 	return s.w.PutMVCC(key, value)
+}
+
+func (s spanSetWriter) PutRawMVCC(key storage.MVCCKey, value []byte) error {
+	if err := s.checkAllowed(key.Key); err != nil {
+		return err
+	}
+	return s.w.PutRawMVCC(key, value)
 }
 
 func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
