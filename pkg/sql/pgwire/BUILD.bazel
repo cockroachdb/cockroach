@@ -108,6 +108,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/colconv",
+        "//pkg/sql/lex",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/hba",
         "//pkg/sql/pgwire/identmap",
