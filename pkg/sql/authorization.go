@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -401,7 +402,7 @@ func MemberOfWithAdminOption(
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, ie, txn)
+		return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
 	}
 
 	// We loop in case the table version changes while we're looking up memberships.
@@ -428,7 +429,7 @@ func MemberOfWithAdminOption(
 		}
 
 		// Lookup memberships outside the lock.
-		memberships, err := resolveMemberOfWithAdminOption(ctx, member, ie, txn)
+		memberships, err := resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
 		if err != nil {
 			return nil, err
 		}
@@ -451,7 +452,7 @@ func MemberOfWithAdminOption(
 			}
 			if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
 				// If there is no memory available to cache the entry, we can still
-				// proceed so that the query has a chance to succeed..
+				// proceed so that the query has a chance to succeed.
 				log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
 			} else {
 				roleMembersCache.userCache[member] = memberships
@@ -464,14 +465,52 @@ func MemberOfWithAdminOption(
 	}
 }
 
+var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.resolve_membership_single_scan.enabled",
+	"determines whether to populate the role membership cache with a single scan",
+	true,
+).WithPublic()
+
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
-// TODO(mberhault): this is the naive way and performs a full lookup for each user,
-// we could save detailed memberships (as opposed to fully expanded) and reuse them
-// across users. We may then want to lookup more than just this user.
 func resolveMemberOfWithAdminOption(
-	ctx context.Context, member security.SQLUsername, ie sqlutil.InternalExecutor, txn *kv.Txn,
+	ctx context.Context,
+	member security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	singleQuery bool,
 ) (map[security.SQLUsername]bool, error) {
 	ret := map[security.SQLUsername]bool{}
+	if singleQuery {
+		type membership struct {
+			role    security.SQLUsername
+			isAdmin bool
+		}
+		memberToRoles := make(map[security.SQLUsername][]membership)
+		if err := forEachRoleMembership(ctx, ie, txn, func(role, member security.SQLUsername, isAdmin bool) error {
+			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		// Recurse through all roles associated with the member.
+		var recurse func(u security.SQLUsername)
+		recurse = func(u security.SQLUsername) {
+			for _, membership := range memberToRoles[u] {
+				// If the parent role was seen before, we still might need to update
+				// the isAdmin flag for that role, but there's no need to recurse
+				// through the role's ancestry again.
+				prev, alreadySeen := ret[membership.role]
+				ret[membership.role] = prev || membership.isAdmin
+				if !alreadySeen {
+					recurse(membership.role)
+				}
+			}
+		}
+		recurse(member)
+		return ret, nil
+	}
 
 	// Keep track of members we looked up.
 	visited := map[security.SQLUsername]struct{}{}
