@@ -1,0 +1,2 @@
+alter_database_drop_secondary_region ::=
+	'ALTER' 'DATABASE' database_name 'DROP' 'SECONDARY' 'REGION'
