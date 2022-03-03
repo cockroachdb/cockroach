@@ -251,7 +251,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	// If this is the first flush and is due to size, if it was unsorted then
 	// create initial splits if requested before flushing.
-	if b.flushCounts.total == 0 && forSize && b.initialSplits != 0 && !b.sorted {
+	if b.flushCounts.total == 1 && forSize && b.initialSplits != 0 && !b.sorted {
 		if err := b.createInitialSplits(ctx); err != nil {
 			return err
 		}
