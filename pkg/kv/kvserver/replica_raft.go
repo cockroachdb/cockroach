@@ -1188,7 +1188,7 @@ func (r *Replica) refreshProposalsLocked(
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 				p.finishApplication(ctx, proposalResult{
 					Err: roachpb.NewError(
-						roachpb.NewAmbiguousResultError(
+						roachpb.NewAmbiguousResultErrorf(
 							"unable to determine whether command was applied via snapshot",
 						),
 					),
@@ -1257,7 +1257,7 @@ func (r *Replica) refreshProposalsLocked(
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, proposalResult{
-				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
+				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err)),
 			})
 		}
 	}
@@ -1271,8 +1271,7 @@ func (r *Replica) poisonInflightLatches(err error) {
 	for _, p := range r.mu.proposals {
 		p.ec.poison()
 		if p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
-			aErr := roachpb.NewAmbiguousResultError("circuit breaker tripped")
-			aErr.WrappedErr = roachpb.NewError(err)
+			aErr := roachpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.
 			p.signalProposalResult(proposalResult{Err: roachpb.NewError(aErr)})

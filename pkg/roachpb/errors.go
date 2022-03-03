@@ -654,27 +654,65 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...Rang
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
 
-// NewAmbiguousResultError initializes a new AmbiguousResultError with
-// an explanatory message.
-func NewAmbiguousResultError(msg string) *AmbiguousResultError {
-	return &AmbiguousResultError{Message: msg}
-}
-
 // NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
 // an explanatory format and set of arguments.
 func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
-	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
+	return NewAmbiguousResultError(errors.Errorf(format, args...))
 }
 
+// NewAmbiguousResultError returns an AmbiguousResultError whose TriggeringError
+// method returns the supplied error. AmbiguousResultError does *not* implement
+// `errors.Wrapper` (or any of its analogues), see TriggeringError.
+func NewAmbiguousResultError(err error) *AmbiguousResultError {
+	return &AmbiguousResultError{
+		EncodedError:      errors.EncodeError(context.Background(), err),
+		DeprecatedMessage: err.Error(),
+	}
+}
+
+var _ errors.SafeFormatter = (*AmbiguousResultError)(nil)
+var _ fmt.Formatter = (*AmbiguousResultError)(nil)
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *AmbiguousResultError) SafeFormatError(p errors.Printer) error {
+	p.Printf("result is ambiguous: %s", e.TriggeringError())
+	return nil
+}
+
+// Format implements fmt.Formatter.
+func (e *AmbiguousResultError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// Error implements error.
 func (e *AmbiguousResultError) Error() string {
-	return e.message(nil)
+	return fmt.Sprint(e)
+}
+
+// TriggeringError returns the error that triggered the ambiguous result. This
+// intentionally isn't implemented through `errors.Wrapper` to avoid precedence
+// bugs such as in this example, where we wouldn't handle the ambiguous result
+// due to the matching order:
+//
+//   err := NewAmbiguousResultErrorf("foo")
+//   err.EncodedError = errors.EncodeError(context.Background(), &FooError{})
+//   if errors.HasType(err, (*FooError)(nil)) {
+//     /* handle FooError */
+//   } else if errors.HasType(err, (*AmbiguousResultError)(nil)) {
+//     /* handle ambiguous result */
+//   }
+//
+// In other words, we're making unwrapping through an AmbiguousResultError an
+// explicit choice.
+//
+// This method never returns nil.
+func (e *AmbiguousResultError) TriggeringError() error {
+	if e.EncodedError.Error == nil {
+		return errors.New("unknown") // can be removed in v22.2
+	}
+	return errors.DecodeError(context.Background(), e.EncodedError)
 }
 
 func (e *AmbiguousResultError) message(_ *Error) string {
-	if e.WrappedErr != nil {
-		return fmt.Sprintf("result is ambiguous (%v)", e.WrappedErr)
-	}
-	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
+	return fmt.Sprintf("result is ambiguous: %v", e.TriggeringError())
 }
 
 // Type is part of the ErrorDetailInterface.

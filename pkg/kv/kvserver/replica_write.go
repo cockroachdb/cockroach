@@ -304,9 +304,12 @@ func (r *Replica) executeWriteBatch(
 					})
 			}
 			abandon()
-			log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
-				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
+			dur := timeutil.Since(startTime)
+			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
+				dur.Seconds(), ba)
+			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(
+				errors.Wrapf(ctx.Err(), "after %.2fs of attempting command", dur.Seconds()),
+			))
 
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
@@ -314,7 +317,7 @@ func (r *Replica) executeWriteBatch(
 			abandon()
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
+			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultErrorf("server shutdown"))
 		}
 	}
 }

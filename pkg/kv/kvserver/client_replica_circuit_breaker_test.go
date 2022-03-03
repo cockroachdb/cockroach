@@ -934,8 +934,8 @@ func (*circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
 	t.Log(err)
 	// We also accept an ambiguous result wrapping a breaker error; this occurs
 	// when the breaker trips while a write is already inflight.
-	if aErr := (*roachpb.AmbiguousResultError)(nil); errors.As(err, &aErr) && aErr.WrappedErr != nil {
-		err = aErr.WrappedErr.GoError()
+	if aErr := (*roachpb.AmbiguousResultError)(nil); errors.As(err, &aErr) {
+		err = aErr.TriggeringError()
 	}
 	require.True(t, errors.Is(err, circuit.ErrBreakerOpen), "%+v", err)
 }
