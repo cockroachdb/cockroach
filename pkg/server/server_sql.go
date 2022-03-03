@@ -690,7 +690,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
-		RoleMemberCache:         sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount()),
+		RoleMemberCache:         sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
 		SessionInitCache:        sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount()),
 		RootMemoryMonitor:       rootSQLMemoryMonitor,
 		TestingKnobs:            sqlExecutorTestingKnobs,
