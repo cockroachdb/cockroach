@@ -1110,6 +1110,14 @@ func TestDecodeKey(t *testing.T) {
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1}},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Synthetic: true}},
+		{Key: roachpb.Key("foo"), LocalTimestamp: hlc.ClockTimestamp{WallTime: 89999}},
+		{Key: roachpb.Key("foo"), LocalTimestamp: hlc.ClockTimestamp{WallTime: 99, Logical: 45}},
+		{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 89999}, LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234}},
+		{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}, LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234}},
+		{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}, LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234}},
+		{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 89999}, LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21}},
+		{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}, LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21}},
+		{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}, LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21}},
 	}
 	for _, test := range tests {
 		t.Run(test.String(), func(t *testing.T) {
@@ -1137,8 +1145,9 @@ func TestDecodeKey(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected err: %+v", err)
 			}
-			if !reflect.DeepEqual(test, decodedKey) {
-				t.Errorf("expected %+v got %+v", test, decodedKey)
+			expDecoded := test.Normalize()
+			if !reflect.DeepEqual(expDecoded, decodedKey) {
+				t.Errorf("expected %+v got %+v", expDecoded, decodedKey)
 			}
 		})
 	}

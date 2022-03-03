@@ -591,7 +591,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, p.curUnsafeKey.LocalTimestamp) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 
@@ -651,7 +651,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// we want to read the intent regardless of our read timestamp and fall
 		// into case 11 below.
 		if p.checkUncertainty {
-			if p.uncertainty.IsUncertain(metaTS) {
+			if p.uncertainty.IsUncertain(metaTS, p.meta.GetLocalTimestamp()) {
 				return p.uncertaintyError(metaTS)
 			}
 			// The intent is not within the uncertainty window, but there could
@@ -1001,7 +1001,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 			// are only uncertain if their timestamps are synthetic. Meanwhile,
 			// any value with a time in the range (ts, uncertainty.LocalLimit]
 			// is uncertain.
-			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, p.curUnsafeKey.LocalTimestamp) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 		}
@@ -1021,7 +1021,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty
 		// error.
-		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
+		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, p.curUnsafeKey.LocalTimestamp) {
 			return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 		}
 		if !p.iterNext() {

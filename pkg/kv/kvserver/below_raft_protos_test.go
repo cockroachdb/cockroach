@@ -64,6 +64,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			m := enginepb.NewPopulatedMVCCMetadata(r, false)
 			m.Txn = nil                 // never populated below Raft
 			m.Timestamp.Synthetic = nil // never populated below Raft
+			m.LocalTimestamp = nil      // never populated below Raft
 			if m.MergeTimestamp != nil {
 				m.MergeTimestamp.Synthetic = nil // never populated below Raft
 			}
@@ -71,7 +72,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 6170112718709472849,
+		populatedSum: 12812489297533931627,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

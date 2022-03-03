@@ -89,10 +89,72 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
 		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
 		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
+		{key: MVCCKey{Key: roachpb.Key("glue"), LocalTimestamp: hlc.ClockTimestamp{WallTime: 89999}}},
+		{key: MVCCKey{Key: roachpb.Key("foo"), LocalTimestamp: hlc.ClockTimestamp{WallTime: 99, Logical: 45}}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 99},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 99},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			encodedTS := encodeMVCCTimestamp(test.key.Timestamp)
+			encodedTS := encodeMVCCTimestamp(test.key.Timestamp, test.key.LocalTimestamp)
 			eKey := EngineKey{Key: test.key.Key, Version: encodedTS}
 			b1 := eKey.Encode()
 			require.Equal(t, len(b1), eKey.EncodedLen())
@@ -110,9 +172,10 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 			require.False(t, eKeyDecoded.IsLockTableKey())
 			require.True(t, eKeyDecoded.IsMVCCKey())
 			require.NoError(t, eKeyDecoded.Validate())
+			expDecoded := test.key.Normalize()
 			keyDecoded, err := eKeyDecoded.ToMVCCKey()
 			require.NoError(t, err)
-			require.Equal(t, test.key, keyDecoded)
+			require.Equal(t, expDecoded, keyDecoded)
 			keyPart, ok := GetKeyPartFromEngineKey(b2)
 			require.True(t, ok)
 			require.Equal(t, eKeyDecoded.Key, roachpb.Key(keyPart))
@@ -138,6 +201,68 @@ func TestEngineKeyValidate(t *testing.T) {
 		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
 		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
 		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
+		{key: MVCCKey{Key: roachpb.Key("glue"), LocalTimestamp: hlc.ClockTimestamp{WallTime: 89999}}},
+		{key: MVCCKey{Key: roachpb.Key("foo"), LocalTimestamp: hlc.ClockTimestamp{WallTime: 99, Logical: 45}}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 99},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 99},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("glue"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
+		{key: MVCCKey{
+			Key:            roachpb.Key("foo"),
+			Timestamp:      hlc.Timestamp{WallTime: 89999, Logical: 45, Synthetic: true},
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1234, Logical: 21},
+		}},
 
 		// Valid LockTableKeys.
 		{
@@ -168,7 +293,7 @@ func TestEngineKeyValidate(t *testing.T) {
 			case EngineKey:
 				ek = k
 			case MVCCKey:
-				ek = EngineKey{Key: k.Key, Version: encodeMVCCTimestamp(k.Timestamp)}
+				ek = EngineKey{Key: k.Key, Version: encodeMVCCTimestamp(k.Timestamp, k.LocalTimestamp)}
 			case LockTableKey:
 				key, _ := k.ToEngineKey(nil)
 				ek = key

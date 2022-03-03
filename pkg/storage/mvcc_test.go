@@ -960,23 +960,23 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			err := engine.PutMVCC(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err := engine.PutMVCC(MVCCKey{Key: testKey1, Timestamp: hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey2, Timestamp: hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey2, Timestamp: hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey3, Timestamp: hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{Key: testKey4, Timestamp: hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -997,7 +997,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				UpperBound: testKey5,
 			})
 			defer iter.Close()
-			iter.SeekGE(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}})
+			iter.SeekGE(MVCCKey{Key: testKey1, Timestamp: hlc.Timestamp{WallTime: 5}})
 			iter.Next() // key2/5
 
 			// Lay down an intent on key3, which will go at key3/0 and sort before key3/5.

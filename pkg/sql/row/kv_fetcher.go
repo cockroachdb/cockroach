@@ -184,7 +184,7 @@ func (f *KVFetcher) NextKV(
 			var ts hlc.Timestamp
 			switch mvccDecodeStrategy {
 			case MVCCDecodingRequired:
-				key, ts, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
+				key, ts, _, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
 			case MVCCDecodingNotRequired:
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}

@@ -389,7 +389,8 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: int64(j)}
-			require.NoError(b, batch.Set(EncodeMVCCKey(MVCCKey{key, ts}), value, nil /* WriteOptions */))
+			enc := EncodeMVCCKey(MVCCKey{Key: key, Timestamp: ts})
+			require.NoError(b, batch.Set(enc, value, nil /* WriteOptions */))
 		}
 		batch.Reset()
 	}

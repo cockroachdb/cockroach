@@ -83,7 +83,8 @@ type MVCCIncrementalIterator struct {
 
 	// For allocation avoidance, meta is used to store the timestamp of keys
 	// regardless if they are metakeys.
-	meta enginepb.MVCCMetadata
+	meta    enginepb.MVCCMetadata
+	localTs hlc.ClockTimestamp // avoids heap allocation
 
 	// Configuration passed in MVCCIncrementalIterOptions.
 	intentPolicy MVCCIncrementalIterIntentPolicy
@@ -335,6 +336,7 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 		// The key is an MVCC value and not an intent or inline.
 		i.meta.Reset()
 		i.meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
+		i.meta.SetLocalTimestamp(unsafeKey.LocalTimestamp, &i.localTs)
 		return nil
 	}
 

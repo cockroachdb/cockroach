@@ -224,7 +224,7 @@ func slurpScanResponse(
 		for len(br) > 0 {
 			var kv roachpb.KeyValue
 			var err error
-			kv.Key, kv.Value.Timestamp, kv.Value.RawBytes, br, err = enginepb.ScanDecodeKeyValue(br)
+			kv.Key, kv.Value.Timestamp, _, kv.Value.RawBytes, br, err = enginepb.ScanDecodeKeyValue(br)
 			if err != nil {
 				return errors.Wrapf(err, `decoding changes for %s`, span)
 			}

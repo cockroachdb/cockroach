@@ -849,7 +849,11 @@ func MVCCGetAsTxn(
 // iterator has already been seeked to metaKey, so a wasteful seek can be
 // avoided.
 func mvccGetMetadata(
-	iter MVCCIterator, metaKey MVCCKey, iterAlreadyPositioned bool, meta *enginepb.MVCCMetadata,
+	iter MVCCIterator,
+	metaKey MVCCKey,
+	iterAlreadyPositioned bool,
+	meta *enginepb.MVCCMetadata,
+	localTs *hlc.ClockTimestamp,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
 		return false, 0, 0, nil
@@ -882,6 +886,7 @@ func mvccGetMetadata(
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
+	meta.SetLocalTimestamp(unsafeKey.LocalTimestamp, localTs)
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
@@ -890,10 +895,12 @@ func mvccGetMetadata(
 // allocations. Managing this temporary buffer using a sync.Pool
 // completely eliminates allocation from the put common path.
 type putBuffer struct {
-	meta    enginepb.MVCCMetadata
-	newMeta enginepb.MVCCMetadata
-	ts      hlc.LegacyTimestamp
-	tmpbuf  []byte
+	meta       enginepb.MVCCMetadata
+	newMeta    enginepb.MVCCMetadata
+	ts         hlc.LegacyTimestamp // avoids heap allocations
+	localTs    hlc.ClockTimestamp  // avoids heap allocations
+	newLocalTs hlc.ClockTimestamp  // avoids heap allocations
+	tmpbuf     []byte              // avoids heap allocations
 }
 
 var putBufferPool = sync.Pool{
@@ -1118,8 +1125,8 @@ func maybeGetValue(
 // "batch" (this is not the RocksDB batch repr format), returning both the
 // key/value and the suffix of data remaining in the batch.
 func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
-	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
-	return MVCCKey{k, ts}, value, orepr, err
+	k, ts, localTs, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
+	return MVCCKey{k, ts, localTs}, value, orepr, err
 }
 
 // MVCCScanDecodeKeyValues decodes all key/value pairs returned in one or more
@@ -1289,8 +1296,8 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, origMetaKeySize, origMetaValSize, err :=
-		mvccGetMetadata(iter, metaKey, false /* iterAlreadyPositioned */, &buf.meta)
+	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(
+		iter, metaKey, false /* iterAlreadyPositioned */, &buf.meta, &buf.localTs)
 	if err != nil {
 		return err
 	}
@@ -1457,13 +1464,16 @@ func mvccPutInternal(
 			// delete the old intent, taking care with MVCC stats.
 			logicalOp = MVCCUpdateIntentOpType
 			if metaTimestamp.Less(writeTimestamp) {
+				versionKey := metaKey
+				versionKey.Timestamp = metaTimestamp
+				versionKey.LocalTimestamp = meta.GetLocalTimestamp()
+
 				{
 					// If the older write intent has a version underneath it, we need to
 					// read its size because its GCBytesAge contribution may change as we
 					// move the intent above it. A similar phenomenon occurs in
 					// MVCCResolveWriteIntent.
-					latestKey := MVCCKey{Key: key, Timestamp: metaTimestamp}
-					_, prevUnsafeVal, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
+					_, prevUnsafeVal, haveNextVersion, err := unsafeNextVersion(iter, versionKey)
 					if err != nil {
 						return err
 					}
@@ -1473,8 +1483,6 @@ func mvccPutInternal(
 					iter = nil // prevent accidental use below
 				}
 
-				versionKey := metaKey
-				versionKey.Timestamp = metaTimestamp
 				if err := writer.ClearMVCC(versionKey); err != nil {
 					return err
 				}
@@ -1580,6 +1588,7 @@ func mvccPutInternal(
 		}
 		buf.newMeta.Txn = txnMeta
 		buf.newMeta.Timestamp = writeTimestamp.ToLegacyTimestamp()
+		buf.newMeta.SetLocalTimestamp(localTimestamp, &buf.newLocalTs)
 	}
 	newMeta := &buf.newMeta
 
@@ -1621,7 +1630,8 @@ func mvccPutInternal(
 	// RocksDB's skiplist memtable implementation includes a fast-path for
 	// sequential insertion patterns.
 	versionKey := metaKey
-	versionKey.Timestamp = writeTimestamp
+	versionKey.Timestamp = newMeta.Timestamp.ToTimestamp()
+	versionKey.LocalTimestamp = newMeta.GetLocalTimestamp()
 	if err := writer.PutMVCC(versionKey, value); err != nil {
 		return err
 	}
@@ -2001,6 +2011,7 @@ func MVCCClearTimeRange(
 			if bufSize < useClearRangeThreshold {
 				buf[bufSize].Key = append(buf[bufSize].Key[:0], k.Key...)
 				buf[bufSize].Timestamp = k.Timestamp
+				buf[bufSize].LocalTimestamp = k.LocalTimestamp
 				bufSize++
 			} else {
 				// Buffer is now full -- switch to just tracking the start of the range
@@ -2082,8 +2093,8 @@ func MVCCClearTimeRange(
 	defer iter.Close()
 
 	var clearedMetaKey MVCCKey
-	var clearedMeta enginepb.MVCCMetadata
-	var restoredMeta enginepb.MVCCMetadata
+	var clearedMeta, restoredMeta enginepb.MVCCMetadata
+	var clearedLocalTs, restoredLocalTs hlc.ClockTimestamp
 	iter.SeekGE(MVCCKey{Key: key})
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -2104,6 +2115,7 @@ func MVCCClearTimeRange(
 				restoredMeta.Deleted = valueSize == 0
 				restoredMeta.ValBytes = valueSize
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
+				restoredMeta.SetLocalTimestamp(k.LocalTimestamp, &restoredLocalTs)
 
 				ms.Add(updateStatsOnClear(
 					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
@@ -2130,6 +2142,7 @@ func MVCCClearTimeRange(
 			clearedMeta.ValBytes = int64(len(iter.UnsafeValue()))
 			clearedMeta.Deleted = clearedMeta.ValBytes == 0
 			clearedMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
+			clearedMeta.SetLocalTimestamp(k.LocalTimestamp, &clearedLocalTs)
 
 			// Move the iterator to the next key/value in linear iteration even if it
 			// lies outside (startTime, endTime].
@@ -2981,7 +2994,7 @@ func mvccResolveWriteIntent(
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
 	pushed := inProgress && timestampChanged
-	latestKey := MVCCKey{Key: intent.Key, Timestamp: metaTimestamp}
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: metaTimestamp, LocalTimestamp: meta.GetLocalTimestamp()}
 
 	// Handle partial txn rollbacks. If the current txn sequence
 	// is part of a rolled back (ignored) seqnum range, we're going
@@ -3052,6 +3065,13 @@ func mvccResolveWriteIntent(
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = newTimestamp.ToLegacyTimestamp()
 		buf.newMeta.Txn.WriteTimestamp = newTimestamp
+		// The local timestamp does not change during intent resolution unless the
+		// resolver provides a clock observation from this node that was captured
+		// while the transaction was still pending, in which case it can be advanced
+		// to the observed timestamp.
+		localTs := latestKey.LocalTimestamp
+		localTs.Forward(intent.ClockWhilePending.Timestamp)
+		buf.newMeta.SetLocalTimestamp(localTs, &buf.newLocalTs)
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
@@ -3075,8 +3095,10 @@ func mvccResolveWriteIntent(
 		// rewrite it.
 		var prevValSize int64
 		if timestampChanged {
-			oldKey := MVCCKey{Key: intent.Key, Timestamp: metaTimestamp}
-			newKey := MVCCKey{Key: intent.Key, Timestamp: newTimestamp}
+			oldKey := latestKey
+			newKey := oldKey
+			newKey.Timestamp = buf.newMeta.Timestamp.ToTimestamp()
+			newKey.LocalTimestamp = buf.newMeta.GetLocalTimestamp()
 
 			// Rewrite the versioned value at the new timestamp.
 			iter.SeekGE(oldKey)
@@ -3497,10 +3519,11 @@ func MVCCGarbageCollect(
 
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
+	localTs := &hlc.ClockTimestamp{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
 		ok, metaKeySize, metaValSize, err :=
-			mvccGetMetadata(iter, encKey, false /* iterAlreadyPositioned */, meta)
+			mvccGetMetadata(iter, encKey, false /* iterAlreadyPositioned */, meta, localTs)
 		if err != nil {
 			return err
 		}

@@ -605,7 +605,8 @@ func (*Replica) sha512(
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
 			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: unsafeKey.Timestamp,
+				Timestamp:      unsafeKey.Timestamp,
+				LocalTimestamp: unsafeKey.LocalTimestamp,
 			}
 			alloc, kv.Key = alloc.Copy(unsafeKey.Key, 0)
 			alloc, kv.Value = alloc.Copy(unsafeValue, 0)
@@ -681,7 +682,8 @@ func (*Replica) sha512(
 		if snapshot != nil {
 			// Add LeaseAppliedState to the diff.
 			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: hlc.Timestamp{},
+				Timestamp:      hlc.Timestamp{},
+				LocalTimestamp: hlc.ClockTimestamp{},
 			}
 			kv.Key = keys.RangeAppliedStateKey(desc.RangeID)
 			var v roachpb.Value

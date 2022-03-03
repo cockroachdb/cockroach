@@ -205,6 +205,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 			b.batchTS = b.db.Clock().Now()
 		}
 		key.Timestamp = b.batchTS
+		key.LocalTimestamp = hlc.ClockTimestamp{}
 	}
 
 	// Update the range currently represented in this batch, as necessary.

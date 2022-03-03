@@ -32,7 +32,7 @@ func BenchmarkScanDecodeKeyValue(b *testing.B) {
 	b.Run("getTs=true", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var err error
-			_, _, _, _, err = enginepb.ScanDecodeKeyValue(rep)
+			_, _, _, _, _, err = enginepb.ScanDecodeKeyValue(rep)
 			if err != nil {
 				b.Fatal(err)
 			}

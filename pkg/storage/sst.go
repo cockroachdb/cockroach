@@ -247,8 +247,8 @@ func UpdateSSTTimestamps(
 			opts,
 			sstOut,
 			MakeIngestionWriterOptions(ctx, st),
-			EncodeMVCCTimestampSuffix(from),
-			EncodeMVCCTimestampSuffix(to),
+			EncodeMVCCTimestampSuffix(from, hlc.ClockTimestamp{}),
+			EncodeMVCCTimestampSuffix(to, hlc.ClockTimestamp{}),
 			concurrency,
 		); err != nil {
 			return nil, err

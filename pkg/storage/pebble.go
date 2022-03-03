@@ -296,7 +296,7 @@ func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error
 			return nil //nolint:returnerrcheck
 		}
 		if meta.Txn != nil {
-			ts := encodeMVCCTimestamp(meta.Timestamp.ToTimestamp())
+			ts := encodeMVCCTimestamp(meta.Timestamp.ToTimestamp(), hlc.ClockTimestamp{})
 			t.updateBounds(ts)
 		}
 	}
@@ -1487,8 +1487,8 @@ func (p *Pebble) Compact() error {
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key) error {
-	bufStart := EncodeMVCCKey(MVCCKey{start, hlc.Timestamp{}})
-	bufEnd := EncodeMVCCKey(MVCCKey{end, hlc.Timestamp{}})
+	bufStart := EncodeMVCCKey(MakeMVCCMetadataKey(start))
+	bufEnd := EncodeMVCCKey(MakeMVCCMetadataKey(end))
 	return p.db.Compact(bufStart, bufEnd, true /* parallel */)
 }
 

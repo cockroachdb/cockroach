@@ -7656,7 +7656,7 @@ func TestDiffRange(t *testing.T) {
 	// Construct the two snapshots.
 	leaderSnapshot := &roachpb.RaftSnapshotData{
 		KV: []roachpb.RaftSnapshotData_KeyValue{
-			{Key: []byte("a"), Timestamp: timestamp, Value: value},
+			{Key: []byte("a"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 111}, Value: value},
 			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcd"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
@@ -7666,6 +7666,9 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
 			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
+			{Key: []byte("local1"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 111}, Value: value},
+			{Key: []byte("local2"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 222}, Value: value},
+			{Key: []byte("local3"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 333}, Value: value},
 			{Key: []byte("x"), Timestamp: timestamp, Value: value},
 			{Key: []byte("y"), Timestamp: timestamp, Value: value},
 			// Both 'zeroleft' and 'zeroright' share the version at (1,1), but
@@ -7692,6 +7695,9 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
+			{Key: []byte("local1"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 111}, Value: value},
+			{Key: []byte("local2"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 444}, Value: value},
+			{Key: []byte("local3"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 333}, Value: value},
 			{Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
 			{Key: []byte("z"), Timestamp: timestamp, Value: value},
 			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
@@ -7702,12 +7708,14 @@ func TestDiffRange(t *testing.T) {
 
 	// The expected diff.
 	eDiff := ReplicaSnapshotDiffSlice{
-		{LeaseHolder: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("a"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 111}, Value: value},
 		{LeaseHolder: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
 		{LeaseHolder: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
+		{LeaseHolder: true, Key: []byte("local2"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 222}, Value: value},
+		{LeaseHolder: false, Key: []byte("local2"), Timestamp: timestamp, LocalTimestamp: hlc.ClockTimestamp{WallTime: 444}, Value: value},
 		{LeaseHolder: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
 		{LeaseHolder: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
@@ -7720,7 +7728,7 @@ func TestDiffRange(t *testing.T) {
 
 	for i, e := range eDiff {
 		v := diff[i]
-		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || e.Timestamp != v.Timestamp || !bytes.Equal(e.Value, v.Value) {
+		if !reflect.DeepEqual(e, v) {
 			t.Fatalf("diff varies at row %d, want %v and got %v\n\ngot:\n%s\nexpected:\n%s", i, e, v, diff, eDiff)
 		}
 	}
@@ -7735,22 +7743,27 @@ func TestDiffRange(t *testing.T) {
 +++ follower
 -0.000001729,1 "a"
 -    ts:1970-01-01 00:00:00.000001729 +0000 UTC
+-    localTs:0.000000111,0
 -    value:"foo"
 -    raw mvcc_key/value: 610000000000000006c1000000010d 666f6f
 +0.000001729,1 "ab"
 +    ts:1970-01-01 00:00:00.000001729 +0000 UTC
++    localTs:0,0
 +    value:"foo"
 +    raw mvcc_key/value: 61620000000000000006c1000000010d 666f6f
 -0.000001729,1 "abcd"
 -    ts:1970-01-01 00:00:00.000001729 +0000 UTC
+-    localTs:0,0
 -    value:"foo"
 -    raw mvcc_key/value: 616263640000000000000006c1000000010d 666f6f
 +0.000001729,1 "abcdef"
 +    ts:1970-01-01 00:00:00.000001729 +0000 UTC
++    localTs:0,0
 +    value:"foo"
 +    raw mvcc_key/value: 6162636465660000000000000006c1000000010d 666f6f
 +0,0 "foo"
 +    ts:1970-01-01 00:00:00 +0000 UTC
++    localTs:0,0
 +    value:"foo"
 +    raw mvcc_key/value: 666f6f00 666f6f
 `
