@@ -1191,7 +1191,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	key := keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
-	if err := storage.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, val, nil); err != nil {
+	if err := storage.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1989,7 +1989,7 @@ func TestOptimizePuts(t *testing.T) {
 	for i, c := range testCases {
 		if c.exKey != nil {
 			if err := storage.MVCCPut(context.Background(), tc.engine, nil, c.exKey,
-				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), nil); err != nil {
+				hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -3370,7 +3370,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	err := storage.MVCCPut(ctx, tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
+	err := storage.MVCCPut(ctx, tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4452,7 +4452,7 @@ func TestEndTxnWithErrors(t *testing.T) {
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
 			if err := storage.MVCCPutProto(
-				ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &existTxnRecord,
+				ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRecord,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -4495,7 +4495,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	existTxn.Status = roachpb.ABORTED
 	existTxnRec := existTxn.AsRecord()
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	err := storage.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &existTxnRec)
+	err := storage.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRec)
 	require.NoError(t, err)
 
 	// End the transaction, verify expected error, shouldn't deadlock.
@@ -7040,7 +7040,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	v := roachpb.MakeValueFromString("foo")
 	testutils.SucceedsSoon(t, func() error {
 		if err := storage.MVCCPut(ctx, repl.store.Engine(), &enginepb.MVCCStats{},
-			keys.SystemConfigSpan.Key, repl.store.Clock().Now(), v, nil); err != nil {
+			keys.SystemConfigSpan.Key, repl.store.Clock().Now(), hlc.ClockTimestamp{}, v, nil); err != nil {
 			return err
 		}
 
@@ -11080,7 +11080,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// Write a value outside the transaction.
 	tc.manualClock.Increment(10)
 	ts2 := tc.Clock().Now()
-	if err := storage.MVCCPut(ctx, tc.engine, nil, k, ts2, roachpb.MakeValueFromString("one"), nil); err != nil {
+	if err := storage.MVCCPut(ctx, tc.engine, nil, k, ts2, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("one"), nil); err != nil {
 		t.Fatalf("writing interfering value: %+v", err)
 	}
 
@@ -13482,7 +13482,7 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 		ms := cArgs.Stats
 		ms.ContainsEstimates += containsEstimatesDelta
 		ts := cArgs.Header.Timestamp
-		return result.Result{}, storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, cArgs.Header.Txn)
+		return result.Result{}, storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, hlc.ClockTimestamp{}, args.Value, cArgs.Header.Txn)
 	}
 
 	batcheval.UnregisterCommand(roachpb.Put)
