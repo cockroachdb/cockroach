@@ -1435,13 +1435,26 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
-// getSystemJobIDs queries the jobs table for all job IDs that have
+// getSystemJobIDsForNonAutoJobs queries the jobs table for all job IDs that have
 // the given status. Sorted by decreasing creation time.
-func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner, status jobs.Status) []int64 {
+func getSystemJobIDsForNonAutoJobs(
+	t testing.TB, db *sqlutils.SQLRunner, status jobs.Status,
+) []int64 {
+	q := makeSQLQuery()
+	q.Append(`SELECT job_id FROM crdb_internal.jobs WHERE status=$`, status)
+	q.Append(` AND (`)
+	for i, jobType := range jobspb.AutomaticJobTypes {
+		q.Append(`job_type != $`, jobType.String())
+		if i < len(jobspb.AutomaticJobTypes)-1 {
+			q.Append(" AND ")
+		}
+	}
+	q.Append(` OR job_type IS NULL)`)
+	q.Append(` ORDER BY created DESC`)
 	rows := db.Query(
 		t,
-		`SELECT job_id FROM crdb_internal.jobs WHERE status=$1 ORDER BY created DESC`,
-		status,
+		q.String(),
+		q.QueryArguments()...,
 	)
 	defer rows.Close()
 
@@ -1473,8 +1486,8 @@ func TestAdminAPIJobs(t *testing.T) {
 		}
 	})
 
-	existingSucceededIDs := getSystemJobIDs(t, sqlDB, jobs.StatusSucceeded)
-	existingRunningIDs := getSystemJobIDs(t, sqlDB, jobs.StatusRunning)
+	existingSucceededIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StatusSucceeded)
+	existingRunningIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StatusRunning)
 	existingIDs := append(existingSucceededIDs, existingRunningIDs...)
 
 	runningOnlyIds := []int64{1, 2, 4}
@@ -1627,7 +1640,6 @@ func TestAdminAPIJobs(t *testing.T) {
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
 				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
 			}
-
 		}
 	})
 }
