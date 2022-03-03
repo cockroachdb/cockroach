@@ -87,10 +87,7 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, err
 		}
 	}
 
-	return spanconfig.Record{
-		Target: spanconfig.DecodeTarget(rawSp),
-		Config: conf,
-	}, nil
+	return spanconfig.MakeRecord(spanconfig.DecodeTarget(rawSp), conf)
 }
 
 func (sd *spanConfigDecoder) translateEvent(
@@ -121,12 +118,13 @@ func (sd *spanConfigDecoder) translateEvent(
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "received span configuration update for %s (deleted=%t)", record.Target, deleted)
+		log.Infof(ctx, "received span configuration update for %s (deleted=%t)",
+			record.GetTarget(), deleted)
 	}
 
 	var update spanconfig.Update
 	if deleted {
-		update = spanconfig.Deletion(record.Target)
+		update = spanconfig.Deletion(record.GetTarget())
 	} else {
 		update = spanconfig.Update(record)
 	}

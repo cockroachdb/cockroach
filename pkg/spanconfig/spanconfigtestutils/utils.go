@@ -134,10 +134,10 @@ func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
 	if len(parts) != 2 {
 		t.Fatalf("expected single %q separator", ":")
 	}
-	return spanconfig.Record{
-		Target: ParseTarget(t, parts[0]),
-		Config: ParseConfig(t, parts[1]),
-	}
+	record, err := spanconfig.MakeRecord(ParseTarget(t, parts[0]),
+		ParseConfig(t, parts[1]))
+	require.NoError(t, err)
+	return record
 }
 
 // ParseKVAccessorGetArguments is a helper function that parses datadriven
@@ -310,7 +310,7 @@ func PrintSpanConfig(config roachpb.SpanConfig) string {
 // above, or the constituent span and config to have been constructed using the
 // Parse{Span,Config} helpers above.
 func PrintSpanConfigRecord(t *testing.T, record spanconfig.Record) string {
-	return fmt.Sprintf("%s:%s", PrintTarget(t, record.Target), PrintSpanConfig(record.Config))
+	return fmt.Sprintf("%s:%s", PrintTarget(t, record.GetTarget()), PrintSpanConfig(record.GetConfig()))
 }
 
 // PrintSystemSpanConfigDiffedAgainstDefault is a helper function that diffs the

@@ -245,7 +245,7 @@ func (f *fullReconciler) reconcile(
 	var storeWithExtraneousSpanConfigs *spanconfigstore.Store
 	{
 		for _, u := range updates {
-			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Target))
+			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.GetTarget()))
 		}
 		storeWithExtraneousSpanConfigs = storeWithExistingSpanConfigs
 	}
@@ -337,7 +337,7 @@ func (f *fullReconciler) deleteExtraneousSpanConfigs(
 ) ([]spanconfig.Target, error) {
 	var extraneousTargets []spanconfig.Target
 	if err := storeWithExtraneousSpanConfigs.Iterate(func(record spanconfig.Record) error {
-		extraneousTargets = append(extraneousTargets, record.Target)
+		extraneousTargets = append(extraneousTargets, record.GetTarget())
 		return nil
 	},
 	); err != nil {

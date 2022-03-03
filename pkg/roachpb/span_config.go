@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 // StoreMatchesConstraint returns whether a store's attributes or node's
@@ -48,6 +50,49 @@ func (s *SpanConfig) IsEmpty() bool {
 // TTL returns the implies TTL as a time.Duration.
 func (s *SpanConfig) TTL() time.Duration {
 	return time.Duration(s.GCPolicy.TTLSeconds) * time.Second
+}
+
+// ValidateSystemTargetSpanConfig ensures that only protection policies
+// (GCPolicy.ProtectionPolicies) field is set on the underlying
+// roachpb.SpanConfig.
+func (s *SpanConfig) ValidateSystemTargetSpanConfig() error {
+	if s.RangeMinBytes != 0 {
+		return errors.AssertionFailedf("RangeMinBytes set on system span config")
+	}
+	if s.RangeMaxBytes != 0 {
+		return errors.AssertionFailedf("RangeMaxBytes set on system span config")
+	}
+	if s.GCPolicy.TTLSeconds != 0 {
+		return errors.AssertionFailedf("TTLSeconds set on system span config")
+	}
+	if s.GCPolicy.IgnoreStrictEnforcement {
+		return errors.AssertionFailedf("IgnoreStrictEnforcement set on system span config")
+	}
+	if s.GlobalReads {
+		return errors.AssertionFailedf("GlobalReads set on system span config")
+	}
+	if s.NumReplicas != 0 {
+		return errors.AssertionFailedf("NumReplicas set on system span config")
+	}
+	if s.NumVoters != 0 {
+		return errors.AssertionFailedf("NumVoters set on system span config")
+	}
+	if len(s.Constraints) != 0 {
+		return errors.AssertionFailedf("Constraints set on system span config")
+	}
+	if len(s.VoterConstraints) != 0 {
+		return errors.AssertionFailedf("VoterConstraints set on system span config")
+	}
+	if len(s.LeasePreferences) != 0 {
+		return errors.AssertionFailedf("LeasePreferences set on system span config")
+	}
+	if s.RangefeedEnabled {
+		return errors.AssertionFailedf("RangefeedEnabled set on system span config")
+	}
+	if s.ExcludeDataFromBackup {
+		return errors.AssertionFailedf("ExcludeDataFromBackup set on system span config")
+	}
+	return nil
 }
 
 // GetNumVoters returns the number of voting replicas as defined in the

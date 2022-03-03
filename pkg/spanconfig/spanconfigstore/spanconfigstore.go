@@ -43,10 +43,11 @@ func newSpanConfigStore() *spanConfigStore {
 func (s *spanConfigStore) copy(ctx context.Context) *spanConfigStore {
 	clone := newSpanConfigStore()
 	_ = s.forEachOverlapping(keys.EverythingSpan, func(entry spanConfigEntry) error {
-		_, _, err := clone.apply(false /* dryrun */, spanconfig.Update{
-			Target: spanconfig.MakeTargetFromSpan(entry.span),
-			Config: entry.config,
-		})
+		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
+		if err != nil {
+			log.Fatalf(ctx, "%v", err)
+		}
+		_, _, err = clone.apply(false /* dryrun */, spanconfig.Update(record))
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
@@ -141,7 +142,7 @@ func (s *spanConfigStore) apply(
 	sorted := make([]spanconfig.Update, len(updates))
 	copy(sorted, updates)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Target.Less(sorted[j].Target)
+		return sorted[i].GetTarget().Less(sorted[j].GetTarget())
 	})
 	updates = sorted // re-use the same variable
 
@@ -273,13 +274,17 @@ func (s *spanConfigStore) accumulateOpsFor(
 	for _, update := range updates {
 		var carriedOver spanConfigEntry
 		carriedOver, carryOver = carryOver, spanConfigEntry{}
-		if update.Target.GetSpan().Overlaps(carriedOver.span) {
-			gapBetweenUpdates := roachpb.Span{Key: carriedOver.span.Key, EndKey: update.Target.GetSpan().Key}
+		if update.GetTarget().GetSpan().Overlaps(carriedOver.span) {
+			gapBetweenUpdates := roachpb.Span{
+				Key:    carriedOver.span.Key,
+				EndKey: update.GetTarget().GetSpan().Key}
 			if gapBetweenUpdates.Valid() {
 				toAdd = append(toAdd, s.makeEntry(gapBetweenUpdates, carriedOver.config))
 			}
 
-			carryOverSpanAfterUpdate := roachpb.Span{Key: update.Target.GetSpan().EndKey, EndKey: carriedOver.span.EndKey}
+			carryOverSpanAfterUpdate := roachpb.Span{
+				Key:    update.GetTarget().GetSpan().EndKey,
+				EndKey: carriedOver.span.EndKey}
 			if carryOverSpanAfterUpdate.Valid() {
 				carryOver = spanConfigEntry{
 					span:   carryOverSpanAfterUpdate,
@@ -291,22 +296,22 @@ func (s *spanConfigStore) accumulateOpsFor(
 		}
 
 		skipAddingSelf := false
-		for _, overlapping := range s.tree.Get(update.Target.GetSpan().AsRange()) {
+		for _, overlapping := range s.tree.Get(update.GetTarget().GetSpan().AsRange()) {
 			existing := overlapping.(*spanConfigStoreEntry)
 			if existing.span.Overlaps(carriedOver.span) {
 				continue // we've already processed this entry above.
 			}
 
 			var (
-				union = existing.span.Combine(update.Target.GetSpan())
-				inter = existing.span.Intersect(update.Target.GetSpan())
+				union = existing.span.Combine(update.GetTarget().GetSpan())
+				inter = existing.span.Intersect(update.GetTarget().GetSpan())
 
 				pre  = roachpb.Span{Key: union.Key, EndKey: inter.Key}
 				post = roachpb.Span{Key: inter.EndKey, EndKey: union.EndKey}
 			)
 
 			if update.Addition() {
-				if existing.span.Equal(update.Target.GetSpan()) && existing.config.Equal(update.Config) {
+				if existing.span.Equal(update.GetTarget().GetSpan()) && existing.config.Equal(update.GetConfig()) {
 					skipAddingSelf = true
 					break // no-op; peep-hole optimization
 				}
@@ -316,7 +321,7 @@ func (s *spanConfigStore) accumulateOpsFor(
 			// non-intersecting parts of the span.
 			toDelete = append(toDelete, *existing)
 			// existing entry contains the update span's start key
-			if existing.span.ContainsKey(update.Target.GetSpan().Key) {
+			if existing.span.ContainsKey(update.GetTarget().GetSpan().Key) {
 				// ex:     [-----------------)
 				//
 				// up:         [-------)
@@ -332,7 +337,7 @@ func (s *spanConfigStore) accumulateOpsFor(
 				}
 			}
 
-			if existing.span.ContainsKey(update.Target.GetSpan().EndKey) { // existing entry contains the update span's end key
+			if existing.span.ContainsKey(update.GetTarget().GetSpan().EndKey) { // existing entry contains the update span's end key
 				// ex:     [-----------------)
 				//
 				// up:     -------------)
@@ -349,7 +354,7 @@ func (s *spanConfigStore) accumulateOpsFor(
 
 		if update.Addition() && !skipAddingSelf {
 			// Add the update itself.
-			toAdd = append(toAdd, s.makeEntry(update.Target.GetSpan(), update.Config))
+			toAdd = append(toAdd, s.makeEntry(update.GetTarget().GetSpan(), update.GetConfig()))
 
 			// TODO(irfansharif): If we're adding an entry, we could inspect the
 			// entries before and after and check whether either of them have
@@ -385,11 +390,11 @@ func (s *spanConfigStore) makeEntry(sp roachpb.Span, conf roachpb.SpanConfig) sp
 // spans, those spans be valid, and non-overlapping.
 func validateApplyArgs(updates ...spanconfig.Update) error {
 	for i := range updates {
-		if !updates[i].Target.IsSpanTarget() {
+		if !updates[i].GetTarget().IsSpanTarget() {
 			return errors.New("expected update to target a span")
 		}
 
-		sp := updates[i].Target.GetSpan()
+		sp := updates[i].GetTarget().GetSpan()
 		if !sp.Valid() || len(sp.EndKey) == 0 {
 			return errors.New("invalid span")
 		}
@@ -398,7 +403,7 @@ func validateApplyArgs(updates ...spanconfig.Update) error {
 	sorted := make([]spanconfig.Update, len(updates))
 	copy(sorted, updates)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Target.GetSpan().Key.Compare(sorted[j].Target.GetSpan().Key) < 0
+		return sorted[i].GetTarget().GetSpan().Key.Compare(sorted[j].GetTarget().GetSpan().Key) < 0
 	})
 	updates = sorted // re-use the same variable
 
@@ -406,11 +411,11 @@ func validateApplyArgs(updates ...spanconfig.Update) error {
 		if i == 0 {
 			continue
 		}
-		if updates[i].Target.GetSpan().Overlaps(updates[i-1].Target.GetSpan()) {
+		if updates[i].GetTarget().GetSpan().Overlaps(updates[i-1].GetTarget().GetSpan()) {
 			return errors.Newf(
 				"found overlapping updates %s and %s",
-				updates[i-1].Target.GetSpan(),
-				updates[i].Target.GetSpan(),
+				updates[i-1].GetTarget().GetSpan(),
+				updates[i].GetTarget().GetSpan(),
 			)
 		}
 	}
