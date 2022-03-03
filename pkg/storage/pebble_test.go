@@ -165,7 +165,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	batch := eng.NewBatch()
 	defer batch.Close()
 	for i := 0; i < 100; i++ {
-		key := MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
+		key := MVCCKey{Key: []byte{byte(i)}, Timestamp: hlc.Timestamp{WallTime: 100}}
 		if err := batch.PutMVCC(key, []byte("foo")); err != nil {
 			t.Fatal(err)
 		}
@@ -496,7 +496,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 	defer eng.Close()
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	k1 := MVCCKey{[]byte("a"), ts1}
+	k1 := MVCCKey{Key: []byte("a"), Timestamp: ts1}
 	require.NoError(t, eng.PutMVCC(k1, []byte("a1")))
 
 	var (
@@ -527,7 +527,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.Nil(t, batch2.PinEngineStateForIterators())
 
 	// Write a newer version of "a"
-	require.NoError(t, eng.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
+	require.NoError(t, eng.PutMVCC(MVCCKey{Key: []byte("a"), Timestamp: ts2}, []byte("a2")))
 
 	checkMVCCIter := func(iter MVCCIterator) {
 		defer iter.Close()
@@ -594,8 +594,8 @@ func TestPebbleIterConsistency(t *testing.T) {
 	// The eng iterator will see both values.
 	checkIterSeesBothValues(eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 	// The indexed batches will see 2 values since the second one is written to the batch.
-	require.NoError(t, batch.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
-	require.NoError(t, batch2.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
+	require.NoError(t, batch.PutMVCC(MVCCKey{Key: []byte("a"), Timestamp: ts2}, []byte("a2")))
+	require.NoError(t, batch2.PutMVCC(MVCCKey{Key: []byte("a"), Timestamp: ts2}, []byte("a2")))
 	checkIterSeesBothValues(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 	checkIterSeesBothValues(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 }
@@ -633,6 +633,14 @@ func makeRandEncodedKeys() [][]byte {
 		if rng.Int31n(1000) == 0 && !k.Timestamp.IsEmpty() {
 			// 0.1% of keys have a synthetic component.
 			k.Timestamp.Synthetic = true
+		}
+		if rng.Int31n(100) < 3 {
+			// 3% of keys have a local timestamp.
+			k.LocalTimestamp.WallTime = rng.Int63n(5)
+			if rng.Int31n(5) == 0 {
+				// Of which, 20% have a logical component to the local timestamp.
+				k.LocalTimestamp.Logical = rng.Int31n(4) + 1
+			}
 		}
 		keys[i] = EncodeMVCCKey(k)
 	}
@@ -881,7 +889,7 @@ func TestPebbleBackgroundError(t *testing.T) {
 	require.NoError(t, err)
 	defer eng.Close()
 
-	require.NoError(t, eng.PutMVCC(MVCCKey{[]byte("a"), hlc.Timestamp{WallTime: 1}}, []byte("a")))
+	require.NoError(t, eng.PutMVCC(MVCCKey{Key: []byte("a"), Timestamp: hlc.Timestamp{WallTime: 1}}, []byte("a")))
 	require.NoError(t, eng.db.Flush())
 }
 
@@ -1127,33 +1135,33 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	// The added key was not an MVCCKey.
 	finishAndCheck(0, 0)
 	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})},
+		UserKey: EncodeMVCCKey(MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: 2, Logical: 1}})},
 		[]byte("foo")))
 	// Added 1 MVCCKey which sets both the upper and lower bound.
 	finishAndCheck(2, 3)
 	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}})},
+		UserKey: EncodeMVCCKey(MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: 22, Logical: 1}})},
 		[]byte("foo")))
 	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25, Logical: 1}})},
+		UserKey: EncodeMVCCKey(MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: 25, Logical: 1}})},
 		[]byte("foo")))
 	// Added 2 MVCCKeys.
 	finishAndCheck(22, 26)
 	// Using the same suffix for all keys in a block results in an interval of
 	// width one (inclusive lower bound to exclusive upper bound).
-	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
+	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1}, hlc.ClockTimestamp{})
 	require.NoError(t, collector.UpdateKeySuffixes(
 		nil /* old prop */, nil /* old suffix */, suffix,
 	))
 	finishAndCheck(42, 43)
 	// An invalid key results in an error.
 	// Case 1: malformed sentinel.
-	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
+	key := EncodeMVCCKey(MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: 2, Logical: 1}})
 	sentinelPos := len(key) - 1 - int(key[len(key)-1])
 	key[sentinelPos] = '\xff'
 	require.Error(t, collector.UpdateKeySuffixes(nil, nil, key))
 	// Case 2: malformed bare suffix (too short).
-	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
+	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1}, hlc.ClockTimestamp{})[1:]
 	require.Error(t, collector.UpdateKeySuffixes(nil, nil, suffix))
 }
 
@@ -1174,7 +1182,7 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	aKey := roachpb.Key("a")
 	for i := 0; i < 10; i++ {
 		require.NoError(t, eng.PutMVCC(
-			MVCCKey{aKey, hlc.Timestamp{WallTime: int64(i), Logical: 1}},
+			MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: int64(i), Logical: 1}},
 			[]byte(fmt.Sprintf("val%d", i))))
 	}
 	require.NoError(t, eng.Flush())
@@ -1205,7 +1213,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer eng.Close()
 
 	ts := hlc.Timestamp{WallTime: 1}
-	k := MVCCKey{[]byte("a"), ts}
+	k := MVCCKey{Key: []byte("a"), Timestamp: ts}
 	// Write.
 	require.NoError(t, eng.PutMVCC(k, []byte("a1")))
 	cbCount := int32(0)

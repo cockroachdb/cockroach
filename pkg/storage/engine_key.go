@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -44,11 +45,13 @@ type EngineKey struct {
 // referencing these lengths and fix it.
 // TODO(nvanbenschoten): unify these constants with those in mvcc_key.go.
 const (
-	engineKeyNoVersion                             = 0
-	engineKeyVersionWallTimeLen                    = 8
-	engineKeyVersionWallAndLogicalTimeLen          = 12
-	engineKeyVersionWallLogicalAndSyntheticTimeLen = 13
-	engineKeyVersionLockTableLen                   = 17
+	engineKeyNoVersion                                           = 0
+	engineKeyVersionWallTimeLen                                  = 8
+	engineKeyVersionWallAndLogicalTimeLen                        = 12
+	engineKeyVersionWallLogicalAndSyntheticTimeLen               = 13
+	engineKeyVersionLockTableLen                                 = 17
+	engineKeyVersionWallAndLogicalTimeLocalWallTimeLen           = 20
+	engineKeyVersionWallAndLogicalTimeLocalWallAndLogicalTimeLen = 24
 )
 
 // Format implements the fmt.Formatter interface
@@ -137,7 +140,9 @@ func (k EngineKey) IsMVCCKey() bool {
 	return l == engineKeyNoVersion ||
 		l == engineKeyVersionWallTimeLen ||
 		l == engineKeyVersionWallAndLogicalTimeLen ||
-		l == engineKeyVersionWallLogicalAndSyntheticTimeLen
+		l == engineKeyVersionWallLogicalAndSyntheticTimeLen ||
+		l == engineKeyVersionWallAndLogicalTimeLocalWallTimeLen ||
+		l == engineKeyVersionWallAndLogicalTimeLocalWallAndLogicalTimeLen
 }
 
 // IsLockTableKey returns true if the key can be decoded as a LockTableKey.
@@ -153,13 +158,26 @@ func (k EngineKey) ToMVCCKey() (MVCCKey, error) {
 		// No-op.
 	case engineKeyVersionWallTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
+		key.LocalTimestamp = hlc.ClockTimestamp(key.Timestamp) // see MVCCKey.Normalize
 	case engineKeyVersionWallAndLogicalTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
+		key.LocalTimestamp = hlc.ClockTimestamp(key.Timestamp) // see MVCCKey.Normalize
 	case engineKeyVersionWallLogicalAndSyntheticTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
+		// TODO(nvanbenschoten): In v23.1, remove the Synthetic flag.
 		key.Timestamp.Synthetic = k.Version[12] != 0
+		key.LocalTimestamp = hlc.MinClockTimestamp // see MVCCKey.Normalize
+	case engineKeyVersionWallAndLogicalTimeLocalWallTimeLen:
+		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
+		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
+		key.LocalTimestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[12:20]))
+	case engineKeyVersionWallAndLogicalTimeLocalWallAndLogicalTimeLen:
+		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
+		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
+		key.LocalTimestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[12:20]))
+		key.LocalTimestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[20:24]))
 	default:
 		return MVCCKey{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
 	}
