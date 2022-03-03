@@ -75,7 +75,7 @@ func TestPreSeedSpanConfigsWrittenWhenActive(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].GetTarget().GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].GetTarget().GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -200,7 +200,7 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].GetTarget().GetSpan(), tenantSeedSpan)
 	}
 
 	// Ensure the cluster version bump goes through successfully.
@@ -215,6 +215,6 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].GetTarget().GetSpan(), tenantSeedSpan)
 	}
 }

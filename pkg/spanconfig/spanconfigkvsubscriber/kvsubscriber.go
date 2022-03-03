@@ -272,7 +272,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		for _, ev := range events {
-			target := ev.(*bufferEvent).Update.Target
+			target := ev.(*bufferEvent).Update.GetTarget()
 			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}

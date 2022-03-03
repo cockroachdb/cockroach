@@ -245,7 +245,11 @@ func (f *fullReconciler) reconcile(
 	var storeWithExtraneousSpanConfigs *spanconfigstore.Store
 	{
 		for _, u := range updates {
-			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Target))
+			del, err := spanconfig.Deletion(u.GetTarget())
+			if err != nil {
+				return nil, hlc.Timestamp{}, err
+			}
+			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, del)
 		}
 		storeWithExtraneousSpanConfigs = storeWithExistingSpanConfigs
 	}
@@ -259,7 +263,11 @@ func (f *fullReconciler) reconcile(
 	// contents. As before, we could've fetched this state from KV directly, but
 	// doing it this way is cheaper.
 	for _, d := range deletedSpans {
-		storeWithLatestSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(d))
+		del, err := spanconfig.Deletion(d)
+		if err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
+		storeWithLatestSpanConfigs.Apply(ctx, false /* dryrun */, del)
 	}
 
 	return storeWithLatestSpanConfigs, reconciledUpUntil, nil
@@ -337,7 +345,7 @@ func (f *fullReconciler) deleteExtraneousSpanConfigs(
 ) ([]spanconfig.Target, error) {
 	var extraneousTargets []spanconfig.Target
 	if err := storeWithExtraneousSpanConfigs.Iterate(func(record spanconfig.Record) error {
-		extraneousTargets = append(extraneousTargets, record.Target)
+		extraneousTargets = append(extraneousTargets, record.GetTarget())
 		return nil
 	},
 	); err != nil {
@@ -428,11 +436,18 @@ func (r *incrementalReconciler) reconcile(
 					Key:    r.codec.TablePrefix(uint32(missingID)),
 					EndKey: r.codec.TablePrefix(uint32(missingID)).PrefixEnd(),
 				}
-				updates = append(updates, spanconfig.Deletion(spanconfig.MakeTargetFromSpan(tableSpan)))
+				del, err := spanconfig.Deletion(spanconfig.MakeTargetFromSpan(tableSpan))
+				if err != nil {
+					return err
+				}
+				updates = append(updates, del)
 			}
 			for _, missingSystemTarget := range missingProtectedTimestampTargets {
-				updates = append(updates, spanconfig.Deletion(
-					spanconfig.MakeTargetFromSystemTarget(missingSystemTarget)))
+				del, err := spanconfig.Deletion(spanconfig.MakeTargetFromSystemTarget(missingSystemTarget))
+				if err != nil {
+					return err
+				}
+				updates = append(updates, del)
 			}
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
