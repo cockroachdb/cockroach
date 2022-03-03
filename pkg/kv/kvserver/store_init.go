@@ -58,6 +58,7 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 		nil,
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
+		hlc.ClockTimestamp{},
 		nil,
 		&ident,
 	); err != nil {
@@ -203,7 +204,7 @@ func WriteInitialClusterData(
 		// Range descriptor.
 		if err := storage.MVCCPutProto(
 			ctx, batch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
-			now, nil /* txn */, desc,
+			now, hlc.ClockTimestamp{}, nil /* txn */, desc,
 		); err != nil {
 			return err
 		}
@@ -211,14 +212,15 @@ func WriteInitialClusterData(
 		// Replica GC timestamp.
 		if err := storage.MVCCPutProto(
 			ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
-			hlc.Timestamp{}, nil /* txn */, &now,
+			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &now,
 		); err != nil {
 			return err
 		}
 		// Range addressing for meta2.
 		meta2Key := keys.RangeMetaKey(endKey)
-		if err := storage.MVCCPutProto(ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
-			now, nil /* txn */, desc,
+		if err := storage.MVCCPutProto(
+			ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
+			now, hlc.ClockTimestamp{}, nil /* txn */, desc,
 		); err != nil {
 			return err
 		}
@@ -228,7 +230,7 @@ func WriteInitialClusterData(
 			// Range addressing for meta1.
 			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
 			if err := storage.MVCCPutProto(
-				ctx, batch, nil /* ms */, meta1Key.AsRawKey(), now, nil /* txn */, desc,
+				ctx, batch, nil /* ms */, meta1Key.AsRawKey(), now, hlc.ClockTimestamp{}, nil /* txn */, desc,
 			); err != nil {
 				return err
 			}
@@ -239,7 +241,7 @@ func WriteInitialClusterData(
 			// Initialize the checksums.
 			kv.Value.InitChecksum(kv.Key)
 			if err := storage.MVCCPut(
-				ctx, batch, nil /* ms */, kv.Key, now, kv.Value, nil, /* txn */
+				ctx, batch, nil /* ms */, kv.Key, now, hlc.ClockTimestamp{}, kv.Value, nil, /* txn */
 			); err != nil {
 				return err
 			}

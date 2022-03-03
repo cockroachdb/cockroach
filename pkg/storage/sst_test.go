@@ -74,7 +74,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 				require.NoError(t, batch.PutMVCC(MVCCKey{Key: roachpb.Key(key), Timestamp: txn1TS}, []byte("value")))
 			}
 			for _, key := range intents {
-				require.NoError(t, MVCCPut(ctx, batch, nil, roachpb.Key(key), txn1TS, roachpb.MakeValueFromString("intent"), txn1))
+				require.NoError(t, MVCCPut(ctx, batch, nil, roachpb.Key(key), txn1TS, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("intent"), txn1))
 			}
 			require.NoError(t, batch.Commit(true))
 			batch.Close()

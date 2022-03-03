@@ -908,7 +908,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Write the existing transaction record, if necessary.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if c.existingTxn != nil {
-				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, c.existingTxn); err != nil {
+				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, c.existingTxn); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1012,13 +1012,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1031,7 +1031,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		if storeTxnBeforeEndTxn {
 			txnRec := txn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, &txnRec); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRec); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -123,7 +123,7 @@ func (sc *AbortSpan) Del(
 	ctx context.Context, reader storage.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, nil /* txn */)
+	return storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
@@ -136,7 +136,7 @@ func (sc *AbortSpan) Put(
 ) error {
 	log.VEventf(ctx, 2, "writing abort span entry for %s", txnID.Short())
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, entry)
 }
 
 // CopyTo copies the abort span entries to the abort span for the range
@@ -181,7 +181,7 @@ func (sc *AbortSpan) CopyTo(
 		}
 		return storage.MVCCPutProto(ctx, w, ms,
 			keys.AbortSpanKey(newRangeID, txnID),
-			hlc.Timestamp{}, nil, &entry,
+			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &entry,
 		)
 	}); err != nil {
 		return errors.Wrap(err, "AbortSpan.CopyTo")
