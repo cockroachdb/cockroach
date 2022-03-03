@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -76,7 +77,7 @@ var _ kvserverbase.BulkAdder = &BufferingAdder{}
 // encounter an error and need to be split and retired to be applied.
 func MakeBulkAdder(
 	ctx context.Context,
-	db SSTSender,
+	db *kv.DB,
 	rangeCache *rangecache.RangeCache,
 	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
@@ -155,9 +156,15 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 2,
-		"bulk adder %s ingested %s, flushed %d due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+		"bulk adder %s ingested %s, spent %v sorting and %v flushing (%v sending, %v splitting, %v scattering %v). Flushed %d due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
 		b.name,
 		sz(b.sink.totalRows.DataSize),
+		b.flushCounts.totalFlush,
+		b.flushCounts.totalSort,
+		b.sink.flushCounts.sendWait,
+		b.sink.flushCounts.splitWait,
+		b.sink.flushCounts.scatterWait,
+		sz(b.sink.flushCounts.scatterMoved),
 		b.flushCounts.bufferSize,
 		sz(b.memAcc.Used()),
 		b.sink.flushCounts.total, b.sink.flushCounts.files,
@@ -281,13 +288,15 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 	if log.V(4) {
 		log.Infof(ctx,
-			"bulk adder %s has ingested %s, spent %v sorting and %v flushing (%v sending, %v splitting). Flushed %d times due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+			"bulk adder %s has ingested %s, spent %v sorting and %v flushing (%v sending, %v splitting, %v scattering %v). Flushed %d times due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
 			b.name,
 			sz(b.sink.totalRows.DataSize),
 			b.flushCounts.totalSort,
 			b.flushCounts.totalFlush,
 			b.sink.flushCounts.sendWait,
 			b.sink.flushCounts.splitWait,
+			b.sink.flushCounts.scatterWait,
+			sz(b.sink.flushCounts.scatterMoved),
 			b.flushCounts.bufferSize,
 			sz(b.memAcc.Used()),
 			b.sink.flushCounts.total, b.sink.flushCounts.files,
@@ -303,15 +312,18 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	targetSize := b.curBuf.Len() / b.initialSplits
-	log.Infof(ctx, "creating up to %d initial splits from %d keys in %s buffer", b.initialSplits, b.curBuf.Len(), sz(b.curBuf.MemSize))
+	log.Infof(ctx, "%s creating up to %d initial splits from %d keys in %s buffer", b.name, b.initialSplits, b.curBuf.Len(), sz(b.curBuf.MemSize))
 
 	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
 
+	before := timeutil.Now()
+
+	created := 0
 	for i := targetSize; i < b.curBuf.Len(); i += targetSize {
 		k := b.curBuf.Key(i)
 		prev := b.curBuf.Key(i - targetSize)
 		log.VEventf(ctx, 1, "splitting at key %d / %d: %s", i, b.curBuf.Len(), k)
-		if err := b.sink.db.SplitAndScatter(ctx, k, hour, prev); err != nil {
+		if _, err := b.sink.db.SplitAndScatter(ctx, k, hour, prev); err != nil {
 			// TODO(dt): a typed error would be nice here.
 			if strings.Contains(err.Error(), "predicate") {
 				log.VEventf(ctx, 1, "split at %s rejected, had previously split and no longer included %s", k, prev)
@@ -319,7 +331,11 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			}
 			return err
 		}
+		created++
 	}
+	log.Infof(ctx, "%s created %d initial splits in %v from %d keys in %s buffer",
+		b.name, created, timeutil.Since(before), b.curBuf.Len(), sz(b.curBuf.MemSize))
+
 	return nil
 }
 
