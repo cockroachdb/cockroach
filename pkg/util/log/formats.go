@@ -17,6 +17,10 @@ type logFormatter interface {
 	// formatEntry formats a logEntry into a newly allocated *buffer.
 	// The caller is responsible for calling putBuffer() afterwards.
 	formatEntry(entry logEntry) *buffer
+
+	// contentType is the MIME content-type field to use on
+	// transports which use this metadata.
+	contentType() string
 }
 
 var formatParsers = map[string]string{
