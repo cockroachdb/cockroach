@@ -181,17 +181,32 @@ user root
 statement ok
 GRANT testrole TO testuser WITH ADMIN OPTION
 
+statement ok
+CREATE ROLE child_role;
+GRANT testrole to child_role;
+GRANT testuser TO child_role;
+
 query TTB colnames
 SELECT * FROM system.role_members
 ----
-role      member    isAdmin
-admin     root      true
-testrole  testuser  true
-
-user testuser
+role      member      isAdmin
+admin     root        true
+testrole  child_role  false
+testrole  testuser    true
+testuser  child_role  false
 
 statement ok
+SET ROLE child_role
+
+# ADMIN OPTION should be inherited, so this should succeed.
+statement ok
 GRANT testrole TO testuser2 WITH ADMIN OPTION
+
+statement ok
+RESET ROLE;
+DROP ROLE child_role
+
+user testuser
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations

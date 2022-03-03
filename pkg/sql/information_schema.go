@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -2646,12 +2648,13 @@ func forEachRole(
 }
 
 func forEachRoleMembership(
-	ctx context.Context, p *planner, fn func(role, member security.SQLUsername, isAdmin bool) error,
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	fn func(role, member security.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
-	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
-		ctx, "read-members", p.txn, query,
-	)
+	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
+	it, err := ie.QueryIterator(ctx, "read-members", txn, query)
 	if err != nil {
 		return err
 	}

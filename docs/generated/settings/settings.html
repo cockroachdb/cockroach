@@ -94,6 +94,7 @@
 <tr><td><code>server.web_session.purge.period</code></td><td>duration</td><td><code>1h0m0s</code></td><td>the time until old sessions are deleted</td></tr>
 <tr><td><code>server.web_session.purge.ttl</code></td><td>duration</td><td><code>1h0m0s</code></td><td>if nonzero, entries in system.web_sessions older than this duration are periodically purged</td></tr>
 <tr><td><code>server.web_session_timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that a newly created web session will be valid</td></tr>
+<tr><td><code>sql.auth.resolve_membership_single_scan.enabled</code></td><td>boolean</td><td><code>true</code></td><td>determines whether to populate the role membership cache with a single scan</td></tr>
 <tr><td><code>sql.contention.event_store.capacity</code></td><td>byte size</td><td><code>64 MiB</code></td><td>the in-memory storage capacity per-node of contention event store</td></tr>
 <tr><td><code>sql.contention.txn_id_cache.max_size</code></td><td>byte size</td><td><code>0 B</code></td><td>the maximum byte size TxnID cache will use (set to 0 to disable)</td></tr>
 <tr><td><code>sql.cross_db_fks.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if true, creating foreign key references across databases is allowed</td></tr>

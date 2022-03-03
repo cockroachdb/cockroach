@@ -554,7 +554,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
 	schema: vtable.PGCatalogAuthMembers,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRoleMembership(ctx, p,
+		return forEachRoleMembership(ctx, p.ExecCfg().InternalExecutor, p.Txn(),
 			func(roleName, memberName security.SQLUsername, isAdmin bool) error {
 				return addRow(
 					h.UserOid(roleName),                 // roleid
