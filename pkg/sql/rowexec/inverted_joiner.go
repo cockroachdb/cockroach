@@ -113,6 +113,10 @@ type invertedJoiner struct {
 	// It is reused to reduce allocations.
 	indexRow rowenc.EncDatumRow
 
+	// prefixKey is used to avoid reallocating a prefix key (when we have a
+	// non-inverted prefix).
+	prefixKey roachpb.Key
+
 	// indexRowTypes is a list of the types of each column in indexRow.
 	indexRowTypes []*types.T
 
@@ -451,25 +455,16 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				// an empty set, so don't bother creating a prefix key span.
 				ij.batchedExprEval.nonInvertedPrefixes = append(ij.batchedExprEval.nonInvertedPrefixes, roachpb.Key{})
 			} else {
-				for prefixIdx, colIdx := range ij.prefixEqualityCols {
-					ij.indexRow[prefixIdx] = row[colIdx]
-				}
-				// TODO(mgartner): MakeKeyFromEncDatums will allocate and grow a
-				// new roachpb.Key. Many rows will share the same prefix or
-				// encode to the same length roachpb.Key. We can optimize this
-				// by reusing a pre-allocated key.
 				keyCols := ij.desc.IndexFetchSpecKeyAndSuffixColumns(ij.index)
-				prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
-					ij.indexRow[:len(ij.prefixEqualityCols)],
-					keyCols,
-					&ij.alloc,
-					nil, /* keyPrefix */
-				)
-				if err != nil {
-					ij.MoveToDraining(err)
-					return ijStateUnknown, ij.DrainHelper()
+				// Encode the prefix key; we reuse a buffer to avoid extra allocations when appending values.
+				ij.prefixKey = ij.prefixKey[:0]
+				for i, inputOrd := range ij.prefixEqualityCols {
+					if err := ij.appendPrefixColumn(&keyCols[i], row[inputOrd]); err != nil {
+						ij.MoveToDraining(err)
+						return ijStateUnknown, ij.DrainHelper()
+					}
 				}
-				ij.batchedExprEval.nonInvertedPrefixes = append(ij.batchedExprEval.nonInvertedPrefixes, prefixKey)
+				ij.batchedExprEval.appendNonInvertedPrefix(ij.prefixKey)
 			}
 		}
 	}
@@ -547,26 +542,19 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 		encInvertedVal := scannedRow[idx].EncodedBytes()
 		var encFullVal []byte
 		if len(ij.prefixEqualityCols) > 0 {
-			// TODO(mgartner): MakeKeyFromEncDatumsDeprecated will allocate and grow a
-			// new roachpb.Key. Many rows will share the same prefix or
-			// encode to the same length roachpb.Key. We can optimize this
-			// by reusing a pre-allocated key.
+			ij.prefixKey = ij.prefixKey[:0]
 			keyCols := ij.desc.IndexFetchSpecKeyAndSuffixColumns(ij.index)
-			prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
-				ij.indexRow[:len(ij.prefixEqualityCols)],
-				keyCols,
-				&ij.alloc,
-				nil, /* keyPrefix */
-			)
-			if err != nil {
-				ij.MoveToDraining(err)
-				return ijStateUnknown, ij.DrainHelper()
+			for i := range ij.prefixEqualityCols {
+				if err := ij.appendPrefixColumn(&keyCols[i], ij.indexRow[i]); err != nil {
+					ij.MoveToDraining(err)
+					return ijStateUnknown, ij.DrainHelper()
+				}
 			}
 			// We append an encoded inverted value/datum to the key prefix
 			// representing the non-inverted prefix columns, to generate the key
 			// for the inverted index. This is similar to the internals of
 			// rowenc.appendEncDatumsToKey.
-			encFullVal = append(prefixKey, encInvertedVal...)
+			encFullVal = append(ij.prefixKey, encInvertedVal...)
 		}
 		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal, encFullVal)
 		if err != nil {
@@ -742,6 +730,20 @@ func (ij *invertedJoiner) transformToTableRow(indexRow rowenc.EncDatumRow) {
 	for keyIdx, rowIdx := range ij.indexRowToTableRowMap {
 		ij.tableRow[rowIdx] = indexRow[keyIdx]
 	}
+}
+
+// appendPrefixColumn encodes a datum corresponding to an index prefix column
+// and appends it to ij.prefixKey.
+func (ij *invertedJoiner) appendPrefixColumn(
+	keyCol *descpb.IndexFetchSpec_KeyColumn, encDatum rowenc.EncDatum,
+) error {
+	encoding := descpb.DatumEncoding_ASCENDING_KEY
+	if keyCol.Direction == descpb.IndexDescriptor_DESC {
+		encoding = descpb.DatumEncoding_DESCENDING_KEY
+	}
+	var err error
+	ij.prefixKey, err = encDatum.Encode(keyCol.Type, &ij.alloc, encoding, ij.prefixKey)
+	return err
 }
 
 // Start is part of the RowSource interface.
