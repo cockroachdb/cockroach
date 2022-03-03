@@ -31,6 +31,8 @@ func (f formatFluentJSONCompact) formatEntry(entry logEntry) *buffer {
 	return formatJSON(entry, true /* fluent */, tagCompact)
 }
 
+func (formatFluentJSONCompact) contentType() string { return "application/json" }
+
 type formatFluentJSONFull struct{}
 
 func (formatFluentJSONFull) formatterName() string { return "json-fluent" }
@@ -40,6 +42,8 @@ func (f formatFluentJSONFull) formatEntry(entry logEntry) *buffer {
 }
 
 func (formatFluentJSONFull) doc() string { return formatJSONDoc(true /* fluent */, tagVerbose) }
+
+func (formatFluentJSONFull) contentType() string { return "application/json" }
 
 type formatJSONCompact struct{}
 
@@ -51,6 +55,8 @@ func (f formatJSONCompact) formatEntry(entry logEntry) *buffer {
 
 func (formatJSONCompact) doc() string { return formatJSONDoc(false /* fluent */, tagCompact) }
 
+func (formatJSONCompact) contentType() string { return "application/json" }
+
 type formatJSONFull struct{}
 
 func (formatJSONFull) formatterName() string { return "json" }
@@ -60,6 +66,8 @@ func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
 }
 
 func (formatJSONFull) doc() string { return formatJSONDoc(false /* fluent */, tagVerbose) }
+
+func (formatJSONFull) contentType() string { return "application/json" }
 
 func formatJSONDoc(forFluent bool, tags tagChoice) string {
 	var buf strings.Builder
