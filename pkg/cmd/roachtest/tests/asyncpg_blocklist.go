@@ -23,7 +23,10 @@ var asyncpgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var asyncpgBlocklist22_1 = asyncpgBlocklist21_2
+var asyncpgBlocklist22_1 = blocklist{
+	"test_cursor.TestCursor.test_cursor_03": "unknown",
+	"test_pool.TestPool.test_pool_11":       "unknown",
+}
 
 var asyncpgBlocklist21_2 = blocklist{}
 
