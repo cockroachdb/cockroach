@@ -276,12 +276,21 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 		}
 	}
 
-	// A script to summarize the hottest ranges.
+	// A script to summarize the hottest ranges for a storage server's range reports.
 	{
 		s := zc.clusterPrinter.start("hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
 find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
+			return err
+		}
+	}
+
+	// A script to summarize the hottest ranges for a tenant's range report.
+	{
+		s := zc.clusterPrinter.start("tenant hot range summary script")
+		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20`)); err != nil {
 			return err
 		}
 	}

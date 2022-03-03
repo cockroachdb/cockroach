@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -41,17 +42,18 @@ const defaultSLIScope = "default"
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
-	EmittedMessages *aggmetric.AggCounter
-	EmittedBytes    *aggmetric.AggCounter
-	FlushedBytes    *aggmetric.AggCounter
-	BatchHistNanos  *aggmetric.AggHistogram
-	Flushes         *aggmetric.AggCounter
-	FlushHistNanos  *aggmetric.AggHistogram
-	CommitLatency   *aggmetric.AggHistogram
-	BackfillCount   *aggmetric.AggGauge
-	ErrorRetries    *aggmetric.AggCounter
-	AdmitLatency    *aggmetric.AggHistogram
-	RunningCount    *aggmetric.AggGauge
+	EmittedMessages       *aggmetric.AggCounter
+	EmittedBytes          *aggmetric.AggCounter
+	FlushedBytes          *aggmetric.AggCounter
+	BatchHistNanos        *aggmetric.AggHistogram
+	Flushes               *aggmetric.AggCounter
+	FlushHistNanos        *aggmetric.AggHistogram
+	CommitLatency         *aggmetric.AggHistogram
+	BackfillCount         *aggmetric.AggGauge
+	BackfillPendingRanges *aggmetric.AggGauge
+	ErrorRetries          *aggmetric.AggCounter
+	AdmitLatency          *aggmetric.AggHistogram
+	RunningCount          *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -65,17 +67,18 @@ func (a *AggMetrics) MetricStruct() {}
 
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
-	EmittedMessages *aggmetric.Counter
-	EmittedBytes    *aggmetric.Counter
-	FlushedBytes    *aggmetric.Counter
-	BatchHistNanos  *aggmetric.Histogram
-	Flushes         *aggmetric.Counter
-	FlushHistNanos  *aggmetric.Histogram
-	CommitLatency   *aggmetric.Histogram
-	ErrorRetries    *aggmetric.Counter
-	AdmitLatency    *aggmetric.Histogram
-	BackfillCount   *aggmetric.Gauge
-	RunningCount    *aggmetric.Gauge
+	EmittedMessages       *aggmetric.Counter
+	EmittedBytes          *aggmetric.Counter
+	FlushedBytes          *aggmetric.Counter
+	BatchHistNanos        *aggmetric.Histogram
+	Flushes               *aggmetric.Counter
+	FlushHistNanos        *aggmetric.Histogram
+	CommitLatency         *aggmetric.Histogram
+	ErrorRetries          *aggmetric.Counter
+	AdmitLatency          *aggmetric.Histogram
+	BackfillCount         *aggmetric.Gauge
+	BackfillPendingRanges *aggmetric.Gauge
+	RunningCount          *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -146,6 +149,28 @@ func (m *sliMetrics) getBackfillCallback() func() func() {
 		return func() {
 			m.BackfillCount.Dec(1)
 		}
+	}
+}
+
+// getBackfillRangeCallback returns a backfillRangeCallback that is to be called
+// at the beginning of a backfill with the number of ranges that will be scanned
+// and returns a two callbacks to decrement the value until all ranges have
+// been emitted or clear the number completely if the backfill is cancelled.
+// Note: dec() should only be called as many times as the initial value, and
+// clear() should be called when there will never be another dec() call.
+func (m *sliMetrics) getBackfillRangeCallback() func(int64) (func(), func()) {
+	return func(initial int64) (dec func(), clear func()) {
+		remaining := initial
+		m.BackfillPendingRanges.Inc(initial)
+		dec = func() {
+			m.BackfillPendingRanges.Dec(1)
+			atomic.AddInt64(&remaining, -1)
+		}
+		clear = func() {
+			m.BackfillPendingRanges.Dec(remaining)
+			atomic.AddInt64(&remaining, -remaining)
+		}
+		return
 	}
 }
 
@@ -272,6 +297,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedBackfillPendingRanges := metric.Metadata{
+		Name:        "changefeed.backfill_pending_ranges",
+		Help:        "Number of ranges in an ongoing backfill that are yet to be fully emitted",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedRunning := metric.Metadata{
 		Name:        "changefeed.running",
 		Help:        "Number of currently running changefeeds, including sinkless",
@@ -297,8 +328,9 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 			histogramWindow, commitLatencyMaxValue.Nanoseconds(), 1),
 		AdmitLatency: b.Histogram(metaAdmitLatency, histogramWindow,
 			admitLatencyMaxValue.Nanoseconds(), 1),
-		BackfillCount: b.Gauge(metaChangefeedBackfillCount),
-		RunningCount:  b.Gauge(metaChangefeedRunning),
+		BackfillCount:         b.Gauge(metaChangefeedBackfillCount),
+		BackfillPendingRanges: b.Gauge(metaChangefeedBackfillPendingRanges),
+		RunningCount:          b.Gauge(metaChangefeedRunning),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -343,17 +375,18 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedMessages: a.EmittedMessages.AddChild(scope),
-		EmittedBytes:    a.EmittedBytes.AddChild(scope),
-		FlushedBytes:    a.FlushedBytes.AddChild(scope),
-		BatchHistNanos:  a.BatchHistNanos.AddChild(scope),
-		Flushes:         a.Flushes.AddChild(scope),
-		FlushHistNanos:  a.FlushHistNanos.AddChild(scope),
-		CommitLatency:   a.CommitLatency.AddChild(scope),
-		ErrorRetries:    a.ErrorRetries.AddChild(scope),
-		AdmitLatency:    a.AdmitLatency.AddChild(scope),
-		BackfillCount:   a.BackfillCount.AddChild(scope),
-		RunningCount:    a.RunningCount.AddChild(scope),
+		EmittedMessages:       a.EmittedMessages.AddChild(scope),
+		EmittedBytes:          a.EmittedBytes.AddChild(scope),
+		FlushedBytes:          a.FlushedBytes.AddChild(scope),
+		BatchHistNanos:        a.BatchHistNanos.AddChild(scope),
+		Flushes:               a.Flushes.AddChild(scope),
+		FlushHistNanos:        a.FlushHistNanos.AddChild(scope),
+		CommitLatency:         a.CommitLatency.AddChild(scope),
+		ErrorRetries:          a.ErrorRetries.AddChild(scope),
+		AdmitLatency:          a.AdmitLatency.AddChild(scope),
+		BackfillCount:         a.BackfillCount.AddChild(scope),
+		BackfillPendingRanges: a.BackfillPendingRanges.AddChild(scope),
+		RunningCount:          a.RunningCount.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm

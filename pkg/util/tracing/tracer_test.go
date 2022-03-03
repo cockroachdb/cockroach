@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
@@ -824,4 +825,26 @@ func TestSpanFinishRaces(t *testing.T) {
 			require.Equal(t, fmt.Sprintf("msg %d", i), s.Logs[0].Message.StripMarkers())
 		}
 	}
+}
+
+// Test that updates to the EnableActiveSpansRegistry affect span creation.
+func TestTracerClusterSettings(t *testing.T) {
+	ctx := context.Background()
+	sv := settings.Values{}
+	EnableActiveSpansRegistry.Override(ctx, &sv, true)
+
+	tr := NewTracerWithOpt(ctx, WithClusterSettings(&sv))
+	sp := tr.StartSpan("test")
+	require.False(t, sp.IsNoop())
+	sp.Finish()
+
+	EnableActiveSpansRegistry.Override(ctx, &sv, false)
+	sp = tr.StartSpan("test")
+	require.True(t, sp.IsNoop())
+	sp.Finish()
+
+	EnableActiveSpansRegistry.Override(ctx, &sv, true)
+	sp = tr.StartSpan("test")
+	require.False(t, sp.IsNoop())
+	sp.Finish()
 }
