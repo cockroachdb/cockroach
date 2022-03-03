@@ -227,6 +227,7 @@
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/.gitattributes  @cockroachdb/dev-inf
+/pkg/roachpb/ambiguous_*     @cockroachdb/kv-prs
 /pkg/roachpb/api*            @cockroachdb/kv-prs
 /pkg/roachpb/batch*          @cockroachdb/kv-prs
 /pkg/roachpb/BUILD.bazel     @cockroachdb/kv-prs-noreview
@@ -248,6 +249,7 @@
 /pkg/roachpb/span*           @cockroachdb/kv-prs
 /pkg/roachpb/string_test.go  @cockroachdb/kv-prs
 /pkg/roachpb/tenant*         @cockroachdb/kv-prs
+/pkg/roachpb/testdata/ambi*  @cockroachdb/kv-prs
 /pkg/roachpb/testdata/repl*  @cockroachdb/kv-prs
 /pkg/roachpb/version*        @cockroachdb/server
 /pkg/roachprod/              @cockroachdb/dev-inf

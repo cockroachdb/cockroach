@@ -1,0 +1,4 @@
+echo
+----
+result is ambiguous: boom with a secret
+result is ambiguous: boom with a ‹secret›

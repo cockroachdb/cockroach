@@ -654,34 +654,6 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...Rang
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
 
-// NewAmbiguousResultError initializes a new AmbiguousResultError with
-// an explanatory message.
-func NewAmbiguousResultError(msg string) *AmbiguousResultError {
-	return &AmbiguousResultError{Message: msg}
-}
-
-// NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
-// an explanatory format and set of arguments.
-func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
-	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
-}
-
-func (e *AmbiguousResultError) Error() string {
-	return e.message(nil)
-}
-
-func (e *AmbiguousResultError) message(_ *Error) string {
-	if e.WrappedErr != nil {
-		return fmt.Sprintf("result is ambiguous (%v)", e.WrappedErr)
-	}
-	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
-}
-
-// Type is part of the ErrorDetailInterface.
-func (e *AmbiguousResultError) Type() ErrorDetailType {
-	return AmbiguousResultErrType
-}
-
 // ClientVisibleAmbiguousError implements the ClientVisibleAmbiguousError interface.
 func (e *AmbiguousResultError) ClientVisibleAmbiguousError() {}
 
