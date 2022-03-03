@@ -7,11 +7,6 @@ statement ok
 CREATE TABLE my_spatial_table (k INT PRIMARY KEY)
 
 query T
-SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
-----
-test.public.my_spatial_table.geom1 SRID:4326 TYPE:POINT DIMS:2
-
-query T
 EXPLAIN (VERBOSE) SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
 ----
 distribution: local
@@ -37,6 +32,11 @@ vectorized: true
         └── • alter table
               columns: ()
               estimated row count: 10 (missing stats)
+
+query T
+SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
+----
+test.public.my_spatial_table.geom1 SRID:4326 TYPE:POINT DIMS:2
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
@@ -153,18 +153,6 @@ SELECT AddGeometryColumn ('my_spatial_table','geom7',4326,'FAKESHAPE',2)
 statement ok
 CREATE TABLE other_table (k INT PRIMARY KEY); INSERT INTO other_table VALUES (1), (2)
 
-# It's ok to select other columns and multiple rows. Each geom column only gets
-# added once.
-query ITT
-SELECT
-  k,
-  AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2),
-  AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
-FROM other_table
-----
-1  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
-2  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
-
 query T
 EXPLAIN (VERBOSE) SELECT
   k,
@@ -216,6 +204,19 @@ vectorized: true
         └── • alter table
               columns: ()
               estimated row count: 10 (missing stats)
+
+# It's ok to select other columns and multiple rows. Each geom column only gets
+# added once.
+query ITT
+SELECT
+  k,
+  AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',2),
+  AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
+FROM other_table
+----
+1  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
+2  my_spatial_table.geom7 SRID:4326 TYPE:POINT DIMS:2  my_spatial_table.geom8 SRID:4326 TYPE:POINT DIMS:2
+
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
