@@ -24,7 +24,6 @@ var asyncpgBlocklists = blocklistsForVersion{
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
 var asyncpgBlocklist22_1 = asyncpgBlocklist21_2
-
 var asyncpgBlocklist21_2 = blocklist{}
 
 var asyncpgIgnoreList22_1 = blocklist{
@@ -68,6 +67,7 @@ var asyncpgIgnoreList22_1 = blocklist{
 	"test_copy.TestCopyTo.test_copy_records_to_table_async":                                               "unknown",
 	"test_copy.TestCopyTo.test_copy_to_table_basics":                                                      "unknown",
 	"test_cursor.TestCursor.test_cursor_02":                                                               "unknown",
+	"test_cursor.TestCursor.test_cursor_03":                                                               "unknown",
 	"test_cursor.TestCursor.test_cursor_04":                                                               "unknown",
 	"test_cursor.TestIterableCursor.test_cursor_iterable_02":                                              "unknown",
 	"test_exceptions.TestExceptions.test_exceptions_str":                                                  "unknown",
@@ -124,6 +124,7 @@ var asyncpgIgnoreList22_1 = blocklist{
 	"test_pool.TestPool.test_pool_handles_transaction_exit_in_asyncgen_2":                                 "unknown",
 	"test_listeners.TestListeners.test_dangling_listener_warns":                                           "unknown",
 	"test_pool.TestPool.test_pool_01":                                                                     "unknown",
+	"test_pool.TestPool.test_pool_11":                                                                     "unknown",
 	"test_pool.TestPool.test_pool_init_and_use_race":                                                      "unknown",
 }
 
