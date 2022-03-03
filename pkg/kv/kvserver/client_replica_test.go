@@ -492,6 +492,253 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 	})
 }
 
+// TestTxnReadWithinUncertaintyIntervalAfterIntentResolution tests cases where a
+// reader transaction observes a committed value that was committed before the
+// reader began, but that was resolved after the reader began. The test ensures
+// that even if the reader has collected an observed timestamp from the node
+// that holds the intent, and even if this observed timestamp is less than the
+// timestamp that the intent is eventually committed at, the reader still
+// considers the value to be in its uncertainty interval. Not doing so could
+// allow for stale read, which would be a violation of linearizability.
+//
+// This is a regression test for #36431. Before this issue was addressed,
+// it was possible for the following series of events to lead to a stale
+// read:
+// - txn W is coordinated by node B. It lays down an intent on node A (key k) at
+//   ts 95.
+// - txn W gets pushed to ts 105 (taken from B's clock). It refreshes
+//   successfully and commits at 105. Node A's clock is at, say, 100; this is
+//   within clock offset bounds.
+// - after all this, txn R starts on node A. It gets assigned ts 100. The txn
+//   has no uncertainty for node A.
+// - txn W's async intent resolution comes around and resolves the intent on
+//   node A, moving the value fwd from ts 95 to 105.
+// - txn R reads key k and doesn't see anything. There's a value at 105, but the
+//   txn have no uncertainty due to an observed timestamp. This is a stale read.
+//
+// The test's rangedResolution parameter dictates whether the intent is
+// asynchronously resolved using point or ranged intent resolution.
+//
+// The test's movedWhilePending parameter dictates whether the intent is moved
+// to a higher timestamp first by a PENDING intent resolution and then COMMITTED
+// at that same timestamp, or whether it is moved to a higher timestamp at the
+// same time as it is COMMITTED.
+//
+// The test's alreadyResolved parameter dictates whether the intent is
+// already resolved by the time the reader observes it, or whether the
+// reader must resolve the intent itself.
+//
+func TestTxnReadWithinUncertaintyIntervalAfterIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "rangedResolution", func(t *testing.T, rangedResolution bool) {
+		testutils.RunTrueAndFalse(t, "movedWhilePending", func(t *testing.T, movedWhilePending bool) {
+			testutils.RunTrueAndFalse(t, "alreadyResolved", func(t *testing.T, alreadyResolved bool) {
+				testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
+					t, rangedResolution, movedWhilePending, alreadyResolved,
+				)
+			})
+		})
+	})
+}
+
+func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
+	t *testing.T, rangedResolution, movedWhilePending, alreadyResolved bool,
+) {
+	const numNodes = 2
+	var manuals []*hlc.HybridManualClock
+	var clocks []*hlc.Clock
+	for i := 0; i < numNodes; i++ {
+		manuals = append(manuals, hlc.NewHybridManualClock())
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manuals[i].UnixNano,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+						// Disable async intent resolution, so that the test can carefully
+						// control when intent resolution occurs.
+						DisableAsyncIntentResolution: true,
+					},
+				},
+			},
+		}
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Split off two scratch ranges.
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	tc.SplitRangeOrFatal(t, keyA)
+	_, keyBDesc := tc.SplitRangeOrFatal(t, keyB)
+	// Place key A's sole replica on node 1 and key B's sole replica on node 2.
+	tc.AddVotersOrFatal(t, keyB, tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, keyBDesc, tc.Target(1))
+	tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+
+	// Pause the servers' clocks going forward.
+	var maxNanos int64
+	for i, m := range manuals {
+		m.Pause()
+		if cur := m.UnixNano(); cur > maxNanos {
+			maxNanos = cur
+		}
+		clocks = append(clocks, tc.Servers[i].Clock())
+	}
+	// After doing so, perfectly synchronize them.
+	for _, m := range manuals {
+		m.Increment(maxNanos - m.UnixNano())
+	}
+
+	// Create a new writer transaction.
+	maxOffset := clocks[0].MaxOffset().Nanoseconds()
+	require.NotZero(t, maxOffset)
+	writerTxn := roachpb.MakeTransaction("test_writer", keyA, 1, clocks[0].Now(), maxOffset, int32(tc.Servers[0].NodeID()))
+
+	// Write to key A and key B in the writer transaction.
+	for _, key := range []roachpb.Key{keyA, keyB} {
+		put := putArgs(key, []byte("val"))
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), roachpb.Header{Txn: &writerTxn}, put)
+		require.Nil(t, pErr)
+		writerTxn.Update(resp.Header().Txn)
+	}
+
+	// Move the clock on just the first server and bump the transaction commit
+	// timestamp to this value. The clock on the second server will trail behind.
+	manuals[0].Increment(100)
+	require.True(t, writerTxn.WriteTimestamp.Forward(clocks[0].Now()))
+
+	// Refresh the writer transaction's timestamp.
+	writerTxn.ReadTimestamp.Forward(writerTxn.WriteTimestamp)
+
+	// Commit the writer transaction. Key A will be synchronously resolved because
+	// it is on the same range as the transaction record. However, key B will be
+	// handed to the IntentResolver for asynchronous resolution. Because we
+	// disabled async resolution, it will not be resolved yet.
+	et, etH := endTxnArgs(&writerTxn, true /* commit */)
+	et.LockSpans = []roachpb.Span{
+		{Key: keyA}, {Key: keyB},
+	}
+	if rangedResolution {
+		for i := range et.LockSpans {
+			et.LockSpans[i].EndKey = et.LockSpans[i].Key.Next()
+		}
+	}
+	etResp, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), etH, et)
+	require.Nil(t, pErr)
+	writerTxn.Update(etResp.Header().Txn)
+
+	// Create a new reader transaction. The reader uses the second server as a
+	// gateway, so its initial read timestamp actually trails the commit timestamp
+	// of the writer transaction due to clock skew between the two servers. This
+	// is the classic case where the reader's uncertainty interval is needed to
+	// avoid stale reads. Remember that the reader transaction began after the
+	// writer transaction committed and received an ack, so it must observe the
+	// writer's writes if it is to respect real-time ordering.
+	//
+	// NB: we use writerTxn.MinTimestamp instead of clocks[1].Now() so that a
+	// stray clock update doesn't influence the reader's read timestamp.
+	readerTxn := roachpb.MakeTransaction("test_reader", keyA, 1, writerTxn.MinTimestamp, maxOffset, int32(tc.Servers[1].NodeID()))
+	require.True(t, readerTxn.ReadTimestamp.Less(writerTxn.WriteTimestamp))
+	require.False(t, readerTxn.GlobalUncertaintyLimit.Less(writerTxn.WriteTimestamp))
+
+	// Collect an observed timestamp from each of the nodes. We read the key
+	// following (Key.Next) each of the written keys to avoid conflicting with
+	// read values. We read keyB first to avoid advancing the clock on node 2
+	// before we collect an observed timestamp from it.
+	//
+	// NOTE: this wasn't even a necessary step to hit #36431, because new
+	// transactions are always an observed timestamp from their own gateway node.
+	for i, key := range []roachpb.Key{keyB, keyA} {
+		get := getArgs(key.Next())
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), roachpb.Header{Txn: &readerTxn}, get)
+		require.Nil(t, pErr)
+		require.Nil(t, resp.(*roachpb.GetResponse).Value)
+		readerTxn.Update(resp.Header().Txn)
+		require.Len(t, readerTxn.ObservedTimestamps, i+1)
+	}
+
+	// Resolve the intent on key B zero, one, or two times.
+	{
+		resolveIntentArgs := func(status roachpb.TransactionStatus) roachpb.Request {
+			if rangedResolution {
+				return &roachpb.ResolveIntentRangeRequest{
+					RequestHeader: roachpb.RequestHeader{Key: keyB, EndKey: keyB.Next()},
+					IntentTxn:     writerTxn.TxnMeta,
+					Status:        status,
+				}
+			} else {
+				return &roachpb.ResolveIntentRequest{
+					RequestHeader: roachpb.RequestHeader{Key: keyB},
+					IntentTxn:     writerTxn.TxnMeta,
+					Status:        status,
+				}
+			}
+		}
+
+		if movedWhilePending {
+			// First change the intent's timestamp without committing it. This
+			// exercises the case where the intent's timestamp is moved forward by a
+			// PENDING intent resolution request and kept the same when the intent is
+			// eventually COMMITTED. This PENDING intent resolution may still be
+			// evaluated after the transaction commit has been acknowledged in
+			// real-time, so it still needs to lead to the committed value retaining
+			// its original local timestamp.
+			//
+			// For instance, consider the following timeline:
+			//
+			//  1. txn W writes intent on key A @ time 10
+			//  2. txn W writes intent on key B @ time 10
+			//  3. high priority reader @ 15 reads key B
+			//  4. high priority reader pushes txn W to time 15
+			//  5. txn W commits @ 15 and resolves key A synchronously
+			//  6. txn R begins and collects observed timestamp from key B's node @
+			//     time 11
+			//  7. high priority reader moves intent on key B to time 15
+			//  8. async intent resolution commits intent on key B, still @ time 15
+			//  9. txn R reads key B with read ts 11, observed ts 11, and uncertainty
+			//     interval [11, 21]. If step 7 updated the intent's local timestamp
+			//     to the current time when changing its version timestamp, txn R
+			//     could use its observed timestamp to avoid an uncertainty error,
+			//     leading to a stale read.
+			//
+			resolve := resolveIntentArgs(roachpb.PENDING)
+			_, pErr = kv.SendWrapped(ctx, tc.Servers[0].DistSender(), resolve)
+			require.Nil(t, pErr)
+		}
+
+		if alreadyResolved {
+			// Resolve the committed value on key B to COMMITTED.
+			resolve := resolveIntentArgs(roachpb.COMMITTED)
+			_, pErr = kv.SendWrapped(ctx, tc.Servers[0].DistSender(), resolve)
+			require.Nil(t, pErr)
+		}
+	}
+
+	// Read key A and B in the reader transaction. Both should produce
+	// ReadWithinUncertaintyIntervalErrors.
+	for _, key := range []roachpb.Key{keyA, keyB} {
+		get := getArgs(key)
+		_, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), roachpb.Header{Txn: &readerTxn}, get)
+		require.NotNil(t, pErr)
+		var rwuiErr *roachpb.ReadWithinUncertaintyIntervalError
+		require.True(t, errors.As(pErr.GetDetail(), &rwuiErr))
+		require.Equal(t, readerTxn.ReadTimestamp, rwuiErr.ReadTimestamp)
+		require.Equal(t, readerTxn.GlobalUncertaintyLimit, rwuiErr.GlobalUncertaintyLimit)
+		require.Equal(t, readerTxn.ObservedTimestamps, rwuiErr.ObservedTimestamps)
+		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ExistingTimestamp)
+	}
+}
+
 // TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer tests a case where a
 // transaction observes a committed value in its uncertainty interval that was
 // written under a previous leaseholder. In the test, the transaction does

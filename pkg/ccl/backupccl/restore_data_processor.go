@@ -476,9 +476,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			continue
 		}
 
-		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
+		key := iter.UnsafeKey()
+		keyScratch = append(keyScratch[:0], key.Key...)
+		key.Key = keyScratch
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := storage.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 
