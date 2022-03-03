@@ -156,9 +156,9 @@ func (s *Store) applyInternal(
 	systemSpanConfigStoreUpdates := make([]spanconfig.Update, 0, len(updates))
 	for _, update := range updates {
 		switch {
-		case update.Target.IsSpanTarget():
+		case update.GetTarget().IsSpanTarget():
 			spanStoreUpdates = append(spanStoreUpdates, update)
-		case update.Target.IsSystemTarget():
+		case update.GetTarget().IsSystemTarget():
 			systemSpanConfigStoreUpdates = append(systemSpanConfigStoreUpdates, update)
 		default:
 			return nil, nil, errors.AssertionFailedf("unknown target type")
@@ -174,10 +174,12 @@ func (s *Store) applyInternal(
 	}
 
 	for _, entry := range addedEntries {
-		added = append(added, spanconfig.Record{
-			Target: spanconfig.MakeTargetFromSpan(entry.span),
-			Config: entry.config,
-		})
+		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span),
+			entry.config)
+		if err != nil {
+			return nil, nil, err
+		}
+		added = append(added, record)
 	}
 
 	deletedSystemTargets, addedSystemSpanConfigRecords, err := s.mu.systemSpanConfigStore.apply(
@@ -205,9 +207,10 @@ func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 	return s.mu.spanConfigStore.forEachOverlapping(
 		keys.EverythingSpan,
 		func(s spanConfigEntry) error {
-			return f(spanconfig.Record{
-				Target: spanconfig.MakeTargetFromSpan(s.span),
-				Config: s.config,
-			})
+			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(s.span), s.config)
+			if err != nil {
+				return err
+			}
+			return f(record)
 		})
 }

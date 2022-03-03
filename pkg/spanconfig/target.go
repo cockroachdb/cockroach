@@ -234,8 +234,8 @@ func RecordsToEntries(records []Record) []roachpb.SpanConfigEntry {
 	entries := make([]roachpb.SpanConfigEntry, 0, len(records))
 	for _, rec := range records {
 		entries = append(entries, roachpb.SpanConfigEntry{
-			Target: rec.Target.ToProto(),
-			Config: rec.Config,
+			Target: rec.GetTarget().ToProto(),
+			Config: rec.GetConfig(),
 		})
 	}
 	return entries
@@ -250,10 +250,11 @@ func EntriesToRecords(entries []roachpb.SpanConfigEntry) ([]Record, error) {
 		if err != nil {
 			return nil, err
 		}
-		records = append(records, Record{
-			Target: target,
-			Config: entry.Config,
-		})
+		record, err := MakeRecord(target, entry.Config)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 	return records, nil
 }

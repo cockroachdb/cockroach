@@ -82,11 +82,11 @@ func TestRandomized(t *testing.T) {
 				updates[i] = getRandomUpdate()
 			}
 			sort.Slice(updates, func(i, j int) bool {
-				return updates[i].Target.Less(updates[j].Target)
+				return updates[i].GetTarget().Less(updates[j].GetTarget())
 			})
 			invalid := false
 			for i := 1; i < numUpdates; i++ {
-				if updates[i].Target.GetSpan().Overlaps(updates[i-1].Target.GetSpan()) {
+				if updates[i].GetTarget().GetSpan().Overlaps(updates[i-1].GetTarget().GetSpan()) {
 					invalid = true
 				}
 			}
@@ -113,9 +113,9 @@ func TestRandomized(t *testing.T) {
 		_, _, err := store.apply(false /* dryrun */, updates...)
 		require.NoError(t, err)
 		for _, update := range updates {
-			if testSpan.Overlaps(update.Target.GetSpan()) {
+			if testSpan.Overlaps(update.GetTarget().GetSpan()) {
 				if update.Addition() {
-					expConfig, expFound = update.Config, true
+					expConfig, expFound = update.GetConfig(), true
 				} else {
 					expConfig, expFound = roachpb.SpanConfig{}, false
 				}
@@ -126,11 +126,10 @@ func TestRandomized(t *testing.T) {
 	if !expFound {
 		_ = store.forEachOverlapping(testSpan,
 			func(entry spanConfigEntry) error {
+				record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
+				require.NoError(t, err)
 				t.Fatalf("found unexpected entry: %s",
-					spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
-						Target: spanconfig.MakeTargetFromSpan(entry.span),
-						Config: entry.config,
-					}))
+					spanconfigtestutils.PrintSpanConfigRecord(t, record))
 				return nil
 			},
 		)
@@ -139,11 +138,10 @@ func TestRandomized(t *testing.T) {
 		_ = store.forEachOverlapping(testSpan,
 			func(entry spanConfigEntry) error {
 				if !foundEntry.isEmpty() {
+					record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
+					require.NoError(t, err)
 					t.Fatalf("expected single overlapping entry, found second: %s",
-						spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
-							Target: spanconfig.MakeTargetFromSpan(entry.span),
-							Config: entry.config,
-						}))
+						spanconfigtestutils.PrintSpanConfigRecord(t, record))
 				}
 				foundEntry = entry
 

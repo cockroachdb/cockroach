@@ -98,8 +98,8 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 		if mi.batchIdx != mj.batchIdx { // sort by batch/ts order
 			return mi.batchIdx < mj.batchIdx
 		}
-		if !mi.update.Target.Equal(mj.update.Target) { // sort by target order
-			return mi.update.Target.Less(mj.update.Target)
+		if !mi.update.GetTarget().Equal(mj.update.GetTarget()) { // sort by target order
+			return mi.update.GetTarget().Less(mj.update.GetTarget())
 		}
 
 		return mi.update.Deletion() // sort deletes before upserts
@@ -111,15 +111,15 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 	var output strings.Builder
 	for _, m := range r.mu.mutations {
 		if m.update.Deletion() {
-			output.WriteString(fmt.Sprintf("delete %s\n", m.update.Target))
+			output.WriteString(fmt.Sprintf("delete %s\n", m.update.GetTarget()))
 		} else {
 			switch {
-			case m.update.Target.IsSpanTarget():
-				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
-					PrintSpanConfigDiffedAgainstDefaults(m.update.Config)))
-			case m.update.Target.IsSystemTarget():
-				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
-					PrintSystemSpanConfigDiffedAgainstDefault(m.update.Config)))
+			case m.update.GetTarget().IsSpanTarget():
+				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.GetTarget(),
+					PrintSpanConfigDiffedAgainstDefaults(m.update.GetConfig())))
+			case m.update.GetTarget().IsSystemTarget():
+				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.GetTarget(),
+					PrintSystemSpanConfigDiffedAgainstDefault(m.update.GetConfig())))
 			default:
 				panic("unsupported target type")
 			}
