@@ -26,6 +26,7 @@ const (
 	tableEventTruncate
 	tableEventPrimaryKeyChange
 	tableEventLocalityRegionalByRowChange
+	tableEventAddHiddenColumn
 )
 
 var (
@@ -36,6 +37,7 @@ var (
 		tableEventTypeUnknown:                 true,
 		tableEventPrimaryKeyChange:            false,
 		tableEventLocalityRegionalByRowChange: false,
+		tableEventAddHiddenColumn:             true,
 	}
 
 	columnChangeTableEventFilter = tableEventFilter{
@@ -45,6 +47,7 @@ var (
 		tableEventTypeUnknown:                 true,
 		tableEventPrimaryKeyChange:            false,
 		tableEventLocalityRegionalByRowChange: false,
+		tableEventAddHiddenColumn:             true,
 	}
 
 	schemaChangeEventFilters = map[changefeedbase.SchemaChangeEventClass]tableEventFilter{
@@ -71,8 +74,12 @@ func classifyTableEvent(e TableEvent) tableEventType {
 		et = et | tableEventPrimaryKeyChange
 	}
 
-	if newColumnBackfillComplete(e) {
+	if newVisibleColumnBackfillComplete(e) {
 		et = et | tableEventTypeAddColumnWithBackfill
+	}
+
+	if newHiddenColumnBackfillComplete(e) {
+		et = et | tableEventAddHiddenColumn
 	}
 
 	if newColumnNoBackfill(e) {
@@ -145,10 +152,15 @@ func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
 	return false
 }
 
-func newColumnBackfillComplete(e TableEvent) (res bool) {
+func newVisibleColumnBackfillComplete(e TableEvent) (res bool) {
 	// TODO(ajwerner): What is the case where the before has a backfill mutation
 	// and the After doesn't? What about other queued mutations?
-	return len(e.Before.PublicColumns()) < len(e.After.PublicColumns()) &&
+	return len(e.Before.VisibleColumns()) < len(e.After.VisibleColumns()) &&
+		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
+}
+
+func newHiddenColumnBackfillComplete(e TableEvent) (res bool) {
+	return len(e.Before.VisibleColumns()) == len(e.After.VisibleColumns()) &&
 		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
 }
 
