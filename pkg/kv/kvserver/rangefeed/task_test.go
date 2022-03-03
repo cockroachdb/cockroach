@@ -27,13 +27,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeVal(val string) roachpb.Value {
+	return roachpb.MakeValueFromString(val)
+}
+
+func makeValWithTs(val string, ts int64) roachpb.Value {
+	v := makeVal(val)
+	v.Timestamp = hlc.Timestamp{WallTime: ts}
+	return v
+}
+
 func makeKV(key, val string, ts int64) storage.MVCCKeyValue {
 	return storage.MVCCKeyValue{
 		Key: storage.MVCCKey{
 			Key:       roachpb.Key(key),
 			Timestamp: hlc.Timestamp{WallTime: ts},
 		},
-		Value: []byte(val),
+		Value: makeVal(val).RawBytes,
 	}
 }
 
@@ -56,7 +66,7 @@ func makeMetaKV(key string, meta enginepb.MVCCMetadata) storage.MVCCKeyValue {
 
 func makeInline(key, val string) storage.MVCCKeyValue {
 	return makeMetaKV(key, enginepb.MVCCMetadata{
-		RawBytes: []byte(val),
+		RawBytes: makeVal(val).RawBytes,
 	})
 }
 

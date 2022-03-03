@@ -67,12 +67,18 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	if !mvccKey.Key.Equal(key) {
 		return roachpb.Value{}
 	}
-	if len(iter.Value()) == 0 {
-		return roachpb.Value{}
-	}
 	var valCopy []byte
 	e.b, valCopy = e.b.Copy(iter.Value(), 0 /* extraCap */)
-	return roachpb.Value{RawBytes: valCopy, Timestamp: mvccKey.Timestamp}
+	mvccVal, err := storage.DecodeMVCCValue(valCopy)
+	if err != nil {
+		panic(err)
+	}
+	if mvccVal.IsTombstone() {
+		return roachpb.Value{}
+	}
+	val := mvccVal.Value
+	val.Timestamp = mvccKey.Timestamp
+	return val
 }
 
 // Put inserts a key/value/timestamp tuple. If an exact key/timestamp pair is
@@ -124,8 +130,13 @@ func (e *Engine) DebugPrint(indent string) string {
 		if err != nil {
 			fmt.Fprintf(&buf, "(err:%s)", err)
 		} else {
-			fmt.Fprintf(&buf, "%s%s %s -> %s",
-				indent, key.Key, key.Timestamp, roachpb.Value{RawBytes: value}.PrettyPrint())
+			v, err := storage.DecodeMVCCValue(value)
+			if err != nil {
+				fmt.Fprintf(&buf, "(err:%s)", err)
+			} else {
+				fmt.Fprintf(&buf, "%s%s %s -> %s",
+					indent, key.Key, key.Timestamp, v.Value.PrettyPrint())
+			}
 		}
 	})
 	return buf.String()

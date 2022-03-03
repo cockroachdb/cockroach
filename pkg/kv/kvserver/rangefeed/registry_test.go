@@ -286,50 +286,50 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	expEvents := []*roachpb.RangeFeedEvent{
 		rangeFeedValueWithPrev(
 			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("valD3"), Timestamp: hlc.Timestamp{WallTime: 16}},
-			roachpb.Value{RawBytes: []byte("valD2")},
+			makeValWithTs("valD3", 16),
+			makeVal("valD2"),
 		),
 		rangeFeedValueWithPrev(
 			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("valD4"), Timestamp: hlc.Timestamp{WallTime: 19}},
-			roachpb.Value{RawBytes: []byte("valD3")},
+			makeValWithTs("valD4", 19),
+			makeVal("valD3"),
 		),
 		rangeFeedValueWithPrev(
 			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("valD5"), Timestamp: hlc.Timestamp{WallTime: 20}},
-			roachpb.Value{RawBytes: []byte("valD4")},
+			makeValWithTs("valD5", 20),
+			makeVal("valD4"),
 		),
 		rangeFeedValueWithPrev(
 			roachpb.Key("e"),
-			roachpb.Value{RawBytes: []byte("valE2"), Timestamp: hlc.Timestamp{WallTime: 5}},
-			roachpb.Value{RawBytes: []byte("valE1")},
+			makeValWithTs("valE2", 5),
+			makeVal("valE1"),
 		),
 		rangeFeedValueWithPrev(
 			roachpb.Key("e"),
-			roachpb.Value{RawBytes: []byte("valE3"), Timestamp: hlc.Timestamp{WallTime: 6}},
-			roachpb.Value{RawBytes: []byte("valE2")},
+			makeValWithTs("valE3", 6),
+			makeVal("valE2"),
 		),
 		rangeFeedValue(
 			roachpb.Key("f"),
-			roachpb.Value{RawBytes: []byte("valF1"), Timestamp: hlc.Timestamp{WallTime: 5}},
+			makeValWithTs("valF1", 5),
 		),
 		rangeFeedValueWithPrev(
 			roachpb.Key("f"),
-			roachpb.Value{RawBytes: []byte("valF2"), Timestamp: hlc.Timestamp{WallTime: 6}},
-			roachpb.Value{RawBytes: []byte("valF1")},
+			makeValWithTs("valF2", 6),
+			makeVal("valF1"),
 		),
 		rangeFeedValueWithPrev(
 			roachpb.Key("f"),
-			roachpb.Value{RawBytes: []byte("valF3"), Timestamp: hlc.Timestamp{WallTime: 7}},
-			roachpb.Value{RawBytes: []byte("valF2")},
+			makeValWithTs("valF3", 7),
+			makeVal("valF2"),
 		),
 		rangeFeedValue(
 			roachpb.Key("g"),
-			roachpb.Value{RawBytes: []byte("valG1"), Timestamp: hlc.Timestamp{WallTime: 0}},
+			makeVal("valG1"),
 		),
 		rangeFeedValue(
 			roachpb.Key("h"),
-			roachpb.Value{RawBytes: []byte("valH1"), Timestamp: hlc.Timestamp{WallTime: 15}},
+			makeValWithTs("valH1", 15),
 		),
 	}
 	require.Equal(t, expEvents, r.Events())
