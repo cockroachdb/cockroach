@@ -96,6 +96,10 @@ const (
 	// latestHistoryDirectory is the directory where all 22.1 and beyond
 	// LATEST files will be stored as we no longer want to overwrite it.
 	latestHistoryDirectory = "latest"
+
+	// backupMetadataDirectory is the directory where metadata about a backup
+	// collection is stored. In v22.1 it contains the latest directory.
+	backupMetadataDirectory = "metadata"
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
@@ -1253,16 +1257,16 @@ func ListFullBackupsInCollection(
 func readLatestCheckpointFile(
 	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
 ) (ioctx.ReadCloserCtx, error) {
+	filename = strings.TrimPrefix(filename, "/")
 	// First try reading from the progress directory. If the backup is from
 	// an older version, it may not exist there yet so try reading
 	// in the base directory if the first attempt fails.
 	r, err := exportStore.ReadFile(ctx, backupProgressDirectory+"/"+filename)
 	if err != nil {
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, err
+		r, err = exportStore.ReadFile(ctx, filename)
+		if err != nil {
+			return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
 		}
-
-		return exportStore.ReadFile(ctx, filename)
 	}
 	return r, nil
 }
@@ -1276,6 +1280,7 @@ func writeNewCheckpointFile(
 	filename string,
 	descBuf []byte,
 ) error {
+	filename = strings.TrimPrefix(filename, "/")
 	// If the cluster is still running on a mixed version, we want to write
 	// to the base directory as well the progress directory. That way if
 	// an old node resumes a backup, it doesn't have to start over.

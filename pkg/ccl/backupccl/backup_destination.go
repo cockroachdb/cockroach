@@ -344,13 +344,12 @@ func readLatestFile(
 func findLatestFile(
 	ctx context.Context, exportStore cloud.ExternalStorage,
 ) (ioctx.ReadCloserCtx, error) {
-	latestFile, err := exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
+	latestFile, err := exportStore.ReadFile(ctx, backupMetadataDirectory+"/"+latestHistoryDirectory+"/"+latestFileName)
 	if err != nil {
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, err
-		}
-
 		latestFile, err = exportStore.ReadFile(ctx, latestFileName)
+		if err != nil {
+			return nil, errors.Wrap(err, "Latest file could not be read in base or metadata directory")
+		}
 	}
 	return latestFile, err
 }
@@ -370,5 +369,5 @@ func writeNewLatestFile(
 		}
 	}
 
-	return cloud.WriteFile(ctx, exportStore, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
+	return cloud.WriteFile(ctx, exportStore, backupMetadataDirectory+"/"+latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
 }
