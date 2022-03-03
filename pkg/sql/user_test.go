@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sync/atomic"
 	"testing"
@@ -48,190 +49,199 @@ func TestGetUserTimeout(t *testing.T) {
 	// race builds are so slow as to trigger this timeout spuriously.
 	skip.UnderRace(t)
 
-	ctx := context.Background()
+	for _, singleScan := range []bool{false, true} {
+		t.Run(fmt.Sprintf("single_scan=%t", singleScan), func(t *testing.T) {
+			ctx := context.Background()
 
-	// unavailableCh is used by the replica command filter
-	// to conditionally block requests and simulate unavailability.
-	var unavailableCh atomic.Value
-	closedCh := make(chan struct{})
-	close(closedCh)
-	unavailableCh.Store(closedCh)
-	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, _ roachpb.BatchRequest) *roachpb.Error {
-			select {
-			case <-unavailableCh.Load().(chan struct{}):
-			case <-ctx.Done():
+			// unavailableCh is used by the replica command filter
+			// to conditionally block requests and simulate unavailability.
+			var unavailableCh atomic.Value
+			closedCh := make(chan struct{})
+			close(closedCh)
+			unavailableCh.Store(closedCh)
+			knobs := &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, _ roachpb.BatchRequest) *roachpb.Error {
+					select {
+					case <-unavailableCh.Load().(chan struct{}):
+					case <-ctx.Done():
+					}
+					return nil
+				},
 			}
-			return nil
-		},
-	}
-	params := base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+			params := base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}}
+			s, db, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
 
-	// Make a user that must use a password to authenticate.
-	// Default privileges on defaultdb are needed to run simple queries.
-	if _, err := db.Exec(`
+			// Make a user that must use a password to authenticate.
+			// Default privileges on defaultdb are needed to run simple queries.
+			if _, err := db.Exec(`
 CREATE USER foo WITH PASSWORD 'testabc';
 GRANT ALL ON DATABASE defaultdb TO foo;
 GRANT admin TO foo`); err != nil {
-		t.Fatal(err)
-	}
-
-	// We'll attempt connections on gateway node 0.
-	fooURL, fooCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-		s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false /* withClientCerts */)
-	defer fooCleanupFn()
-	barURL, barCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-		s.ServingSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false /* withClientCerts */)
-	defer barCleanupFn()
-	rootURL, rootCleanupFn := sqlutils.PGUrl(t,
-		s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
-	defer rootCleanupFn()
-
-	// Override the timeout built into pgx so we are only subject to
-	// what the server thinks.
-	fooURL.RawQuery += "&connect_timeout=0"
-	barURL.RawQuery += "&connect_timeout=0"
-	rootURL.RawQuery += "&connect_timeout=0"
-
-	t.Log("-- sanity checks --")
-
-	// We use a closure here and below to ensure the defers are run
-	// before the rest of the test.
-
-	func() {
-		// Sanity check: verify that secure mode is enabled: password is
-		// required. If this part fails, this means the test cluster is
-		// not properly configured, and the remainder of the test below
-		// would report false positives.
-		unauthURL := fooURL
-		unauthURL.User = url.User("foo")
-		dbSQL, err := pgxConn(t, unauthURL)
-		if err == nil {
-			defer func() { _ = dbSQL.Close(ctx) }()
-		}
-		if !testutils.IsError(err, "failed SASL auth") {
-			t.Fatalf("expected password error, got %v", err)
-		}
-	}()
-
-	func() {
-		// Sanity check: verify that the new user is able to log in with password.
-		dbSQL, err := pgxConn(t, fooURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = dbSQL.Close(ctx) }()
-		row := dbSQL.QueryRow(ctx, "SELECT current_user")
-		var username string
-		if err := row.Scan(&username); err != nil {
-			t.Fatal(err)
-		}
-		if username != "foo" {
-			t.Fatalf("invalid username: expected foo, got %q", username)
-		}
-	}()
-
-	// Configure the login timeout to just 200ms.
-	if _, err := db.Exec(`SET CLUSTER SETTING server.user_login.timeout = '200ms'`); err != nil {
-		t.Fatal(err)
-	}
-
-	func() {
-		t.Log("-- make ranges unavailable --")
-
-		ch := make(chan struct{})
-		unavailableCh.Store(ch)
-		defer close(ch)
-
-		t.Log("-- expect no timeout because of cache --")
-
-		func() {
-			// Now attempt to connect again. Since a previous authentication attempt
-			// for this user occurred, the auth-related info should be cached, so
-			// authentication should work.
-			dbSQL, err := pgxConn(t, fooURL)
-			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() { _ = dbSQL.Close(ctx) }()
-			// A simple query must work even without a system range available.
-			if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
-				t.Fatal(err)
+
+			if singleScan {
+				_, err := db.Exec(`SET CLUSTER SETTING sql.auth.resolve_member_single_scan.enabled = true`)
+				require.NoError(t, err)
 			}
-			var isSuperuser string
-			require.NoError(t, dbSQL.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
-			require.Equal(t, "on", isSuperuser)
-		}()
 
-		t.Log("-- expect timeout --")
+			// We'll attempt connections on gateway node 0.
+			fooURL, fooCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
+				s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false /* withClientCerts */)
+			defer fooCleanupFn()
+			barURL, barCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
+				s.ServingSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false /* withClientCerts */)
+			defer barCleanupFn()
+			rootURL, rootCleanupFn := sqlutils.PGUrl(t,
+				s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+			defer rootCleanupFn()
 
-		func() {
-			// Now attempt to connect with a different user. We're expecting a timeout
-			// within 5 seconds.
-			start := timeutil.Now()
-			dbSQL, err := pgxConn(t, barURL)
-			if err == nil {
+			// Override the timeout built into pgx so we are only subject to
+			// what the server thinks.
+			fooURL.RawQuery += "&connect_timeout=0"
+			barURL.RawQuery += "&connect_timeout=0"
+			rootURL.RawQuery += "&connect_timeout=0"
+
+			t.Log("-- sanity checks --")
+
+			// We use a closure here and below to ensure the defers are run
+			// before the rest of the test.
+
+			func() {
+				// Sanity check: verify that secure mode is enabled: password is
+				// required. If this part fails, this means the test cluster is
+				// not properly configured, and the remainder of the test below
+				// would report false positives.
+				unauthURL := fooURL
+				unauthURL.User = url.User("foo")
+				dbSQL, err := pgxConn(t, unauthURL)
+				if err == nil {
+					defer func() { _ = dbSQL.Close(ctx) }()
+				}
+				if !testutils.IsError(err, "failed SASL auth") {
+					t.Fatalf("expected password error, got %v", err)
+				}
+			}()
+
+			func() {
+				// Sanity check: verify that the new user is able to log in with password.
+				dbSQL, err := pgxConn(t, fooURL)
+				if err != nil {
+					t.Fatal(err)
+				}
 				defer func() { _ = dbSQL.Close(ctx) }()
-			}
-			if !testutils.IsError(err, "internal error while retrieving user account") {
-				t.Fatalf("expected error during connection, got %v", err)
-			}
-			timeoutDur := timeutil.Since(start)
-			if timeoutDur > 5*time.Second {
-				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
-			}
-		}()
+				row := dbSQL.QueryRow(ctx, "SELECT current_user")
+				var username string
+				if err := row.Scan(&username); err != nil {
+					t.Fatal(err)
+				}
+				if username != "foo" {
+					t.Fatalf("invalid username: expected foo, got %q", username)
+				}
+			}()
 
-		t.Log("-- no timeout for root --")
-
-		func() {
-			dbSQL, err := pgxConn(t, rootURL)
-			if err != nil {
+			// Configure the login timeout to just 200ms.
+			if _, err := db.Exec(`SET CLUSTER SETTING server.user_login.timeout = '200ms'`); err != nil {
 				t.Fatal(err)
 			}
-			defer func() { _ = dbSQL.Close(ctx) }()
-			// A simple query must work for 'root' even without a system range available.
-			if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
-				t.Fatal(err)
-			}
-			var isSuperuser string
-			require.NoError(t, dbSQL.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
-			require.Equal(t, "on", isSuperuser)
-		}()
 
-		t.Log("-- re-enable range, revoke admin for user --")
-	}()
+			func() {
+				t.Log("-- make ranges unavailable --")
 
-	t.Log("-- removing foo as admin --")
-	_, err := db.Exec(`REVOKE admin FROM foo`)
-	require.NoError(t, err)
+				ch := make(chan struct{})
+				unavailableCh.Store(ch)
+				defer close(ch)
 
-	func() {
-		t.Log("-- make ranges unavailable --")
+				t.Log("-- expect no timeout because of cache --")
 
-		ch := make(chan struct{})
-		unavailableCh.Store(ch)
-		defer close(ch)
+				func() {
+					// Now attempt to connect again. Since a previous authentication attempt
+					// for this user occurred, the auth-related info should be cached, so
+					// authentication should work.
+					dbSQL, err := pgxConn(t, fooURL)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer func() { _ = dbSQL.Close(ctx) }()
+					// A simple query must work even without a system range available.
+					if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
+						t.Fatal(err)
+					}
+					var isSuperuser string
+					require.NoError(t, dbSQL.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
+					require.Equal(t, "on", isSuperuser)
+				}()
 
-		func() {
-			// Now attempt to connect with foo. We're expecting a timeout within 5
-			// seconds as the membership cache is invalid.
-			start := timeutil.Now()
-			dbSQL, err := pgxConn(t, fooURL)
-			if err == nil {
-				defer func() { _ = dbSQL.Close(ctx) }()
-			}
-			if !testutils.IsError(err, "internal error while retrieving user account memberships") {
-				t.Fatalf("expected error during connection, got %v", err)
-			}
-			timeoutDur := timeutil.Since(start)
-			if timeoutDur > 5*time.Second {
-				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
-			}
-		}()
-	}()
+				t.Log("-- expect timeout --")
+
+				func() {
+					// Now attempt to connect with a different user. We're expecting a timeout
+					// within 5 seconds.
+					start := timeutil.Now()
+					dbSQL, err := pgxConn(t, barURL)
+					if err == nil {
+						defer func() { _ = dbSQL.Close(ctx) }()
+					}
+					if !testutils.IsError(err, "internal error while retrieving user account") {
+						t.Fatalf("expected error during connection, got %v", err)
+					}
+					timeoutDur := timeutil.Since(start)
+					if timeoutDur > 5*time.Second {
+						t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
+					}
+				}()
+
+				t.Log("-- no timeout for root --")
+
+				func() {
+					dbSQL, err := pgxConn(t, rootURL)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer func() { _ = dbSQL.Close(ctx) }()
+					// A simple query must work for 'root' even without a system range available.
+					if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
+						t.Fatal(err)
+					}
+					var isSuperuser string
+					require.NoError(t, dbSQL.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
+					require.Equal(t, "on", isSuperuser)
+				}()
+
+				t.Log("-- re-enable range, revoke admin for user --")
+			}()
+
+			t.Log("-- removing foo as admin --")
+			_, err := db.Exec(`REVOKE admin FROM foo`)
+			require.NoError(t, err)
+
+			func() {
+				t.Log("-- make ranges unavailable --")
+
+				ch := make(chan struct{})
+				unavailableCh.Store(ch)
+				defer close(ch)
+
+				func() {
+					// Now attempt to connect with foo. We're expecting a timeout within 5
+					// seconds as the membership cache is invalid.
+					start := timeutil.Now()
+					dbSQL, err := pgxConn(t, fooURL)
+					if err == nil {
+						defer func() { _ = dbSQL.Close(ctx) }()
+					}
+					if !testutils.IsError(err, "internal error while retrieving user account memberships") {
+						t.Fatalf("expected error during connection, got %v", err)
+					}
+					timeoutDur := timeutil.Since(start)
+					if timeoutDur > 5*time.Second {
+						t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
+					}
+				}()
+			}()
+		})
+	}
 }
 
 func pgxConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
