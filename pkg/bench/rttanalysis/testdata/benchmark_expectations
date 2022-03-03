@@ -1,7 +1,7 @@
 exp,benchmark
-15,AlterRole/alter_role_with_1_option
-16,AlterRole/alter_role_with_2_options
-21,AlterRole/alter_role_with_3_options
+14,AlterRole/alter_role_with_1_option
+15,AlterRole/alter_role_with_2_options
+20,AlterRole/alter_role_with_3_options
 15,AlterTableAddCheckConstraint/alter_table_add_1_check_constraint
 15,AlterTableAddCheckConstraint/alter_table_add_2_check_constraints
 15,AlterTableAddCheckConstraint/alter_table_add_3_check_constraints
