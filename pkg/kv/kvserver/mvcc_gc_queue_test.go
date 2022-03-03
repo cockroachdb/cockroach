@@ -282,7 +282,7 @@ func (cws *cachedWriteSimulator) multiKey(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
 	key, value := []byte("multikey"), cws.value(size)
 	var eachMS enginepb.MVCCStats
-	if err := storage.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn); err != nil {
+	if err := storage.MVCCPut(ctx, eng, &eachMS, key, ts, hlc.ClockTimestamp{}, value, txn); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numOps; i++ {
@@ -311,7 +311,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 		for i := 0; i < qps; i++ {
 			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
 
-			if err := storage.MVCCPut(ctx, eng, ms, key, now, value, nil /* txn */); err != nil {
+			if err := storage.MVCCPut(ctx, eng, ms, key, now, hlc.ClockTimestamp{}, value, nil); err != nil {
 				t.Fatal(err)
 			}
 			if len(firstSl) < cacheFirstLen {
@@ -855,7 +855,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
-			if err := storage.MVCCPutProto(ctx, tc.engine, nil, key, hlc.Timestamp{}, nil, txn); err != nil {
+			if err := storage.MVCCPutProto(ctx, tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1057,7 +1057,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	ts := tc.Clock().Now()
 	for _, lpv := range lastProcessedVals {
-		if err := storage.MVCCPutProto(ctx, tc.engine, nil, lpv.key, hlc.Timestamp{}, nil, &ts); err != nil {
+		if err := storage.MVCCPutProto(ctx, tc.engine, nil, lpv.key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &ts); err != nil {
 			t.Fatal(err)
 		}
 	}

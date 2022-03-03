@@ -569,7 +569,8 @@ func TestClusterIDMismatch(t *testing.T) {
 			StoreID:   roachpb.StoreID(i + 1),
 		}
 		if err := storage.MVCCPutProto(
-			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
+			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &sIdent,
+		); err != nil {
 
 			t.Fatal(err)
 		}
@@ -1160,7 +1161,7 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
 
 	require.NoError(t, storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(),
-		hlc.Timestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
 	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
 
 	batch := eng.NewBatch()

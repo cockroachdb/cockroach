@@ -206,7 +206,7 @@ func (m mvccPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, txn)
+	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.WriteTimestamp, hlc.ClockTimestamp{}, m.value, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -229,7 +229,8 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, m.expVal, true, txn)
+	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key,
+		txn.WriteTimestamp, hlc.ClockTimestamp{}, m.value, m.expVal, true, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -251,7 +252,7 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, false, txn)
+	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.WriteTimestamp, hlc.ClockTimestamp{}, m.value, false, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -278,7 +279,8 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 
 	txn.Sequence++
 
-	keys, _, _, err := storage.MVCCDeleteRange(ctx, writer, nil, m.key, m.endKey, 0, txn.WriteTimestamp, txn, true)
+	keys, _, _, err := storage.MVCCDeleteRange(ctx, writer, nil, m.key, m.endKey,
+		0, txn.WriteTimestamp, hlc.ClockTimestamp{}, txn, true)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -331,7 +333,7 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.WriteTimestamp, txn)
+	err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.WriteTimestamp, hlc.ClockTimestamp{}, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}

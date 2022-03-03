@@ -683,7 +683,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						if kv.WallTimestamp == intentTS {
 							txn = &intentTxn
 						}
-						require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
+						require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), hlc.ClockTimestamp{}, kv.Value(), txn))
 					}
 					require.NoError(t, b.Commit(false))
 					stats := engineStats(t, engine, 0)

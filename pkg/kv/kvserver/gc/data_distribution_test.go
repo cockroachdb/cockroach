@@ -64,7 +64,7 @@ func (ds dataDistribution) setupTest(
 				txn.WriteTimestamp = ts
 			}
 			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,
-				roachpb.Value{RawBytes: kv.Value}, txn)
+				hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, txn)
 			require.NoError(t, err)
 		}
 		if !kv.Key.Timestamp.Less(maxTs) {

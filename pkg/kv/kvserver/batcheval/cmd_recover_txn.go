@@ -216,7 +216,7 @@ func RecoverTxn(
 		reply.RecoveredTxn.Status = roachpb.ABORTED
 	}
 	txnRecord := reply.RecoveredTxn.AsRecord()
-	if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+	if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
 		return result.Result{}, err
 	}
 

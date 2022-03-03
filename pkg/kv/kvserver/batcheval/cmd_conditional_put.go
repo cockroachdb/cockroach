@@ -67,9 +67,11 @@ func ConditionalPut(
 	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, ts, args.Value, expVal, handleMissing, h.Txn)
+		err = storage.MVCCBlindConditionalPut(
+			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, expVal, handleMissing, h.Txn)
 	} else {
-		err = storage.MVCCConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, ts, args.Value, expVal, handleMissing, h.Txn)
+		err = storage.MVCCConditionalPut(
+			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, expVal, handleMissing, h.Txn)
 	}
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld

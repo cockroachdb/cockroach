@@ -399,6 +399,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			nil, /* ms */
 			roachpb.Key(key),
 			hlc.Timestamp{},
+			hlc.ClockTimestamp{},
 			roachpb.MakeValueFromBytes([]byte(val)),
 			nil, /* txn */
 		)
