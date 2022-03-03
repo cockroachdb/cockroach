@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -401,7 +402,7 @@ func MemberOfWithAdminOption(
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, ie, txn)
+		return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useScanForAdminOption.Get(execCfg.SV()))
 	}
 
 	// We loop in case the table version changes while we're looking up memberships.
@@ -428,7 +429,7 @@ func MemberOfWithAdminOption(
 		}
 
 		// Lookup memberships outside the lock.
-		memberships, err := resolveMemberOfWithAdminOption(ctx, member, ie, txn)
+		memberships, err := resolveMemberOfWithAdminOption(ctx, member, ie, txn, useScanForAdminOption.Get(execCfg.SV()))
 		if err != nil {
 			return nil, err
 		}
@@ -464,15 +465,71 @@ func MemberOfWithAdminOption(
 	}
 }
 
+var useScanForAdminOption = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sql.auth.resolve_member_single_scan.enabled",
+	"whether to resolve memberships with a single scan",
+	false,
+).WithPublic()
+
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 // TODO(mberhault): this is the naive way and performs a full lookup for each user,
 // we could save detailed memberships (as opposed to fully expanded) and reuse them
 // across users. We may then want to lookup more than just this user.
 func resolveMemberOfWithAdminOption(
-	ctx context.Context, member security.SQLUsername, ie sqlutil.InternalExecutor, txn *kv.Txn,
+	ctx context.Context,
+	member security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	singleScan bool,
 ) (map[security.SQLUsername]bool, error) {
-	ret := map[security.SQLUsername]bool{}
+	if singleScan {
+		lookupRolesStmt := `SELECT "member", "role", "isAdmin" FROM system.role_members`
+		it, err := ie.QueryIterator(
+			ctx, "expand-roles-single-scan", txn, lookupRolesStmt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		userToIsAdmin := make(map[security.SQLUsername]bool)
+		memberToRoles := make(map[security.SQLUsername][]security.SQLUsername)
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+			memberName := tree.MustBeDString(row[0])
+			roleName := tree.MustBeDString(row[1])
+			isAdmin := row[2].(*tree.DBool)
 
+			// system.role_members stores pre-normalized usernames.
+			m := security.MakeSQLUsernameFromPreNormalizedString(string(memberName))
+			role := security.MakeSQLUsernameFromPreNormalizedString(string(roleName))
+			userToIsAdmin[role] = bool(*isAdmin)
+			memberToRoles[m] = append(memberToRoles[m], role)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		// Recurse through all roles associated with the member.
+		ret := map[security.SQLUsername]bool{}
+		var recurse func(u security.SQLUsername)
+		recurse = func(u security.SQLUsername) {
+			if _, ok := ret[u]; ok {
+				return
+			}
+			// Only apply memberships if it is not a member itself.
+			if u != member {
+				ret[u] = userToIsAdmin[u]
+			}
+			for _, role := range memberToRoles[u] {
+				recurse(role)
+			}
+		}
+		recurse(member)
+		return ret, nil
+	}
+
+	ret := map[security.SQLUsername]bool{}
 	// Keep track of members we looked up.
 	visited := map[security.SQLUsername]struct{}{}
 	toVisit := []security.SQLUsername{member}
