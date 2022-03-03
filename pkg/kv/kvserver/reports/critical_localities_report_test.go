@@ -56,13 +56,13 @@ func TestCriticalLocalitiesReport(t *testing.T) {
 		{
 			name: "simple",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name: "db1",
-						zone: &zone{replicas: 3},
+						zone: &zone{voters: 3},
 						tables: []table{
-							{name: "t1", zone: &zone{replicas: 3}},
+							{name: "t1", zone: &zone{voters: 3}},
 							// Critical localities for t2 are counted towards db1's zone,
 							// since t2 doesn't define a zone.
 							{name: "t2"},
@@ -80,7 +80,7 @@ func TestCriticalLocalitiesReport(t *testing.T) {
 							// qualifying zone.
 							{name: "t4"},
 							{name: "t5"},
-							{name: "t6", zone: &zone{replicas: 3}},
+							{name: "t6", zone: &zone{voters: 3}},
 						},
 					},
 				},
