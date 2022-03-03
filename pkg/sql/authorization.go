@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +48,9 @@ type MembershipCache struct {
 	boundAccount mon.BoundAccount
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[security.SQLUsername]userRoleMembership
+	// populateCacheGroup ensures that there is at most one request in-flight
+	// for each key.
+	populateCacheGroup singleflight.Group
 }
 
 // NewMembershipCache initializes a new MembershipCache.
@@ -428,11 +432,18 @@ func MemberOfWithAdminOption(
 			return userMapping, nil
 		}
 
-		// Lookup memberships outside the lock.
-		memberships, err := resolveMemberOfWithAdminOption(ctx, member, ie, txn, useScanForRoleMembershipCache.Get(execCfg.SV()))
+		// Lookup memberships outside the lock, but ensure there are no unnecessary
+		// simultaneous lookups.
+		membershipsMap, _, err := roleMembersCache.populateCacheGroup.Do(
+			member.Normalized(),
+			func() (interface{}, error) {
+				return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useScanForRoleMembershipCache.Get(execCfg.SV()))
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
+		memberships := membershipsMap.(map[security.SQLUsername]bool)
 
 		finishedLoop := func() bool {
 			// Update membership.
