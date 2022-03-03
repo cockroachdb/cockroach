@@ -590,7 +590,7 @@ func TestRangeIteration(t *testing.T) {
 		schema: []database{{
 			name: "db1",
 			zone: &zone{
-				replicas: 3,
+				voters: 3,
 			},
 			tables: []table{
 				{
