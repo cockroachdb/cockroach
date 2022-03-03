@@ -346,11 +346,10 @@ func findLatestFile(
 ) (ioctx.ReadCloserCtx, error) {
 	latestFile, err := exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
 	if err != nil {
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, err
-		}
-
 		latestFile, err = exportStore.ReadFile(ctx, latestFileName)
+		if err != nil {
+			return nil, errors.Wrap(err, "s/Latest/LATEST/g file could not be read in base or metadata directory")
+		}
 	}
 	return latestFile, err
 }
