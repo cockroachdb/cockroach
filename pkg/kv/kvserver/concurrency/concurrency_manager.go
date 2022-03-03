@@ -157,6 +157,7 @@ func NewManager(cfg Config) Manager {
 		},
 		lt: lt,
 		ltw: &lockTableWaiterImpl{
+			nodeDesc:          cfg.NodeDesc,
 			st:                cfg.Settings,
 			clock:             cfg.Clock,
 			stopper:           cfg.Stopper,

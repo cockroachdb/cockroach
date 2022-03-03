@@ -220,7 +220,7 @@ sequence req=req6
 on-txn-updated txn=txn2 status=pending ts=18,1
 ----
 [-] update txn: increasing timestamp of txn2
-[2] sequence req5: resolving intent "k" for txn 00000002 with PENDING status
+[2] sequence req5: resolving intent "k" for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
 [2] sequence req5: lock wait-queue event: done waiting
 [2] sequence req5: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
 [2] sequence req5: acquiring latches

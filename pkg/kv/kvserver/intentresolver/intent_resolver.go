@@ -869,21 +869,23 @@ func (ir *IntentResolver) ResolveIntents(
 		var batcher *requestbatcher.RequestBatcher
 		if len(intent.EndKey) == 0 {
 			req = &roachpb.ResolveIntentRequest{
-				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:      intent.Txn,
-				Status:         intent.Status,
-				Poison:         opts.Poison,
-				IgnoredSeqNums: intent.IgnoredSeqNums,
+				RequestHeader:     roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				Poison:            opts.Poison,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
 			}
 			batcher = ir.irBatcher
 		} else {
 			req = &roachpb.ResolveIntentRangeRequest{
-				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:      intent.Txn,
-				Status:         intent.Status,
-				Poison:         opts.Poison,
-				MinTimestamp:   opts.MinTimestamp,
-				IgnoredSeqNums: intent.IgnoredSeqNums,
+				RequestHeader:     roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				Poison:            opts.Poison,
+				MinTimestamp:      opts.MinTimestamp,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
 			}
 			batcher = ir.irRangeBatcher
 		}
