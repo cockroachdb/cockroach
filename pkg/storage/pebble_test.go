@@ -165,8 +165,9 @@ func TestPebbleIterReuse(t *testing.T) {
 	batch := eng.NewBatch()
 	defer batch.Close()
 	for i := 0; i < 100; i++ {
-		key := MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
-		if err := batch.PutMVCC(key, []byte("foo")); err != nil {
+		key := MVCCKey{Key: []byte{byte(i)}, Timestamp: hlc.Timestamp{WallTime: 100}}
+		value := MVCCValue{Value: roachpb.MakeValueFromString("foo")}
+		if err := batch.PutMVCC(key, value); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -496,8 +497,9 @@ func TestPebbleIterConsistency(t *testing.T) {
 	defer eng.Close()
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	k1 := MVCCKey{[]byte("a"), ts1}
-	require.NoError(t, eng.PutMVCC(k1, []byte("a1")))
+	k1 := MVCCKey{Key: []byte("a"), Timestamp: ts1}
+	v1 := MVCCValue{Value: roachpb.MakeValueFromString("a1")}
+	require.NoError(t, eng.PutMVCC(k1, v1))
 
 	var (
 		roEngine  = eng.NewReadOnly(StandardDurability)
@@ -527,7 +529,9 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.Nil(t, batch2.PinEngineStateForIterators())
 
 	// Write a newer version of "a"
-	require.NoError(t, eng.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
+	k2 := MVCCKey{Key: []byte("a"), Timestamp: ts2}
+	v2 := MVCCValue{Value: roachpb.MakeValueFromString("a2")}
+	require.NoError(t, eng.PutMVCC(k2, v2))
 
 	checkMVCCIter := func(iter MVCCIterator) {
 		defer iter.Close()
@@ -594,8 +598,14 @@ func TestPebbleIterConsistency(t *testing.T) {
 	// The eng iterator will see both values.
 	checkIterSeesBothValues(eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 	// The indexed batches will see 2 values since the second one is written to the batch.
-	require.NoError(t, batch.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
-	require.NoError(t, batch2.PutMVCC(MVCCKey{[]byte("a"), ts2}, []byte("a2")))
+	require.NoError(t, batch.PutMVCC(
+		MVCCKey{Key: []byte("a"), Timestamp: ts2},
+		MVCCValue{Value: roachpb.MakeValueFromString("a2")},
+	))
+	require.NoError(t, batch2.PutMVCC(
+		MVCCKey{Key: []byte("a"), Timestamp: ts2},
+		MVCCValue{Value: roachpb.MakeValueFromString("a2")},
+	))
 	checkIterSeesBothValues(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 	checkIterSeesBothValues(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 }
@@ -881,7 +891,10 @@ func TestPebbleBackgroundError(t *testing.T) {
 	require.NoError(t, err)
 	defer eng.Close()
 
-	require.NoError(t, eng.PutMVCC(MVCCKey{[]byte("a"), hlc.Timestamp{WallTime: 1}}, []byte("a")))
+	require.NoError(t, eng.PutMVCC(
+		MVCCKey{Key: []byte("a"), Timestamp: hlc.Timestamp{WallTime: 1}},
+		MVCCValue{Value: roachpb.MakeValueFromString("a")},
+	))
 	require.NoError(t, eng.db.Flush())
 }
 
@@ -950,7 +963,8 @@ func generateData(t *testing.T, engine Engine, limits dataLimits, totalEntries i
 		if rng.Float64() < limits.tombstoneChance {
 			size = 0
 		}
-		require.NoError(t, engine.PutMVCC(MVCCKey{Key: key, Timestamp: timestamp}, randutil.RandBytes(rng, size)), "Write data to test storage")
+		value := MVCCValue{Value: roachpb.MakeValueFromBytes(randutil.RandBytes(rng, size))}
+		require.NoError(t, engine.PutMVCC(MVCCKey{Key: key, Timestamp: timestamp}, value), "Write data to test storage")
 	}
 	require.NoError(t, engine.Flush(), "Flush engine data")
 }
@@ -1174,8 +1188,8 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	aKey := roachpb.Key("a")
 	for i := 0; i < 10; i++ {
 		require.NoError(t, eng.PutMVCC(
-			MVCCKey{aKey, hlc.Timestamp{WallTime: int64(i), Logical: 1}},
-			[]byte(fmt.Sprintf("val%d", i))))
+			MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: int64(i), Logical: 1}},
+			MVCCValue{Value: roachpb.MakeValueFromString(fmt.Sprintf("val%d", i))}))
 	}
 	require.NoError(t, eng.Flush())
 	iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
@@ -1205,9 +1219,10 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer eng.Close()
 
 	ts := hlc.Timestamp{WallTime: 1}
-	k := MVCCKey{[]byte("a"), ts}
+	k := MVCCKey{Key: []byte("a"), Timestamp: ts}
+	v := MVCCValue{Value: roachpb.MakeValueFromString("a1")}
 	// Write.
-	require.NoError(t, eng.PutMVCC(k, []byte("a1")))
+	require.NoError(t, eng.PutMVCC(k, v))
 	cbCount := int32(0)
 	eng.RegisterFlushCompletedCallback(func() {
 		atomic.AddInt32(&cbCount, 1)
@@ -1234,7 +1249,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 		}
 		return v
 	}
-	require.Equal(t, "a1", string(checkGetAndIter(roStandard)))
+	require.Equal(t, v.Value.RawBytes, checkGetAndIter(roStandard))
 	// Write is not visible yet.
 	require.Nil(t, checkGetAndIter(roGuaranteed))
 	require.Nil(t, checkGetAndIter(roGuaranteedPinned))
@@ -1251,5 +1266,5 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	// due to iterator caching.
 	roGuaranteed2 := eng.NewReadOnly(GuaranteedDurability)
 	defer roGuaranteed2.Close()
-	require.Equal(t, "a1", string(checkGetAndIter(roGuaranteed2)))
+	require.Equal(t, v.Value.RawBytes, checkGetAndIter(roGuaranteed2))
 }

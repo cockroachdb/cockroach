@@ -20,9 +20,68 @@
 // uncertainty related restarts.
 package uncertainty
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
+
+// D0 ————————————————————————————————————————————————
+//
+// MVCCKey
+//
+// Each value in CockroachDB is stored at an associated versioned key. This key
+// is distinguished from roachpb.Key with the addition of a "version" timestamp.
+//
+// As a multi-version concurrency control (MVCC) system, the version timestamp
+// dictates the key's visibility to readers. Readers with read timestamps equal
+// to or greater than the version timestamp observe the key. Readers with read
+// timestamps below the version timestamp ignore the key.
+//
+// NOTE: inlined struct definition to avoid circular dependency.
+var D0 = /* storage.MVCCKey */ struct {
+	Key       roachpb.Key
+	Timestamp hlc.Timestamp
+}{}
 
 // D1 ————————————————————————————————————————————————
+//
+// MVCCValue
+//
+// At and below the MVCC layer, each roachpb.Value as wrapped with a header that
+// contains MVCC-level metadata. One piece of metadata stored in this header is
+// the value's "local" clock timestamp.
+//
+// The local clock timestamp records the value of the local HLC clock on the
+// leaseholder when the key-value was originally written. It is used to make
+// claims about the relative real time ordering of the key-value's writer and
+// readers.
+//
+// When a versioned key-value is encountered by a transaction while reading,
+// there are three possible outcomes:
+// 1. the key's value is visible to the reader and is returned.
+// 2. the key's value is not visible to the reader but is determined to have
+//    definitely been written concurrently with reader's transaction, so it is
+//    ignored and not returned.
+// 3. the key's value is not visible to the reader but is determined to have
+//    been possibly written before the reader's transaction, so the reader must
+//    perform an uncertainty restart and later return the value to ensure real-
+//    time ordering guarantees.
+//
+// We call the differentiation between outcomes 2 and 3 "uncertainty". The rest
+// of this package explores the mechanisms used to guarantee real-time ordering
+// between transactions while attempting to maximize the number of readers that
+// end up in outcome 2 and minimize the number that end up in outcome 3, thereby
+// minimizing uncertainty restarts and maximizing concurrency.
+//
+// NOTE: inlined struct definition to avoid circular dependency.
+var D1 = /* storage.MVCCValue */ struct {
+	Header struct {
+		LocalTimestamp hlc.ClockTimestamp
+	}
+	Value roachpb.Value
+}{}
+
+// D2 ————————————————————————————————————————————————
 //
 // Transaction.GlobalUncertaintyLimit
 //
@@ -32,9 +91,9 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // respected, this maximum timestamp places an upper bound on the commit
 // timestamp of any other transaction that committed causally before the new
 // transaction.
-var D1 = roachpb.Transaction{}.GlobalUncertaintyLimit
+var D2 = roachpb.Transaction{}.GlobalUncertaintyLimit
 
-// D2 ————————————————————————————————————————————————
+// D3 ————————————————————————————————————————————————
 //
 // Interval
 //
@@ -43,9 +102,9 @@ var D1 = roachpb.Transaction{}.GlobalUncertaintyLimit
 // global uncertainty limit is pulled directly from the transaction. The local
 // uncertainty limit is an optional tighter bound established through HLC clock
 // observations on individual nodes in the system.
-var D2 = Interval{}
+var D3 = Interval{}
 
-// D3 ————————————————————————————————————————————————
+// D4 ————————————————————————————————————————————————
 //
 // ReadWithinUncertaintyIntervalError
 //
@@ -59,9 +118,9 @@ var D2 = Interval{}
 // guaranteed to observe any value written by any other transaction with a
 // happened-before relation to it, which is paramount to ensure single-key
 // linearizability and avoid stale reads.
-var D3 = roachpb.ReadWithinUncertaintyIntervalError{}
+var D4 = roachpb.ReadWithinUncertaintyIntervalError{}
 
-// D4 ————————————————————————————————————————————————
+// D5 ————————————————————————————————————————————————
 //
 // ObservedTimestamp
 //
@@ -73,17 +132,17 @@ var D3 = roachpb.ReadWithinUncertaintyIntervalError{}
 // promise that any later clock reading from the same node will have a larger
 // value. Similarly, they are a promise that any prior update to the clock was
 // given a smaller value.
-var D4 = roachpb.ObservedTimestamp{}
+var D5 = roachpb.ObservedTimestamp{}
 
-// D5 ————————————————————————————————————————————————
+// D6 ————————————————————————————————————————————————
 //
 // Transaction.UpdateObservedTimestamp
 //
 // A transaction collects observed timestamps as it visits nodes in the cluster
 // when performing reads and writes.
-var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
+var D6 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 
-// D6 ————————————————————————————————————————————————
+// D7 ————————————————————————————————————————————————
 //
 // Transaction.ObservedTimestamps
 //
@@ -91,7 +150,10 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // purpose of this list is to avoid uncertainty related restarts which occur
 // when reading a value in the near future, per the global_uncertainty_limit
 // field. The list helps avoid these restarts by establishing a lower
-// local_uncertainty_limit when evaluating a request on a node in the list.
+// local_uncertainty_limit when evaluating a request on a node in the list. The
+// local_uncertainty_limit can then be compared against the value's local
+// timestamp to determine whether the value was written before or after the
+// clock observation by the reader.
 //
 // Meaning
 //
@@ -115,29 +177,32 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //
 // Thus, expressed properly, we can say that when a node has been read from
 // successfully before by a transaction, uncertainty for values written by a
-// leaseholder on that node is restricted to values with timestamps in the
+// leaseholder on that node is restricted to values with local timestamps in the
 // interval [read_timestamp, first_visit_timestamp). An upper bound can be
 // placed on the uncertainty window because we are guaranteed that at the time
 // that the transaction first visited the node, none of the Ranges that it was a
-// leaseholder for had served any writes at higher timestamps than the clock
-// reading we observe. This implies the following property:
+// leaseholder for had assigned local timestamps to any writes at higher
+// timestamps than the clock reading we observe. This implies the following
+// property:
 //
 //    Any writes that the transaction may later see written by leaseholders on
-//    this node at higher timestamps than the observed timestamp could not have
-//    taken place causally before this transaction and can be ignored for the
-//    purposes of uncertainty.
+//    this node at higher local timestamps than the observed timestamp could not
+//    have taken place causally before this transaction and can be ignored for
+//    the purposes of uncertainty.
 //
 // There are two invariants necessary for this property to hold:
 //
-//  1. a leaseholder's clock must always be equal to or greater than the timestamp
-//     of all writes that it has served. This is trivial to enforce for
+//  1. a leaseholder's clock must always be equal to or greater than the local
+//     timestamp of all writes that it has served. This is trivial to enforce for
 //     non-transactional writes. It is more complicated for transactional writes
 //     which may move their commit timestamp forward over their lifetime before
 //     committing, even after writing intents on remote Ranges. To accommodate
-//     this situation, transactions ensure that at the time of their commit, any
-//     leaseholder for a Range that contains one of its intent has an HLC clock
-//     with an equal or greater timestamp than the transaction's commit timestamp.
-//     TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
+//     this situation, MVCC keys track their local timestamp separately from
+//     their version timestamp. This provides the flexibility to advance a key's
+//     version timestamp without advancing its local timestamp and ensure that
+//     at the time of a transaction's commit, any leaseholder for a Range that
+//     contains one of its intent has an HLC clock with a greater timestamp than
+//     that intent's local timestamp.
 //
 //  2. a leaseholder's clock must always be equal to or greater than the timestamp
 //     of all writes that previous leaseholders for its Range have served. We
@@ -153,14 +218,17 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //
 // The property ensures that when this list holds a corresponding entry for the
 // node who owns the lease that the current request is executing under, we can
-// run the request with the list's timestamp as the upper bound for its
-// uncertainty interval, limiting (and often avoiding) uncertainty restarts. We
-// do this by establishing a separate local_uncertainty_limit, which is set to
-// the minimum of the global_uncertainty_limit and the node's observed timestamp
-// entry in ComputeLocalUncertaintyLimit.
+// compare the list's timestamp against the local timestamp of values in the
+// range. This comparison establishes a total ordering across clock observations
+// (local timestamp assignment for writers and observed timestamps for readers)
+// and establish a partial ordering between writer and reader transactions. This
+// partial ordering can limit (and often avoid) uncertainty restarts. We do this
+// by establishing a separate local_uncertainty_limit for readers, which is set
+// to the minimum of the global_uncertainty_limit and the node's observed
+// timestamp entry in ComputeLocalUncertaintyLimit.
 //
 // However, as stated, the correctness property only holds for values at higher
-// timestamps than the observed timestamp written *by leaseholders on this
+// local timestamps than the observed timestamp written *by leaseholders on this
 // node*. This is critical, as the property tells us nothing about values
 // written by leaseholders on different nodes, even if a lease for one of those
 // Ranges has since moved to a node that we have an observed timestamp entry
@@ -182,17 +250,18 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // meaning for the purpose of reducing the transaction's uncertainty interval.
 // This is because there is no guarantee that at the time of acquiring the
 // observed timestamp from the follower node, the leaseholder hadn't already
-// served writes at higher timestamps than the follower node's clock reflected.
+// served writes with local timestamps higher than the follower node's clock
+// reflected.
 //
 // However, if the transaction performing a follower read happens to have an
 // observed timestamp from the current leaseholder, this timestamp can be used
 // to reduce the transaction's uncertainty interval. Even though the read is
 // being served from a different replica in the range, the observed timestamp
-// still places a bound on the values in the range that may have been written
-// before the transaction began.
-var D6 = roachpb.Transaction{}.ObservedTimestamps
+// still places a bound on the local timestamps associated with values in the
+// range that may have been written before the transaction began.
+var D7 = roachpb.Transaction{}.ObservedTimestamps
 
-// D7 ————————————————————————————————————————————————
+// D8 ————————————————————————————————————————————————
 //
 // TimestampFromServerClock
 //
@@ -219,7 +288,7 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 // receive an uncertainty error.
 //
 // It is somewhat non-intuitive that non-transactional requests need uncertainty
-// intervals — after all, they receive their timestamp to the leaseholder of the
+// intervals — after all, they receive their timestamp on the leaseholder of the
 // only range that they talk to, so isn't every value with a commit timestamp
 // above their read timestamp certainly concurrent? The answer is surprisingly
 // "no" for the following reasons, so they cannot forgo the use of uncertainty
@@ -229,7 +298,7 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 //    This means that there are times when the replica is not the leaseholder at
 //    the point of timestamp allocation, and only becomes the leaseholder later.
 //    In such cases, the timestamp assigned to the request is not guaranteed to
-//    be greater than the written_timestamp of all writes served by the range at
+//    be greater than the local timestamp of all writes served by the range at
 //    the time of allocation. This is true despite invariants 1 & 2 from above,
 //    because the replica allocating the timestamp is not yet the leaseholder.
 //
@@ -253,7 +322,7 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 //
 // 2. even if the replica's lease is stable and the timestamp is assigned to the
 //    non-transactional request by the leaseholder, the assigned clock reading
-//    only reflects the written_timestamp of all of the writes served by the
+//    only reflects the local timestamp of all of the writes served by the
 //    leaseholder (and previous leaseholders) thus far. This clock reading is
 //    not guaranteed to lead the commit timestamp of all of these writes,
 //    especially if they are committed remotely and resolved after the request
@@ -266,21 +335,21 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 //    the leaseholder to be uncertain. Concretely, the non-transactional request
 //    needs to consider values of the following form to be uncertain:
 //
-//      written_timestamp < local_limit && commit_timestamp < global_limit
+//      local_timestamp < local_limit && commit_timestamp < global_limit
 //
 //    The value that the non-transactional request is observing may have been
 //    written on the local leaseholder at time 10, its transaction may have been
 //    committed remotely at time 20, acknowledged, then the non-transactional
 //    request may have begun and received a timestamp of 15 from the local
 //    leaseholder, then finally the value may have been resolved asynchronously
-//    and moved to timestamp 20 (written_timestamp: 10, commit_timestamp: 20).
-//    The failure of the non-transactional request to observe this value would
-//    be a stale read.
+//    and moved to timestamp 20 (local_timestamp: 10, commit_timestamp: 20). The
+//    failure of the non-transactional request to observe this value would be a
+//    stale read.
 //
 //    For example, consider the following series of events:
 //    - client begins a txn and is assigned provisional commit timestamp = 10
 //    - client's txn performs a Put(k, v1)
-//    - leaseholder serves Put(k, v1), lays down intent at written_timestamp = 10
+//    - leaseholder serves Put(k, v1), lays down intent at local_timestamp = 10
 //    - client's txn performs a write elsewhere and hits a WriteTooOldError
 //      that bumps its provisional commit timestamp to 20
 //    - client's txn refreshes to ts = 20. This notably happens without
@@ -296,22 +365,15 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 //      server-side retry, bumps its read timestamp, and returns k = v1. Failure
 //      to do so would be a stale read.
 //
-//    TODO(nvanbenschoten): expand on this when we fix #36431. For now, this can
-//    be framed in relation to synthetic timestamps, but it's easier to discuss
-//    in terms of the impending "written_timestamp" attribute of each value,
-//    even though written_timestamps do not yet exist in code.
-//
-//    TODO(nvanbenschoten): add more direct testing for this when we fix #36431.
-//
 //    TODO(nvanbenschoten): add another reason here once we address #73292.
 //
 // Convenient, because non-transactional requests are always scoped to a
 // single-range, those that hit uncertainty errors can always retry on the
 // server, so these errors never bubble up to the client that initiated the
 // request.
-var D7 = roachpb.Header{}.TimestampFromServerClock
+var D8 = roachpb.Header{}.TimestampFromServerClock
 
-// D8 ————————————————————————————————————————————————
+// D9 ————————————————————————————————————————————————
 //
 // ComputeInterval
 //
@@ -321,7 +383,7 @@ var D7 = roachpb.Header{}.TimestampFromServerClock
 // Similarly, observed timestamps can also assist a transaction even on its
 // first visit to a node in cases where it gets stuck waiting on locks for long
 // periods of time.
-var D8 = ComputeInterval
+var D9 = ComputeInterval
 
 // Ignore unused warnings.
-var _, _, _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6, D7, D8
+var _, _, _, _, _, _, _, _, _, _ = D0, D1, D2, D3, D4, D5, D6, D7, D8, D9

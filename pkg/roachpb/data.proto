@@ -67,6 +67,12 @@ enum ValueType {
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
+
+  // MVCC_EXTENDED_ENCODING_SENTINEL is a sentinel tag value used in the
+  // MVCCValue extended encoding to indicate that an encoded Value is wrapped
+  // with a header. It should not be used in the Value encoding directly. See
+  // MVCCValue for more details.
+  MVCC_EXTENDED_ENCODING_SENTINEL = 101;
 }
 
 // Value specifies the value at a key. Multiple values at the same key are

@@ -52,7 +52,7 @@ import (
 // txn_advance    t=<name> ts=<int>[,<int>]
 // txn_status     t=<name> status=<txnstatus>
 //
-// resolve_intent t=<name> k=<key> [status=<txnstatus>]
+// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
 // check_intent   k=<key> [none]
 //
 // cput      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
@@ -124,7 +124,12 @@ func TestMVCCHistories(t *testing.T) {
 						buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
 					}
 				} else {
-					buf.Printf("data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+					val, err := DecodeMVCCValue(r.Value)
+					if err != nil {
+						buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
+					} else {
+						buf.Printf("data: %v -> %s\n", r.Key, val)
+					}
 				}
 				return nil
 			})
@@ -543,14 +548,20 @@ func cmdResolveIntent(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
 	status := e.getTxnStatus()
-	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status)
+	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
+	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status, clockWhilePending)
 }
 
 func (e *evalCtx) resolveIntent(
-	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
+	rw ReadWriter,
+	key roachpb.Key,
+	txn *roachpb.Transaction,
+	resolveStatus roachpb.TransactionStatus,
+	clockWhilePending hlc.ClockTimestamp,
 ) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
+	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
 	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
 	return err
 }
@@ -608,7 +619,7 @@ func cmdCPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -625,7 +636,7 @@ func cmdDelete(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -658,7 +669,7 @@ func cmdDeleteRange(e *evalCtx) error {
 		}
 
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -726,7 +737,7 @@ func cmdIncrement(e *evalCtx) error {
 		}
 		e.results.buf.Printf("inc: current value = %d\n", curVal)
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -734,14 +745,7 @@ func cmdIncrement(e *evalCtx) error {
 
 func cmdMerge(e *evalCtx) error {
 	key := e.getKey()
-	var value string
-	e.scanArg("v", &value)
-	var val roachpb.Value
-	if e.hasArg("raw") {
-		val.RawBytes = []byte(value)
-	} else {
-		val.SetString(value)
-	}
+	val := e.getVal()
 	ts := e.getTs(nil)
 	return e.withWriter("merge", func(rw ReadWriter) error {
 		return MVCCMerge(e.ctx, rw, nil, key, ts, val)
@@ -763,7 +767,7 @@ func cmdPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
