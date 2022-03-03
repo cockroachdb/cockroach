@@ -636,6 +636,7 @@ func MVCCPutProto(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	txn *roachpb.Transaction,
 	msg protoutil.Message,
 ) error {
@@ -644,7 +645,7 @@ func MVCCPutProto(
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCPut(ctx, rw, ms, key, timestamp, value, txn)
+	return MVCCPut(ctx, rw, ms, key, timestamp, localTimestamp, value, txn)
 }
 
 // MVCCBlindPutProto sets the given key to the protobuf-serialized byte string
@@ -656,6 +657,7 @@ func MVCCBlindPutProto(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	msg protoutil.Message,
 	txn *roachpb.Transaction,
 ) error {
@@ -664,7 +666,7 @@ func MVCCBlindPutProto(
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCBlindPut(ctx, writer, ms, key, timestamp, value, txn)
+	return MVCCBlindPut(ctx, writer, ms, key, timestamp, localTimestamp, value, txn)
 }
 
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
@@ -987,6 +989,7 @@ func MVCCPut(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
@@ -998,7 +1001,7 @@ func MVCCPut(
 		iter = rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
 		defer iter.Close()
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, txn, nil)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -1017,10 +1020,11 @@ func MVCCBlindPut(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, value, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, localTimestamp, value, txn, nil)
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
@@ -1035,12 +1039,13 @@ func MVCCDelete(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	txn *roachpb.Transaction,
 ) error {
 	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, nil)
 }
 
 var noValue = roachpb.Value{}
@@ -1056,6 +1061,7 @@ func mvccPutUsingIter(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) ([]byte, error),
@@ -1070,8 +1076,7 @@ func mvccPutUsingIter(
 
 	buf := newPutBuffer()
 
-	err := mvccPutInternal(ctx, writer, iter, ms, key, timestamp, rawBytes,
-		txn, buf, valueFn)
+	err := mvccPutInternal(ctx, writer, iter, ms, key, timestamp, localTimestamp, rawBytes, txn, buf, valueFn)
 
 	// Using defer would be more convenient, but it is measurably slower.
 	buf.release()
@@ -1262,6 +1267,15 @@ func replayTransactionalWrite(
 // read timestamp. (One could imagine instead requiring that the timestamp
 // parameter be set to hlc.Timestamp{} when writing transactionally, but
 // hlc.Timestamp{} is already used as a sentinel for inline puts.)
+//
+// The local timestamp parameter dictates the local clock timestamp
+// assigned to the key-value. It should be taken from the local HLC
+// clock on the leaseholder that is performing the write and must be
+// below the leaseholder's lease expiration. If the supplied local
+// timestamp is empty (hlc.ClockTimestamp{}), the value will not be
+// assigned an explicit local timestamp. The effect of this is that
+// readers treat the local timestamp as being equal to the version
+// timestamp.
 func mvccPutInternal(
 	ctx context.Context,
 	writer Writer,
@@ -1269,6 +1283,7 @@ func mvccPutInternal(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value []byte,
 	txn *roachpb.Transaction,
 	buf *putBuffer,
@@ -1656,6 +1671,7 @@ func MVCCIncrement(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
@@ -1664,7 +1680,7 @@ func MVCCIncrement(
 
 	var int64Val int64
 	var newInt64Val int64
-	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, func(value optionalValue) ([]byte, error) {
+	valueFn := func(value optionalValue) ([]byte, error) {
 		if value.IsPresent() {
 			var err error
 			if int64Val, err = value.GetInt(); err != nil {
@@ -1688,7 +1704,8 @@ func MVCCIncrement(
 		newValue.SetInt(newInt64Val)
 		newValue.InitChecksum(key)
 		return newValue.RawBytes, nil
-	})
+	}
+	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
 
 	return newInt64Val, err
 }
@@ -1726,6 +1743,7 @@ func MVCCConditionalPut(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
@@ -1734,7 +1752,8 @@ func MVCCConditionalPut(
 	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
 
-	return mvccConditionalPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
+	return mvccConditionalPutUsingIter(
+		ctx, rw, iter, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, txn)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -1752,12 +1771,14 @@ func MVCCBlindConditionalPut(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccConditionalPutUsingIter(ctx, writer, nil, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
+	return mvccConditionalPutUsingIter(
+		ctx, writer, nil, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, txn)
 }
 
 func mvccConditionalPutUsingIter(
@@ -1767,27 +1788,27 @@ func mvccConditionalPutUsingIter(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(
-		ctx, writer, iter, ms, key, timestamp, noValue, txn,
-		func(existVal optionalValue) ([]byte, error) {
-			if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
-				if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
-					return nil, &roachpb.ConditionFailedError{
-						ActualValue: existVal.ToPointer(),
-					}
-				}
-			} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
+	valueFn := func(existVal optionalValue) ([]byte, error) {
+		if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
+			if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ToPointer(),
 				}
 			}
-			return value.RawBytes, nil
-		})
+		} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
+			return nil, &roachpb.ConditionFailedError{
+				ActualValue: existVal.ToPointer(),
+			}
+		}
+		return value.RawBytes, nil
+	}
+	return mvccPutUsingIter(ctx, writer, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
 }
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
@@ -1805,13 +1826,14 @@ func MVCCInitPut(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
 	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
-	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, failOnTombstones, txn)
+	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
 }
 
 // MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
@@ -1828,11 +1850,13 @@ func MVCCBlindInitPut(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccInitPutUsingIter(ctx, rw, nil, ms, key, timestamp, value, failOnTombstones, txn)
+	return mvccInitPutUsingIter(
+		ctx, rw, nil, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
 }
 
 func mvccInitPutUsingIter(
@@ -1842,27 +1866,27 @@ func mvccInitPutUsingIter(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(
-		ctx, rw, iter, ms, key, timestamp, noValue, txn,
-		func(existVal optionalValue) ([]byte, error) {
-			if failOnTombstones && existVal.IsTombstone() {
-				// We found a tombstone and failOnTombstones is true: fail.
-				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal.ToPointer(),
-				}
+	valueFn := func(existVal optionalValue) ([]byte, error) {
+		if failOnTombstones && existVal.IsTombstone() {
+			// We found a tombstone and failOnTombstones is true: fail.
+			return nil, &roachpb.ConditionFailedError{
+				ActualValue: existVal.ToPointer(),
 			}
-			if existVal.IsPresent() && !existVal.EqualTagAndData(value) {
-				// The existing value does not match the supplied value.
-				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal.ToPointer(),
-				}
+		}
+		if existVal.IsPresent() && !existVal.EqualTagAndData(value) {
+			// The existing value does not match the supplied value.
+			return nil, &roachpb.ConditionFailedError{
+				ActualValue: existVal.ToPointer(),
 			}
-			return value.RawBytes, nil
-		})
+		}
+		return value.RawBytes, nil
+	}
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -2163,6 +2187,7 @@ func MVCCDeleteRange(
 	key, endKey roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
@@ -2189,7 +2214,9 @@ func MVCCDeleteRange(
 
 	var keys []roachpb.Key
 	for i, kv := range res.KVs {
-		if err := mvccPutInternal(ctx, rw, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
+		if err := mvccPutInternal(
+			ctx, rw, iter, ms, kv.Key, timestamp, localTimestamp, nil, txn, buf, nil,
+		); err != nil {
 			return nil, nil, 0, err
 		}
 		if returnKeys {

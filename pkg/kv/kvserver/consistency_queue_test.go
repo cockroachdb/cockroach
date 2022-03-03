@@ -416,7 +416,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	val.SetInt(42)
 	diffTimestamp = ts.Clock().Now()
 	if err := storage.MVCCPut(
-		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, val, nil,
+		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, hlc.ClockTimestamp{}, val, nil,
 	); err != nil {
 		t.Fatal(err)
 	}

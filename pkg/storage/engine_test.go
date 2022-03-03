@@ -178,15 +178,13 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 				// Put a value so that the deletion below finds a value to seek
 				// to.
-				if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{},
-					roachpb.MakeValueFromString("x"), nil); err != nil {
+				if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("x"), nil); err != nil {
 					t.Fatal(err)
 				}
 
 				// Seek the iterator to `key` and clear the value (but without
 				// telling the iterator about that).
-				if err := MVCCDelete(context.Background(), batch, nil, key,
-					hlc.Timestamp{}, nil); err != nil {
+				if err := MVCCDelete(context.Background(), batch, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 					t.Fatal(err)
 				}
 
@@ -1647,7 +1645,7 @@ func TestScanIntents(t *testing.T) {
 	defer eng.Close()
 
 	for _, key := range keys {
-		err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
+		err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: key}, txn1)
 		require.NoError(t, err)
 	}
 

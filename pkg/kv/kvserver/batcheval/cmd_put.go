@@ -54,9 +54,9 @@ func Put(
 	}
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+		err = storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, cArgs.Now, args.Value, h.Txn)
 	} else {
-		err = storage.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+		err = storage.MVCCPut(ctx, readWriter, ms, args.Key, ts, cArgs.Now, args.Value, h.Txn)
 	}
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld

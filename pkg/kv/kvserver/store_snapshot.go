@@ -1020,7 +1020,7 @@ func SendEmptySnapshot(
 	var ms enginepb.MVCCStats
 	// Seed an empty range into the new engine.
 	if err := storage.MVCCPutProto(
-		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, nil /* txn */, &desc,
+		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, hlc.ClockTimestamp{}, nil /* txn */, &desc,
 	); err != nil {
 		return err
 	}
