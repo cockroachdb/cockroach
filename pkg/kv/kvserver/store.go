@@ -2648,6 +2648,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 		nil,
 		keys.StoreLastUpKey(),
 		hlc.Timestamp{},
+		hlc.ClockTimestamp{},
 		nil,
 		&time,
 	)
@@ -2683,6 +2684,7 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 		nil,
 		keys.StoreHLCUpperBoundKey(),
 		hlc.Timestamp{},
+		hlc.ClockTimestamp{},
 		nil,
 		&ts,
 	); err != nil {
@@ -3572,7 +3574,16 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	err := storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	err := storage.MVCCPutProto(
+		ctx,
+		eng,
+		nil,
+		keys.StoreClusterVersionKey(),
+		hlc.Timestamp{},
+		hlc.ClockTimestamp{},
+		nil,
+		&cv,
+	)
 	if err != nil {
 		return err
 	}

@@ -105,7 +105,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			var stats enginepb.MVCCStats
 			for i := 0; i < test.keyCount; i++ {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
-				if err := storage.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, hlc.ClockTimestamp{}, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -664,7 +664,7 @@ func fillInData(ctx context.Context, engine Engine, data []testValue) error {
 	batch := engine.NewBatch()
 	defer batch.Close()
 	for _, val := range data {
-		if err := MVCCPut(ctx, batch, nil, val.key, val.timestamp, val.value, val.txn); err != nil {
+		if err := MVCCPut(ctx, batch, nil, val.key, val.timestamp, hlc.ClockTimestamp{}, val.value, val.txn); err != nil {
 			return err
 		}
 	}

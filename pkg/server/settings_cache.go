@@ -100,7 +100,7 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 	for _, kv := range kvs {
 		kv.Value.Timestamp = hlc.Timestamp{} // nb: Timestamp is not part of checksum
 		if err := storage.MVCCPut(
-			ctx, batch, nil, keys.StoreCachedSettingsKey(kv.Key), hlc.Timestamp{}, kv.Value, nil,
+			ctx, batch, nil, keys.StoreCachedSettingsKey(kv.Key), hlc.Timestamp{}, hlc.ClockTimestamp{}, kv.Value, nil,
 		); err != nil {
 			return err
 		}

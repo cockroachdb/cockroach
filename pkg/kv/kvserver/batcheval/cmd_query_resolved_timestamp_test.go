@@ -42,14 +42,14 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		return hlc.Timestamp{WallTime: ts}
 	}
 	writeValue := func(k string, ts int64) {
-		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), nil))
+		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, nil))
 	}
 	writeIntent := func(k string, ts int64) {
 		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0, 1)
-		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), &txn))
+		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, &txn))
 	}
 	writeInline := func(k string) {
-		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, nil))
+		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil))
 	}
 
 	// Setup: (with separated intents the actual key layout in the store is not what is listed below.)

@@ -55,13 +55,13 @@ import (
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
 //
-// cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
-// del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
-// put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// cput      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
+// del       [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
+// del_range [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
+// increment [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
+// put       [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
+// get       [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// scan      [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -423,7 +423,7 @@ func cmdTxnBegin(e *evalCtx) error {
 	var txnName string
 	e.scanArg("t", &txnName)
 	ts := e.getTs(nil)
-	globalUncertaintyLimit := e.getTsWithName(nil, "globalUncertaintyLimit")
+	globalUncertaintyLimit := e.getTsWithName("globalUncertaintyLimit")
 	key := roachpb.KeyMin
 	if e.hasArg("k") {
 		key = e.getKey()
@@ -587,6 +587,7 @@ func cmdClearRange(e *evalCtx) error {
 func cmdCPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	key := e.getKey()
 	val := e.getVal()
@@ -603,7 +604,7 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw ReadWriter) error {
-		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, val, expVal, behavior, txn); err != nil {
+		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, localTs, val, expVal, behavior, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -617,9 +618,10 @@ func cmdDelete(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	key := e.getKey()
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw ReadWriter) error {
-		if err := MVCCDelete(e.ctx, rw, nil, key, ts, txn); err != nil {
+		if err := MVCCDelete(e.ctx, rw, nil, key, ts, localTs, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -633,6 +635,7 @@ func cmdDeleteRange(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	returnKeys := e.hasArg("returnKeys")
 	max := 0
 	if e.hasArg("max") {
@@ -641,7 +644,8 @@ func cmdDeleteRange(e *evalCtx) error {
 
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw ReadWriter) error {
-		deleted, resumeSpan, num, err := MVCCDeleteRange(e.ctx, rw, nil, key, endKey, int64(max), ts, txn, returnKeys)
+		deleted, resumeSpan, num, err := MVCCDeleteRange(
+			e.ctx, rw, nil, key, endKey, int64(max), ts, localTs, txn, returnKeys)
 		if err != nil {
 			return err
 		}
@@ -676,8 +680,8 @@ func cmdGet(e *evalCtx) error {
 		opts.FailOnMoreRecent = true
 	}
 	opts.Uncertainty = uncertainty.Interval{
-		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
-		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
+		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),
 	}
 	if opts.Txn != nil {
 		if !opts.Uncertainty.GlobalLimit.IsEmpty() {
@@ -703,6 +707,7 @@ func cmdGet(e *evalCtx) error {
 func cmdIncrement(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	key := e.getKey()
 	inc := int64(1)
@@ -715,7 +720,7 @@ func cmdIncrement(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw ReadWriter) error {
-		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, txn, inc)
+		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, localTs, txn, inc)
 		if err != nil {
 			return err
 		}
@@ -746,6 +751,7 @@ func cmdMerge(e *evalCtx) error {
 func cmdPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	key := e.getKey()
 	val := e.getVal()
@@ -753,7 +759,7 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw ReadWriter) error {
-		if err := MVCCPut(e.ctx, rw, nil, key, ts, val, txn); err != nil {
+		if err := MVCCPut(e.ctx, rw, nil, key, ts, localTs, val, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -782,8 +788,8 @@ func cmdScan(e *evalCtx) error {
 		opts.FailOnMoreRecent = true
 	}
 	opts.Uncertainty = uncertainty.Interval{
-		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
-		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
+		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),
 	}
 	if opts.Txn != nil {
 		if !opts.Uncertainty.GlobalLimit.IsEmpty() {
@@ -899,10 +905,14 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 }
 
 func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {
-	return e.getTsWithName(txn, "ts")
+	return e.getTsWithTxnAndName(txn, "ts")
 }
 
-func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) hlc.Timestamp {
+func (e *evalCtx) getTsWithName(name string) hlc.Timestamp {
+	return e.getTsWithTxnAndName(nil, name)
+}
+
+func (e *evalCtx) getTsWithTxnAndName(txn *roachpb.Transaction, name string) hlc.Timestamp {
 	var ts hlc.Timestamp
 	if txn != nil {
 		ts = txn.ReadTimestamp
