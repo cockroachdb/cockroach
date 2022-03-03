@@ -51,7 +51,7 @@ func getRelevantDescChanges(
 	descs []catalog.Descriptor,
 	expanded []descpb.ID,
 	priorIDs map[descpb.ID]descpb.ID,
-	descriptorCoverage tree.DescriptorCoverage,
+	fullCluster bool,
 ) ([]BackupManifest_DescriptorRevision, error) {
 
 	allChanges, err := getAllDescChanges(ctx, execCfg.Codec, execCfg.DB, startTime, endTime, priorIDs)
@@ -89,7 +89,7 @@ func getRelevantDescChanges(
 		// We're interested in changes to all descriptors if we're targeting all
 		// descriptors except for the descriptors that we do not include in a
 		// cluster backup.
-		if descriptorCoverage == tree.AllDescriptors && !isExcludedDescriptor(id) {
+		if fullCluster && !isExcludedDescriptor(id) {
 			return true
 		}
 		// A change to an ID that we're interested in is obviously interesting.
@@ -228,13 +228,17 @@ func getAllDescChanges(
 	return res, nil
 }
 
-func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
+func ensureInterleavesIncluded(tables []catalog.Descriptor) error {
 	inBackup := make(map[descpb.ID]bool, len(tables))
 	for _, t := range tables {
 		inBackup[t.GetID()] = true
 	}
 
-	for _, table := range tables {
+	for _, d := range tables {
+		table, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
 		if err := catalog.ForEachIndex(table, catalog.IndexOpts{
 			AddMutations: true,
 		}, func(index catalog.Index) error {
@@ -346,8 +350,13 @@ func fullClusterTargets(
 // fullClusterTargets, but rather than returning the entire database
 // descriptor as the second argument, it only returns their IDs.
 func fullClusterTargetsBackup(
-	allDescs []catalog.Descriptor,
+	ctx context.Context, execCfg *sql.ExecutorConfig, endTime hlc.Timestamp,
 ) ([]catalog.Descriptor, []descpb.ID, error) {
+	allDescs, err := backupresolver.LoadAllDescs(ctx, execCfg.Codec, execCfg.DB, endTime)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, err
@@ -356,6 +365,9 @@ func fullClusterTargetsBackup(
 	fullClusterDBIDs := make([]descpb.ID, 0)
 	for _, desc := range fullClusterDBs {
 		fullClusterDBIDs = append(fullClusterDBIDs, desc.GetID())
+	}
+	if len(fullClusterDescs) == 0 {
+		return nil, nil, errors.New("no descriptors available to backup at selected time")
 	}
 	return fullClusterDescs, fullClusterDBIDs, nil
 }
