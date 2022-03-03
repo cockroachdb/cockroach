@@ -14,27 +14,21 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 func (d *delegator) delegateShowCompletions(n *tree.ShowCompletions) (tree.Statement, error) {
-	offsetVal, ok := n.Offset.AsConstantInt()
-	if !ok {
-		return nil, errors.Newf("invalid offset %v", n.Offset)
-	}
-	offset, err := strconv.Atoi(offsetVal.String())
+	offset, err := n.Offset.AsInt64()
 	if err != nil {
 		return nil, err
 	}
 
-	completions, err := RunShowCompletions(n.Statement.RawString(), offset)
+	completions, err := RunShowCompletions(n.Statement.RawString(), int(offset))
 	if err != nil {
 		return nil, err
 	}
