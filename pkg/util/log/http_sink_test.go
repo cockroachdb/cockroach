@@ -12,7 +12,6 @@ package log
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +37,7 @@ import (
 func testBase(
 	t *testing.T,
 	defaults logconfig.HTTPDefaults,
-	fn func(body string) error,
+	fn func(header http.Header, body string) error,
 	hangServer bool,
 	deadline time.Duration,
 ) {
@@ -68,7 +68,7 @@ func testBase(
 			<-cancelCh
 		} else {
 			// The test is expecting some message via a predicate.
-			if err := fn(string(buf)); err != nil {
+			if err := fn(r.Header, string(buf)); err != nil {
 				// non-failing, in case there are extra log messages generated
 				t.Log(err)
 			} else {
@@ -175,7 +175,7 @@ func TestMessageReceived(t *testing.T) {
 		DisableKeepAlives: &tb,
 	}
 
-	testFn := func(body string) error {
+	testFn := func(_ http.Header, body string) error {
 		t.Log(body)
 		if !strings.Contains(body, `"message":"hello world"`) {
 			return errors.New("Log message not found in request")
@@ -204,4 +204,72 @@ func TestHTTPSinkTimeout(t *testing.T) {
 	}
 
 	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 500*time.Millisecond)
+}
+
+// TestHTTPSinkContentTypeJSON verifies that the HTTP sink content type
+// header is set to `application/json` when the format is json.
+func TestHTTPSinkContentTypeJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	address := "http://localhost" // testBase appends the port
+	timeout := 5 * time.Second
+	tb := true
+	format := "json-fluent"
+	expectedContentType := "application/json"
+	defaults := logconfig.HTTPDefaults{
+		Address: &address,
+		Timeout: &timeout,
+
+		// We need to disable keepalives otherwise the HTTP server in the
+		// test will let an async goroutine run waiting for more requests.
+		DisableKeepAlives: &tb,
+		CommonSinkConfig: logconfig.CommonSinkConfig{
+			Format: &format,
+		},
+	}
+
+	testFn := func(header http.Header, body string) error {
+		t.Log(body)
+		contentType := header.Get("Content-Type")
+		if contentType != expectedContentType {
+			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
+		}
+		return nil
+	}
+
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0))
+}
+
+// TestHTTPSinkContentTypePlainText verifies that the HTTP sink content type
+// header is set to `text/plain` when the format is json.
+func TestHTTPSinkContentTypePlainText(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	address := "http://localhost" // testBase appends the port
+	timeout := 5 * time.Second
+	tb := true
+	format := "crdb-v1"
+	expectedContentType := "text/plain"
+	defaults := logconfig.HTTPDefaults{
+		Address: &address,
+		Timeout: &timeout,
+
+		// We need to disable keepalives otherwise the HTTP server in the
+		// test will let an async goroutine run waiting for more requests.
+		DisableKeepAlives: &tb,
+		CommonSinkConfig: logconfig.CommonSinkConfig{
+			Format: &format,
+		},
+	}
+
+	testFn := func(header http.Header, body string) error {
+		t.Log(body)
+		contentType := header.Get("Content-Type")
+		if contentType != expectedContentType {
+			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
+		}
+		return nil
+	}
+
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0))
 }

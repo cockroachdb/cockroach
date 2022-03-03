@@ -30,6 +30,7 @@ type httpSinkOptions struct {
 	timeout           time.Duration
 	method            string
 	disableKeepAlives bool
+	contentType       string
 }
 
 func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
@@ -44,8 +45,9 @@ func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
 			Transport: transport,
 			Timeout:   opt.timeout,
 		},
-		address:   url,
-		doRequest: doPost,
+		address:     url,
+		doRequest:   doPost,
+		contentType: "application/octet-stream",
 	}
 
 	if opt.unsafeTLS {
@@ -56,13 +58,18 @@ func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
 		hs.doRequest = doGet
 	}
 
+	if opt.contentType != "" {
+		hs.contentType = opt.contentType
+	}
+
 	return hs, nil
 }
 
 type httpSink struct {
-	client    http.Client
-	address   string
-	doRequest func(*httpSink, []byte) (*http.Response, error)
+	client      http.Client
+	address     string
+	contentType string
+	doRequest   func(sink *httpSink, logEntry []byte) (*http.Response, error)
 }
 
 // output emits some formatted bytes to this sink.
@@ -73,6 +80,7 @@ type httpSink struct {
 // The parent logger's outputMu is held during this operation: log
 // sinks must not recursively call into logging when implementing
 // this method.
+
 func (hs *httpSink) output(extraSync bool, b []byte) (err error) {
 	resp, err := hs.doRequest(hs, b)
 	if err != nil {
@@ -82,7 +90,8 @@ func (hs *httpSink) output(extraSync bool, b []byte) (err error) {
 	if resp.StatusCode >= 400 {
 		return HTTPLogError{
 			StatusCode: resp.StatusCode,
-			Address:    hs.address}
+			Address:    hs.address,
+		}
 	}
 	return nil
 }
@@ -98,7 +107,7 @@ func (hs *httpSink) emergencyOutput(b []byte) {
 }
 
 func doPost(hs *httpSink, b []byte) (*http.Response, error) {
-	resp, err := hs.client.Post(hs.address, "text/plain", bytes.NewReader(b))
+	resp, err := hs.client.Post(hs.address, hs.contentType, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

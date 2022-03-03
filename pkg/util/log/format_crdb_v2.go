@@ -40,6 +40,8 @@ func (formatCrdbV2) formatEntry(entry logEntry) *buffer {
 
 func (formatCrdbV2) doc() string { return formatCrdbV2CommonDoc() }
 
+func (formatCrdbV2) contentType() string { return "text/plain" }
+
 func formatCrdbV2CommonDoc() string {
 	var buf strings.Builder
 
@@ -187,6 +189,8 @@ func (formatCrdbV2TTY) formatEntry(entry logEntry) *buffer {
 func (formatCrdbV2TTY) doc() string {
 	return "Same textual format as `" + formatCrdbV2{}.formatterName() + "`." + ttyFormatDoc
 }
+
+func (formatCrdbV2TTY) contentType() string { return "text/plain" }
 
 // formatEntryInternalV2 renders a log entry.
 // Log lines are colorized depending on severity.
