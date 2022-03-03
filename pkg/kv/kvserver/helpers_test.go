@@ -492,6 +492,11 @@ func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
 	return r.closedTimestampPolicyRLocked()
 }
 
+// TripBreaker synchronously trips the breaker.
+func (r *Replica) TripBreaker() {
+	r.breaker.tripSync(errors.New("injected error"))
+}
+
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(

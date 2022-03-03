@@ -385,6 +385,7 @@ message ReplicaUnavailableError {
 
   optional roachpb.RangeDescriptor desc = 2 [(gogoproto.nullable) = false];
   optional roachpb.ReplicaDescriptor replica = 4 [(gogoproto.nullable) = false];
+  optional errorspb.EncodedError cause = 5 [(gogoproto.nullable) = false];
 }
 
 // A RaftGroupDeletedError indicates a raft group has been deleted for
