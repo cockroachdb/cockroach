@@ -13,6 +13,7 @@ package importer_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"io"
 	"os"
 	"path/filepath"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -143,20 +143,20 @@ func validateParquetFile(
 			if err != nil {
 				return err
 			}
-			validateDatum(t,test.datums[i][j],datum)
+			validateDatum(t, test.datums[i][j], datum)
 		}
 		i++
 	}
 	return nil
 }
 
-func validateDatum(t *testing.T,expected tree.Datum,actual tree.Datum){
+func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 	switch expected.ResolvedType().Family() {
 	case types.ArrayFamily:
 		eArr := expected.(*tree.DArray)
 		aArr := actual.(*tree.DArray)
-		for i:=0;i<eArr.Len();i++{
-			validateDatum(t,eArr.Array[i],aArr.Array[i])
+		for i := 0; i < eArr.Len(); i++ {
+			validateDatum(t, eArr.Array[i], aArr.Array[i])
 		}
 	case types.DateFamily:
 		// pgDate.orig property doesn't matter and can cause the test to fail
@@ -170,7 +170,12 @@ func validateDatum(t *testing.T,expected tree.Datum,actual tree.Datum){
 		if expected.(*tree.DFloat).String() == "NaN" {
 			// NaN != NaN, therefore stringify the comparison.
 			require.Equal(t, "NaN", actual.(*tree.DFloat).String())
-		}else{
+		} else {
+			eS := expected.String()
+			a := actual.String()
+			if eS != a{
+				fmt.Println("hey")
+			}
 			require.Equal(t, expected.String(), actual.String())
 		}
 	default:
@@ -184,22 +189,18 @@ func TestRandomParquetExports(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "rand"
-	rng, _ := randutil.NewTestRand()
-	params := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
-		},
-	}
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
+	})
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, params)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	rng, _ := randutil.NewTestRand()
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	var tableName string
-	s0 := tc.Server(0)
-	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
 	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
 		var (
@@ -223,12 +224,12 @@ func TestRandomParquetExports(t *testing.T) {
 
 		for i = 1; i < numTables; i++ {
 			tableName = tablePrefix + fmt.Sprint(i)
-			numRows, err := randgen.PopulateTableWithRandData(rng, tc.Conns[0], tableName, 20)
+			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20)
 			require.NoError(t, err)
 			if numRows > 10 {
 				// Ensure the table only contains columns supported by EXPORT Parquet. If an
 				// unsupported column cannot be dropped, try populating another table
-				if err := func () error {
+				if err := func() error {
 					_, cols, err := ie.QueryRowExWithCols(
 						ctx,
 						"",
@@ -242,14 +243,14 @@ func TestRandomParquetExports(t *testing.T) {
 					for _, col := range cols {
 						_, err := importer.NewParquetColumn(col.Typ, "", false)
 						if err != nil {
-							_, err = sqlDB.DB.ExecContext(ctx,fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
-							if err != nil{
+							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+							if err != nil {
 								return err
 							}
 						}
 					}
 					return nil
-				}(); err != nil{
+				}(); err != nil {
 					continue
 				}
 				success = true
@@ -258,8 +259,8 @@ func TestRandomParquetExports(t *testing.T) {
 		}
 		require.Equal(t, true, success)
 	}
-
-	// TODO (butler): iterate over random select statements
+	t.Logf("%s",sqlDB.QueryStr(t,`SHOW CREATE TABLE `+tableName))
+	// TODO (msbutler): iterate over random select statements
 	test := parquetTest{
 		filePrefix: tableName,
 		dbName:     dbName,
@@ -281,27 +282,23 @@ func TestBasicParquetTypes(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "baz"
-	params := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
-		},
-	}
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
+	})
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, params)
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	// instantiating an internal executor to easily get datums from the table
-	s0 := tc.Server(0)
-	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob',
-	2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 0.5032135844230652,true),(4, 'Alex', 3, 14.3, NULL), (5, 
 'Bobby', 2, 3.4,false), (6, NULL, NULL, 4.5, NULL)`)
 
 	tests := []parquetTest{
@@ -317,7 +314,7 @@ INDEX (y))`)
 		},
 		{
 			filePrefix: "colname",
-			stmt: `EXPORT INTO PARQUET 'nodelocal://0/colname' FROM SELECT avg(z), min(y) AS baz
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/colname' FROM SELECT avg(z), min(y) AS bar
 							FROM foo`,
 		},
 		{
