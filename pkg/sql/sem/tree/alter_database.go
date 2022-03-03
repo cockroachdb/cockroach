@@ -111,3 +111,20 @@ func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	node.Placement.Format(ctx)
 }
+
+// AlterDatabaseSecondaryRegion represents a
+// ALTER DATABASE SET SECONDARY REGION ... statement.
+type AlterDatabaseSecondaryRegion struct {
+	DatabaseName    Name
+	SecondaryRegion Name
+}
+
+var _ Statement = &AlterDatabaseSecondaryRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseSecondaryRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" SET SECONDARY REGION ")
+	node.SecondaryRegion.Format(ctx)
+}

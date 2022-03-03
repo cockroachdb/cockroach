@@ -173,11 +173,9 @@ func zoneConfigForMultiRegionDatabase(
 	}
 
 	return zonepb.ZoneConfig{
-		NumReplicas: &numReplicas,
-		NumVoters:   &numVoters,
-		LeasePreferences: []zonepb.LeasePreference{
-			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.PrimaryRegion())}},
-		},
+		NumReplicas:                 &numReplicas,
+		NumVoters:                   &numVoters,
+		LeasePreferences:            makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig),
 		NullVoterConstraintsIsEmpty: true,
 		VoterConstraints:            voterConstraints,
 		Constraints:                 constraints,
@@ -206,9 +204,8 @@ func zoneConfigForMultiRegionPartition(
 	zc.VoterConstraints = voterConstraints
 
 	zc.InheritedLeasePreferences = false
-	zc.LeasePreferences = []zonepb.LeasePreference{
-		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(partitionRegion)}},
-	}
+
+	zc.LeasePreferences = makeLeasePreferences(partitionRegion, regionConfig)
 	return *zc, err
 }
 
@@ -253,13 +250,22 @@ func getNumVotersAndNumReplicas(
 			numReplicas = (numVotersForZoneSurvival) + (numRegions - 1)
 		}
 	case descpb.SurvivalGoal_REGION_FAILURE:
-		// <(quorum - 1) voters in the home region> + <1 replica for every other
-		// region>
+		// The primary and secondary region each have two voters.
+		// maxFailuresBeforeUnavailability(numVotersForZoneSurvival) = 2.
+		// We have 5 voters for survival mode region failure such that we can
+		// get quorum with 2 voters in the primary region + one voter outside.
+		// Every other region has one replica.
+
+		numRegionsWithTwoVoters := int32(1)
+		if regionConfig.HasSecondaryRegion() {
+			numRegionsWithTwoVoters = 2
+		}
+
 		numVoters = numVotersForRegionSurvival
 		// We place the maximum concurrent replicas that can fail before a range
 		// outage in the home region, and ensure that there's at least one replica
 		// in all other regions.
-		numReplicas = maxFailuresBeforeUnavailability(numVotersForRegionSurvival) + (numRegions - 1)
+		numReplicas = numRegionsWithTwoVoters*maxFailuresBeforeUnavailability(numVotersForRegionSurvival) + (numRegions - numRegionsWithTwoVoters)
 		if numReplicas < numVoters {
 			// NumReplicas cannot be less than NumVoters. If we have <= 4 regions, all
 			// replicas will be voting replicas.
@@ -358,7 +364,7 @@ func synthesizeVoterConstraints(
 				// +--------------------+   +-------------------+    +--------------------+
 				//
 				NumReplicas: maxFailuresBeforeUnavailability(numVoters),
-				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
+				Constraints: makeConstraintsWithSecondaryRegion(region, regionConfig),
 			},
 		}, nil
 	default:
@@ -445,15 +451,37 @@ func zoneConfigForMultiRegionTable(
 		ret.VoterConstraints = voterConstraints
 
 		ret.InheritedLeasePreferences = false
-		ret.LeasePreferences = []zonepb.LeasePreference{
-			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(preferredRegion)}},
-		}
+		ret.LeasePreferences = makeLeasePreferences(preferredRegion, regionConfig)
 	case *catpb.LocalityConfig_RegionalByRow_:
 		// We purposely do not set anything here at table level - this should be done at
 		// partition level instead.
 		return ret, nil
 	}
 	return ret, nil
+}
+
+// makeConstraintsWithSecondaryRegion returns a list of constraints.
+// A constraint is added for the region passed in and a secondary lease
+// preference is added if the regionConfig has a secondary region.
+func makeConstraintsWithSecondaryRegion(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) []zonepb.Constraint {
+	constraints := []zonepb.Constraint{makeRequiredConstraintForRegion(region)}
+	if regionConfig.HasSecondaryRegion() && region != regionConfig.SecondaryRegion() {
+		constraints = append(constraints, makeRequiredConstraintForRegion(regionConfig.SecondaryRegion()))
+	}
+	return constraints
+}
+
+// makeLeasePreferences returns a list of lease preference constraints.
+// A constraint is added for the region passed in and a secondary lease
+// preference is added if the regionConfig has a secondary region.
+func makeLeasePreferences(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) []zonepb.LeasePreference {
+	return []zonepb.LeasePreference{
+		{Constraints: makeConstraintsWithSecondaryRegion(region, regionConfig)},
+	}
 }
 
 // applyZoneConfigForMultiRegionTableOption is an option that can be passed into
@@ -1179,6 +1207,7 @@ func SynthesizeRegionConfig(
 		regionEnumID,
 		dbDesc.GetRegionConfig().Placement,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
+		multiregion.WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
 	)
 
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {

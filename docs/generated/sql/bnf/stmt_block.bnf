@@ -1202,6 +1202,7 @@ unreserved_keyword ::=
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
+	| 'SECONDARY'
 	| 'SERIALIZABLE'
 	| 'SEQUENCE'
 	| 'SEQUENCES'
@@ -1454,6 +1455,7 @@ alter_database_stmt ::=
 	| alter_database_drop_region_stmt
 	| alter_database_survival_goal_stmt
 	| alter_database_primary_region_stmt
+	| alter_database_set_secondary_region_stmt
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1992,6 +1994,9 @@ alter_database_primary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name primary_region_clause
 	| 'ALTER' 'DATABASE' database_name 'SET' primary_region_clause
 
+alter_database_set_secondary_region_stmt ::=
+	'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION' opt_equal region_name
+
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' a_expr set_zone_config
 
@@ -2526,6 +2531,10 @@ survival_goal_clause ::=
 primary_region_clause ::=
 	'PRIMARY' 'REGION' opt_equal region_name
 
+opt_equal ::=
+	'='
+	| 
+
 relocate_kw ::=
 	'TESTING_RELOCATE'
 	| 'EXPERIMENTAL_RELOCATE'
@@ -2702,10 +2711,6 @@ all_op ::=
 	| '~'
 	| 'SQRT'
 	| 'CBRT'
-
-opt_equal ::=
-	'='
-	| 
 
 region_or_regions ::=
 	'REGIONS'

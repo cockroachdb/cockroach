@@ -871,7 +871,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SECONDARY SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -975,6 +975,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> alter_database_owner
 %type <tree.Statement> alter_database_placement_stmt
 %type <tree.Statement> alter_database_set_stmt
+%type <tree.Statement> alter_database_set_secondary_region_stmt
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1753,6 +1754,7 @@ alter_database_stmt:
 | alter_database_primary_region_stmt
 | alter_database_placement_stmt
 | alter_database_set_stmt
+| alter_database_set_secondary_region_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1842,6 +1844,15 @@ alter_database_primary_region_stmt:
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($5),
+    }
+  }
+
+alter_database_set_secondary_region_stmt:
+  ALTER DATABASE database_name SET SECONDARY REGION opt_equal region_name
+  {
+    $$.val = &tree.AlterDatabaseSecondaryRegion{
+      DatabaseName: tree.Name($3),
+      SecondaryRegion: tree.Name($8),
     }
   }
 
@@ -14140,6 +14151,7 @@ unreserved_keyword:
 | SCRUB
 | SEARCH
 | SECOND
+| SECONDARY
 | SERIALIZABLE
 | SEQUENCE
 | SEQUENCES

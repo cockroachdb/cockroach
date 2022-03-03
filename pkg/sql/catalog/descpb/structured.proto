@@ -1276,6 +1276,8 @@ message DatabaseDescriptor {
     // DataPlacement dictates whether or not to use a restricted data placement
     // policy.
     optional DataPlacement placement = 5 [(gogoproto.nullable) = false];
+
+    optional string secondary_region = 6 [(gogoproto.nullable)=false,(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
   }
   // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;
@@ -1406,6 +1408,7 @@ message TypeDescriptor {
 
     // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
     optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+    optional string secondary_region = 2 [(gogoproto.nullable) = false, (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
   }
 
   optional RegionConfig region_config = 16;

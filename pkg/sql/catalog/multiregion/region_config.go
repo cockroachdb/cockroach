@@ -36,6 +36,7 @@ type RegionConfig struct {
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
+	secondaryRegion      catpb.RegionName
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -90,6 +91,17 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+// SecondaryRegion returns the secondary region configured on the RegionConfig.
+func (r *RegionConfig) SecondaryRegion() catpb.RegionName {
+	return r.secondaryRegion
+}
+
+// HasSecondaryRegion returns whether the RegionConfig has a secondary
+// region set.
+func (r *RegionConfig) HasSecondaryRegion() bool {
+	return r.secondaryRegion != ""
+}
+
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
@@ -98,6 +110,13 @@ type MakeRegionConfigOption func(r *RegionConfig)
 func WithTransitioningRegions(transitioningRegions catpb.RegionNames) MakeRegionConfigOption {
 	return func(r *RegionConfig) {
 		r.transitioningRegions = transitioningRegions
+	}
+}
+
+// WithSecondaryRegion is an option to include a secondary region.
+func WithSecondaryRegion(secondaryRegion catpb.RegionName) MakeRegionConfigOption {
+	return func(r *RegionConfig) {
+		r.secondaryRegion = secondaryRegion
 	}
 }
 
