@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1341,7 +1341,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 			// for JSON objects.
 			Start: inverted.EncVal(encoding.EncodeJSONObjectSpanStartAscending(prefix)),
 			// This end key is equal to jsonInvertedIndex + 1.
-			End: inverted.EncVal(roachpb.Key(prefix).PrefixEnd()),
+			End: inverted.EncVal(keysbase.PrefixEnd(prefix)),
 		}, true /* tight */))
 
 	default:

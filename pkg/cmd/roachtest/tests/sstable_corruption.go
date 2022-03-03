@@ -55,7 +55,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node),
 			"./cockroach debug pebble manifest dump {store-dir}/MANIFEST-* | grep -v added | grep -v deleted | grep \"\\[/Table\"")
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("could not find tables to corrupt: %s\nstdout: %s\nstderr: %s", err, result.Stdout, result.Stderr)
 		}
 		tableSSTs := strings.Split(result.Stdout, "\n")
 		if len(tableSSTs) == 0 {

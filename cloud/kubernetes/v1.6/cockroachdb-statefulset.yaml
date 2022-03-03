@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.6/cockroachdb-statefulset.yaml
 apiVersion: v1
 kind: Service
 metadata:

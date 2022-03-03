@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/performance/cockroachdb-daemonset-insecure.yaml
 # This configuration file sets up a DaemonSet running CockroachDB in insecure
 # mode. For more information on why you might want to use a DaemonSet instead
 # of a StatefulSet, see our docs:

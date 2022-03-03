@@ -134,6 +134,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],
+    shard_count = 16,
     tags = ["no-remote"],
     deps = [
         "//build/bazelutil:noop",

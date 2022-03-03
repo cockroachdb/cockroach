@@ -51,6 +51,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":tests"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/bench",

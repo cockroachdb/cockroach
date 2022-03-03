@@ -54,6 +54,7 @@ go_test(
     name = "democluster_test",
     srcs = ["demo_cluster_test.go"],
     embed = [":democluster"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

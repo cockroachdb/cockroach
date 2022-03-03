@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/multiregion/eks/cockroachdb-statefulset-secure-eks.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:

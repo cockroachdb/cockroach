@@ -304,8 +304,8 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
-    shard_count = 4,
-    tags = ["cpu:4"],
+    shard_count = 8,
+    tags = ["cpu:2"],
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",

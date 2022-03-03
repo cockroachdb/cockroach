@@ -11,6 +11,7 @@ go_test(
         "//pkg/sql/schemachanger:testdata",
     ],
     embed = [":schemachangerccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

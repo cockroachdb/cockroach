@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "authentication.go",
         "backend_dialer.go",
+        "conn_migration.go",
         "connector.go",
         "error.go",
         "forwarder.go",
@@ -28,6 +29,7 @@ go_library(
         "//pkg/security/certmgr",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgwirebase",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/httputil",
@@ -52,6 +54,7 @@ go_test(
     size = "small",
     srcs = [
         "authentication_test.go",
+        "conn_migration_test.go",
         "connector_test.go",
         "forwarder_test.go",
         "frontend_admitter_test.go",
@@ -65,6 +68,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/denylist",
+        "//pkg/ccl/sqlproxyccl/interceptor",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/ccl/utilccl",

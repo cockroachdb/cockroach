@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -203,9 +203,9 @@ func TestByteArrayRoundTrip(t *testing.T) {
 		randValues = append(randValues, d)
 	}
 
-	for _, be := range []sessiondatapb.BytesEncodeFormat{
-		sessiondatapb.BytesEncodeHex,
-		sessiondatapb.BytesEncodeEscape,
+	for _, be := range []lex.BytesEncodeFormat{
+		lex.BytesEncodeHex,
+		lex.BytesEncodeEscape,
 	} {
 		t.Run(be.String(), func(t *testing.T) {
 			for i, d := range randValues {

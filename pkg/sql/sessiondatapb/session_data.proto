@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "sessiondatapb";
 
+import "sql/lex/encode.proto";
 import "util/duration/duration.proto";
 import "util/timeutil/pgdate/pgdate.proto";
 import "gogoproto/gogo.proto";
@@ -104,20 +105,6 @@ message DataConversionConfig {
   util.duration.IntervalStyle interval_style = 3;
   // DateStyle indicates the style to parse and display dates as.
   util.timeutil.pgdate.DateStyle date_style = 4 [(gogoproto.nullable) = false];
-}
-
-// BytesEncodeFormat is the configuration for bytes to string conversions.
-enum BytesEncodeFormat {
-  option (gogoproto.goproto_enum_prefix) = false;
-  option (gogoproto.goproto_enum_stringer) = false;
-
-  // BytesEncodeHex uses the hex format: e'abc\n'::BYTES::STRING -> '\x61626312'.
-  // This is the default, for compatibility with PostgreSQL.
-  BytesEncodeHex = 0;
-  // BytesEncodeEscape uses the escaped format: e'abc\n'::BYTES::STRING -> 'abc\012'.
-  BytesEncodeEscape = 1;
-  // BytesEncodeBase64 uses base64 encoding.
-  BytesEncodeBase64 = 2;
 }
 
 // VectorizeExecMode controls if an when the Executor executes queries using
