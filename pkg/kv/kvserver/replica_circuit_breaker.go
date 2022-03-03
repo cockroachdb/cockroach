@@ -37,7 +37,7 @@ type replicaInCircuitBreaker interface {
 	Desc() *roachpb.RangeDescriptor
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 	slowReplicationThreshold(ba *roachpb.BatchRequest) (time.Duration, bool)
-	replicaUnavailableError() error
+	replicaUnavailableError(err error) error
 	poisonInflightLatches(err error)
 }
 
@@ -102,11 +102,7 @@ func (br *replicaCircuitBreaker) enabled() bool {
 	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0 && br.canEnable()
 }
 
-func (br *replicaCircuitBreaker) newError() error {
-	return br.r.replicaUnavailableError()
-}
-
-func (br *replicaCircuitBreaker) TripAsync() {
+func (br *replicaCircuitBreaker) TripAsync(err error) {
 	if !br.enabled() {
 		return
 	}
@@ -114,9 +110,13 @@ func (br *replicaCircuitBreaker) TripAsync() {
 	_ = br.stopper.RunAsyncTask(
 		br.ambCtx.AnnotateCtx(context.Background()), "trip-breaker",
 		func(ctx context.Context) {
-			br.wrapped.Report(br.newError())
+			br.tripSync(err)
 		},
 	)
+}
+
+func (br *replicaCircuitBreaker) tripSync(err error) {
+	br.wrapped.Report(br.r.replicaUnavailableError(err))
 }
 
 type signaller interface {
@@ -240,12 +240,13 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 			return pErr.GoError()
 		},
 	); err != nil {
-		return errors.CombineErrors(r.replicaUnavailableError(), err)
+		return r.replicaUnavailableError(err)
 	}
 	return nil
 }
 
 func replicaUnavailableError(
+	err error,
 	desc *roachpb.RangeDescriptor,
 	replDesc roachpb.ReplicaDescriptor,
 	lm liveness.IsLiveMap,
@@ -270,25 +271,22 @@ func replicaUnavailableError(
 	var _ redact.SafeFormatter = desc
 	var _ redact.SafeFormatter = replDesc
 
-	err := roachpb.NewReplicaUnavailableError(desc, replDesc)
-	err = errors.Wrapf(
-		err,
-		"raft status: %+v", redact.Safe(rs), // raft status contains no PII
-	)
 	if len(nonLiveRepls.AsProto()) > 0 {
 		err = errors.Wrapf(err, "replicas on non-live nodes: %v (lost quorum: %t)", nonLiveRepls, !canMakeProgress)
 	}
 
-	return err
+	err = errors.Wrapf(
+		err,
+		"raft status: %+v", redact.Safe(rs), // raft status contains no PII
+	)
+
+	return roachpb.NewReplicaUnavailableError(err, desc, replDesc)
 }
 
-func (r *Replica) replicaUnavailableError() error {
+func (r *Replica) replicaUnavailableError(err error) error {
 	desc := r.Desc()
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
-	var isLiveMap liveness.IsLiveMap
-	if nl := r.store.cfg.NodeLiveness; nl != nil { // exclude unit test
-		isLiveMap = nl.GetIsLiveMap()
-	}
-	return replicaUnavailableError(desc, replDesc, isLiveMap, r.RaftStatus())
+	isLiveMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus())
 }
