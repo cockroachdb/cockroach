@@ -2244,6 +2244,7 @@ func (s *statusServer) HotRangesV2(
 						IndexName:         indexName,
 						ReplicaNodeIds:    replicaNodeIDs,
 						LeaseholderNodeID: r.LeaseholderNodeID,
+						StoreID:           store.StoreID,
 					})
 				}
 			}
