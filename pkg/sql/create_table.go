@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1442,6 +1443,9 @@ func NewTableDesc(
 
 	// Create the TTL column if one does not already exist.
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
+		if err := checkTTLEnabledForCluster(ctx, st); err != nil {
+			return nil, err
+		}
 		hasRowLevelTTLColumn := false
 		for _, def := range n.Defs {
 			switch def := def.(type) {
@@ -2388,6 +2392,16 @@ func rowLevelTTLSchedule(ttl *catpb.RowLevelTTL) string {
 		return override
 	}
 	return defaultTTLScheduleCron
+}
+
+func checkTTLEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
+	if !st.Version.IsActive(ctx, clusterversion.RowLevelTTL) {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"row level TTL is only available once the cluster is fully upgraded",
+		)
+	}
+	return nil
 }
 
 // CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
