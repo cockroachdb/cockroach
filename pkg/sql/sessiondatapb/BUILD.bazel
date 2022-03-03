@@ -31,6 +31,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/lex:lex_proto",
         "//pkg/util/duration:duration_proto",
         "//pkg/util/timeutil/pgdate:pgdate_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -46,6 +47,7 @@ go_proto_library(
     proto = ":sessiondatapb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/lex",
         "//pkg/util/duration",
         "//pkg/util/timeutil/pgdate",
         "@com_github_gogo_protobuf//gogoproto",

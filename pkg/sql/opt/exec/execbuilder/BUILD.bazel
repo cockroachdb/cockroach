@@ -64,6 +64,7 @@ go_test(
         "@cockroach//c-deps:libgeos",
     ],
     embed = [":execbuilder"],
+    shard_count = 16,
     deps = [
         "//pkg/security",
         "//pkg/security/securitytest",

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -96,6 +97,13 @@ const (
 	// latestHistoryDirectory is the directory where all 22.1 and beyond
 	// LATEST files will be stored as we no longer want to overwrite it.
 	latestHistoryDirectory = "latest"
+)
+
+var writeMetadataSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.bulkio.write_metadata_sst.enabled",
+	"write experimental new format BACKUP metadata file",
+	true,
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check

@@ -321,5 +321,5 @@ message IndexBackfillMergerSpec {
   repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
   repeated int32 span_idx = 5;
 
-  optional int64 chunk_size = 6 [(gogoproto.nullable) = false];
+  // NEXT ID: 8.
 }

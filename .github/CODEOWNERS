@@ -220,6 +220,7 @@
 /pkg/internal/team/          @cockroachdb/test-eng
 /pkg/jobs/                   @cockroachdb/cdc-prs
 /pkg/keys/                   @cockroachdb/kv-prs
+/pkg/keysbase/               @cockroachdb/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
 /pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
 /pkg/migration/              @cockroachdb/kv-prs-noreview @cockroachdb/sql-schema

@@ -52,6 +52,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":concurrency"],
+    shard_count = 16,
     deps = [
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency/lock",

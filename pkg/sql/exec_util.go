@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -2807,7 +2808,7 @@ func (m *sessionDataMutator) SetAvoidBuffering(b bool) {
 	m.data.AvoidBuffering = b
 }
 
-func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondatapb.BytesEncodeFormat) {
+func (m *sessionDataMutator) SetBytesEncodeFormat(val lex.BytesEncodeFormat) {
 	m.data.DataConversionConfig.BytesEncodeFormat = val
 }
 

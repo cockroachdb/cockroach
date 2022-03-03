@@ -39,6 +39,7 @@ go_test(
         "validate_test.go",
     ],
     embed = [":ptstorage"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/keys",

@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/bring-your-own-certs/client.yaml
 # This config file demonstrates how to connect to the CockroachDB StatefulSet
 # defined in bring-your-own-certs-statefulset.yaml that uses certificates
 # created outside of Kubernetes. See that file for why you may want to use it.

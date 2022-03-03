@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/performance/cockroachdb-statefulset-insecure.yaml
 # This configuration file sets up an insecure StatefulSet running CockroachDB with
 # tweaks to make it more performant than our default configuration files. All
 # changes from the default insecure configuration have been marked with a comment

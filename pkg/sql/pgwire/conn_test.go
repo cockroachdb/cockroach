@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -569,7 +570,7 @@ func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.Sessio
 
 func makeTestingConvCfg() (sessiondatapb.DataConversionConfig, *time.Location) {
 	return sessiondatapb.DataConversionConfig{
-		BytesEncodeFormat: sessiondatapb.BytesEncodeHex,
+		BytesEncodeFormat: lex.BytesEncodeHex,
 	}, time.UTC
 }
 

@@ -39,6 +39,7 @@ PROTOBUF_SRCS = [
   "//pkg/sql/contentionpb:contentionpb_go_proto",
   "//pkg/sql/execinfrapb:execinfrapb_go_proto",
   "//pkg/sql/inverted:inverted_go_proto",
+  "//pkg/sql/lex:lex_go_proto",
   "//pkg/sql/pgwire/pgerror:pgerror_go_proto",
   "//pkg/sql/protoreflect/test:protoreflecttest_go_proto",
   "//pkg/sql/rowenc/rowencpb:rowencpb_go_proto",

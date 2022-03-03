@@ -18,7 +18,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
-        "//pkg/roachpb",
+        "//pkg/keysbase",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -34,6 +34,7 @@ go_test(
     name = "json_test",
     size = "small",
     srcs = [
+        "dep_test.go",
         "encode_test.go",
         "json_test.go",
     ],
@@ -43,6 +44,7 @@ go_test(
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/testutils",
+        "//pkg/testutils/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
