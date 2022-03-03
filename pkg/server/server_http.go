@@ -72,6 +72,22 @@ var HSTSEnabled = func() *settings.BoolSetting {
 	return s
 }()
 
+// HTTPSForwardedEnabled is a boolean that enables accepting forwarded
+// HTTPS traffic and serving it on the HTTP port. This is useful in
+// situations where the operator is running CRDB behind a load
+// balancer and would like to terminate SSL there.
+var HTTPSForwardedEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"server.accept_https_forwarded.enabled",
+		"if true, a secure server will accept HTTP traffic provided "+
+			"a forwarding header is set identifying the forwarded protocol"+
+			"as https.",
+		false,
+	).WithPublic()
+	return s
+}()
+
 const hstsHeaderKey = "Strict-Transport-Security"
 
 // hstsHeaderValue contains the static HSTS header value we return when
@@ -255,6 +271,15 @@ func (s *httpServer) start(
 				if HSTSEnabled.Get(&s.cfg.Settings.SV) {
 					w.Header().Set(hstsHeaderKey, hstsHeaderValue)
 				}
+
+				if HTTPSForwardedEnabled.Get(&s.cfg.Settings.SV) &&
+					getForwardedProtocol(r.Header) == "https" {
+					// If we are receiving forwarded HTTPS traffic from a load
+					// balancer, there's no need to redirect to HTTPS ourselves
+					// because we'll cause an infinite redirect.
+					s.baseHandler(w, r)
+					return
+				}
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
 			})
 			mux.Handle(healthPath, http.HandlerFunc(s.baseHandler))
@@ -276,6 +301,24 @@ func (s *httpServer) start(
 	return stopper.RunAsyncTask(workersCtx, "server-http", func(context.Context) {
 		netutil.FatalIfUnexpected(connManager.Serve(httpLn))
 	})
+}
+
+func getForwardedProtocol(h http.Header) string {
+	forwardedProto := h.Get("X-Forwarded-Proto")
+	if forwardedProto != "" {
+		return forwardedProto
+	}
+	forwarded := h.Get("Forwarded")
+	if forwarded != "" {
+		directives := strings.Split(forwarded, ";")
+		for _, d := range directives {
+			kv := strings.Split(d, "=")
+			if len(kv) == 2 && kv[0] == "proto" {
+				return kv[1]
+			}
+		}
+	}
+	return ""
 }
 
 // gzipHandler intercepts HTTP Requests and will gzip the response if
