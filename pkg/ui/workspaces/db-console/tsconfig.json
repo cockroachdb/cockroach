@@ -21,19 +21,21 @@
     "declaration": true,
     "outDir": "./dist/types",
     "target": "es6",
+    "rootDirs": [".", "ccl"],
     "baseUrl": ".",
     "paths": {
       "oss/*": ["*"],
-      "*": [
-        "ccl/*",
-        "*",
-        "node_modules/*"
+      "src/*": [
+        "ccl/src/*",
+        "src/*"
       ]
     }
   },
   "exclude": [
     "cypress",
     "cluster-ui",
-    "dist"
+    "dist",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
   ]
 }
