@@ -117,17 +117,42 @@ func EngineKeyCompare(a, b []byte) int {
 	// Compare the version part of the key. Note that when the version is a
 	// timestamp, the timestamp encoding causes byte comparison to be equivalent
 	// to timestamp comparison.
-	aTS := a[aSep:aEnd]
-	bTS := b[bSep:bEnd]
-	if len(aTS) == 0 {
-		if len(bTS) == 0 {
+	aVer := a[aSep:aEnd]
+	bVer := b[bSep:bEnd]
+	if len(aVer) == 0 {
+		if len(bVer) == 0 {
 			return 0
 		}
 		return -1
-	} else if len(bTS) == 0 {
+	} else if len(bVer) == 0 {
 		return 1
 	}
-	return bytes.Compare(bTS, aTS)
+
+	const tsSuffix = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen + mvccEncodedTimeLogicalLen
+	aTS, bTS := aVer, bVer
+	if len(aVer) > tsSuffix {
+		aTS = aVer[:tsSuffix]
+	} else if len(aVer) < tsSuffix {
+		aTS = append(aVer[:len(aVer):len(aVer)], make([]byte, 4)...)
+	}
+	if len(bVer) > tsSuffix {
+		bTS = bVer[:tsSuffix]
+	} else if len(bVer) < tsSuffix {
+		bTS = append(bVer[:len(bVer):len(bVer)], make([]byte, 4)...)
+	}
+	// TODO: short has not logical, long does
+	if c := bytes.Compare(bTS, aTS); c != 0 {
+		return c
+	}
+	if len(aVer) <= tsSuffix {
+		if len(bVer) <= tsSuffix {
+			return 0
+		}
+		return -1
+	} else if len(bVer) <= tsSuffix {
+		return 1
+	}
+	return bytes.Compare(bVer, aVer)
 }
 
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
@@ -408,7 +433,9 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
 	// Only collect if this looks like an MVCC timestamp.
 	if versionLen == engineKeyVersionWallTimeLen ||
 		versionLen == engineKeyVersionWallAndLogicalTimeLen ||
-		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
+		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen ||
+		versionLen == engineKeyVersionWallAndLogicalTimeLocalWallTimeLen ||
+		versionLen == engineKeyVersionWallAndLogicalTimeLocalWallAndLogicalTimeLen {
 		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
 		// Version consists of the bytes after the sentinel and before the length.
 		b = b[prefixPartEnd+1 : len(b)-1]

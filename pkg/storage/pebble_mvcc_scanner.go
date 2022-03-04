@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -29,10 +30,15 @@ import (
 )
 
 const (
-	maxItersBeforeSeek = 10
-
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	kvLenSize = 8
+)
+
+var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
+	"mvcc-max-iters-before-seek",
+	10, /* defaultValue */
+	0,  /* min */
+	3,  /* max */
 )
 
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
@@ -356,7 +362,7 @@ type pebbleMVCCScanner struct {
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
-	// [1, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
+	// [0, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
 	itersBeforeSeek int
 }
 
@@ -483,8 +489,8 @@ func (p *pebbleMVCCScanner) incrementItersBeforeSeek() {
 // Decrements itersBeforeSeek while ensuring it stays positive.
 func (p *pebbleMVCCScanner) decrementItersBeforeSeek() {
 	p.itersBeforeSeek--
-	if p.itersBeforeSeek < 1 {
-		p.itersBeforeSeek = 1
+	if p.itersBeforeSeek < 0 {
+		p.itersBeforeSeek = 0
 	}
 }
 
@@ -971,6 +977,12 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 func (p *pebbleMVCCScanner) seekVersion(
 	ctx context.Context, seekTS hlc.Timestamp, uncertaintyCheck bool,
 ) bool {
+	if seekTS.IsEmpty() {
+		// If the seek timestamp is empty, we've already seen all versions of this
+		// key, so seek to the next one.
+		return p.advanceKey()
+	}
+
 	seekKey := MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
 	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], seekKey)
 	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
