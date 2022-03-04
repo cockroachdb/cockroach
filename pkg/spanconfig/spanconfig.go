@@ -48,10 +48,12 @@ type KVAccessor interface {
 	WithTxn(context.Context, *kv.Txn) KVAccessor
 }
 
-// KVSubscriber presents a consistent[1] snapshot of a StoreReader that's
-// incrementally maintained with changes made to the global span configurations
-// state (system.span_configurations). The maintenance happens transparently;
-// callers can subscribe to learn about what key spans may have seen a
+// KVSubscriber presents a consistent[1] snapshot of a StoreReader and
+// ProtectedTSReader that's incrementally maintained with changes made to the
+// global span configurations state (system.span_configurations). The
+// maintenance happens transparently.
+//
+// Callers can subscribe to learn about what key spans may have seen a
 // configuration change. After learning about a span update through a callback
 // invocation, subscribers can consult the embedded StoreReader to retrieve an
 // up-to-date[2] config for the updated span. The callback is called in a single
@@ -66,10 +68,11 @@ type KVAccessor interface {
 // StoreReader for the given span would still retrieve the last config observed
 // for the span[3].
 //
-// [1]: The contents of the StoreReader at t1 corresponds exactly to the
-//      contents of the global span configuration state at t0 where t0 <= t1. If
-//      the StoreReader is read from at t2 where t2 > t1, it's guaranteed to
-//      observe a view of the global state at t >= t0.
+// [1]: The contents of the StoreReader and ProtectedTSReader at t1 corresponds
+//      exactly to the contents of the global span configuration state at t0
+//      where t0 <= t1. If the StoreReader or ProtectedTSReader is read from at
+//      t2 where t2 > t1, it's guaranteed to observe a view of the global state
+//      at t >= t0.
 // [2]: For the canonical KVSubscriber implementation, this is typically lagging
 //      by the closed timestamp target duration.
 // [3]: The canonical KVSubscriber implementation is bounced whenever errors
@@ -77,6 +80,8 @@ type KVAccessor interface {
 //      (typically through a coarsely targeted [min,max) span).
 type KVSubscriber interface {
 	StoreReader
+	ProtectedTSReader
+
 	LastUpdated() hlc.Timestamp
 	Subscribe(func(ctx context.Context, updated roachpb.Span))
 }
@@ -406,7 +411,7 @@ type ProtectedTSReader interface {
 	// part of the given key span. The time at which this protected timestamp
 	// state is valid is returned as well.
 	GetProtectionTimestamps(ctx context.Context, sp roachpb.Span) (
-		protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp,
+		protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error,
 	)
 }
 
@@ -421,7 +426,7 @@ type emptyProtectedTSReader hlc.Clock
 // GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
 // interface.
 func (r *emptyProtectedTSReader) GetProtectionTimestamps(
-	_ context.Context, _ roachpb.Span,
-) ([]hlc.Timestamp, hlc.Timestamp) {
-	return nil, (*hlc.Clock)(r).Now()
+	context.Context, roachpb.Span,
+) ([]hlc.Timestamp, hlc.Timestamp, error) {
+	return nil, (*hlc.Clock)(r).Now(), nil
 }

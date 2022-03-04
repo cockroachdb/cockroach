@@ -40,6 +40,13 @@ var (
 		400*1<<10, // 400 Kib
 	)
 
+	splitAfter = settings.RegisterByteSizeSetting(
+		settings.TenantWritable,
+		"bulkio.ingest.scatter_after_size",
+		"amount of data added to any one range after which a new range should be split off and scattered",
+		48<<20,
+	)
+
 	ingestDelay = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"bulkio.ingest.flush_delay",
@@ -67,11 +74,9 @@ func (b sz) SafeFormat(w redact.SafePrinter, _ rune) {
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
-	db         *kv.DB
-	rc         *rangecache.RangeCache
-	settings   *cluster.Settings
-	maxSize    func() int64
-	splitAfter func() int64
+	db       *kv.DB
+	rc       *rangecache.RangeCache
+	settings *cluster.Settings
 
 	// disallowShadowingBelow is described on roachpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
@@ -99,6 +104,8 @@ type SSTBatcher struct {
 
 	// writeAtBatchTS is passed to the writeAtBatchTs argument to db.AddSStable.
 	writeAtBatchTS bool
+
+	initialSplitDone bool
 
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
@@ -141,14 +148,12 @@ func MakeSSTBatcher(
 	ctx context.Context,
 	db *kv.DB,
 	settings *cluster.Settings,
-	flushBytes func() int64,
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:                     db,
 		settings:               settings,
-		maxSize:                flushBytes,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
 	}
@@ -159,9 +164,9 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db *kv.DB, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context, db *kv.DB, settings *cluster.Settings,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
+	b := &SSTBatcher{db: db, settings: settings, ingestAll: true}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -290,7 +295,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return b.Reset(ctx)
 	}
 
-	if b.sstWriter.DataSize >= b.maxSize() {
+	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
 		if err := b.doFlush(ctx, sizeFlush, nextKey); err != nil {
 			return err
 		}
@@ -337,7 +342,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	size := b.sstWriter.DataSize
 	if reason == sizeFlush {
-		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize()))
+		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(ingestFileSize(b.settings)))
 		b.flushCounts.sstSize++
 
 		// On first flush, if it is due to size, we introduce one split at the start
@@ -347,23 +352,26 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// minimizes impact on other adders (e.g. causing extra SST splitting).
 		//
 		// We only do this splitting if the caller expects the sst_batcher to
-		// split and scatter the data as it ingests it (which is the case when
-		// splitAfter) is set.
-		if b.flushCounts.total == 1 && b.splitAfter != nil {
+		// split and scatter the data as it ingests it i.e. splitAfter > 0.
+		if b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 && !b.initialSplitDone {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Warningf(ctx, "failed to generate split key to separate ingestion span: %v", err)
 			} else {
+				if log.V(1) {
+					log.Infof(ctx, "splitting on first flush to separate ingestion span using key %v", start)
+				}
 				// NB: Passing 'hour' here is technically illegal until 19.2 is
 				// active, but the value will be ignored before that, and we don't
 				// have access to the cluster version here.
 				reply, err := b.db.SplitAndScatter(ctx, splitAt, hour)
 				if err != nil {
-					log.Warningf(ctx, "%v", err)
-				}
-				b.flushCounts.splitWait += reply.Timing.Split
-				b.flushCounts.scatterWait += reply.Timing.Scatter
-				if reply.Stats != nil {
-					b.flushCounts.scatterMoved += reply.Stats.Total()
+					log.Warningf(ctx, "failed ot split at first key to separate ingestion span: %v", err)
+				} else {
+					b.flushCounts.splitWait += reply.Timing.Split
+					b.flushCounts.scatterWait += reply.Timing.Scatter
+					if reply.Stats != nil {
+						b.flushCounts.scatterMoved += reply.Stats.Total()
+					}
 				}
 			}
 		}
@@ -403,8 +411,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 			b.lastFlushKey = append(b.lastFlushKey[:0], b.flushKey...)
 			b.flushedToCurrentRange = size
 		}
-		if b.splitAfter != nil {
-			if splitAfter := b.splitAfter(); b.flushedToCurrentRange > splitAfter && nextKey != nil {
+		if splitSize := splitAfter.Get(&b.settings.SV); splitSize > 0 {
+			if b.flushedToCurrentRange > splitSize && nextKey != nil {
 				if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
 					log.Warningf(ctx, "%v", err)
 				} else {
