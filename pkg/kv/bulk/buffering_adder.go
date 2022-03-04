@@ -93,9 +93,6 @@ func MakeBulkAdder(
 	if opts.StepBufferSize == 0 {
 		opts.StepBufferSize = 32 << 20
 	}
-	if opts.SSTSize == nil {
-		opts.SSTSize = func() int64 { return 16 << 20 }
-	}
 	if opts.SplitAndScatterAfter == nil {
 		// splitting _before_ hitting max reduces chance of auto-splitting after the
 		// range is full and is more expensive to split/move.
@@ -108,7 +105,6 @@ func MakeBulkAdder(
 		name: opts.Name,
 		sink: SSTBatcher{
 			db:                     db,
-			maxSize:                opts.SSTSize,
 			rc:                     rangeCache,
 			settings:               settings,
 			skipDuplicates:         opts.SkipDuplicates,

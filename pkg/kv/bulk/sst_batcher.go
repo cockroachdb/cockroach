@@ -70,7 +70,6 @@ type SSTBatcher struct {
 	db         *kv.DB
 	rc         *rangecache.RangeCache
 	settings   *cluster.Settings
-	maxSize    func() int64
 	splitAfter func() int64
 
 	// disallowShadowingBelow is described on roachpb.AddSSTableRequest.
@@ -141,14 +140,12 @@ func MakeSSTBatcher(
 	ctx context.Context,
 	db *kv.DB,
 	settings *cluster.Settings,
-	flushBytes func() int64,
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:                     db,
 		settings:               settings,
-		maxSize:                flushBytes,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
 	}
@@ -159,9 +156,9 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db *kv.DB, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context, db *kv.DB, settings *cluster.Settings,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
+	b := &SSTBatcher{db: db, settings: settings, ingestAll: true}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -290,7 +287,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return b.Reset(ctx)
 	}
 
-	if b.sstWriter.DataSize >= b.maxSize() {
+	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
 		if err := b.doFlush(ctx, sizeFlush, nextKey); err != nil {
 			return err
 		}
@@ -337,7 +334,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	size := b.sstWriter.DataSize
 	if reason == sizeFlush {
-		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize()))
+		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(ingestFileSize(b.settings)))
 		b.flushCounts.sstSize++
 
 		// On first flush, if it is due to size, we introduce one split at the start
