@@ -27,7 +27,7 @@ import (
 // to tie into tracing, so that existing calls to `log.Event` can be lifted to
 // calls to `Timing.Event`.
 type Timing struct {
-	Now func() time.Time
+	Now func() int64
 	// OnEvent is called every time Event is called. It will be invoked directly
 	// from Event, i.e. logging in OnEvent needs to skip two stack frames to get
 	// to the caller of Event.
@@ -37,7 +37,7 @@ type Timing struct {
 }
 
 type entry struct {
-	ts time.Time
+	ts int64 // unix nanos
 	tr interface{}
 }
 
@@ -68,28 +68,28 @@ type End struct {
 // being present (or slipping in down the road) is high and would lead to
 // under-reporting of the duration attributed to 'pouncing':
 //
-//   dur, _ := tm.Event(ctx, "pouncing ends")
+//   dur := tm.Event(ctx, "pouncing ends")
 //   doSomethingIncludingMaybeAddAnotherEvent(tm)
 //   fmt.Printf("pouncing took %s!", dur)
 //
 // The use of Between is generally preferable to avoid this problem in all but
 // trivially correct code.
-func (tm *Timing) Event(ctx context.Context, tr interface{}) (time.Duration, int) {
-	prev := tm.ents[tm.lastIdx()]
+//
+// TODO update comment
+func (tm *Timing) Event(ctx context.Context, tr interface{}) int {
 	ts := tm.Now()
 	tm.ents = append(tm.ents, entry{
 		ts: ts,
 		tr: tr,
 	})
-	idx := tm.lastIdx()
-	tm.OnEvent(ctx, tr, ts)
-	return tm.ents[idx].ts.Sub(prev.ts), idx
+	//tm.OnEvent(ctx, tr, ts)
+	return tm.lastIdx()
 }
 
 // Between returns the duration elapsed between two calls to Event as identified
 // by their respective indexes.
 func (tm *Timing) Between(from, to int) time.Duration {
-	return tm.ents[to].ts.Sub(tm.ents[from].ts)
+	return time.Duration(tm.ents[to].ts - tm.ents[from].ts) // TODO overflow checks
 }
 
 func (tm *Timing) Duration() time.Duration {
@@ -103,7 +103,12 @@ func (tm *Timing) Duration() time.Duration {
 func (tm *Timing) Summary() map[interface{}]time.Duration {
 	res := make(map[interface{}]time.Duration)
 	m := map[interface{}]int{} // idx, key is never &End{X}
+
 	for i := range tm.ents {
+		// TODO: also compute the duration for which there isn't a single open
+		// interval. This is "time between the cracks". We may double-account time
+		// when intervals overlap, but if no interval is open, that's something that
+		// should go in a separate bucket and be reported.
 		el := &tm.ents[i]
 		e, ok := el.tr.(*End)
 		if !ok {
@@ -118,12 +123,12 @@ func (tm *Timing) Summary() map[interface{}]time.Duration {
 		}
 		// Closing an existing interval. If it isn't open, that's a programming
 		// error but we'll handle it gracefully by ignoring it.
-		idx, open := m[e]
+		idx, open := m[e.Event]
 		if !open {
 			continue // ignore
 		}
-		res[el.tr] += tm.Between(idx, i)
-		delete(m, el.tr)
+		res[e.Event] += tm.Between(idx, i)
+		delete(m, e.Event)
 	}
 	for e, idx := range m {
 		// Close any leftover events.
