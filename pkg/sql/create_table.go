@@ -1533,9 +1533,6 @@ func NewTableDesc(
 					)
 				}
 			}
-			if err := checkTypeIsSupported(ctx, st, defType); err != nil {
-				return nil, err
-			}
 			if d.PrimaryKey.Sharded {
 				if n.PartitionByTable.ContainsPartitions() && !n.PartitionByTable.All {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes cannot be explicitly partitioned")
@@ -2775,18 +2772,6 @@ func regionalByRowDefaultColDef(
 	c.OnUpdateExpr.Expr = onUpdateExpr
 
 	return c
-}
-
-func checkTypeIsSupported(ctx context.Context, settings *cluster.Settings, typ *types.T) error {
-	version := settings.Version.ActiveVersionOrEmpty(ctx)
-	if supported := types.IsTypeSupportedInVersion(version, typ); !supported {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"type %s is not supported until version upgrade is finalized",
-			typ.SQLString(),
-		)
-	}
-	return nil
 }
 
 // setSequenceOwner adds sequence id to the sequence id list owned by a column
