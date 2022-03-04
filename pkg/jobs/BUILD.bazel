@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/json",
