@@ -3797,10 +3797,11 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	}()
 
 	importCtx := &parallelImportContext{
-		semaCtx:   &semaCtx,
-		evalCtx:   &evalCtx,
-		tableDesc: tableDesc.ImmutableCopy().(catalog.TableDescriptor),
-		kvCh:      kvCh,
+		semaCtx:    &semaCtx,
+		evalCtx:    &evalCtx,
+		tableDesc:  tableDesc.ImmutableCopy().(catalog.TableDescriptor),
+		kvCh:       kvCh,
+		numWorkers: 1,
 	}
 
 	producer := &csvBenchmarkStream{
@@ -4745,7 +4746,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	r, err := newMysqloutfileReader(&semaCtx, roachpb.MySQLOutfileOptions{
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
-	}, kvCh, 0, 0,
+	}, kvCh, 0, 1,
 		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
@@ -4848,7 +4849,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Delimiter:  '\t',
 		Null:       `\N`,
 		MaxRowSize: 4096,
-	}, kvCh, 0, 0,
+	}, kvCh, 0, 1,
 		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 

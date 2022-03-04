@@ -20,7 +20,6 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -581,17 +580,16 @@ func runParallelImport(
 	group := ctxgroup.WithContext(ctx)
 
 	// Start consumers.
-	parallelism := importCtx.numWorkers
-	if parallelism <= 0 {
-		parallelism = runtime.GOMAXPROCS(0)
-	}
 
-	minEmited := make([]int64, parallelism)
+	minEmited := make([]int64, importCtx.numWorkers)
 	group.GoCtx(func(ctx context.Context) error {
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-rows-to-datums")
 		defer span.Finish()
-		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
+		if importCtx.numWorkers <= 0 {
+			return errors.AssertionFailedf("invalid parallelism: %d", importCtx.numWorkers)
+		}
+		return ctxgroup.GroupWorkers(ctx, importCtx.numWorkers, func(ctx context.Context, id int) error {
 			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
 		})
 	})
