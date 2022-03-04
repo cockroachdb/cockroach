@@ -349,6 +349,16 @@ const (
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
+	// EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
+	// migration that bumps Pebble's format major version to a version that
+	// supports range keys.
+	EnsurePebbleFormatVersionRangeKeys
+	// EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
+	// and is used as the feature gate for use of range keys. Any node at this
+	// version is guaranteed to reside in a cluster where all nodes support range
+	// keys at the Pebble layer.
+	EnablePebbleFormatVersionRangeKeys
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -608,6 +618,15 @@ var versionsSingleton = keyedVersions{
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
+
+	{
+		Key:     EnsurePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 1000},
+	},
+	{
+		Key:     EnablePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 1002},
+	},
 }
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
