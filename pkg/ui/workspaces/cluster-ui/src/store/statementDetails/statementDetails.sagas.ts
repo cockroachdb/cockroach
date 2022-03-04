@@ -18,7 +18,7 @@ import {
 } from "src/api/statementsApi";
 import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
 import { CACHE_INVALIDATION_PERIOD } from "src/store/utils";
-import { generateStmtDetailsToID } from "../../statementDetails/statementDetails.selectors";
+import { generateStmtDetailsToID } from "../../util";
 
 export function* refreshSQLDetailsStatsSaga(
   action: PayloadAction<StatementDetailsRequest>,
@@ -33,6 +33,8 @@ export function* requestSQLDetailsStatsSaga(
     ? generateStmtDetailsToID(
         action.payload.fingerprint_id,
         action.payload.app_names.toString(),
+        action.payload.start,
+        action.payload.end,
       )
     : "";
   try {

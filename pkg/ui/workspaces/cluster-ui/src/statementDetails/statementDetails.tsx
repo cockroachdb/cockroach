@@ -56,7 +56,7 @@ import { commonStyles } from "src/common";
 import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store";
 import moment from "moment";
-import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { StatementDetailsRequest } from "src/api/statementsApi";
 import SQLActivityError from "../sqlActivity/errorComponent";
 import {
@@ -162,7 +162,7 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 function statementDetailsRequestFromProps(
   props: StatementDetailsProps,
 ): cockroach.server.serverpb.StatementDetailsRequest {
-  const [start, end] = toDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(props.timeScale);
   const statementFingerprintID = getMatchParamByName(
     props.match,
     statementAttr,
