@@ -14,13 +14,12 @@ import {
   ErrorWithKey,
   getStatementDetails,
   StatementDetailsRequest,
-  StatementDetailsResponse,
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
 import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
 import { rootActions } from "../reducers";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
-import { generateStmtDetailsToID } from "../../statementDetails/statementDetails.selectors";
+import { generateStmtDetailsToID } from "../../util";
 
 export function* refreshSQLDetailsStatsSaga(
   action?: PayloadAction<StatementDetailsRequest>,
@@ -34,6 +33,8 @@ export function* requestSQLDetailsStatsSaga(
   const key = generateStmtDetailsToID(
     action?.payload.fingerprint_id,
     action?.payload.app_names.toString(),
+    action?.payload.start,
+    action?.payload.end,
   );
   try {
     const result = yield call(getStatementDetails, action?.payload);

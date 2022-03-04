@@ -11,6 +11,8 @@
 import _ from "lodash";
 import { combineReducers } from "redux";
 import moment from "moment";
+import { util } from "@cockroachlabs/cluster-ui";
+const { generateStmtDetailsToID } = util;
 
 import {
   CachedDataReducer,
@@ -300,39 +302,15 @@ const queriesReducerObj = new CachedDataReducer(
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
-// TODO (maryliag) add period selected to generate ID
 export const statementDetailsRequestToID = (
   req: api.StatementDetailsRequestMessage,
 ): string =>
   generateStmtDetailsToID(
     req.fingerprint_id.toString(),
     req.app_names.toString(),
+    req.start,
+    req.end,
   );
-
-export const generateStmtDetailsToID = (
-  fingerprintID: string,
-  appNames: string,
-): string => {
-  if (
-    appNames &&
-    (appNames.includes("$ internal") || appNames.includes("unset"))
-  ) {
-    const apps = appNames.split(",");
-    for (let i = 0; i < apps.length; i++) {
-      if (apps[i].includes("$ internal")) {
-        apps[i] = "$ internal";
-      }
-      if (apps[i].includes("unset")) {
-        apps[i] = "";
-      }
-    }
-    appNames = apps.toString();
-  }
-  if (appNames) {
-    return fingerprintID + appNames;
-  }
-  return fingerprintID;
-};
 
 const queryReducerObj = new KeyedCachedDataReducer(
   api.getStatementDetails,

@@ -8,50 +8,41 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import Long from "long";
 import { createSelector } from "@reduxjs/toolkit";
 import { RouteComponentProps } from "react-router-dom";
 import { AppState } from "../store";
-import { appNamesAttr, fingerprintIDAttr, getMatchParamByName } from "../util";
+import {
+  appNamesAttr,
+  fingerprintIDAttr,
+  generateStmtDetailsToID,
+  getMatchParamByName,
+} from "../util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
+import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
 type StatementDetailsResponseMessage = cockroach.server.serverpb.StatementDetailsResponse;
-
-export const generateStmtDetailsToID = (
-  fingerprintID: string,
-  appNames: string,
-): string => {
-  if (
-    appNames &&
-    (appNames.includes("$ internal") || appNames.includes("unset"))
-  ) {
-    const apps = appNames.split(",");
-    for (let i = 0; i < apps.length; i++) {
-      if (apps[i].includes("$ internal")) {
-        apps[i] = "$ internal";
-      }
-      if (apps[i].includes("unset")) {
-        apps[i] = "";
-      }
-    }
-    appNames = apps.toString();
-  }
-  if (appNames) {
-    return fingerprintID + appNames;
-  }
-  return fingerprintID;
-};
 
 export const selectStatementDetails = createSelector(
   (_state: AppState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, fingerprintIDAttr),
   (_state: AppState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, appNamesAttr),
+  (state: AppState): TimeScale => selectTimeScale(state),
   (state: AppState) => state.adminUI.sqlDetailsStats,
   (
     fingerprintID,
     appNames,
+    timeScale,
     statementDetailsStats,
   ): StatementDetailsResponseMessage => {
-    const key = generateStmtDetailsToID(fingerprintID, appNames);
+    const [start, end] = toRoundedDateRange(timeScale);
+    const key = generateStmtDetailsToID(
+      fingerprintID,
+      appNames,
+      Long.fromNumber(start.unix()),
+      Long.fromNumber(end.unix()),
+    );
     if (Object.keys(statementDetailsStats).includes(key)) {
       return statementDetailsStats[key].data;
     }

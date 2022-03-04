@@ -10,6 +10,7 @@
 import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
+import Long from "long";
 
 import {
   refreshLiveness,
@@ -17,7 +18,6 @@ import {
   refreshStatementDiagnosticsRequests,
   refreshStatementDetails,
   refreshUserSQLRoles,
-  generateStmtDetailsToID,
 } from "src/redux/apiReducers";
 import { RouteComponentProps } from "react-router";
 import {
@@ -30,6 +30,9 @@ import {
   StatementDetails,
   StatementDetailsDispatchProps,
   StatementDetailsStateProps,
+  TimeScale,
+  toRoundedDateRange,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -50,18 +53,29 @@ import { getMatchParamByName, queryByName } from "src/util/query";
 import { appNamesAttr, statementAttr } from "src/util/constants";
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
+const { generateStmtDetailsToID } = util;
+
 export const selectStatementDetails = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, statementAttr),
   (_state: AdminUIState, props: RouteComponentProps): string =>
     queryByName(props.location, appNamesAttr),
+  (state: AdminUIState): TimeScale =>
+    statementsTimeScaleLocalSetting.selector(state),
   (state: AdminUIState) => state.cachedData.statementDetails,
   (
     fingerprintID,
     appNames,
+    timeScale,
     statementDetailsStats,
   ): StatementDetailsResponseMessage => {
-    const key = generateStmtDetailsToID(fingerprintID, appNames);
+    const [start, end] = toRoundedDateRange(timeScale);
+    const key = generateStmtDetailsToID(
+      fingerprintID,
+      appNames,
+      Long.fromNumber(start.unix()),
+      Long.fromNumber(end.unix()),
+    );
     if (Object.keys(statementDetailsStats).includes(key)) {
       return statementDetailsStats[key].data;
     }
