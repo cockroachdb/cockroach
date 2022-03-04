@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -286,10 +287,10 @@ func (n *recordScheduleExecutor) GetCreateScheduleStatement(
 var _ ScheduledJobExecutor = &recordScheduleExecutor{}
 
 func fastDaemonKnobs(scanDelay func() time.Duration) *TestingKnobs {
-	return &TestingKnobs{
-		SchedulerDaemonInitialScanDelay: func() time.Duration { return 0 },
-		SchedulerDaemonScanDelay:        scanDelay,
-	}
+	knobs := NewTestingKnobsWithShortIntervals()
+	knobs.SchedulerDaemonInitialScanDelay = func() time.Duration { return 0 }
+	knobs.SchedulerDaemonScanDelay = scanDelay
+	return knobs
 }
 
 func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
@@ -828,6 +829,7 @@ func TestSchedulerCanBeRestrictedToSingleNode(t *testing.T) {
 }
 
 type blockUntilCancelledExecutor struct {
+	once          sync.Once
 	started, done chan struct{}
 }
 
@@ -840,8 +842,12 @@ func (e *blockUntilCancelledExecutor) ExecuteJob(
 	schedule *ScheduledJob,
 	txn *kv.Txn,
 ) error {
-	defer close(e.done)
-	close(e.started)
+	done := func() {}
+	e.once.Do(func() {
+		close(e.started)
+		done = func() { close(e.done) }
+	})
+	defer done()
 	<-ctx.Done()
 	return ctx.Err()
 }
@@ -873,6 +879,15 @@ func (e *blockUntilCancelledExecutor) GetCreateScheduleStatement(
 	return "", errors.AssertionFailedf("unexpected GetCreateScheduleStatement call")
 }
 
+func readWithTimeout(t *testing.T, ch chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -902,8 +917,44 @@ func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
 	require.NoError(t, schedule.Create(
 		context.Background(), ts.InternalExecutor().(sqlutil.InternalExecutor), nil))
 
-	<-ex.started
+	readWithTimeout(t, ex.started)
 	// Disable scheduler and verify all running schedules were cancelled.
 	schedulerEnabledSetting.Override(context.Background(), &ts.ClusterSettings().SV, false)
-	<-ex.done
+	readWithTimeout(t, ex.done)
+}
+
+func TestSchedulePlanningRespectsTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const executorName = "block-until-cancelled-executor"
+	ex := &blockUntilCancelledExecutor{
+		started: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: fastDaemonKnobs(overridePaceSetting(10 * time.Millisecond)),
+	}
+	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	defer ts.Stopper().Stop(context.Background())
+
+	// timeout must be long enough to work when running under stress.
+	schedulerScheduleExecutionTimeout.Override(
+		context.Background(), &ts.ClusterSettings().SV, 100*time.Millisecond)
+	// Create schedule which blocks until its context cancelled due to timeout.
+	// We only need to create one schedule.  This is because
+	// scheduler executes its batch of schedules sequentially, and so, creating more
+	// than one doesn't change anything since we block.
+	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
+	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner(security.TestUserName())
+	schedule.SetNextRun(timeutil.Now())
+	schedule.SetExecutionDetails(executorName, jobspb.ExecutionArguments{})
+	require.NoError(t, schedule.Create(
+		context.Background(), ts.InternalExecutor().(sqlutil.InternalExecutor), nil))
+
+	readWithTimeout(t, ex.started)
+	readWithTimeout(t, ex.done)
 }
