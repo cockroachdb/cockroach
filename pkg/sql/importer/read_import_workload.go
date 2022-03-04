@@ -13,7 +13,6 @@ package importer
 import (
 	"context"
 	"net/url"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -37,10 +36,11 @@ import (
 )
 
 type workloadReader struct {
-	semaCtx *tree.SemaContext
-	evalCtx *tree.EvalContext
-	table   catalog.TableDescriptor
-	kvCh    chan row.KVBatch
+	semaCtx     *tree.SemaContext
+	evalCtx     *tree.EvalContext
+	table       catalog.TableDescriptor
+	kvCh        chan row.KVBatch
+	parallelism int
 }
 
 var _ inputConverter = &workloadReader{}
@@ -50,8 +50,9 @@ func newWorkloadReader(
 	evalCtx *tree.EvalContext,
 	table catalog.TableDescriptor,
 	kvCh chan row.KVBatch,
+	parallelism int,
 ) *workloadReader {
-	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh}
+	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -168,7 +169,7 @@ func (w *workloadReader) readFiles(
 	}
 
 	for _, wc := range wcs {
-		if err := ctxgroup.GroupWorkers(ctx, runtime.GOMAXPROCS(0), func(ctx context.Context, _ int) error {
+		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) error {
 			evalCtx := w.evalCtx.Copy()
 			return wc.Worker(ctx, evalCtx, w.semaCtx)
 		}); err != nil {

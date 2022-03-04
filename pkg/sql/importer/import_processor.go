@@ -13,6 +13,7 @@ package importer
 import (
 	"context"
 	"math"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -105,6 +106,14 @@ var importAtNow = settings.RegisterBoolSetting(
 	"bulkio.import_at_current_time.enabled",
 	"write imported data at the current timestamp, when each batch is flushed",
 	true,
+)
+
+var readerParallelismSetting = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"bulkio.import.reader_parallelism",
+	"number of parallel workers to use to convert read data for formats that support parallel conversion; 0 indicates number of cores",
+	0,
+	settings.NonNegativeInt,
 )
 
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
@@ -285,6 +294,14 @@ func makeInputConverter(
 		}
 	}
 
+	readerParallelism := int(spec.ReaderParallelism)
+	if readerParallelism <= 0 {
+		readerParallelism = int(readerParallelismSetting.Get(&evalCtx.Settings.SV))
+	}
+	if readerParallelism <= 0 {
+		readerParallelism = runtime.GOMAXPROCS(0)
+	}
+
 	switch spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := true
@@ -295,28 +312,28 @@ func makeInputConverter(
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh), nil
+			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh, readerParallelism), nil
 		}
 		return newCSVInputReader(
-			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
+			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, readerParallelism,
 			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			readerParallelism, singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
 			spec.Format.MysqlDump)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			readerParallelism, singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
 			spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), evalCtx)
+			readerParallelism, evalCtx)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)

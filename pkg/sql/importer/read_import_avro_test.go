@@ -602,7 +602,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 
 	avro, err := newAvroInputReader(&semaCtx, kvCh,
 		tableDesc.ImmutableCopy().(catalog.TableDescriptor),
-		avroOpts, 0, 0, &evalCtx)
+		avroOpts, 0, 1, &evalCtx)
 	require.NoError(b, err)
 
 	limitStream := &limitAvroStream{
