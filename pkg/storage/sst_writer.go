@@ -63,6 +63,8 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	format := sstable.TableFormatRocksDBv2
 	// Cases are ordered from newer to older versions.
 	switch {
+	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys):
+		format = sstable.TableFormatPebblev2 // Range keys.
 	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties):
 		format = sstable.TableFormatPebblev1 // Block properties.
 	}
@@ -77,11 +79,14 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
 // are typically only ever iterated in their entirety.
-func MakeBackupSSTWriter(_ context.Context, _ *cluster.Settings, f io.Writer) SSTWriter {
+func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
+	if cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys) {
+		opts.TableFormat = sstable.TableFormatPebblev2 // Range keys.
+	}
 	// Don't need BlockPropertyCollectors for backups.
 	opts.BlockPropertyCollectors = nil
 

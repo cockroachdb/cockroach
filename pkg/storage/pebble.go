@@ -1630,6 +1630,10 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	formatVers := pebble.FormatMostCompatible
 	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.EnsurePebbleFormatVersionRangeKeys)):
+		if formatVers < pebble.FormatRangeKeys {
+			formatVers = pebble.FormatRangeKeys
+		}
 	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector)):
 		if formatVers < pebble.FormatBlockPropertyCollector {
 			formatVers = pebble.FormatBlockPropertyCollector
