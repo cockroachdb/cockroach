@@ -873,6 +873,15 @@ func (e *blockUntilCancelledExecutor) GetCreateScheduleStatement(
 	return "", errors.AssertionFailedf("unexpected GetCreateScheduleStatement call")
 }
 
+func readWithTimeout(t *testing.T, ch chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -902,8 +911,43 @@ func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
 	require.NoError(t, schedule.Create(
 		context.Background(), ts.InternalExecutor().(sqlutil.InternalExecutor), nil))
 
-	<-ex.started
+	readWithTimeout(t, ex.started)
 	// Disable scheduler and verify all running schedules were cancelled.
 	schedulerEnabledSetting.Override(context.Background(), &ts.ClusterSettings().SV, false)
-	<-ex.done
+	readWithTimeout(t, ex.done)
+}
+
+func TestSchedulePlanningRespectsTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const executorName = "block-until-cancelled-executor"
+	ex := &blockUntilCancelledExecutor{
+		started: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: fastDaemonKnobs(overridePaceSetting(10 * time.Millisecond)),
+	}
+	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	defer ts.Stopper().Stop(context.Background())
+
+	schedulerSchedulePlanningTimeout.Override(
+		context.Background(), &ts.ClusterSettings().SV, 10*time.Millisecond)
+	// Create schedule which blocks until its context cancelled due to timeout.
+	// We only need to create one schedule.  This is because
+	// scheduler executes its batch of schedules sequentially, and so, creating more
+	// than one doesn't change anything since we block.
+	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
+	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner(security.TestUserName())
+	schedule.SetNextRun(timeutil.Now())
+	schedule.SetExecutionDetails(executorName, jobspb.ExecutionArguments{})
+	require.NoError(t, schedule.Create(
+		context.Background(), ts.InternalExecutor().(sqlutil.InternalExecutor), nil))
+
+	readWithTimeout(t, ex.started)
+	readWithTimeout(t, ex.done)
 }
