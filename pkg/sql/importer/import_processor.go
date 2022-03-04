@@ -12,6 +12,7 @@ package importer
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
@@ -350,6 +351,14 @@ func ingestKvs(
 		writeAtBatchTimestamp = false
 	}
 
+	var pkAdderName, indexAdderName = "row adder", "index adder"
+	if len(spec.Tables) == 1 {
+		for k := range spec.Tables {
+			pkAdderName = fmt.Sprintf("%s row adder", k)
+			indexAdderName = fmt.Sprintf("%s index adder", k)
+		}
+	}
+
 	isPK := make(map[tableAndIndex]bool, len(spec.Tables))
 	for _, t := range spec.Tables {
 		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = true
@@ -369,7 +378,7 @@ func ingestKvs(
 	minBufferSize, maxBufferSize, stepSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
 		true /* isPKAdder */)
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     "pkAdder",
+		Name:                     pkAdderName,
 		DisallowShadowingBelow:   writeTS,
 		SkipDuplicates:           true,
 		MinBufferSize:            minBufferSize,
@@ -387,7 +396,7 @@ func ingestKvs(
 	minBufferSize, maxBufferSize, stepSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
 	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     "indexAdder",
+		Name:                     indexAdderName,
 		DisallowShadowingBelow:   writeTS,
 		SkipDuplicates:           true,
 		MinBufferSize:            minBufferSize,
