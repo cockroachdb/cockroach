@@ -16,21 +16,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
-// IngestBatchSize is a cluster setting that controls the maximum size of the
-// payload in an AddSSTable request.
-var IngestBatchSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+var (
+	// IngestBatchSize controls the size of ingest ssts.
+	IngestBatchSize = settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
 		"kv.bulk_ingest.batch_size",
 		"the maximum size of the payload in an AddSSTable request",
 		16<<20,
 	)
-	return s
-}()
+)
 
-// IngestFileSize determines the target size files sent via AddSSTable requests.
+// ingestFileSize determines the target size files sent via AddSSTable requests.
 // It returns the smaller of the IngestBatchSize and Raft command size settings.
-func IngestFileSize(st *cluster.Settings) int64 {
+func ingestFileSize(st *cluster.Settings) int64 {
 	desiredSize := IngestBatchSize.Get(&st.SV)
 	maxCommandSize := kvserver.MaxCommandSize.Get(&st.SV)
 	if desiredSize > maxCommandSize {

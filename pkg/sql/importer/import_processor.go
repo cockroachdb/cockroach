@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -355,8 +354,6 @@ func ingestKvs(
 		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = true
 	}
 
-	flushSize := func() int64 { return bulk.IngestFileSize(flowCtx.Cfg.Settings) }
-
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
 	// secondary index kvs. The number of secondary index kvs are small, and so we
@@ -375,7 +372,6 @@ func ingestKvs(
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
 		StepBufferSize:           stepSize,
-		SSTSize:                  flushSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
 	})
@@ -393,7 +389,6 @@ func ingestKvs(
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
 		StepBufferSize:           stepSize,
-		SSTSize:                  flushSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
 	})

@@ -120,6 +120,7 @@ var retiredSettings = map[string]struct{}{
 	"server.declined_reservation_timeout":                              {},
 	"bulkio.backup.resolve_destination_in_job.enabled":                 {},
 	"sql.defaults.experimental_hash_sharded_indexes.enabled":           {},
+	"schemachanger.backfiller.max_sst_size":                            {},
 }
 
 // register adds a setting to the registry.
