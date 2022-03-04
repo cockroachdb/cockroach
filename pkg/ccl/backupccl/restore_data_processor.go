@@ -54,9 +54,6 @@ type restoreDataProcessor struct {
 	// is updated, the job should be PAUSEd and RESUMEd for the new setting to
 	// take effect.
 	numWorkers int
-	// flushBytes is the maximum buffer size used when creating SSTs to flush. It
-	// remains constant over the lifetime of the processor.
-	flushBytes int64
 
 	// phaseGroup manages the phases of the restore:
 	// 1) reading entries from the input
@@ -147,7 +144,6 @@ func newRestoreDataProcessor(
 		progCh:     make(chan RestoreProgress, maxConcurrentRestoreWorkers),
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
-		flushBytes: bulk.IngestFileSize(flowCtx.Cfg.Settings),
 	}
 
 	if err := rd.Init(rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
@@ -429,7 +425,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	batcher, err := bulk.MakeSSTBatcher(ctx,
 		db,
 		evalCtx.Settings,
-		func() int64 { return rd.flushBytes },
 		disallowShadowingBelow,
 		writeAtBatchTS,
 	)
