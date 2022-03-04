@@ -85,12 +85,21 @@ func (r *Replica) executeWriteBatch(
 	// pre-Raft evaluation (e.g. conditional puts), otherwise we can race with
 	// replica removal and get evaluated on an empty replica. We must release
 	// this lock before Raft execution, to avoid deadlocks.
-	r.readOnlyCmdMu.RLock()
+	//
+	// To avoid having to include an `RUnlock()` call in each early return before
+	// Raft execution, use the local. Upon unlocking, the local must be zeroed
+	// out.
+	readOnlyCmdMu := &r.readOnlyCmdMu
+	readOnlyCmdMu.RLock()
+	defer func() {
+		if readOnlyCmdMu != nil {
+			readOnlyCmdMu.RUnlock()
+		}
+	}()
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceed(ctx, ba, g)
 	if err != nil {
-		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -149,7 +158,6 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
@@ -158,8 +166,11 @@ func (r *Replica) executeWriteBatch(
 	// evalAndPropose.
 	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, st, ui, tok.Move(ctx))
 	if pErr != nil {
-		r.readOnlyCmdMu.RUnlock()
 		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
+			readOnlyCmdMu.RUnlock()
+			readOnlyCmdMu = nil
+
 			r.raftMu.Lock()
 			defer r.raftMu.Unlock()
 			// This exits with a fatal error, but returns in tests.
@@ -171,7 +182,8 @@ func (r *Replica) executeWriteBatch(
 
 	// We are done with pre-Raft evaluation at this point, and have to release the
 	// read-only command lock to avoid deadlocks during Raft evaluation.
-	r.readOnlyCmdMu.RUnlock()
+	readOnlyCmdMu.RUnlock()
+	readOnlyCmdMu = nil
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
