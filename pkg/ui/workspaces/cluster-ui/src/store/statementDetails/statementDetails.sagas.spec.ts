@@ -39,7 +39,7 @@ describe("SQLDetailsStats sagas", () => {
     type: "request",
   };
   const key =
-    "SELECT * FROM crdb_internal.node_build_info$ cockroach sql,newname";
+    "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0";
   const SQLDetailsStatsResponse = new cockroach.server.serverpb.StatementDetailsResponse(
     {
       statement: {
@@ -659,7 +659,7 @@ describe("SQLDetailsStats sagas", () => {
         )
         .withReducer(reducer)
         .hasFinalState<Record<string, SQLDetailsStatsState>>({
-          "SELECT * FROM crdb_internal.node_build_info$ cockroach sql,newname": {
+          "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
             data: SQLDetailsStatsResponse,
             lastError: null,
             valid: true,
@@ -680,7 +680,7 @@ describe("SQLDetailsStats sagas", () => {
         )
         .withReducer(reducer)
         .hasFinalState<Record<string, SQLDetailsStatsState>>({
-          "SELECT * FROM crdb_internal.node_build_info$ cockroach sql,newname": {
+          "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
             data: null,
             lastError: error,
             valid: false,
