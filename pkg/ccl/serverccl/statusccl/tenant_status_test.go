@@ -944,7 +944,7 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 			"expected a valid txnID, but %+v is found", result)
 		sqlConn.Exec(t, "COMMIT")
 
-		testutils.SucceedsWithin(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			resp, err := status.TxnIDResolution(ctx, &serverpb.TxnIDResolutionRequest{
 				CoordinatorID: strconv.Itoa(int(coordinatorNodeID)),
 				TxnIDs:        []uuid.UUID{txnID},
@@ -959,7 +959,7 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 					"was not", txnID.String(), coordinatorNodeID)
 			require.NotEqual(t, roachpb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
 			return nil
-		}, 3*time.Second)
+		})
 	}
 
 	t.Run("regular_cluster", func(t *testing.T) {
