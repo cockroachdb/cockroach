@@ -48,4 +48,5 @@ type TestingKnobs struct {
 	DialerKnobs                  ModuleTestingKnobs
 	ProtectedTS                  ModuleTestingKnobs
 	CapturedIndexUsageStatsKnobs ModuleTestingKnobs
+	AdmissionControl             ModuleTestingKnobs
 }

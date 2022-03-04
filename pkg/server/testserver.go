@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -276,6 +277,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	if params.Knobs.SQLExecutor == nil {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
+	}
+
+	if params.Knobs.AdmissionControl == nil {
+		cfg.TestingKnobs.AdmissionControl = &admission.Options{}
 	}
 
 	return cfg
