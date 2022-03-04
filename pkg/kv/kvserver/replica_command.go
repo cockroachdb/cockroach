@@ -3353,8 +3353,10 @@ func (r *Replica) adminScatter(
 	}
 
 	ri := r.GetRangeInfo(ctx)
+	stats := r.GetMVCCStats()
 	return roachpb.AdminScatterResponse{
 		RangeInfos: []roachpb.RangeInfo{ri},
+		MVCCStats:  &stats,
 	}, nil
 }
 

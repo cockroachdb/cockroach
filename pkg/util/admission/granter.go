@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -590,6 +591,13 @@ type GrantCoordinator struct {
 	// disabled.
 	useGrantChains bool
 
+	// The admission control code needs high sampling frequency of the cpu load,
+	// and turns off admission control enforcement when the sampling frequency
+	// is too low. For testing queueing behavior, we do not want the enforcement
+	// to be turned off in a non-deterministic manner so add a testing flag to
+	// disable that feature.
+	testingDisableSkipEnforcement bool
+
 	// grantChainActive indicates whether a grant chain is active. If active,
 	// grantChainID is the ID of that chain. If !active, grantChainID is the ID
 	// of the next chain that will become active. IDs are assigned by
@@ -614,9 +622,51 @@ type Options struct {
 	SQLSQLResponseBurstTokens      int
 	SQLStatementLeafStartWorkSlots int
 	SQLStatementRootStartWorkSlots int
+	TestingDisableSkipEnforcement  bool
 	Settings                       *cluster.Settings
 	// Only non-nil for tests.
 	makeRequesterFunc makeRequesterFunc
+}
+
+var _ base.ModuleTestingKnobs = &Options{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*Options) ModuleTestingKnobs() {}
+
+// DefaultOptions are the default settings for various admission control knobs.
+var DefaultOptions Options = Options{
+	MinCPUSlots:                    1,
+	MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
+	SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
+	SQLSQLResponseBurstTokens:      100000, /* TODO(sumeer): add cluster setting */
+	SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
+	SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
+}
+
+// Override applies values from "override" to the receiver that differ from Go
+// defaults.
+func (o *Options) Override(override *Options) {
+	if override.MinCPUSlots != 0 {
+		o.MinCPUSlots = override.MinCPUSlots
+	}
+	if override.MaxCPUSlots != 0 {
+		o.MaxCPUSlots = override.MaxCPUSlots
+	}
+	if override.SQLKVResponseBurstTokens != 0 {
+		o.SQLKVResponseBurstTokens = override.SQLKVResponseBurstTokens
+	}
+	if override.SQLSQLResponseBurstTokens != 0 {
+		o.SQLSQLResponseBurstTokens = override.SQLSQLResponseBurstTokens
+	}
+	if override.SQLStatementLeafStartWorkSlots != 0 {
+		o.SQLStatementLeafStartWorkSlots = override.SQLStatementLeafStartWorkSlots
+	}
+	if override.SQLStatementRootStartWorkSlots != 0 {
+		o.SQLStatementRootStartWorkSlots = override.SQLStatementRootStartWorkSlots
+	}
+	if override.TestingDisableSkipEnforcement {
+		o.TestingDisableSkipEnforcement = true
+	}
 }
 
 type makeRequesterFunc func(
@@ -654,13 +704,14 @@ func NewGrantCoordinators(
 		totalSlotsMetric: metrics.KVTotalSlots,
 	}
 	coord := &GrantCoordinator{
-		ambientCtx:           ambientCtx,
-		settings:             st,
-		cpuOverloadIndicator: kvSlotAdjuster,
-		cpuLoadListener:      kvSlotAdjuster,
-		useGrantChains:       true,
-		numProcs:             1,
-		grantChainID:         1,
+		ambientCtx:                    ambientCtx,
+		settings:                      st,
+		cpuOverloadIndicator:          kvSlotAdjuster,
+		cpuLoadListener:               kvSlotAdjuster,
+		useGrantChains:                true,
+		testingDisableSkipEnforcement: opts.TestingDisableSkipEnforcement,
+		numProcs:                      1,
+		grantChainID:                  1,
 	}
 
 	kvg := &kvGranter{
@@ -893,7 +944,10 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
 	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
 	if coord.granters[KVWork] != nil {
-		coord.granters[KVWork].(*kvGranter).skipSlotEnforcement = skipEnforcement
+		if !coord.testingDisableSkipEnforcement {
+			kvg := coord.granters[KVWork].(*kvGranter)
+			kvg.skipSlotEnforcement = skipEnforcement
+		}
 	}
 	if coord.grantChainActive && !coord.tryTerminateGrantChain() {
 		return

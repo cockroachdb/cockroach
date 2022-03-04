@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -76,6 +77,10 @@ type StoreTestingKnobs struct {
 	// rocksdb but before in-memory side effects have been processed.
 	// It is only called on the replica the proposed the command.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
+
+	// TestingResponseErrorEvent is called when an error is returned applying
+	// a command.
+	TestingResponseErrorEvent func(context.Context, *roachpb.BatchRequest, error)
 
 	// TestingResponseFilter is called after the replica processes a
 	// command in order for unittests to modify the batch response,

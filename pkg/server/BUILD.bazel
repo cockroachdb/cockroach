@@ -204,6 +204,7 @@ go_library(
         "//pkg/ui",
         "//pkg/util",
         "//pkg/util/admission",
+        "//pkg/util/buildutil",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/errorutil",

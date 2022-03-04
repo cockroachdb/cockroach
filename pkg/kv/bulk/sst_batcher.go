@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,7 +67,7 @@ func (b sz) SafeFormat(w redact.SafePrinter, _ rune) {
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
-	db         SSTSender
+	db         *kv.DB
 	rc         *rangecache.RangeCache
 	settings   *cluster.Settings
 	maxSize    func() int64
@@ -109,8 +110,11 @@ type SSTBatcher struct {
 		sstSize int
 		files   int // a single flush might create multiple files.
 
-		sendWait  time.Duration
-		splitWait time.Duration
+		scatterMoved int64
+
+		sendWait    time.Duration
+		splitWait   time.Duration
+		scatterWait time.Duration
 	}
 	// Tracking for if we have "filled" a range in case we want to split/scatter.
 	flushedToCurrentRange int64
@@ -135,7 +139,7 @@ type SSTBatcher struct {
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
 	ctx context.Context,
-	db SSTSender,
+	db *kv.DB,
 	settings *cluster.Settings,
 	flushBytes func() int64,
 	disallowShadowingBelow hlc.Timestamp,
@@ -155,7 +159,7 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context, db *kv.DB, settings *cluster.Settings, flushBytes func() int64,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
 	err := b.Reset(ctx)
@@ -352,8 +356,14 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 				// NB: Passing 'hour' here is technically illegal until 19.2 is
 				// active, but the value will be ignored before that, and we don't
 				// have access to the cluster version here.
-				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
+				reply, err := b.db.SplitAndScatter(ctx, splitAt, hour)
+				if err != nil {
 					log.Warningf(ctx, "%v", err)
+				}
+				b.flushCounts.splitWait += reply.Timing.Split
+				b.flushCounts.scatterWait += reply.Timing.Scatter
+				if reply.Stats != nil {
+					b.flushCounts.scatterMoved += reply.Stats.Total()
 				}
 			}
 		}
@@ -398,16 +408,19 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 				if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
 					log.Warningf(ctx, "%v", err)
 				} else {
-					beforeSplit := timeutil.Now()
-
 					log.VEventf(ctx, 2, "%s added since last split, splitting/scattering for next range at %v", sz(b.flushedToCurrentRange), end)
 					// NB: Passing 'hour' here is technically illegal until 19.2 is
 					// active, but the value will be ignored before that, and we don't
 					// have access to the cluster version here.
-					if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
+					reply, err := b.db.SplitAndScatter(ctx, splitAt, hour)
+					if err != nil {
 						log.Warningf(ctx, "failed to split and scatter during ingest: %+v", err)
 					}
-					b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+					b.flushCounts.splitWait += reply.Timing.Split
+					b.flushCounts.scatterWait += reply.Timing.Scatter
+					if reply.Stats != nil {
+						b.flushCounts.scatterMoved += reply.Stats.Total()
+					}
 				}
 				b.flushedToCurrentRange = 0
 			}
@@ -434,39 +447,6 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 	return b.totalRows
 }
 
-// SSTSender is an interface to send SST data to an engine.
-type SSTSender interface {
-	AddSSTable(
-		ctx context.Context,
-		begin, end interface{},
-		data []byte,
-		disallowConflicts bool,
-		disallowShadowing bool,
-		disallowShadowingBelow hlc.Timestamp,
-		stats *enginepb.MVCCStats,
-		ingestAsWrites bool,
-		batchTs hlc.Timestamp,
-	) error
-
-	AddSSTableAtBatchTimestamp(
-		ctx context.Context,
-		begin, end interface{},
-		data []byte,
-		disallowConflicts bool,
-		disallowShadowing bool,
-		disallowShadowingBelow hlc.Timestamp,
-		stats *enginepb.MVCCStats,
-		ingestAsWrites bool,
-		batchTs hlc.Timestamp,
-	) (hlc.Timestamp, error)
-
-	SplitAndScatter(
-		ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key,
-	) error
-
-	Clock() *hlc.Clock
-}
-
 type sstSpan struct {
 	start, end             roachpb.Key
 	sstBytes               []byte
@@ -479,7 +459,7 @@ type sstSpan struct {
 // for each side of the split in the error, and each are retried.
 func AddSSTable(
 	ctx context.Context,
-	db SSTSender,
+	db *kv.DB,
 	start, end roachpb.Key,
 	sstBytes []byte,
 	disallowShadowingBelow hlc.Timestamp,
@@ -604,7 +584,7 @@ func AddSSTable(
 // passed in is over the top level SST passed into AddSSTTable().
 func createSplitSSTable(
 	ctx context.Context,
-	db SSTSender,
+	db *kv.DB,
 	start, splitKey roachpb.Key,
 	disallowShadowingBelow hlc.Timestamp,
 	iter storage.SimpleMVCCIterator,
