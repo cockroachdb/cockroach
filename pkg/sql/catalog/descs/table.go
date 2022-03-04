@@ -35,7 +35,7 @@ func (tc *Collection) GetMutableTableByName(
 	return true, desc.(*tabledesc.Mutable), nil
 }
 
-// GetImmutableTableByName returns a mutable table descriptor with properties
+// GetImmutableTableByName returns a immutable table descriptor with properties
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
