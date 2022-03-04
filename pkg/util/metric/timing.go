@@ -71,8 +71,6 @@ func (tm *Timing) lastIdx() int {
 // The use of Between is generally preferable to avoid this problem in all but
 // trivially correct code.
 func (tm *Timing) Event(ctx context.Context, tr interface{}) (time.Duration, int) {
-	tm.Event(ctx, "pouncing starts")
-
 	prev := tm.ents[tm.lastIdx()]
 	ts := tm.Now()
 	tm.ents = append(tm.ents, entry{
@@ -88,6 +86,14 @@ func (tm *Timing) Event(ctx context.Context, tr interface{}) (time.Duration, int
 // by their respective indexes.
 func (tm *Timing) Between(from, to int) time.Duration {
 	return tm.ents[to].ts.Sub(tm.ents[from].ts)
+}
+
+func (tm *Timing) Duration() time.Duration {
+	last := tm.lastIdx()
+	if last == 0 {
+		return 0
+	}
+	return tm.Between(0, last)
 }
 
 // TODO(tbg): provide a method to summarize the timings.
