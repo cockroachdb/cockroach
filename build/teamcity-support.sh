@@ -307,23 +307,6 @@ generate_ssh_key() {
   fi
 }
 
-maybe_require_release_justification() {
-    # Set this to 1 to require a "release justification" note in the commit message
-    # or the PR description.
-    require_justification=1
-    if [ "$require_justification" = 1 ]; then
-        tc_start_block "Ensure commit message contains a release justification"
-        # Ensure master branch commits have a release justification.
-        if [[ $(git log -n1 | grep -ci "Release justification: \S\+") == 0 ]]; then
-            echo "Build Failed. No Release justification in the commit message or in the PR description." >&2
-            echo "Commits must have a Release justification of the form:" >&2
-            echo "Release justification: <some description of why this commit is safe to add to the release branch.>" >&2
-            exit 1
-        fi
-        tc_end_block "Ensure commit message contains a release justification"
-    fi
-}
-
 # Call this function with one argument, the error message to print if the
 # workspace is dirty.
 check_workspace_clean() {

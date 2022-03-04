@@ -6,8 +6,6 @@ source "$(dirname "${0}")/teamcity-support.sh"
 
 tc_prepare
 
-maybe_require_release_justification
-
 tc_start_block "Lint"
 # Disable ccache so that Go doesn't try to install dependencies into GOROOT,
 # where it doesn't have write permissions. (Using ccache busts the Go package
