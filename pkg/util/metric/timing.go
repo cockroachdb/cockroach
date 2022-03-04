@@ -53,6 +53,10 @@ func (tm *Timing) lastIdx() int {
 	return len(tm.ents) - 1
 }
 
+type End struct {
+	Event interface{}
+}
+
 // Event records an event to the timing. It returns the duration
 // elapsed since the last Event, and the internal index assigned
 // to the new event (for use in Between). The same event may be
@@ -94,6 +98,38 @@ func (tm *Timing) Duration() time.Duration {
 		return 0
 	}
 	return tm.Between(0, last)
+}
+
+func (tm *Timing) Summary() map[interface{}]time.Duration {
+	res := make(map[interface{}]time.Duration)
+	m := map[interface{}]int{} // idx, key is never &End{X}
+	for i := range tm.ents {
+		el := &tm.ents[i]
+		e, ok := el.tr.(*End)
+		if !ok {
+			idx, open := m[el.tr]
+			if open {
+				// Invalid nesting, close current interval and start new one.
+				res[el.tr] += tm.Between(idx, i)
+				// Fall through.
+			}
+			m[el.tr] = i
+			continue
+		}
+		// Closing an existing interval. If it isn't open, that's a programming
+		// error but we'll handle it gracefully by ignoring it.
+		idx, open := m[e]
+		if !open {
+			continue // ignore
+		}
+		res[el.tr] += tm.Between(idx, i)
+		delete(m, el.tr)
+	}
+	for e, idx := range m {
+		// Close any leftover events.
+		res[e] += tm.Between(idx, tm.lastIdx())
+	}
+	return res
 }
 
 // TODO(tbg): provide a method to summarize the timings.

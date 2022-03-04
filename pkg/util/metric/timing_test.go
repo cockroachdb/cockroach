@@ -26,23 +26,19 @@ func TestTiming(t *testing.T) {
 	const (
 		evStart = iota
 		evLeaseStart
-		evLeaseEnd
 		evContentionStart
-		evContentionEnd
-		evSequenceBegin
-		evSequenceEnd
+		evSequenceStart
 		evEvalStart
-		evEvalEnd
 		evReplStart
-		evReplEnd
 	)
-	mc := hlc.NewManualClock(0)
+	mc := hlc.NewManualClock(1)
 	tm := &Timing{Now: func() time.Time {
 		return time.Unix(0, mc.UnixNano())
 	}}
 	r := rand.New(rand.NewSource(123))
+	_ = r
 	tick := func() {
-		nanos := r.Int63n(5000)
+		nanos := r.Int63n(100)
 		mc.Increment(nanos)
 	}
 
@@ -50,27 +46,28 @@ func TestTiming(t *testing.T) {
 	tick()
 	tm.Event(ctx, evLeaseStart)
 	tick()
-	tm.Event(ctx, evLeaseEnd)
+	tm.Event(ctx, &End{evLeaseStart})
 	tick()
-	tm.Event(ctx, evSequenceBegin)
+	tm.Event(ctx, evSequenceStart)
 	tick()
-	tm.Event(ctx, evSequenceEnd)
+	tm.Event(ctx, &End{evSequenceStart})
 	tick()
 	tm.Event(ctx, evContentionStart)
 	tick()
-	tm.Event(ctx, evContentionEnd)
+	tm.Event(ctx, &End{evContentionStart})
 	tick()
-	tm.Event(ctx, evSequenceBegin)
+	tm.Event(ctx, evSequenceStart)
 	tick()
-	tm.Event(ctx, evSequenceEnd)
+	tm.Event(ctx, &End{evSequenceStart})
 	tick()
 	tm.Event(ctx, evEvalStart)
 	tick()
-	tm.Event(ctx, evEvalEnd)
+	tm.Event(ctx, &End{evEvalStart})
 	tick()
 	tm.Event(ctx, evReplStart)
 	tick()
-	tm.Event(ctx, evReplEnd)
+	tm.Event(ctx, &End{evReplStart})
 
-	require.EqualValues(t, mc.UnixNano(), tm.Duration())
+	require.EqualValues(t, mc.UnixNano(), 1+tm.Duration())
+	t.Error(tm.Summary())
 }
