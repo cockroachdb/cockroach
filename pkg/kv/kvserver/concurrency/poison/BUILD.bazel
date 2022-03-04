@@ -1,5 +1,5 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
@@ -40,5 +40,22 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "poison_test",
+    srcs = ["error_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":poison",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/testutils/echotest",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )

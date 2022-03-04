@@ -40,6 +40,3 @@ func (e *PoisonedError) Format(s fmt.State, verb rune) { errors.FormatError(e, s
 func (e *PoisonedError) Error() string {
 	return fmt.Sprint(e)
 }
-
-// TODO(tbg): need similar init() function that ReplicaUnavailableError has,
-// or PoisonError will not survive network round-trips.
