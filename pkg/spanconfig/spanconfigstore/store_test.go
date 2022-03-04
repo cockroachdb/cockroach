@@ -33,16 +33,6 @@ func (s *Store) TestingApplyInternal(
 	return s.applyInternal(dryrun, updates...)
 }
 
-// TestingSpanConfigStoreForEachOverlapping exports an internal method on the
-// spanConfigStore for testing purposes.
-func (s *Store) TestingSpanConfigStoreForEachOverlapping(
-	span roachpb.Span, f func(spanConfigEntry) error,
-) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.mu.spanConfigStore.forEachOverlapping(span, f)
-}
-
 // TestDataDriven runs datadriven tests against the Store interface.
 // The syntax is as follows:
 //
@@ -136,12 +126,12 @@ func TestDataDriven(t *testing.T) {
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 
 				var results []string
-				_ = store.TestingSpanConfigStoreForEachOverlapping(span,
-					func(entry spanConfigEntry) error {
+				_ = store.ForEachOverlappingSpanConfig(ctx, span,
+					func(sp roachpb.Span, conf roachpb.SpanConfig) error {
 						results = append(results,
 							spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
-								Target: spanconfig.MakeTargetFromSpan(entry.span),
-								Config: entry.config,
+								Target: spanconfig.MakeTargetFromSpan(sp),
+								Config: conf,
 							}),
 						)
 						return nil

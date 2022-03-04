@@ -216,7 +216,9 @@ func TestProtectedTimestamps(t *testing.T) {
 	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans),
+		verifyProtectionTimestampExistsOnSpans(
+			ctx, t, tc, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
+		),
 	)
 
 	// Make a new record that is doomed to fail.
@@ -233,7 +235,9 @@ func TestProtectedTimestamps(t *testing.T) {
 	// does not affect the ability to GC.
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans),
+		verifyProtectionTimestampExistsOnSpans(
+			ctx, t, tc, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
+		),
 	)
 
 	// Add a new record that is after the old record.
@@ -244,7 +248,9 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans),
+		verifyProtectionTimestampExistsOnSpans(
+			ctx, t, tc, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
+		),
 	)
 
 	// Release the record that had succeeded and ensure that GC eventually
@@ -278,18 +284,22 @@ func TestProtectedTimestamps(t *testing.T) {
 // supplied spans.
 func verifyProtectionTimestampExistsOnSpans(
 	ctx context.Context,
+	t *testing.T,
 	tc *testcluster.TestCluster,
 	ptsReader spanconfig.ProtectedTSReader,
 	protectionTimestamp hlc.Timestamp,
 	spans roachpb.Spans,
 ) error {
 	if err := spanconfigptsreader.TestingRefreshPTSState(
-		ctx, ptsReader, tc.Server(0).Clock().Now(),
+		ctx, t, ptsReader, tc.Server(0).Clock().Now(),
 	); err != nil {
 		return err
 	}
 	for _, sp := range spans {
-		timestamps, _ := ptsReader.GetProtectionTimestamps(ctx, sp)
+		timestamps, _, err := ptsReader.GetProtectionTimestamps(ctx, sp)
+		if err != nil {
+			return err
+		}
 		found := false
 		for _, ts := range timestamps {
 			if ts.Equal(protectionTimestamp) {

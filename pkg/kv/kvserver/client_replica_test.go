@@ -3519,7 +3519,10 @@ func TestStrictGCEnforcement(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				for i := 0; i < tc.NumServers(); i++ {
 					ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
-					_, asOf := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
+					_, asOf, err := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
+					if err != nil {
+						return err
+					}
 					if asOf.Less(min) {
 						return errors.Errorf("not yet read")
 					}
@@ -3577,9 +3580,10 @@ func TestStrictGCEnforcement(t *testing.T) {
 				l, _ := r.GetLease()
 				require.NoError(
 					t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, l.Start.ToTimestamp().Next()),
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, l.Start.ToTimestamp().Next()),
 				)
-				r.ReadProtectedTimestamps(ctx)
+				err := r.ReadProtectedTimestamps(ctx)
+				require.NoError(t, err)
 			}
 		}
 		refreshCacheAndUpdatePTSState = func(t *testing.T, nodeID roachpb.NodeID) {
@@ -3590,7 +3594,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 				require.NoError(t, ptp.Refresh(ctx, tc.Server(i).Clock().Now()))
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
-				r.ReadProtectedTimestamps(ctx)
+				err := r.ReadProtectedTimestamps(ctx)
+				require.NoError(t, err)
 			}
 		}
 	)

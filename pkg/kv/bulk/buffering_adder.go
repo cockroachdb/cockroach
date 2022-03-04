@@ -93,27 +93,15 @@ func MakeBulkAdder(
 	if opts.StepBufferSize == 0 {
 		opts.StepBufferSize = 32 << 20
 	}
-	if opts.SSTSize == nil {
-		opts.SSTSize = func() int64 { return 16 << 20 }
-	}
-	if opts.SplitAndScatterAfter == nil {
-		// splitting _before_ hitting max reduces chance of auto-splitting after the
-		// range is full and is more expensive to split/move.
-		opts.SplitAndScatterAfter = func() int64 { return 48 << 20 }
-	} else if opts.SplitAndScatterAfter() == kvserverbase.DisableExplicitSplits {
-		opts.SplitAndScatterAfter = nil
-	}
 
 	b := &BufferingAdder{
 		name: opts.Name,
 		sink: SSTBatcher{
 			db:                     db,
-			maxSize:                opts.SSTSize,
 			rc:                     rangeCache,
 			settings:               settings,
 			skipDuplicates:         opts.SkipDuplicates,
 			disallowShadowingBelow: opts.DisallowShadowingBelow,
-			splitAfter:             opts.SplitAndScatterAfter,
 			batchTS:                opts.BatchTimestamp,
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 		},
@@ -336,6 +324,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	log.Infof(ctx, "%s created %d initial splits in %v from %d keys in %s buffer",
 		b.name, created, timeutil.Since(before), b.curBuf.Len(), sz(b.curBuf.MemSize))
 
+	b.sink.initialSplitDone = true
 	return nil
 }
 
