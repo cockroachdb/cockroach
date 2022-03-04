@@ -59,8 +59,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				ts := r.store.Clock().Now()
 				mp.asOf = r.store.Clock().Now().Next()
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
-					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-					protectionTimestamps: []hlc.Timestamp{ts},
+					sp:                 roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts}},
 				})
 				// We should allow gc to proceed with the normal new threshold if that
 				// threshold is earlier than all of the records.
@@ -78,8 +78,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				ts := r.store.Clock().Now().Add(-11*time.Second.Nanoseconds(), 0)
 				mp.asOf = r.store.Clock().Now().Next()
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
-					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-					protectionTimestamps: []hlc.Timestamp{ts},
+					sp:                 roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts}},
 				})
 				// We should allow gc to proceed up to the timestamp which precedes the
 				// protected timestamp. This means we expect a GC timestamp 10 seconds
@@ -101,8 +101,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				r.mu.Unlock()
 				mp.asOf = r.store.Clock().Now().Next()
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
-					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-					protectionTimestamps: []hlc.Timestamp{th.Next()},
+					sp:                 roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{{ProtectedTimestamp: th.Next()}},
 				})
 				// We should allow GC even if the threshold is already the
 				// predecessor of the earliest valid record. However, the GC
@@ -124,8 +124,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				r.mu.state.GCThreshold = &thresh
 				mp.asOf = thresh.Next()
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
-					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-					protectionTimestamps: []hlc.Timestamp{ts},
+					sp:                 roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts}},
 				})
 				canGC, _, gcTimestamp, _, _, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
 				require.NoError(t, err)
@@ -141,8 +141,9 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				ts3 := r.store.Clock().Now().Add(-30*time.Second.Nanoseconds(), 0)
 				mp.asOf = r.store.Clock().Now().Next()
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
-					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-					protectionTimestamps: []hlc.Timestamp{ts1, ts2, ts3},
+					sp: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts1},
+						{ProtectedTimestamp: ts2}, {ProtectedTimestamp: ts3}},
 				})
 
 				// Shuffle the protection timestamps for good measure.
@@ -184,8 +185,9 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				ts3 := thresh.Add(14*time.Second.Nanoseconds(), 0)
 				ts4 := thresh.Add(20*time.Second.Nanoseconds(), 0)
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
-					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
-					protectionTimestamps: []hlc.Timestamp{ts1, ts2, ts3, ts4},
+					sp: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts1},
+						{ProtectedTimestamp: ts2}, {ProtectedTimestamp: ts3}, {ProtectedTimestamp: ts4}},
 				})
 				mp.shuffleAllProtectionTimestamps()
 				// We should allow gc to proceed up to the timestamp which precedes the
@@ -213,8 +215,8 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 }
 
 type manualPTSReaderProtection struct {
-	sp                   roachpb.Span
-	protectionTimestamps []hlc.Timestamp
+	sp                 roachpb.Span
+	protectionPolicies []roachpb.ProtectionPolicy
 }
 
 type manualPTSReader struct {
@@ -222,26 +224,25 @@ type manualPTSReader struct {
 	protections []manualPTSReaderProtection
 }
 
-// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
-// interface.
-func (mp *manualPTSReader) GetProtectionTimestamps(
+// GetProtectionPolicies is part of the spanconfig.ProtectedTSReader interface.
+func (mp *manualPTSReader) GetProtectionPolicies(
 	ctx context.Context, sp roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
+) (protectionPolicies []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error) {
 	for _, protection := range mp.protections {
 		if protection.sp.Overlaps(sp) {
-			protectionTimestamps = append(protectionTimestamps, protection.protectionTimestamps...)
+			protectionPolicies = append(protectionPolicies, protection.protectionPolicies...)
 		}
 	}
-	return protectionTimestamps, mp.asOf, nil
+	return protectionPolicies, mp.asOf, nil
 }
 
 // shuffleAllProtectionTimestamps shuffles protection timestamps associated with
 // all spans.
 func (mp *manualPTSReader) shuffleAllProtectionTimestamps() {
 	for i := range mp.protections {
-		rand.Shuffle(len(mp.protections[i].protectionTimestamps), func(a, b int) {
-			mp.protections[i].protectionTimestamps[a], mp.protections[i].protectionTimestamps[b] =
-				mp.protections[i].protectionTimestamps[b], mp.protections[i].protectionTimestamps[a]
+		rand.Shuffle(len(mp.protections[i].protectionPolicies), func(a, b int) {
+			mp.protections[i].protectionPolicies[a], mp.protections[i].protectionPolicies[b] =
+				mp.protections[i].protectionPolicies[b], mp.protections[i].protectionPolicies[a]
 		})
 	}
 }

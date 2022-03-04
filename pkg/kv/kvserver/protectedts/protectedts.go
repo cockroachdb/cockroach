@@ -181,8 +181,8 @@ func (c *emptyCache) Refresh(_ context.Context, asOf hlc.Timestamp) error {
 	return nil
 }
 
-func (c *emptyCache) GetProtectionTimestamps(
+func (c *emptyCache) GetProtectionPolicies(
 	context.Context, roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
-	return protectionTimestamps, (*hlc.Clock)(c).Now(), nil
+) (protectionPolicies []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error) {
+	return protectionPolicies, (*hlc.Clock)(c).Now(), nil
 }

@@ -407,12 +407,11 @@ func (u Update) Addition() bool {
 // timestamp information. It doubles up as an adaptor interface for
 // protectedts.Cache.
 type ProtectedTSReader interface {
-	// GetProtectionTimestamps returns all protected timestamps that apply to any
+	// GetProtectionPolicies returns all protected timestamps that apply to any
 	// part of the given key span. The time at which this protected timestamp
 	// state is valid is returned as well.
-	GetProtectionTimestamps(ctx context.Context, sp roachpb.Span) (
-		protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error,
-	)
+	GetProtectionPolicies(ctx context.Context, sp roachpb.Span) (
+		protectionTimestamps []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error)
 }
 
 // EmptyProtectedTSReader returns a ProtectedTSReader which contains no records
@@ -423,10 +422,10 @@ func EmptyProtectedTSReader(c *hlc.Clock) ProtectedTSReader {
 
 type emptyProtectedTSReader hlc.Clock
 
-// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
+// GetProtectionPolicies is part of the spanconfig.ProtectedTSReader
 // interface.
-func (r *emptyProtectedTSReader) GetProtectionTimestamps(
+func (r *emptyProtectedTSReader) GetProtectionPolicies(
 	context.Context, roachpb.Span,
-) ([]hlc.Timestamp, hlc.Timestamp, error) {
+) ([]roachpb.ProtectionPolicy, hlc.Timestamp, error) {
 	return nil, (*hlc.Clock)(r).Now(), nil
 }

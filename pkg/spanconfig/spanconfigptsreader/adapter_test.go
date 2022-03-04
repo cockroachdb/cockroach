@@ -35,9 +35,9 @@ func TestAdapter(t *testing.T) {
 			WallTime: int64(nanos),
 		}
 	}
-	validateProtectedTimestamps := func(expected, actual []hlc.Timestamp) {
+	validateProtectionPolicies := func(expected, actual []roachpb.ProtectionPolicy) {
 		sort.Slice(actual, func(i, j int) bool {
-			return actual[i].Less(actual[j])
+			return actual[i].ProtectedTimestamp.Less(actual[j].ProtectedTimestamp)
 		})
 		require.Equal(t, expected, actual)
 	}
@@ -52,63 +52,71 @@ func TestAdapter(t *testing.T) {
 	// and the freshness timestamp is the minimum of the two.
 	mc.asOf = ts(10)
 	ms.updatedTS = ts(14)
-	timestamps, asOf, err := adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+	protections, asOf, err := adapter.GetProtectionPolicies(ctx, keys.EverythingSpan)
 	require.NoError(t, err)
-	require.Empty(t, timestamps)
+	require.Empty(t, protections)
 	require.Equal(t, ts(10), asOf)
 
 	// Forward the freshness of the cache past the subscriber's.
 	mc.asOf = ts(18)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+	protections, asOf, err = adapter.GetProtectionPolicies(ctx, keys.EverythingSpan)
 	require.NoError(t, err)
-	require.Empty(t, timestamps)
+	require.Empty(t, protections)
 	require.Equal(t, ts(14), asOf)
 
 	// Add some records to the cache; ensure they're returned.
-	mc.protectedTimestamps = append(mc.protectedTimestamps, ts(6), ts(10))
+	mc.protectionPolicies = append(mc.protectionPolicies,
+		roachpb.ProtectionPolicy{ProtectedTimestamp: ts(6)},
+		roachpb.ProtectionPolicy{ProtectedTimestamp: ts(10)})
 	mc.asOf = ts(20)
 
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+	protections, asOf, err = adapter.GetProtectionPolicies(ctx, keys.EverythingSpan)
 	require.NoError(t, err)
 	require.Equal(t, ts(14), asOf)
-	validateProtectedTimestamps([]hlc.Timestamp{ts(6), ts(10)}, timestamps)
+	validateProtectionPolicies([]roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(6)},
+		{ProtectedTimestamp: ts(10)}}, protections)
 
 	// Add some records to the subscriber, ensure they're returned as well.
-	ms.protectedTimestamps = append(ms.protectedTimestamps, ts(7), ts(12))
+	ms.protectionPolicies = append(ms.protectionPolicies,
+		roachpb.ProtectionPolicy{ProtectedTimestamp: ts(7)},
+		roachpb.ProtectionPolicy{ProtectedTimestamp: ts(12)})
 	ms.updatedTS = ts(19)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+	protections, asOf, err = adapter.GetProtectionPolicies(ctx, keys.EverythingSpan)
 	require.NoError(t, err)
 	require.Equal(t, ts(19), asOf)
-	validateProtectedTimestamps([]hlc.Timestamp{ts(6), ts(7), ts(10), ts(12)}, timestamps)
+	validateProtectionPolicies([]roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(6)},
+		{ProtectedTimestamp: ts(7)}, {ProtectedTimestamp: ts(10)},
+		{ProtectedTimestamp: ts(12)}}, protections)
 
 	// Clear out records from the cache, bump its freshness.
-	mc.protectedTimestamps = nil
+	mc.protectionPolicies = nil
 	mc.asOf = ts(22)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+	protections, asOf, err = adapter.GetProtectionPolicies(ctx, keys.EverythingSpan)
 	require.NoError(t, err)
 	require.Equal(t, ts(19), asOf)
-	validateProtectedTimestamps([]hlc.Timestamp{ts(7), ts(12)}, timestamps)
+	validateProtectionPolicies([]roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(7)},
+		{ProtectedTimestamp: ts(12)}}, protections)
 
 	// Clear out records from the subscriber, bump its freshness.
-	ms.protectedTimestamps = nil
+	ms.protectionPolicies = nil
 	ms.updatedTS = ts(25)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+	protections, asOf, err = adapter.GetProtectionPolicies(ctx, keys.EverythingSpan)
 	require.NoError(t, err)
 	require.Equal(t, ts(22), asOf)
-	require.Empty(t, timestamps)
+	require.Empty(t, protections)
 }
 
 type manualSubscriber struct {
-	protectedTimestamps []hlc.Timestamp
-	updatedTS           hlc.Timestamp
+	protectionPolicies []roachpb.ProtectionPolicy
+	updatedTS          hlc.Timestamp
 }
 
 var _ spanconfig.KVSubscriber = &manualSubscriber{}
 
-func (m *manualSubscriber) GetProtectionTimestamps(
+func (m *manualSubscriber) GetProtectionPolicies(
 	context.Context, roachpb.Span,
-) ([]hlc.Timestamp, hlc.Timestamp, error) {
-	return m.protectedTimestamps, m.updatedTS, nil
+) ([]roachpb.ProtectionPolicy, hlc.Timestamp, error) {
+	return m.protectionPolicies, m.updatedTS, nil
 }
 
 func (m *manualSubscriber) Start(context.Context, *stop.Stopper) error {
@@ -140,16 +148,16 @@ func (m *manualSubscriber) Subscribe(callback func(context.Context, roachpb.Span
 }
 
 type manualCache struct {
-	asOf                hlc.Timestamp
-	protectedTimestamps []hlc.Timestamp
+	asOf               hlc.Timestamp
+	protectionPolicies []roachpb.ProtectionPolicy
 }
 
 var _ protectedts.Cache = (*manualCache)(nil)
 
-func (c *manualCache) GetProtectionTimestamps(
+func (c *manualCache) GetProtectionPolicies(
 	context.Context, roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
-	return c.protectedTimestamps, c.asOf, nil
+) (protectionPolicies []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error) {
+	return c.protectionPolicies, c.asOf, nil
 }
 
 func (c *manualCache) Iterate(

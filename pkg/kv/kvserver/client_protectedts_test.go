@@ -296,13 +296,13 @@ func verifyProtectionTimestampExistsOnSpans(
 		return err
 	}
 	for _, sp := range spans {
-		timestamps, _, err := ptsReader.GetProtectionTimestamps(ctx, sp)
+		protections, _, err := ptsReader.GetProtectionPolicies(ctx, sp)
 		if err != nil {
 			return err
 		}
 		found := false
-		for _, ts := range timestamps {
-			if ts.Equal(protectionTimestamp) {
+		for _, protection := range protections {
+			if protection.ProtectedTimestamp.Equal(protectionTimestamp) {
 				found = true
 				break
 			}

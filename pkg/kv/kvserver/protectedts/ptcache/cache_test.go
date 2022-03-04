@@ -373,7 +373,7 @@ func (recs *records) sorted() []*ptpb.Record {
 	return *recs
 }
 
-func TestGetProtectionTimestamps(t *testing.T) {
+func TestGetProtectionPolicies(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -403,12 +403,16 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				r3, _ := protect(t, s, p, ts(6), sp42)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 
-				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp42)
+				protections, _, err := c.GetProtectionPolicies(ctx, sp42)
 				require.NoError(t, err)
-				sort.Slice(protectionTimestamps, func(i, j int) bool {
-					return protectionTimestamps[i].Less(protectionTimestamps[j])
+				sort.Slice(protections, func(i, j int) bool {
+					return protections[i].ProtectedTimestamp.Less(
+						protections[j].ProtectedTimestamp)
 				})
-				require.Equal(t, []hlc.Timestamp{ts(6), ts(10), ts(11)}, protectionTimestamps)
+				require.Equal(t, []roachpb.ProtectionPolicy{
+					{ProtectedTimestamp: ts(6)},
+					{ProtectedTimestamp: ts(10)},
+					{ProtectedTimestamp: ts(11)}}, protections)
 				cleanup(r1, r2, r3)
 			},
 		},
@@ -418,9 +422,9 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				r1, _ := protect(t, s, p, ts(5), sp43)
 				r2, _ := protect(t, s, p, ts(10), sp44)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
-				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp42)
+				protections, _, err := c.GetProtectionPolicies(ctx, sp42)
 				require.NoError(t, err)
-				require.Equal(t, []hlc.Timestamp(nil), protectionTimestamps)
+				require.Equal(t, []roachpb.ProtectionPolicy(nil), protections)
 				cleanup(r1, r2)
 			},
 		},
@@ -437,13 +441,18 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				r6, _ := protect(t, s, p, ts(20), sp44)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 
-				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp4243)
+				protections, _, err := c.GetProtectionPolicies(ctx, sp4243)
 				require.NoError(t, err)
-				sort.Slice(protectionTimestamps, func(i, j int) bool {
-					return protectionTimestamps[i].Less(protectionTimestamps[j])
+				sort.Slice(protections, func(i, j int) bool {
+					return protections[i].ProtectedTimestamp.Less(protections[j].ProtectedTimestamp)
 				})
 				require.Equal(
-					t, []hlc.Timestamp{ts(5), ts(6), ts(10), ts(15), ts(25)}, protectionTimestamps,
+					t, []roachpb.ProtectionPolicy{
+						{ProtectedTimestamp: ts(5)},
+						{ProtectedTimestamp: ts(6)},
+						{ProtectedTimestamp: ts(10)},
+						{ProtectedTimestamp: ts(15)},
+						{ProtectedTimestamp: ts(25)}}, protections,
 				)
 				cleanup(r1, r2, r3, r4, r5, r6)
 			},

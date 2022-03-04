@@ -3519,7 +3519,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				for i := 0; i < tc.NumServers(); i++ {
 					ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
-					_, asOf, err := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
+					_, asOf, err := ptsReader.GetProtectionPolicies(ctx, tableSpan)
 					if err != nil {
 						return err
 					}

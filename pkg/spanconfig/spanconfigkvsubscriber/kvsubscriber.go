@@ -208,24 +208,22 @@ func (s *KVSubscriber) GetSpanConfigForKey(
 	return s.mu.internal.GetSpanConfigForKey(ctx, key)
 }
 
-// GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
-func (s *KVSubscriber) GetProtectionTimestamps(
+// GetProtectionPolicies is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) GetProtectionPolicies(
 	ctx context.Context, sp roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error) {
+) (protectionPolicies []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
 		func(_ roachpb.Span, config roachpb.SpanConfig) error {
-			for _, protection := range config.GCPolicy.ProtectionPolicies {
-				protectionTimestamps = append(protectionTimestamps, protection.ProtectedTimestamp)
-			}
+			protectionPolicies = append(protectionPolicies, config.GCPolicy.ProtectionPolicies...)
 			return nil
 		}); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 
-	return protectionTimestamps, s.mu.lastUpdated, nil
+	return protectionPolicies, s.mu.lastUpdated, nil
 }
 
 func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update) {

@@ -61,9 +61,9 @@ func (n *noopKVSubscriber) GetSpanConfigForKey(
 	return roachpb.SpanConfig{}, nil
 }
 
-// GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
-func (n *noopKVSubscriber) GetProtectionTimestamps(
+// GetProtectionPolicies is part of the spanconfig.KVSubscriber interface.
+func (n *noopKVSubscriber) GetProtectionPolicies(
 	context.Context, roachpb.Span,
-) ([]hlc.Timestamp, hlc.Timestamp, error) {
+) ([]roachpb.ProtectionPolicy, hlc.Timestamp, error) {
 	return nil, n.LastUpdated(), nil
 }

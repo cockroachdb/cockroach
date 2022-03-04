@@ -119,9 +119,9 @@ func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	return m.Store.GetSpanConfigForKey(ctx, key)
 }
 
-func (m *mockSpanConfigSubscriber) GetProtectionTimestamps(
+func (m *mockSpanConfigSubscriber) GetProtectionPolicies(
 	context.Context, roachpb.Span,
-) ([]hlc.Timestamp, hlc.Timestamp, error) {
+) ([]roachpb.ProtectionPolicy, hlc.Timestamp, error) {
 	panic("unimplemented")
 }
 

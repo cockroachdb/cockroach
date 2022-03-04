@@ -55,16 +55,16 @@ func NewAdapter(
 	}
 }
 
-// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
+// GetProtectionPolicies is part of the spanconfig.ProtectedTSReader
 // interface.
-func (a *adapter) GetProtectionTimestamps(
+func (a *adapter) GetProtectionPolicies(
 	ctx context.Context, sp roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
-	cacheTimestamps, cacheFreshness, err := a.cache.GetProtectionTimestamps(ctx, sp)
+) (protectionTimestamps []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error) {
+	cacheProtections, cacheFreshness, err := a.cache.GetProtectionPolicies(ctx, sp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	subscriberTimestamps, subscriberFreshness, err := a.kvSubscriber.GetProtectionTimestamps(ctx, sp)
+	subscriberProtections, subscriberFreshness, err := a.kvSubscriber.GetProtectionPolicies(ctx, sp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -72,7 +72,7 @@ func (a *adapter) GetProtectionTimestamps(
 	// The freshness of the adapter is the minimum freshness of the Cache and
 	// KVSubscriber.
 	subscriberFreshness.Backward(cacheFreshness)
-	return append(subscriberTimestamps, cacheTimestamps...), subscriberFreshness, nil
+	return append(subscriberProtections, cacheProtections...), subscriberFreshness, nil
 }
 
 // TestingRefreshPTSState refreshes the in-memory protected timestamp state to
@@ -88,7 +88,7 @@ func TestingRefreshPTSState(
 		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
 	testutils.SucceedsSoon(t, func() error {
-		_, fresh, err := a.GetProtectionTimestamps(ctx, roachpb.Span{})
+		_, fresh, err := a.GetProtectionPolicies(ctx, roachpb.Span{})
 		if err != nil {
 			return err
 		}

@@ -74,21 +74,21 @@ func (r *Replica) readProtectedTimestampsRLocked(
 		Key:    roachpb.Key(desc.StartKey),
 		EndKey: roachpb.Key(desc.EndKey),
 	}
-	var protectionTimestamps []hlc.Timestamp
+	var protectionPolicies []roachpb.ProtectionPolicy
 	var err error
-	protectionTimestamps, ts.readAt, err = r.store.protectedtsReader.GetProtectionTimestamps(ctx, sp)
+	protectionPolicies, ts.readAt, err = r.store.protectedtsReader.GetProtectionPolicies(ctx, sp)
 	if err != nil {
 		return ts, err
 	}
 	earliestTS := hlc.Timestamp{}
-	for _, protectionTimestamp := range protectionTimestamps {
+	for _, protection := range protectionPolicies {
 		// Check if the timestamp the record was trying to protect is strictly
 		// below the GCThreshold, in which case, we know the record does not apply.
-		if isValid := gcThreshold.LessEq(protectionTimestamp); !isValid {
+		if isValid := gcThreshold.LessEq(protection.ProtectedTimestamp); !isValid {
 			continue
 		}
-		if earliestTS.IsEmpty() || protectionTimestamp.Less(earliestTS) {
-			earliestTS = protectionTimestamp
+		if earliestTS.IsEmpty() || protection.ProtectedTimestamp.Less(earliestTS) {
+			earliestTS = protection.ProtectedTimestamp
 		}
 	}
 	ts.earliestProtectionTimestamp = earliestTS

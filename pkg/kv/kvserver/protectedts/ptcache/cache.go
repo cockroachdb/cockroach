@@ -126,19 +126,20 @@ func (c *Cache) Refresh(ctx context.Context, asOf hlc.Timestamp) error {
 	return nil
 }
 
-// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
+// GetProtectionPolicies is part of the spanconfig.ProtectedTSReader
 // interface.
-func (c *Cache) GetProtectionTimestamps(
+func (c *Cache) GetProtectionPolicies(
 	ctx context.Context, sp roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
+) (protectionPolicies []roachpb.ProtectionPolicy, asOf hlc.Timestamp, _ error) {
 	readAt := c.Iterate(ctx,
 		sp.Key,
 		sp.EndKey,
 		func(rec *ptpb.Record) (wantMore bool) {
-			protectionTimestamps = append(protectionTimestamps, rec.Timestamp)
+			protectionPolicies = append(protectionPolicies,
+				roachpb.ProtectionPolicy{ProtectedTimestamp: rec.Timestamp})
 			return true
 		})
-	return protectionTimestamps, readAt, nil
+	return protectionPolicies, readAt, nil
 }
 
 // Start starts the periodic fetching of the Cache. A Cache must not be used
