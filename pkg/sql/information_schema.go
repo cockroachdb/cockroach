@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -212,30 +213,26 @@ var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 ` + docs.URL("information-schema.html#administrable_role_authorizations") + `
 https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html`,
 	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(
+		ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) (retErr error) {
 		currentUser := p.SessionData().User()
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		grantee := tree.NewDString(currentUser.Normalized())
-		for roleName, isAdmin := range memberMap {
-			if !isAdmin {
-				// We only show memberships with the admin option.
-				continue
-			}
-
-			if err := addRow(
-				grantee,                                // grantee: always the current user
-				tree.NewDString(roleName.Normalized()), // role_name
-				yesString,                              // is_grantable: always YES
-			); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return forEachRoleHierarchyOfUser(
+			ctx, p, currentUser, true, /* onlyIsAdmin */
+			func(grantee, roleName security.SQLUsername, isAdmin bool) error {
+				// The ADMIN OPTION is inherited through the role hierarchy, and grantee
+				// is supposed to be the role that has the ADMIN OPTION. The current user
+				// inherits all the ADMIN OPTIONs of its ancestors.
+				if err := addRow(
+					tree.NewDString(grantee.Normalized()),  // grantee
+					tree.NewDString(roleName.Normalized()), // role_name
+					yesOrNoDatum(isAdmin),                  // is_grantable
+				); err != nil {
+					return err
+				}
+				return nil
+			},
+		)
 	},
 }
 
@@ -246,24 +243,22 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	schema: vtable.InformationSchemaApplicableRoles,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User()
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		grantee := tree.NewDString(currentUser.Normalized())
-
-		for roleName, isAdmin := range memberMap {
-			if err := addRow(
-				grantee,                                // grantee: always the current user
-				tree.NewDString(roleName.Normalized()), // role_name
-				yesOrNoDatum(isAdmin),                  // is_grantable
-			); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return forEachRoleHierarchyOfUser(
+			ctx, p, currentUser, false, /* onlyIsAdmin */
+			func(grantee, roleName security.SQLUsername, isAdmin bool) error {
+				// The ADMIN OPTION is inherited through the role hierarchy, and grantee
+				// is supposed to be the role that has the ADMIN OPTION. The current user
+				// inherits all the ADMIN OPTIONs of its ancestors.
+				if err := addRow(
+					tree.NewDString(grantee.Normalized()),  // grantee
+					tree.NewDString(roleName.Normalized()), // role_name
+					yesOrNoDatum(isAdmin),                  // is_grantable
+				); err != nil {
+					return err
+				}
+				return nil
+			},
+		)
 	},
 }
 
@@ -2675,6 +2670,62 @@ func forEachRoleMembership(
 		}
 	}
 	return err
+}
+
+func forEachRoleHierarchyOfUser(
+	ctx context.Context,
+	p *planner,
+	user security.SQLUsername,
+	onlyIsAdmin bool,
+	fn func(grantee, roleName security.SQLUsername, isAdmin bool) error,
+) (retErr error) {
+	filter := ""
+	if onlyIsAdmin {
+		filter = `WHERE "isAdmin" = true`
+	}
+	lookupRolesStmt := fmt.Sprintf(`
+WITH RECURSIVE
+  cte_members (member, role, "isAdmin")
+    AS (
+      SELECT member, role, "isAdmin"
+      FROM system.role_members
+      WHERE member = $1
+      UNION ALL
+        SELECT parent.member, parent.role, parent."isAdmin"
+        FROM system.role_members AS parent
+        INNER JOIN cte_members AS child ON parent.member = child.role
+    )
+SELECT * FROM cte_members %s`,
+		filter,
+	)
+	it, err := p.QueryIteratorEx(
+		ctx, "expand-role-admins", p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		lookupRolesStmt, user,
+	)
+	if err != nil {
+		return err
+	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
+		grantee := tree.MustBeDString(row[0])
+		roleName := tree.MustBeDString(row[1])
+		isAdmin := tree.MustBeDBool(row[2])
+
+		// system.role_members stores pre-normalized usernames.
+		if err := fn(
+			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
+			security.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
+			bool(isAdmin),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func userCanSeeDescriptor(

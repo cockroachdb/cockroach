@@ -88,7 +88,7 @@ query TTT colnames
 SELECT * FROM information_schema.applicable_roles ORDER BY role_name;
 ----
 grantee   role_name  is_grantable
-testuser  role_bar   YES
+role_foo  role_bar   YES
 testuser  role_foo   YES
 
 statement ok

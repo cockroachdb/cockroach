@@ -202,6 +202,14 @@ SET ROLE child_role
 statement ok
 GRANT testrole TO testuser2 WITH ADMIN OPTION
 
+# And we should be able to introspect for ADMIN option. The grantee is
+# the parent role that was given ADMIN OPTION.
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee   role_name  is_grantable
+testuser  testrole   YES
+
 statement ok
 RESET ROLE;
 DROP ROLE child_role
@@ -376,17 +384,17 @@ user testuser
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
-grantee   role_name  is_grantable
-testuser  rolea      YES
+grantee  role_name  is_grantable
+roleb    rolea      YES
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
 testuser  roled      NO
-testuser  rolec      NO
-testuser  roleb      NO
-testuser  rolea      YES
+roled     rolec      NO
+rolec     roleb      NO
+roleb     rolea      YES
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -413,17 +421,17 @@ GRANT rolea TO rolee
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
-grantee   role_name  is_grantable
-testuser  rolea      YES
+grantee  role_name  is_grantable
+roleb    rolea      YES
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  rolec      NO
-testuser  roleb      NO
-testuser  rolea      YES
 testuser  roled      NO
+roled     rolec      NO
+rolec     roleb      NO
+roleb     rolea      YES
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
