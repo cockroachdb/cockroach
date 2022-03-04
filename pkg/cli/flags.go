@@ -477,7 +477,10 @@ func init() {
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
 		// The following flag is planned to become non-experimental in 21.1.
-		boolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
+		varFlag(f, secOverrideSetter{
+			dst:  &baseCfg.SecurityOverrides,
+			flag: base.DisableSQLRequireTLS}, cliflags.AcceptSQLWithoutTLS)
+		f.Lookup(cliflags.AcceptSQLWithoutTLS.Name).NoOptDefVal = "false"
 		_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
 
 		// More server flags.
@@ -502,6 +505,7 @@ func init() {
 		//
 		// NB: Insecure is deprecated. See #53404.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		varFlag(f, &startCtx.serverSecurityOverrides, cliflags.ServerSecurityOverrides)
 
 		// Enable/disable various external storage endpoints.
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -514,7 +518,12 @@ func init() {
 
 		// Cluster name verification.
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
+		varFlag(f, secOverrideSetter{
+			dst:  &baseCfg.SecurityOverrides,
+			flag: base.DisableClusterNameVerification}, cliflags.DisableClusterNameVerification)
+		f.Lookup(cliflags.DisableClusterNameVerification.Name).NoOptDefVal = "false"
+		_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
+
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
 			// 'start-single-node', we intend that command to be used by
@@ -801,7 +810,13 @@ func init() {
 		varFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
 
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
+		varFlag(f, secOverrideSetter{
+			dst:  &baseCfg.SecurityOverrides,
+			flag: base.DisableClusterNameVerification}, cliflags.DisableClusterNameVerification)
+		f.Lookup(cliflags.DisableClusterNameVerification.Name).NoOptDefVal = "false"
+		// TODO(knz): hide the client-side flag, once we have set up a way to set the
+		// overrides for client commands.
+		// _ = f.MarkHidden(cliflags.DisableClusterNameVerification)
 	}
 
 	// Commands that print tables.
@@ -969,6 +984,7 @@ func init() {
 		_ = extraServerFlagInit // guru assignment
 		// NB: Insecure is deprecated. See #53404.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		varFlag(f, &startCtx.serverSecurityOverrides, cliflags.ServerSecurityOverrides)
 
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
@@ -1119,6 +1135,10 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	}
 	serverCfg.User = security.NodeUserName()
 	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.SecurityOverrides = startCtx.serverSecurityOverrides
+	if serverCfg.Insecure {
+		_ = serverCfg.SecurityOverrides.Set("disable-all")
+	}
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 
 	// Construct the main RPC listen address.
@@ -1212,7 +1232,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverHTTPAddr = "localhost"
 		// We then also tell the server to disable TLS for the HTTP
 		// listener.
-		serverCfg.DisableTLSForHTTP = true
+		serverCfg.SecurityOverrides.SetFlag(base.DisableHTTPTLS, true)
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 

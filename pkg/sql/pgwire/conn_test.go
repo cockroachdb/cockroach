@@ -117,7 +117,7 @@ func TestConn(t *testing.T) {
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
 			mon.BoundAccount{}, /* reserved */
-			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+			authOptions{disableAuthn: true, connType: hba.ConnHostAny},
 		)
 		return nil
 	})
@@ -1082,7 +1082,7 @@ func TestMaliciousInputs(t *testing.T) {
 				func() bool { return false }, /* draining */
 				nil,                          /* sqlServer */
 				mon.BoundAccount{},           /* reserved */
-				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+				authOptions{disableAuthn: true, connType: hba.ConnHostAny},
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)
@@ -1288,7 +1288,6 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 	testingKnobError := fmt.Errorf("a random error")
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			Insecure: true,
 			Knobs: base.TestingKnobs{
 				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
 					AfterReadMsgTestingKnob: func(ctx context.Context) error {

@@ -71,8 +71,7 @@ func trivialQuery(pgURL url.URL) error {
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params := base.TestServerArgs{Insecure: true}
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -82,6 +81,11 @@ func TestPGWireDrainClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Note that we have to disable TLS in this test, because a draining
+	// server fails to agree to set up TLS when receiving a new
+	// connection, no matter whether TLS is enabled.
+	ts := s.(*server.TestServer)
+	ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLTLS|base.DisableSQLAuthn, true)
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
@@ -143,8 +147,7 @@ func TestPGWireDrainClient(t *testing.T) {
 func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params := base.TestServerArgs{Insecure: true}
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -153,11 +156,12 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ts := s.(*server.TestServer)
+	ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLAuthn, true)
 	pgBaseURL := url.URL{
-		Scheme:   "postgres",
-		Host:     net.JoinHostPort(host, port),
-		User:     url.User(security.RootUser),
-		RawQuery: "sslmode=disable",
+		Scheme: "postgres",
+		Host:   net.JoinHostPort(host, port),
+		User:   url.User(security.RootUser),
 	}
 
 	db, err := gosql.Open("postgres", pgBaseURL.String())
@@ -1719,12 +1723,12 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 
 	socketFile := filepath.Join(tempDir, ".s.PGSQL."+port)
 
-	params := base.TestServerArgs{
-		Insecure:   true,
-		SocketFile: socketFile,
-	}
+	params := base.TestServerArgs{SocketFile: socketFile}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+
+	ts := s.(*server.TestServer)
+	ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLAuthn, true)
 
 	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.
 	options := url.Values{
@@ -1809,8 +1813,7 @@ func TestSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params := base.TestServerArgs{Insecure: true}
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1818,11 +1821,12 @@ func TestSessionParameters(t *testing.T) {
 	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
 	port, _ := strconv.Atoi(ports)
 
+	ts := s.(*server.TestServer)
+	ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLAuthn, true)
 	connCfg, err := pgx.ParseConfig(
-		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", security.RootUser, host, port),
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=allow", security.RootUser, host, port),
 	)
 	require.NoError(t, err)
-	connCfg.TLSConfig = nil
 	connCfg.Logger = pgxTestLogger{}
 
 	testData := []struct {

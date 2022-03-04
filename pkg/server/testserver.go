@@ -102,8 +102,6 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	baseCfg.User = security.NodeUserName()
-	// Enable web session authentication.
-	baseCfg.EnableWebSessionAuthentication = true
 	return baseCfg
 }
 
@@ -222,9 +220,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
-	cfg.DisableTLSForHTTP = params.DisableTLSForHTTP
+	cfg.SecurityOverrides.SetFlag(base.DisableHTTPTLS, params.DisableTLSForHTTP)
 	if params.DisableWebSessionAuthentication {
-		cfg.EnableWebSessionAuthentication = false
+		cfg.SecurityOverrides.SetFlag(base.DisableHTTPAuthn, true)
 	}
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
@@ -276,6 +274,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	if params.Knobs.SQLExecutor == nil {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
+	}
+
+	if cfg.Insecure {
+		// We do this override at the end, after the other override
+		// flags above have been applied.
+		_ = cfg.SecurityOverrides.Set("disable-all")
 	}
 
 	return cfg
@@ -704,6 +708,9 @@ func (ts *TestServer) StartTenant(
 	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
+	if baseCfg.Insecure {
+		_ = baseCfg.SecurityOverrides.Set("disable-all")
+	}
 	baseCfg.Locality = params.Locality
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName

@@ -74,10 +74,12 @@ func NewInsecureTestingContextWithClusterID(
 func NewInsecureTestingContextWithKnobs(
 	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	return NewContext(ctx,
 		ContextOptions{
 			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
+			Config:   cfg,
 			Clock:    clock,
 			Stopper:  stopper,
 			Settings: cluster.MakeTestingClusterSettings(),

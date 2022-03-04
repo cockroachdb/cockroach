@@ -182,10 +182,6 @@ type BaseConfig struct {
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
-	// EnableWebSessionAuthentication enables session-based authentication for
-	// the Admin API's HTTP endpoints.
-	EnableWebSessionAuthentication bool
-
 	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
 	// which a feature unique to the demo shell.
 	EnableDemoLoginEndpoint bool
@@ -200,19 +196,17 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 		clusterID: &base.ClusterIDContainer{},
 		serverID:  &base.NodeIDContainer{},
 	}
-	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 	baseCfg := BaseConfig{
-		Tracer:                         tr,
-		idProvider:                     idsProvider,
-		IDContainer:                    idsProvider.serverID,
-		ClusterIDContainer:             idsProvider.clusterID,
-		AmbientCtx:                     log.MakeServerAmbientContext(tr, idsProvider),
-		Config:                         new(base.Config),
-		Settings:                       st,
-		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
-		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
-		StorageEngine:                  storage.DefaultStorageEngine,
-		EnableWebSessionAuthentication: !disableWebLogin,
+		Tracer:             tr,
+		idProvider:         idsProvider,
+		IDContainer:        idsProvider.serverID,
+		ClusterIDContainer: idsProvider.clusterID,
+		AmbientCtx:         log.MakeServerAmbientContext(tr, idsProvider),
+		Config:             new(base.Config),
+		Settings:           st,
+		MaxOffset:          MaxOffsetType(base.DefaultMaxClockOffset),
+		DefaultZoneConfig:  zonepb.DefaultZoneConfig(),
+		StorageEngine:      storage.DefaultStorageEngine,
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
@@ -708,7 +702,7 @@ func (cfg *Config) FilterGossipBootstrapAddresses(ctx context.Context) []util.Un
 // RequireWebSession indicates whether the server should require authentication
 // sessions when serving admin API requests.
 func (cfg *BaseConfig) RequireWebSession() bool {
-	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
+	return !cfg.SecurityOverrides.IsSet(base.DisableHTTPAuthn)
 }
 
 // readEnvironmentVariables populates all context values that are environment

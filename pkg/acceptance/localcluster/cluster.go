@@ -271,6 +271,7 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		User:     security.NodeUserName(),
 		Insecure: true,
 	}
+	_ = baseCtx.SecurityOverrides.Set("disable-all")
 	rpcCtx := rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID: roachpb.SystemTenantID,
 		Config:   baseCtx,

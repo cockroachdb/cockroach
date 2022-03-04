@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -233,7 +234,7 @@ func retrievePasswordFromRoleOptions(
 	if err != nil {
 		return true, nil, err
 	}
-	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
+	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.SecurityOverrides.IsSet(base.DisableSQLSetCredentials) {
 		// We disallow setting a non-empty password in insecure mode
 		// because insecure means an observer may have MITM'ed the change
 		// and learned the password.
@@ -242,7 +243,7 @@ func retrievePasswordFromRoleOptions(
 		// since that forces cert auth when moving back to secure mode,
 		// and certs can't be MITM'ed over the insecure SQL connection.
 		return true, nil, pgerror.New(pgcode.InvalidPassword,
-			"setting or updating a password is not supported in insecure mode")
+			"setting or updating passwords was disabled by configuration")
 	}
 
 	if !isNull {

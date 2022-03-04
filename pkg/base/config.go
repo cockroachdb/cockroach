@@ -151,16 +151,13 @@ var (
 type Config struct {
 	// Insecure specifies whether to disable security checks throughout
 	// the code base.
-	// This is really not recommended.
 	// See: https://github.com/cockroachdb/cockroach/issues/53404
+	//
+	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
 	Insecure bool
 
-	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
-	// clients to authenticate without TLS on a secure cluster.
-	//
-	// Authentication is, as usual, subject to the HBA configuration: in
-	// the default case, password authentication is still mandatory.
-	AcceptSQLWithoutTLS bool
+	// SecurityOverrides indicates which security mechanisms to disable.
+	SecurityOverrides SecurityOverrides
 
 	// SSLCAKey is used to sign new certs.
 	SSLCAKey string
@@ -186,12 +183,6 @@ type Config struct {
 	// negotiated on both sides, the cluster name is not used any more.
 	ClusterName string
 
-	// DisableClusterNameVerification, when set, alters the cluster name
-	// verification to only verify that a non-empty cluster name on
-	// both sides match. This is meant for use while rolling an
-	// existing cluster into using a new cluster name.
-	DisableClusterNameVerification bool
-
 	// SplitListenSQL indicates whether to listen for SQL
 	// clients on a separate address from RPC requests.
 	SplitListenSQL bool
@@ -206,9 +197,6 @@ type Config struct {
 
 	// HTTPAddr is the configured HTTP listen address.
 	HTTPAddr string
-
-	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
-	DisableTLSForHTTP bool
 
 	// HTTPAdvertiseAddr is the advertised HTTP address.
 	// This is computed from HTTPAddr if specified otherwise Addr.
@@ -255,11 +243,11 @@ func (*Config) HistogramWindowInterval() time.Duration {
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
+	cfg.SecurityOverrides = 0
 	cfg.User = security.MakeSQLUsernameFromPreNormalizedString(defaultUser)
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
-	cfg.DisableTLSForHTTP = false
 	cfg.HTTPAdvertiseAddr = ""
 	cfg.SplitListenSQL = false
 	cfg.SQLAddr = defaultSQLAddr
@@ -267,15 +255,13 @@ func (cfg *Config) InitDefaults() {
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
-	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
-	cfg.AcceptSQLWithoutTLS = false
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
 // Insecure and DisableTLSForHTTP.
 func (cfg *Config) HTTPRequestScheme() string {
-	if cfg.Insecure || cfg.DisableTLSForHTTP {
+	if cfg.SecurityOverrides.IsSet(DisableHTTPTLS) {
 		return httpScheme
 	}
 	return httpsScheme

@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -406,4 +407,24 @@ func (b *bytesOrPercentageValue) String() string {
 // IsSet returns true iff Set has successfully been called.
 func (b *bytesOrPercentageValue) IsSet() bool {
 	return b.bval.IsSet()
+}
+
+type secOverrideSetter struct {
+	dst  *base.SecurityOverrides
+	flag base.SecurityOverrides
+}
+
+func (s secOverrideSetter) String() string {
+	return strconv.FormatBool(s.dst.IsSet(s.flag))
+}
+
+func (s secOverrideSetter) Type() string { return "bool" }
+
+func (s secOverrideSetter) Set(v string) error {
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return err
+	}
+	s.dst.SetFlag(s.flag, b)
+	return nil
 }
