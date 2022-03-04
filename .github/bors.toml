@@ -8,7 +8,7 @@ status = ["GitHub CI (Cockroach)"]
 # r+-ed. If it's still in progress (for e.g. if CI is still running), bors will
 # construct the merge commit in parallel and simply wait for success right
 # before merging.
-pr_status = ["license/cla"]
+pr_status = ["license/cla", "blathers/release-justification-check"]
 
 # List of PR labels that may not be attached to a PR when it is r+-ed.
 block_labels = ["do-not-merge"]
