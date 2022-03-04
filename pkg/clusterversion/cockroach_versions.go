@@ -321,6 +321,15 @@ const (
 	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
 	// when DateStyle/IntervalStyle is enabled.
 	DateStyleIntervalStyleCastRewrite
+	// EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
+	// migration that bumps Pebble's format major version to a version that
+	// supports range keys.
+	EnsurePebbleFormatVersionRangeKeys
+	// EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
+	// and is used as the feature gate for use of range keys. Any node at this
+	// version is guaranteed to reside in a cluster where all nodes support range
+	// keys at the Pebble layer.
+	EnablePebbleFormatVersionRangeKeys
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -535,6 +544,16 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DateStyleIntervalStyleCastRewrite,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
+	},
+
+	// TODO(erikgrinaker): These must be moved to 22.1 when the version exists.
+	{
+		Key:     EnsurePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1000},
+	},
+	{
+		Key:     EnablePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 1002},
 	},
 
 	// *************************************************
