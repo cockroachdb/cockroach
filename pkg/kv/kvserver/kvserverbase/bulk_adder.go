@@ -25,11 +25,6 @@ type BulkAdderOptions struct {
 	// behalf of which it is adding data.
 	Name string
 
-	// SplitAndScatterAfter is the number of bytes which if added without hitting
-	// an existing split will cause the adder to split and scatter the next span.
-	// A function returning -1 is interpreted as indicating not to split.
-	SplitAndScatterAfter func() int64
-
 	// MinBufferSize is the initial size of the BulkAdder buffer. It indicates the
 	// amount of memory we require to be able to buffer data before flushing for
 	// SST creation.
@@ -78,10 +73,6 @@ type BulkAdderOptions struct {
 	// sample of the overall input.
 	InitialSplitsIfUnordered int
 }
-
-// DisableExplicitSplits can be returned by a SplitAndScatterAfter function to
-// indicate that the SSTBatcher should not issue explicit splits.
-const DisableExplicitSplits = -1
 
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
