@@ -2425,6 +2425,19 @@ CREATE TABLE t47041 (
 )
 ----
 
+exec-ddl
+ALTER TABLE t47041 INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 1000,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 1000
+  }
+]';
+----
+
 opt
 SELECT 1 FROM t47041 WHERE a > 1 AND k > 0 GROUP BY b, a ORDER BY b
 ----
