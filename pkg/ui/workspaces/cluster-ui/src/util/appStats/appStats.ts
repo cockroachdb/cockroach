@@ -17,6 +17,7 @@ import {
   uniqueLong,
   unique,
 } from "src/util";
+import Long from "long";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
@@ -283,3 +284,37 @@ export function transactionScopedStatementKey(
 ): string {
   return statementKey(stmt) + stmt.transaction_fingerprint_id.toString();
 }
+
+export const generateStmtDetailsToID = (
+  fingerprintID: string,
+  appNames: string,
+  start: Long,
+  end: Long,
+): string => {
+  if (
+    appNames &&
+    (appNames.includes("$ internal") || appNames.includes("unset"))
+  ) {
+    const apps = appNames.split(",");
+    for (let i = 0; i < apps.length; i++) {
+      if (apps[i].includes("$ internal")) {
+        apps[i] = "$ internal";
+      }
+      if (apps[i].includes("unset")) {
+        apps[i] = "";
+      }
+    }
+    appNames = apps.toString();
+  }
+  let generatedID = fingerprintID;
+  if (appNames) {
+    generatedID += `/${appNames}`;
+  }
+  if (start) {
+    generatedID += `/${start}`;
+  }
+  if (end) {
+    generatedID += `/${end}`;
+  }
+  return generatedID;
+};

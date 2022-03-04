@@ -80,6 +80,7 @@
     "@types/fetch-mock": "^5.8.1",
     "@types/highlight.js": "^10.1.0",
     "@types/lodash": "^4.14.149",
+    "@types/long": "^4.0.1",
     "@types/mocha": "^2.2.40",
     "@types/node": "^13.7.0",
     "@types/nvd3": "^1.8.36",

@@ -87,6 +87,18 @@ export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
   return [start, end];
 };
 
+export const toRoundedDateRange = (
+  ts: TimeScale,
+): [moment.Moment, moment.Moment] => {
+  const [start, end] = toDateRange(ts);
+  const startRounded = start.set({ minute: 0, second: 0, millisecond: 0 });
+  const endRounded = end
+    .set({ minute: 0, second: 0, millisecond: 0 })
+    .add(1, "hours");
+
+  return [startRounded, endRounded];
+};
+
 export const findClosestTimeScale = (
   options: TimeScaleOptions,
   seconds: number,
