@@ -145,7 +145,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 
 	// Cut over the ingestion job and the job will stop eventually.
 	destSysSQL.Exec(t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
-	jobutils.WaitForJob(t, destSysSQL, jobspb.JobID(ingestionJobID))
+	jobutils.WaitForJobToSucceed(t, destSysSQL, jobspb.JobID(ingestionJobID))
 	// TODO(casper): Make producer job exit normally in the cutover scenario.
 	sourceSysSQL.CheckQueryResultsRetry(t,
 		fmt.Sprintf("SELECT status, error FROM [SHOW JOBS] WHERE job_id = %d", streamProducerJobID),
