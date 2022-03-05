@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/logtags"
 )
 
 // distImport is used by IMPORT to run a DistSQL flow to ingest data by starting
@@ -52,8 +51,6 @@ func distImport(
 	walltime int64,
 	alwaysFlushProgress bool,
 ) (roachpb.BulkOpSummary, error) {
-	ctx = logtags.AddTag(ctx, "import-distsql-ingest", nil)
-
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
@@ -254,6 +251,7 @@ func makeImportReaderSpecs(
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.ReadImportDataSpec{
+				JobID:  int64(job.ID()),
 				Tables: tables,
 				Types:  typeDescs,
 				Format: format,
