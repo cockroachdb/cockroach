@@ -10,44 +10,23 @@
 
 package tree
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
-
 // AlterTenantSetClusterSetting represents an ALTER TENANT
 // SET CLUSTER SETTING statement.
 type AlterTenantSetClusterSetting struct {
-	Name      string
-	Value     Expr
-	TenantID  roachpb.TenantID
+	SetClusterSetting
+	TenantID  Expr
 	TenantAll bool
 }
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
 	if n.TenantAll {
-		ctx.WriteString("ALTER TENANT ALL ")
-	} else if n.TenantID.IsSet() {
-		ctx.WriteString(fmt.Sprintf("ALTER TENANT %d ", n.TenantID.ToUint64()))
+		ctx.WriteString("ALL TENANTS")
+	} else {
+		ctx.WriteString("TENANT ")
+		ctx.FormatNode(n.TenantID)
 	}
-	ctx.WriteString("SET CLUSTER SETTING ")
-
-	// Cluster setting names never contain PII and should be distinguished
-	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
-		ctx.FormatNameP(&n.Name)
-	})
-
-	ctx.WriteString(" = ")
-
-	switch v := n.Value.(type) {
-	case *DBool, *DInt:
-		ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
-			ctx.FormatNode(v)
-		})
-	default:
-		ctx.FormatNode(v)
-	}
+	ctx.WriteByte(' ')
+	ctx.FormatNode(&n.SetClusterSetting)
 }

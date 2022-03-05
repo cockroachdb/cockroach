@@ -184,6 +184,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:set_exprs_internal.bnf",
   "//docs/generated/sql/bnf:set_local_stmt.bnf",
   "//docs/generated/sql/bnf:set_operation.bnf",
+  "//docs/generated/sql/bnf:set_or_reset_csetting_stmt.bnf",
   "//docs/generated/sql/bnf:set_rest.bnf",
   "//docs/generated/sql/bnf:set_rest_more.bnf",
   "//docs/generated/sql/bnf:set_session_stmt.bnf",
