@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 func distBackupPlanSpecs(
@@ -32,6 +31,7 @@ func distBackupPlanSpecs(
 	planCtx *sql.PlanningCtx,
 	execCtx sql.JobExecContext,
 	dsp *sql.DistSQLPlanner,
+	jobID int64,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -92,6 +92,7 @@ func distBackupPlanSpecs(
 	sqlInstanceIDToSpec := make(map[base.SQLInstanceID]*execinfrapb.BackupDataSpec)
 	for _, partition := range spanPartitions {
 		spec := &execinfrapb.BackupDataSpec{
+			JobID:            jobID,
 			Spans:            partition.Spans,
 			DefaultURI:       defaultURI,
 			URIsByLocalityKV: urisByLocalityKV,
@@ -113,6 +114,7 @@ func distBackupPlanSpecs(
 			// which is not the leaseholder for any of the spans, but is for an
 			// introduced span.
 			spec := &execinfrapb.BackupDataSpec{
+				JobID:            jobID,
 				IntroducedSpans:  partition.Spans,
 				DefaultURI:       defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
@@ -153,7 +155,6 @@ func distBackup(
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "backup-distsql")
 	defer span.Finish()
-	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
 	evalCtx := execCtx.ExtendedEvalContext()
 	var noTxn *kv.Txn
 
