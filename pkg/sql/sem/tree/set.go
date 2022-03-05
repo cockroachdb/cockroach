@@ -19,8 +19,6 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
-
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
 	Name     string
@@ -67,10 +65,8 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 
 // SetClusterSetting represents a SET CLUSTER SETTING statement.
 type SetClusterSetting struct {
-	Name      string
-	Value     Expr
-	TenantID  roachpb.TenantID
-	TenantAll bool
+	Name  string
+	Value Expr
 }
 
 // Format implements the NodeFormatter interface.

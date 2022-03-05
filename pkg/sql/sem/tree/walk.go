@@ -884,6 +884,15 @@ func (n *AlterTenantSetClusterSetting) walkStmt(v Visitor) Statement {
 			ret.Value = e
 		}
 	}
+	if n.TenantID != nil {
+		e, changed := WalkExpr(v, n.TenantID)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.TenantID = e
+		}
+	}
 	return ret
 }
 
