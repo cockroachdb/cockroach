@@ -26,7 +26,7 @@ import (
 type kvBuf struct {
 	entries []kvBufEntry
 	slab    []byte
-	MemSize int // size of buffered data including per-entry overhead
+	MemSize sz // size of buffered data including per-entry overhead
 }
 
 // each entry in the buffer has a key and value -- the actual bytes of these are
@@ -57,7 +57,7 @@ func (b *kvBuf) append(k, v []byte) error {
 		return errors.Errorf("length %d exceeds limit %d", len(v), maxLen)
 	}
 
-	b.MemSize += len(k) + len(v) + entryOverhead
+	b.MemSize += sz(len(k) + len(v) + entryOverhead)
 	var e kvBufEntry
 	e.keySpan = uint64(len(b.slab)<<lenBits) | uint64(len(k)&lenMask)
 	b.slab = append(b.slab, k...)
