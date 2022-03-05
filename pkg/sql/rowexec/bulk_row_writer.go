@@ -137,6 +137,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
 		ctx, sp.flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+			Name:          sp.tableDesc.GetName(),
 			MinBufferSize: bufferSize,
 			// We disallow shadowing here to ensure that we report errors when builds
 			// of unique indexes fail when there are duplicate values. Note that while

@@ -187,6 +187,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	opts := kvserverbase.BulkAdderOptions{
+		Name:                     ib.desc.GetName() + " backfill",
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
 		StepBufferSize:           stepSize,
