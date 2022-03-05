@@ -30,3 +30,29 @@ func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteByte(' ')
 	ctx.FormatNode(&n.SetClusterSetting)
 }
+
+// ShowTenantClusterSetting represents a SHOW CLUSTER SETTING ... FOR TENANT statement.
+type ShowTenantClusterSetting struct {
+	*ShowClusterSetting
+	TenantID Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTenantClusterSetting) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.ShowClusterSetting)
+	ctx.WriteString(" FOR TENANT ")
+	ctx.FormatNode(node.TenantID)
+}
+
+// ShowTenantClusterSettingList represents a SHOW CLUSTER SETTINGS FOR TENANT statement.
+type ShowTenantClusterSettingList struct {
+	*ShowClusterSettingList
+	TenantID Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTenantClusterSettingList) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.ShowClusterSettingList)
+	ctx.WriteString(" FOR TENANT ")
+	ctx.FormatNode(node.TenantID)
+}

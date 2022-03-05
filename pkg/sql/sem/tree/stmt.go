@@ -1253,6 +1253,24 @@ func (*ShowClusterSettingList) StatementType() StatementType { return TypeDML }
 func (*ShowClusterSettingList) StatementTag() string { return "SHOW" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowTenantClusterSetting) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowTenantClusterSetting) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTenantClusterSetting) StatementTag() string { return "SHOW" }
+
+// StatementReturnType implements the Statement interface.
+func (*ShowTenantClusterSettingList) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowTenantClusterSettingList) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTenantClusterSettingList) StatementTag() string { return "SHOW" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowColumns) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1849,6 +1867,8 @@ func (n *SetVar) String() string                         { return AsString(n) }
 func (n *ShowBackup) String() string                     { return AsString(n) }
 func (n *ShowClusterSetting) String() string             { return AsString(n) }
 func (n *ShowClusterSettingList) String() string         { return AsString(n) }
+func (n *ShowTenantClusterSetting) String() string       { return AsString(n) }
+func (n *ShowTenantClusterSettingList) String() string   { return AsString(n) }
 func (n *ShowColumns) String() string                    { return AsString(n) }
 func (n *ShowConstraints) String() string                { return AsString(n) }
 func (n *ShowCreate) String() string                     { return AsString(n) }
