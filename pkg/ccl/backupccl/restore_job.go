@@ -357,6 +357,7 @@ func restore(
 		return distRestore(
 			ctx,
 			execCtx,
+			int64(job.ID()),
 			importSpanChunks,
 			dataToRestore.getPKIDs(),
 			encryption,
