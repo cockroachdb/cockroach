@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -2143,8 +2142,8 @@ func (node *TargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.Databases != nil {
 		return p.row("DATABASE", p.Doc(&node.Databases))
 	}
-	if node.Tenant != (roachpb.TenantID{}) {
-		return p.row("TENANT", pretty.Text(strconv.FormatUint(node.Tenant.ToUint64(), 10)))
+	if node.TenantID.Specified {
+		return p.row("TENANT", p.Doc(&node.TenantID))
 	}
 	return p.row("TABLE", p.Doc(&node.Tables))
 }

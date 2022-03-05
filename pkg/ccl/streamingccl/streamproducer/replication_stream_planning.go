@@ -149,13 +149,13 @@ func doCreateReplicationStream(
 	}
 
 	var spans []roachpb.Span
-	if eval.Targets.Tenant == (roachpb.TenantID{}) {
+	if !eval.Targets.TenantID.IsSet() {
 		// TODO(yevgeniy): Only tenant streaming supported now; Support granular streaming.
 		return pgerror.New(pgcode.FeatureNotSupported, "granular replication streaming not supported")
 	}
 
 	telemetry.Count(`replication.create.tenant`)
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(eval.Targets.Tenant.ToUint64()))
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(eval.Targets.TenantID.ToUint64()))
 	spans = append(spans, roachpb.Span{
 		Key:    prefix,
 		EndKey: prefix.PrefixEnd(),
