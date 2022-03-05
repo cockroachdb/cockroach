@@ -42,6 +42,9 @@ func TryDelegate(
 	case *tree.ShowClusterSettingList:
 		return d.delegateShowClusterSettingList(t)
 
+	case *tree.ShowTenantClusterSettingList:
+		return d.delegateShowTenantClusterSettingList(t)
+
 	case *tree.ShowDatabases:
 		return d.delegateShowDatabases(t)
 

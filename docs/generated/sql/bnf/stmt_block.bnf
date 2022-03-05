@@ -230,7 +230,7 @@ show_stmt ::=
 	| show_constraints_stmt
 	| show_create_stmt
 	| show_create_schedules_stmt
-	| show_csettings_stmt
+	| show_local_or_tenant_csettings_stmt
 	| show_databases_stmt
 	| show_enums_stmt
 	| show_types_stmt
@@ -715,16 +715,9 @@ show_create_schedules_stmt ::=
 	'SHOW' 'CREATE' 'ALL' 'SCHEDULES'
 	| 'SHOW' 'CREATE' 'SCHEDULE' a_expr
 
-show_csettings_stmt ::=
-	'SHOW' 'CLUSTER' 'SETTING' var_name
-	| 'SHOW' 'CLUSTER' 'SETTING' 'ALL'
-	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
-	| 'SHOW' 'CLUSTER' 'SETTINGS'
-	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS'
-	| 'SHOW' 'CLUSTER' 'SETTING' var_name 'FOR' 'TENANT' iconst64
-	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
-	| 'SHOW' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
-	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS' 'FOR' 'TENANT' iconst64
+show_local_or_tenant_csettings_stmt ::=
+	show_csettings_stmt
+	| show_csettings_stmt 'FOR' 'TENANT' d_expr
 
 show_databases_stmt ::=
 	'SHOW' 'DATABASES' with_comment
@@ -1767,6 +1760,13 @@ var_value ::=
 with_comment ::=
 	'WITH' 'COMMENT'
 	| 
+
+show_csettings_stmt ::=
+	'SHOW' 'CLUSTER' 'SETTING' var_name
+	| 'SHOW' 'CLUSTER' 'SETTING' 'ALL'
+	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
+	| 'SHOW' 'CLUSTER' 'SETTINGS'
+	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS'
 
 opt_on_targets_roles ::=
 	'ON' targets_roles

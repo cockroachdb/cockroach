@@ -99,3 +99,12 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 func (n *alterTenantSetClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *alterTenantSetClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *alterTenantSetClusterSettingNode) Close(_ context.Context)        {}
+
+// ShowTenantClusterSetting shows the value of a cluster setting for a tenant.
+// Privileges: super user.
+func (p *planner) ShowTenantClusterSetting(
+	ctx context.Context, n *tree.ShowTenantClusterSetting,
+) (planNode, error) {
+	return nil, unimplemented.NewWithIssue(73857,
+		`unimplemented: tenant-level cluster settings not supported`)
+}
