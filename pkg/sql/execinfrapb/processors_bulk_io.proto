@@ -214,6 +214,7 @@ message StreamIngestionFrontierSpec {
 }
 
 message BackupDataSpec {
+  optional int64 job_id = 11 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
   repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
   optional string default_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "DefaultURI"];
@@ -230,6 +231,8 @@ message BackupDataSpec {
   // User who initiated the backup. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+
+  // NEXTID: 12.
 }
 
 message RestoreFileSpec {
