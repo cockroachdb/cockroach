@@ -12,10 +12,21 @@ package bulk
 
 import (
 	"bytes"
+	"encoding/binary"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/snappy"
 )
+
+type iterable interface {
+	Next() bool
+	Key() roachpb.Key
+	Value() []byte
+	MemSize() sz
+	Len() int
+}
 
 // kvBuf collects []byte key-value pairs in a sortable buffer.
 //
@@ -26,7 +37,8 @@ import (
 type kvBuf struct {
 	entries []kvBufEntry
 	slab    []byte
-	MemSize sz // size of buffered data including per-entry overhead
+	memSize sz // size of buffered data including per-entry overhead
+	pos     int
 }
 
 // each entry in the buffer has a key and value -- the actual bytes of these are
@@ -57,7 +69,7 @@ func (b *kvBuf) append(k, v []byte) error {
 		return errors.Errorf("length %d exceeds limit %d", len(v), maxLen)
 	}
 
-	b.MemSize += sz(len(k) + len(v) + entryOverhead)
+	b.memSize += sz(len(k) + len(v) + entryOverhead)
 	var e kvBufEntry
 	e.keySpan = uint64(len(b.slab)<<lenBits) | uint64(len(k)&lenMask)
 	b.slab = append(b.slab, k...)
@@ -77,12 +89,29 @@ func (b *kvBuf) read(span uint64) []byte {
 	return b.slab[offset : offset+length]
 }
 
-func (b *kvBuf) Key(i int) roachpb.Key {
+func (b *kvBuf) Key() roachpb.Key {
+	return b.read(b.entries[b.pos].keySpan)
+}
+
+func (b *kvBuf) Value() []byte {
+	return b.read(b.entries[b.pos].valSpan)
+}
+
+func (b *kvBuf) Next() bool {
+	b.pos++
+	return b.pos < len(b.entries)
+}
+
+func (b *kvBuf) KeyAt(i int) roachpb.Key {
 	return b.read(b.entries[i].keySpan)
 }
 
-func (b *kvBuf) Value(i int) []byte {
+func (b *kvBuf) ValueAt(i int) []byte {
 	return b.read(b.entries[i].valSpan)
+}
+
+func (b kvBuf) MemSize() sz {
+	return b.memSize
 }
 
 // Len implements sort.Interface.
@@ -92,7 +121,6 @@ func (b *kvBuf) Len() int {
 
 // Less implements sort.Interface.
 func (b *kvBuf) Less(i, j int) bool {
-
 	return bytes.Compare(b.read(b.entries[i].keySpan), b.read(b.entries[j].keySpan)) < 0
 }
 
@@ -107,5 +135,201 @@ func (b *kvBuf) Reset() {
 	// bother checking.
 	b.slab = b.slab[:0]
 	b.entries = b.entries[:0]
-	b.MemSize = 0
+	b.memSize = 0
+	b.pos = -1
+}
+
+// sortedBuffers wraps some number of sorted iterables into a single merged
+// iterable that returns results in sorted order, yielding the KV from whichever
+// iterable has the minimum key first. If multiple iterables yield the same key
+// the order in which they are returned is undefined.
+type sortedBuffers struct {
+	iters []iterable
+	// min is the index into iters of the current minimum key iter after a call to
+	// Next() returns true, i.e. the iter from which Key and Val should return the
+	// current key/value, and which should be Next()'ed on the next call to the
+	// combined iter's Next().
+	min     int
+	memSize sz
+	len     int
+}
+
+func (m *sortedBuffers) Next() bool {
+	if m.min != -1 {
+		if !m.iters[m.min].Next() {
+			m.iters[m.min] = m.iters[len(m.iters)-1]
+			m.iters = m.iters[:len(m.iters)-1]
+		}
+	}
+
+	if len(m.iters) == 0 {
+		return false
+	}
+
+	m.min = 0
+
+	if len(m.iters) > 1 {
+		for i := range m.iters {
+			if i != m.min {
+				if bytes.Compare(m.iters[m.min].Key(), m.iters[i].Key()) == 1 {
+					m.min = i
+				}
+			}
+		}
+	}
+	return true
+}
+
+func (m *sortedBuffers) Key() roachpb.Key {
+	return m.iters[m.min].Key()
+}
+
+func (m *sortedBuffers) Value() []byte {
+	return m.iters[m.min].Value()
+}
+
+func (m *sortedBuffers) add(sorted iterable) error {
+	if !sorted.Next() {
+		return io.ErrUnexpectedEOF
+	}
+	m.iters = append(m.iters, sorted)
+	m.memSize += sorted.MemSize()
+	m.len += sorted.Len()
+	return nil
+}
+
+func (m *sortedBuffers) reset() {
+	m.iters = nil
+	m.memSize = 0
+	m.min = -1
+	m.len = 0
+}
+
+func (m sortedBuffers) MemSize() sz {
+	return m.memSize
+}
+
+func (m sortedBuffers) Len() int {
+	return m.len
+}
+
+// compressedBuffer encodes a sequence of key/value pairs as encoded-length+val
+// which are then compressed for storage in memory and decompressed in frames as
+// they are iterated back. Unlike kvBuf, it does not allow random access to the
+// i'th key, so it is generally only useful for holding already-sorted kv pairs.
+type compressedBuffer struct {
+	r        *snappy.Reader
+	memSize  sz
+	len      int
+	key, val []byte
+}
+
+// snappyReaderOverhead reflects the buffers sizes in a snappy.Reader, taken
+// from snappy.go.
+const snappyReaderOverhead = 65536 + 76490
+
+func compressBuffer(sorted *kvBuf) (iterable, error) {
+	var underlying bytes.Buffer
+	w := snappy.NewBufferedWriter(&underlying)
+	buf := make([]byte, binary.MaxVarintLen64*3)
+	var prev []byte
+	for sorted.Next() {
+		k := sorted.Key()
+		v := sorted.Value()
+		// Compute the length of the prefix this key shares with the previous key.
+		sharedLen := 0
+		for sharedLen < len(k) && sharedLen < len(prev) && k[sharedLen] == prev[sharedLen] {
+			sharedLen++
+		}
+		unsharedLen := len(k) - sharedLen
+
+		// Encode the lengths of the shared and unshared key bytes and value to buf
+		// and then write buf, unshared key, and value bytes to the stream.
+		n := binary.PutUvarint(buf, uint64(sharedLen))
+		n += binary.PutUvarint(buf[n:], uint64(unsharedLen))
+		n += binary.PutUvarint(buf[n:], uint64(len(v)))
+		if _, err := w.Write(buf[:n]); err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(k[sharedLen:]); err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(v); err != nil {
+			return nil, err
+		}
+
+		prev = append(prev[:sharedLen], k[:sharedLen]...)
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	res := underlying.Bytes()
+	// TODO(dt): if cap >>> len, realloc and copy to shrink.
+	return &compressedBuffer{
+		r:       snappy.NewReader(bytes.NewReader(res)),
+		memSize: sz(cap(res) + snappyReaderOverhead),
+		len:     sorted.Len(),
+	}, nil
+}
+
+func (i *compressedBuffer) Next() bool {
+	// Decode key shared-prefix len, key unshared-suffix len, and value len from
+	// the stream. If the stream done, the first read may return an EOF error, but
+	// if it does not, not subsequent read in this method should ever error.
+	sharedLen, err := binary.ReadUvarint(i.r)
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			panic(err)
+		}
+		return false
+	}
+	unsharedLen, err := binary.ReadUvarint(i.r)
+	if err != nil {
+		panic(err)
+	}
+	valueLen, err := binary.ReadUvarint(i.r)
+	if err != nil {
+		panic(err)
+	}
+
+	// Set i.key's len to total key len, growing if needed and copying over the
+	// shared prefix in that case, then read the unshared suffix into it.
+	if uint64(cap(i.key)) < sharedLen+unsharedLen {
+		prev := i.key
+		i.key = make([]byte, sharedLen+unsharedLen)
+		copy(i.key, prev[:sharedLen])
+	}
+	i.key = i.key[:sharedLen+unsharedLen]
+	if _, err := io.ReadFull(i.r, i.key[sharedLen:]); err != nil {
+		panic(err)
+	}
+
+	// Set i.val's len to valueLen, growing if needed, then read the val into it.
+	if uint64(cap(i.val)) < valueLen {
+		i.val = make([]byte, valueLen)
+	}
+	i.val = i.val[:valueLen]
+	if valueLen > 0 {
+		if _, err := io.ReadFull(i.r, i.val); err != nil {
+			panic(err)
+		}
+	}
+
+	return true
+}
+
+func (i *compressedBuffer) Key() roachpb.Key {
+	return i.key
+}
+
+func (i *compressedBuffer) Value() []byte {
+	return i.val
+}
+
+func (i *compressedBuffer) MemSize() sz {
+	return i.memSize
+}
+
+func (i *compressedBuffer) Len() int {
+	return i.len
 }
