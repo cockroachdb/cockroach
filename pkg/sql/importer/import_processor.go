@@ -367,11 +367,11 @@ func ingestKvs(
 		writeAtBatchTimestamp = false
 	}
 
-	var pkAdderName, indexAdderName = "row adder", "index adder"
+	var pkAdderName, indexAdderName = "rows", "indexes"
 	if len(spec.Tables) == 1 {
 		for k := range spec.Tables {
-			pkAdderName = fmt.Sprintf("%s row adder", k)
-			indexAdderName = fmt.Sprintf("%s index adder", k)
+			pkAdderName = fmt.Sprintf("%s rows", k)
+			indexAdderName = fmt.Sprintf("%s indexes", k)
 		}
 	}
 

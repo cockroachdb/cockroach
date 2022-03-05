@@ -26,7 +26,7 @@ type kvPair struct {
 	value []byte
 }
 
-func makeTestData(num int) (kvs []kvPair, totalSize int) {
+func makeTestData(num int) (kvs []kvPair, totalSize sz) {
 	kvs = make([]kvPair, num)
 	r, _ := randutil.NewTestRand()
 	alloc := make([]byte, num*500)
@@ -41,7 +41,7 @@ func makeTestData(num int) (kvs []kvPair, totalSize int) {
 		alloc = alloc[len(kvs[i].key):]
 		kvs[i].value = alloc[:randutil.RandIntInRange(r, 0, 1000)]
 		alloc = alloc[len(kvs[i].value):]
-		totalSize += len(kvs[i].key) + len(kvs[i].value)
+		totalSize += sz(len(kvs[i].key) + len(kvs[i].value))
 	}
 	return kvs, totalSize
 }
@@ -63,7 +63,7 @@ func TestKvBuf(t *testing.T) {
 	if expected, actual := len(src), b.Len(); expected != actual {
 		t.Fatalf("expected len %d got %d", expected, actual)
 	}
-	if expected, actual := totalSize+len(src)*16, b.MemSize; expected != actual {
+	if expected, actual := totalSize+sz(len(src)*16), b.MemSize; expected != actual {
 		t.Fatalf("expected len %d got %d", expected, actual)
 	}
 
