@@ -53,11 +53,13 @@ type BufferingAdder struct {
 
 	initialSplits int
 
+	lastFlush   time.Time
 	flushCounts struct {
-		total      int
-		bufferSize int
-		totalSort  time.Duration
-		totalFlush time.Duration
+		total        int
+		bufferSize   int
+		totalSort    time.Duration
+		totalFlush   time.Duration
+		totalFilling time.Duration
 	}
 
 	// name of the BufferingAdder for the purpose of logging only.
@@ -112,6 +114,7 @@ func MakeBulkAdder(
 		bulkMon:             bulkMon,
 		sorted:              true,
 		initialSplits:       opts.InitialSplitsIfUnordered,
+		lastFlush:           timeutil.Now(),
 	}
 
 	// If no monitor is attached to the instance of a bulk adder, we do not
@@ -144,9 +147,10 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 2,
-		"bulk adder %s ingested %s, spent %v sorting and %v flushing (%v sending, %v splitting, %v scattering %v). Flushed %d due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+		"bulk adder %s ingested %s, spent %v filling %v sorting and %v flushing (%v sending, %v splitting, %v scattering %v). Flushed %d due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
 		b.name,
 		sz(b.sink.totalRows.DataSize),
+		b.flushCounts.totalFilling,
 		b.flushCounts.totalFlush,
 		b.flushCounts.totalSort,
 		b.sink.flushCounts.sendWait,
@@ -220,10 +224,13 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 }
 
 func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
+	b.flushCounts.totalFilling += timeutil.Since(b.lastFlush)
+
 	if b.curBuf.Len() == 0 {
 		if b.onFlush != nil {
 			b.onFlush(b.sink.GetBatchSummary())
 		}
+		b.lastFlush = timeutil.Now()
 		return nil
 	}
 	if err := b.sink.Reset(ctx); err != nil {
@@ -276,9 +283,10 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 	if log.V(4) {
 		log.Infof(ctx,
-			"bulk adder %s has ingested %s, spent %v sorting and %v flushing (%v sending, %v splitting, %v scattering %v). Flushed %d times due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+			"bulk adder %s has ingested %s, spent %v filling %v sorting and %v flushing (%v sending, %v splitting, %v scattering %v). Flushed %d times due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
 			b.name,
 			sz(b.sink.totalRows.DataSize),
+			b.flushCounts.totalFilling,
 			b.flushCounts.totalSort,
 			b.flushCounts.totalFlush,
 			b.sink.flushCounts.sendWait,
@@ -295,6 +303,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		b.onFlush(b.sink.GetBatchSummary())
 	}
 	b.curBuf.Reset()
+	b.lastFlush = timeutil.Now()
 	return nil
 }
 
