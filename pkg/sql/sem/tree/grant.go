@@ -19,12 +19,7 @@
 
 package tree
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 
 // Grant represents a GRANT statement.
 type Grant struct {
@@ -40,7 +35,7 @@ type TargetList struct {
 	Databases NameList
 	Schemas   ObjectNamePrefixList
 	Tables    TablePatterns
-	Tenant    roachpb.TenantID
+	TenantID  TenantID
 	Types     []*UnresolvedObjectName
 	// If the target is for all tables in a set of schemas.
 	AllTablesInSchema bool
@@ -65,8 +60,9 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	} else if tl.Schemas != nil {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
-	} else if tl.Tenant != (roachpb.TenantID{}) {
-		ctx.WriteString(fmt.Sprintf("TENANT %d", tl.Tenant.ToUint64()))
+	} else if tl.TenantID.Specified {
+		ctx.WriteString("TENANT ")
+		ctx.FormatNode(&tl.TenantID)
 	} else if tl.Types != nil {
 		ctx.WriteString("TYPE ")
 		for i, typ := range tl.Types {

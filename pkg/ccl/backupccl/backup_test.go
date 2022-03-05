@@ -91,7 +91,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
-	"github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -9352,6 +9352,8 @@ RESTORE TABLE foo FROM 'nodelocal://0/foo';
 func TestGCDropIndexSpanExpansion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "takes >1 min under race")
 
 	aboutToGC := make(chan struct{})
 	allowGC := make(chan struct{})

@@ -880,7 +880,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %token <str> START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
-%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANTS TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TRANSFER TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
@@ -1087,7 +1087,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> preparable_set_stmt nonpreparable_set_stmt
 %type <tree.Statement> set_local_stmt
 %type <tree.Statement> set_session_stmt
-%type <tree.Statement> set_csetting_stmt
+%type <tree.Statement> set_csetting_stmt set_or_reset_csetting_stmt
 %type <tree.Statement> set_transaction_stmt
 %type <tree.Statement> set_exprs_internal
 %type <tree.Statement> generic_set
@@ -1101,7 +1101,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_create_schedules_stmt
-%type <tree.Statement> show_csettings_stmt
+%type <tree.Statement> show_csettings_stmt show_local_or_tenant_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
@@ -4954,52 +4954,32 @@ set_csetting_stmt:
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Cfg
 // %Text:
-// ALTER TENANT { <tenant_id>  | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
-// ALTER TENANT { <tenant_id>  | ALL } RESET CLUSTER SETTING <var>
+// ALTER { TENANT <tenant_id> | ALL TENANTS } SET CLUSTER SETTING <var> { TO | = } <value>
+// ALTER { TENANT <tenant_id> | ALL TENANTS } RESET CLUSTER SETTING <var>
 // %SeeAlso: SET CLUSTER SETTING
 alter_tenant_csetting_stmt:
-  ALTER TENANT iconst64 SET CLUSTER SETTING var_name to_or_eq var_value
+  ALTER TENANT d_expr set_or_reset_csetting_stmt
   {
-    tenID := uint64($3.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
+    csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
-      Name: strings.Join($7.strs(), "."),
-      Value: $9.expr(),
-      TenantID: roachpb.MakeTenantID(tenID),
+      SetClusterSetting: *csettingStmt,
+      TenantID: $3.expr(),
     }
   }
-| ALTER TENANT ALL SET CLUSTER SETTING var_name to_or_eq var_value
+| ALTER ALL TENANTS set_or_reset_csetting_stmt
   {
+    csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
-      Name: strings.Join($7.strs(), "."),
-      Value: $9.expr(),
-      TenantAll: true,
-    }
-  }
-| ALTER TENANT iconst64 RESET CLUSTER SETTING var_name
-  {
-    tenID := uint64($3.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
-    $$.val = &tree.AlterTenantSetClusterSetting{
-      Name: strings.Join($7.strs(), "."),
-      Value: tree.DefaultVal{},
-      TenantID: roachpb.MakeTenantID(tenID),
-    }
-  }
-| ALTER TENANT ALL RESET CLUSTER SETTING var_name
-  {
-    $$.val = &tree.AlterTenantSetClusterSetting{
-      Name: strings.Join($7.strs(), "."),
-      Value: tree.DefaultVal{},
+      SetClusterSetting: *csettingStmt,
       TenantAll: true,
     }
   }
 | ALTER TENANT error // SHOW HELP: ALTER TENANT
+| ALTER ALL TENANTS error // SHOW HELP: ALTER TENANT
 
+set_or_reset_csetting_stmt:
+  reset_csetting_stmt
+| set_csetting_stmt
 
 to_or_eq:
   '='
@@ -5288,7 +5268,7 @@ show_stmt:
 | show_constraints_stmt      // EXTEND WITH HELP: SHOW CONSTRAINTS
 | show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
-| show_csettings_stmt        // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_local_or_tenant_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
 | show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
@@ -5722,39 +5702,27 @@ show_csettings_stmt:
   {
     $$.val = &tree.ShowClusterSettingList{}
   }
-| SHOW CLUSTER SETTING var_name FOR TENANT iconst64
-  {
-    tenID := uint64($7.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
-    $$.val = &tree.ShowClusterSetting{Name: strings.Join($4.strs(), "."), TenantID: roachpb.MakeTenantID(tenID)}
-  }
-| SHOW ALL CLUSTER SETTINGS FOR TENANT iconst64
-  {
-    tenID := uint64($7.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
-    $$.val = &tree.ShowClusterSettingList{All: true, TenantID: roachpb.MakeTenantID(tenID)}
-  }
-| SHOW CLUSTER SETTINGS FOR TENANT iconst64
-  {
-    tenID := uint64($6.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
-    $$.val = &tree.ShowClusterSettingList{TenantID: roachpb.MakeTenantID(tenID)}
-  }
-| SHOW PUBLIC CLUSTER SETTINGS FOR TENANT iconst64
-  {
-    tenID := uint64($7.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
-    $$.val = &tree.ShowClusterSettingList{TenantID: roachpb.MakeTenantID(tenID)}
-  }
 | SHOW PUBLIC CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
+
+show_local_or_tenant_csettings_stmt:
+  show_csettings_stmt
+  { $$.val = $1.stmt() }
+| show_csettings_stmt FOR TENANT d_expr
+  {
+    switch t := $1.stmt().(type) {
+    case *tree.ShowClusterSetting:
+       $$.val = &tree.ShowTenantClusterSetting{
+          ShowClusterSetting: t,
+          TenantID: $4.expr(),
+       }
+    case *tree.ShowClusterSettingList:
+       $$.val = &tree.ShowTenantClusterSettingList{
+          ShowClusterSettingList: t,
+          TenantID: $4.expr(),
+       }
+    }
+  }
+| show_csettings_stmt FOR TENANT error // SHOW HELP: SHOW CLUSTER SETTING
 
 // %Help: SHOW COLUMNS - list columns in relation
 // %Category: DDL
@@ -6744,13 +6712,24 @@ targets:
   {
     $$.val = tree.TargetList{Tables: $2.tablePatterns()}
   }
+// TODO(knz): This should learn how to parse more complex expressions
+// and placeholders.
 | TENANT iconst64
   {
     tenID := uint64($2.int64())
     if tenID == 0 {
       return setErr(sqllex, errors.New("invalid tenant ID"))
     }
-    $$.val = tree.TargetList{Tenant: roachpb.MakeTenantID(tenID)}
+    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(tenID)}}
+  }
+| TENANT IDENT
+  {
+    // TODO(knz): This rule can go away once the main clause above supports
+    // arbitrary expressions.
+    if $2 != "_" {
+       return setErr(sqllex, errors.New("invalid syntax"))
+    }
+    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true}}
   }
 | DATABASE name_list
   {
@@ -14204,6 +14183,7 @@ unreserved_keyword:
 | TEMPLATE
 | TEMPORARY
 | TENANT
+| TENANTS
 | TESTING_RELOCATE
 | TEXT
 | TIES
