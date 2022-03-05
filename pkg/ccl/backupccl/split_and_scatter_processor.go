@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type splitAndScatterer interface {
@@ -244,6 +245,7 @@ func newSplitAndScatterProcessor(
 
 // Start is part of the RowSource interface.
 func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
+	ctx = logtags.AddTag(ctx, "job", ssp.spec.JobID)
 	ctx = ssp.StartInternal(ctx, splitAndScatterProcessorName)
 	// Note that the loop over doneScatterCh in Next should prevent the goroutine
 	// below from leaking when there are no errors. However, if that loop needs to
