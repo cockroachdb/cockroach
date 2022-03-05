@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -203,6 +204,9 @@ func (ca *changeAggregator) MustBeStreaming() bool {
 
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) {
+	if ca.spec.JobID != 0 {
+		ctx = logtags.AddTag(ctx, "job", ca.spec.JobID)
+	}
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
 	// Derive a separate context so that we can shutdown the poller. Note that
@@ -1138,6 +1142,9 @@ func (cf *changeFrontier) MustBeStreaming() bool {
 
 // Start is part of the RowSource interface.
 func (cf *changeFrontier) Start(ctx context.Context) {
+	if cf.spec.JobID != 0 {
+		ctx = logtags.AddTag(ctx, "job", cf.spec.JobID)
+	}
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
