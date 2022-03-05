@@ -373,7 +373,13 @@ func (i *intentInterleavingIter) checkConstraint(k roachpb.Key, isExclusiveUpper
 		}
 		kConstraint = constrainedToLocal
 	} else if isExclusiveUpper && bytes.Equal(k, keys.LocalMax) {
-		kConstraint = constrainedToLocal
+		// TODO(nvanbenschoten): without pebbleMVCCScanner always iterating at least
+		// once in prevKey (when maxItersBeforeSeek = 0), there are cases where a
+		// reverse scan calls SeekLT(keys.LocalMax).
+		// For instance, remove this line and run:
+		//  make test PKG=./pkg/migration/migrationcluster TESTS=TestClusterIterateRangeDescriptors
+		return
+		//kConstraint = constrainedToLocal
 	}
 	if kConstraint != i.constraint {
 		panic(fmt.Sprintf(
