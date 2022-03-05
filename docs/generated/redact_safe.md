@@ -7,6 +7,9 @@ pkg/base/node_id.go | `*SQLIDContainer`
 pkg/base/node_id.go | `*StoreIDContainer`
 pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `Type`
+pkg/kv/bulk/sst_batcher.go | `sorted`
+pkg/kv/bulk/sst_batcher.go | `sz`
+pkg/kv/bulk/sst_batcher.go | `timing`
 pkg/kv/kvserver/closedts/ctpb/service.go | `LAI`
 pkg/kv/kvserver/closedts/ctpb/service.go | `SeqNum`
 pkg/kv/kvserver/concurrency/lock/locking.go | `WaitPolicy`
