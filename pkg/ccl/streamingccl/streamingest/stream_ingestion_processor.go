@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
@@ -191,6 +192,7 @@ func newStreamIngestionDataProcessor(
 
 // Start is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
+	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	log.Infof(ctx, "starting ingest proc")
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
 
