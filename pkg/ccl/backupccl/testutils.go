@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -483,5 +485,46 @@ func waitForReplicaFieldToBeSet(
 			return err
 		}
 		return nil
+	})
+}
+
+func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
+	t.Helper()
+	thresholdRE := regexp.MustCompile(`(?s).*Threshold:(?P<threshold>[^\s]*)`)
+	threshStr := string(thresholdRE.ExpandString(nil, "$threshold",
+		traceString, thresholdRE.FindStringSubmatchIndex(traceString)))
+	thresh, err := hlc.ParseTimestamp(threshStr)
+	require.NoError(t, err)
+	return thresh
+}
+
+// runGCAndCheckTrace manually enqueues the replica corresponding to
+// `databaseName.tableName`, and runs `checkGCTrace` until it succeeds.
+func runGCAndCheckTrace(
+	ctx context.Context,
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	conn *gosql.DB,
+	skipShouldQueue bool,
+	tableName, databaseName string,
+	checkGCTrace func(traceStr string) error,
+) {
+	t.Helper()
+	var startKey roachpb.Key
+	err := conn.QueryRow("SELECT start_key"+
+		" FROM crdb_internal.ranges_no_leases"+
+		" WHERE table_name = $1"+
+		" AND database_name = $2"+
+		" ORDER BY start_key ASC", tableName, databaseName).Scan(&startKey)
+	require.NoError(t, err)
+	r := tc.LookupRangeOrFatal(t, startKey)
+	l, _, err := tc.FindRangeLease(r, nil)
+	require.NoError(t, err)
+	lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+	s, repl := getFirstStoreReplica(t, lhServer, startKey)
+	testutils.SucceedsSoon(t, func() error {
+		trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, skipShouldQueue)
+		require.NoError(t, err)
+		return checkGCTrace(trace.String())
 	})
 }

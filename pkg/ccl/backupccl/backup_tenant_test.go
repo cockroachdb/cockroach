@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl_test
+package backupccl
 
 import (
 	"context"
@@ -15,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -41,6 +43,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
 	defer tSQL.Close()
+	runner := sqlutils.MakeSQLRunner(tSQL)
 
 	if _, err := tSQL.Exec("SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';"); err != nil {
 		t.Fatal(err)
@@ -54,23 +57,10 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	if _, err := tSQL.Exec("IMPORT INTO x CSV DATA ('workload:///csv/bank/bank?rows=100&version=1.0.0')"); !testutils.IsError(err, "pause") {
 		t.Fatal(err)
 	}
-	var jobID int
-	if err := tSQL.QueryRow(`SELECT job_id FROM [show jobs] WHERE job_type = 'IMPORT'`).Scan(&jobID); err != nil {
-		t.Fatal(err)
-	}
-	tc.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-	// wait for it to pause
-
-	testutils.SucceedsSoon(t, func() error {
-		var status string
-		if err := tSQL.QueryRow(`SELECT status FROM [show jobs] WHERE job_id = $1`, jobID).Scan(&status); err != nil {
-			t.Fatal(err)
-		}
-		if status == string(jobs.StatusPaused) {
-			return nil
-		}
-		return errors.Newf("%s", status)
-	})
+	var jobID jobspb.JobID
+	err := tSQL.QueryRow(`SELECT job_id FROM [show jobs] WHERE job_type = 'IMPORT'`).Scan(&jobID)
+	require.NoError(t, err)
+	jobutils.WaitForJobToPause(t, runner, jobID)
 
 	// tenant now has a fully ingested, paused import, so back them up.
 	const dst = "userfile:///t"
