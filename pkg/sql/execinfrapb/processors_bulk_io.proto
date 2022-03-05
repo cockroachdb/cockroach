@@ -38,6 +38,8 @@ import "roachpb/api.proto";
 // descriptor in the database, and doesn't emit any rows nor support
 // any post-processing.
 message BackfillerSpec {
+  optional int64 job_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+
   enum Type {
     Invalid = 0;
     Column = 1;
@@ -83,6 +85,8 @@ message BackfillerSpec {
   // Note that older nodes do not respect this flag so callers should
   // check MVCCAddSSTable before setting this option.
   optional bool write_at_batch_timestamp = 12 [(gogoproto.nullable) = false];
+
+  // NEXTID: 14.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
