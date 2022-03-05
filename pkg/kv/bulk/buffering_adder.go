@@ -364,14 +364,24 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	for i := targetSize; i < b.curBuf.Len(); i += targetSize {
 		k := b.curBuf.Key(i)
 		prev := b.curBuf.Key(i - targetSize)
-		log.VEventf(ctx, 1, "splitting at key %d / %d: %s", i, b.curBuf.Len(), k)
-		if _, err := b.sink.db.SplitAndScatter(ctx, k, hour, prev); err != nil {
+		log.VEventf(ctx, 1, "%s adder pre-splitting at key %d of %d at %s", b.name, i, b.curBuf.Len(), k)
+		resp, err := b.sink.db.SplitAndScatter(ctx, k, hour, prev)
+		if err != nil {
 			// TODO(dt): a typed error would be nice here.
 			if strings.Contains(err.Error(), "predicate") {
-				log.VEventf(ctx, 1, "split at %s rejected, had previously split and no longer included %s", k, prev)
+				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s", b.name, k, prev)
 				continue
 			}
 			return err
+		}
+		b.sink.flushCounts.splitWait += resp.Timing.Split
+		b.sink.flushCounts.scatterWait += resp.Timing.Scatter
+		if resp.ScatteredStats != nil {
+			moved := sz(resp.ScatteredStats.Total())
+			b.sink.flushCounts.scatterMoved += moved
+			if resp.ScatteredStats.Total() > 0 {
+				log.VEventf(ctx, 3, "pre-split scattered %s in non-empty range %s", moved, resp.ScatteredSpan)
+			}
 		}
 		created++
 	}
