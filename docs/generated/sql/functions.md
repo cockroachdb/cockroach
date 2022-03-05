@@ -2910,6 +2910,8 @@ a CockroachDB HLC in decimal form.</p>
 <p>Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.active_version"></a><code>crdb_internal.active_version() &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the current active cluster version.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.approximate_timestamp"></a><code>crdb_internal.approximate_timestamp(timestamp: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Converts the crdb_internal_mvcc_timestamp column into an approximate timestamp.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>

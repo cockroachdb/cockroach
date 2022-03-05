@@ -4558,6 +4558,28 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.active_version": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				activeVersion := ctx.Settings.Version.ActiveVersionOrEmpty(ctx.Context)
+				jsonStr, err := gojson.Marshal(&activeVersion.Version)
+				if err != nil {
+					return nil, err
+				}
+				jsonDatum, err := tree.ParseDJSON(string(jsonStr))
+				if err != nil {
+					return nil, err
+				}
+				return jsonDatum, nil
+			},
+			Info:       "Returns the current active cluster version.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.is_at_least_version": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
