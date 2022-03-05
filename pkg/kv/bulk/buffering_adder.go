@@ -11,6 +11,7 @@
 package bulk
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,6 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+var compOver = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"bulkio.ingest.compress_buffers_above",
+	"size above which a buffer of unsorted KVs is sorted and compressed during bulk ingestion",
+	32<<20,
 )
 
 // BufferingAdder is a wrapper for an SSTBatcher that allows out-of-order calls
@@ -39,7 +48,7 @@ type BufferingAdder struct {
 	timestamp hlc.Timestamp
 
 	// threshold at which buffered entries will be flushed to SSTBatcher.
-	curBufferSize int64
+	curBufferSize sz
 
 	// ceiling till which we can grow curBufferSize if bulkMon permits.
 	maxBufferSize func() int64
@@ -48,20 +57,24 @@ type BufferingAdder struct {
 	incrementBufferSize int64
 
 	// currently buffered kvs.
-	curBuf kvBuf
-	kvSize sz
+	curBuf  kvBuf
+	buffers sortedBuffers
+	kvSize  sz
+	sorted  bool
 
-	sorted bool
+	compressesBadly bool
 
-	initialSplits int
+	initialSplits   int
+	splitCandidates []roachpb.Key
 
 	lastFlush   time.Time
 	flushCounts struct {
-		total        int
-		bufferSize   int
-		totalSort    time.Duration
-		totalFlush   time.Duration
-		totalFilling time.Duration
+		total            int
+		bufferSize       int
+		totalSort        time.Duration
+		totalFlush       time.Duration
+		totalCompression time.Duration
+		totalFilling     time.Duration
 	}
 
 	// name of the BufferingAdder for the purpose of logging only.
@@ -110,7 +123,7 @@ func MakeBulkAdder(
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 		},
 		timestamp:           timestamp,
-		curBufferSize:       opts.MinBufferSize,
+		curBufferSize:       sz(opts.MinBufferSize),
 		maxBufferSize:       opts.MaxBufferSize,
 		incrementBufferSize: opts.StepBufferSize,
 		bulkMon:             bulkMon,
@@ -118,6 +131,9 @@ func MakeBulkAdder(
 		initialSplits:       opts.InitialSplitsIfUnordered,
 		lastFlush:           timeutil.Now(),
 	}
+
+	b.curBuf.Reset()
+	b.buffers.reset()
 
 	// If no monitor is attached to the instance of a bulk adder, we do not
 	// control its memory usage.
@@ -132,7 +148,7 @@ func MakeBulkAdder(
 	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
 	// it will store in-memory before sending it to RocksDB.
 	b.memAcc = bulkMon.MakeBoundAccount()
-	if err := b.memAcc.Grow(ctx, b.curBufferSize); err != nil {
+	if err := b.memAcc.Grow(ctx, int64(b.curBufferSize)); err != nil {
 		return nil, errors.WithHint(
 			errors.Wrap(err, "not enough memory available to create a BulkAdder"),
 			"Try setting a higher --max-sql-memory.")
@@ -149,11 +165,12 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 1,
-		"%s adder ingested %s (%s); spent %s filling, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v)",
+		"%s adder ingested %s (%s); spent %s filling, %v compressing, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v)",
 		b.name,
 		sz(b.sink.totalRows.DataSize),
 		sorted(b.sorted),
 		timing(b.flushCounts.totalFilling),
+		timing(b.flushCounts.totalCompression),
 		timing(b.flushCounts.totalSort),
 		timing(b.flushCounts.totalFlush),
 		timing(b.sink.flushCounts.flushWait),
@@ -183,7 +200,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 // Add adds a key to the buffer and checks if it needs to flush.
 func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
 	if b.sorted {
-		if l := len(b.curBuf.entries); l > 0 && key.Compare(b.curBuf.Key(l-1)) < 0 {
+		if l := len(b.curBuf.entries); l > 0 && key.Compare(b.curBuf.KeyAt(l-1)) < 0 {
 			b.sorted = false
 		}
 	}
@@ -192,49 +209,84 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 	}
 	b.kvSize += sz(len(key) + len(value))
 
-	if b.curBuf.MemSize > sz(b.curBufferSize) {
+	remaining := b.curBufferSize - b.bufferedMemSize()
+	if remaining <= 0 {
 		// This is an optimization to try and increase the current buffer size if
 		// our memory account permits it. This would lead to creation of a fewer
 		// number of SSTs.
 		//
 		// To prevent a single import from growing its buffer indefinitely we check
 		// if it has exceeded its upper bound.
-		if b.bulkMon != nil && b.curBufferSize < b.maxBufferSize() {
+		if b.bulkMon != nil && b.curBufferSize < sz(b.maxBufferSize()) {
 			if err := b.memAcc.Grow(ctx, b.incrementBufferSize); err != nil {
 				// If we are unable to reserve the additional memory then flush the
 				// buffer, and continue as normal.
 				return b.sizeFlush(ctx)
 			}
-			b.curBufferSize += b.incrementBufferSize
+			b.curBufferSize += sz(b.incrementBufferSize)
 		} else {
 			return b.sizeFlush(ctx)
+		}
+	}
+
+	// If we're buffering unsorted data that is not known to compress badly, check
+	// if the buffer is big enough to stop and compress it, both in absolute size
+	// that justifies compression overhead as well as in relative terms to the
+	// size of the budget. The fewer/bigger buffers we have to merge, the cheaper
+	// the merged is, so we want to buffer as much as we can. However, while we're
+	// compressing we will hold both the un-comopressed and compressed in memory
+	// at once, so we want to stop buffing once the remaining budget is *roughly*
+	// what we'll need to hold both.
+	shouldCompress := !b.sorted && !b.compressesBadly
+	if shouldCompress && b.curBuf.memSize > remaining && b.curBuf.memSize > sz(compOver.Get(&b.sink.settings.SV)) {
+		beforeSort := timeutil.Now()
+		sort.Sort(&b.curBuf)
+		beforeCompress := timeutil.Now()
+		b.flushCounts.totalSort += beforeCompress.Sub(beforeSort)
+
+		res, err := compressBuffer(&b.curBuf)
+		if err != nil {
+			return err
+		}
+		b.flushCounts.totalCompression += timeutil.Since(beforeCompress)
+
+		if shrunkTo := float64(res.MemSize()) / float64(b.curBuf.MemSize()); shrunkTo > 0.7 {
+			log.VEventf(ctx, 3, "%s adder disabling compression after buffer of %s KVs compressed from %s to %s (%.2g)",
+				b.name, b.kvSize, b.curBuf.MemSize(), res.MemSize(), shrunkTo)
+			b.compressesBadly = true
+		} else {
+			if b.initialSplits > 0 {
+				for i := 0; i < b.curBuf.Len(); i += b.curBuf.Len() / b.initialSplits {
+					b.splitCandidates = append(b.splitCandidates, b.curBuf.KeyAt(i).Clone())
+				}
+			}
+			if err := b.buffers.add(res); err != nil {
+				return err
+			}
+			b.curBuf.Reset()
 		}
 	}
 	return nil
 }
 
-func (b *BufferingAdder) bufferedKeys() int {
-	return len(b.curBuf.entries)
-}
-
 func (b *BufferingAdder) bufferedMemSize() sz {
-	return b.curBuf.MemSize
+	return b.curBuf.memSize + b.buffers.memSize
 }
 
 // CurrentBufferFill returns the current buffer fill percentage.
 func (b *BufferingAdder) CurrentBufferFill() float32 {
-	return float32(b.curBuf.MemSize) / float32(b.curBufferSize)
+	return float32(b.bufferedMemSize()) / float32(b.curBufferSize)
 }
 
 // IsEmpty returns true if the adder has no un-flushed data in its buffer.
 func (b *BufferingAdder) IsEmpty() bool {
-	return b.curBuf.Len() == 0
+	return len(b.curBuf.entries) == 0 && b.buffers.len == 0
 }
 
 func (b *BufferingAdder) sizeFlush(ctx context.Context) error {
 	b.flushCounts.bufferSize++
-	log.VEventf(ctx, 2, "%s adder triggering flush of %s of KVs in %s buffer",
-		b.name, b.kvSize, b.bufferedMemSize())
+	log.VEventf(ctx, 3, "%s adder triggering flush of %s of KVs in %s buffer (%s + %s in %d compressed bufs)",
+		b.name, b.kvSize, b.bufferedMemSize(), b.curBuf.memSize, b.buffers.memSize, len(b.buffers.iters))
 	return b.doFlush(ctx, true)
 }
 
@@ -246,28 +298,28 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	b.flushCounts.totalFilling += timeutil.Since(b.lastFlush)
 
-	if b.bufferedKeys() == 0 {
+	if b.IsEmpty() {
 		if b.onFlush != nil {
 			b.onFlush(b.sink.GetBatchSummary())
 		}
 		b.lastFlush = timeutil.Now()
 		return nil
 	}
-	if err := b.sink.Reset(ctx); err != nil {
-		return err
-	}
+
 	b.flushCounts.total++
 
 	before := b.sink.flushCounts
 	beforeSize := b.sink.totalRows.DataSize
 
 	beforeSort := timeutil.Now()
-
-	if !b.sorted {
-		sort.Sort(&b.curBuf)
+	if b.curBuf.Len() > 0 {
+		if !b.sorted {
+			sort.Sort(&b.curBuf)
+		}
+		if err := b.buffers.add(&b.curBuf); err != nil {
+			return err
+		}
 	}
-	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
-
 	beforeFlush := timeutil.Now()
 	b.flushCounts.totalSort += beforeFlush.Sub(beforeSort)
 
@@ -275,17 +327,27 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	// create initial splits if requested before flushing.
 	if b.initialSplits > 0 {
 		if forSize && !b.sorted {
+			// Add the latest buffer's split candidates then do splits.
+			for i := 0; i < b.curBuf.Len(); i += b.curBuf.Len() / b.initialSplits {
+				b.splitCandidates = append(b.splitCandidates, b.curBuf.KeyAt(i))
+			}
 			if err := b.createInitialSplits(ctx); err != nil {
 				return err
 			}
+			b.sink.initialSplitDone = true
 		}
 		// Disable doing initial splits going forward.
 		b.initialSplits = 0
+		b.splitCandidates = nil
 	}
 
-	for i := range b.curBuf.entries {
-		mvccKey.Key = b.curBuf.Key(i)
-		if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
+	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
+	if err := b.sink.Reset(ctx); err != nil {
+		return err
+	}
+	for b.buffers.Next() {
+		mvccKey.Key = b.buffers.Key()
+		if err := b.sink.AddMVCCKey(ctx, mvccKey, b.buffers.Value()); err != nil {
 			return err
 		}
 	}
@@ -304,8 +366,8 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 			"%s adder flushing %s (%s buffered/%0.2gx) wrote %d SSTs (avg: %s) with %d for splits, %d for size, took %v",
 			b.name,
 			b.kvSize,
-			b.curBuf.MemSize,
-			float64(b.kvSize)/float64(b.curBuf.MemSize),
+			b.buffers.memSize, // b.bufferedMemSize() would double-count curBuf.
+			float64(b.kvSize)/float64(b.buffers.memSize),
 			files,
 			sz(written/int64(files)),
 			dueToSplits,
@@ -316,11 +378,12 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if log.V(4) {
 		log.Infof(ctx,
-			"%s adder has ingested %s (%s); spent %s filling, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v)",
+			"%s adder has ingested %s (%s); spent %s filling, %v compressing, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v)",
 			b.name,
 			sz(b.sink.totalRows.DataSize),
 			sorted(b.sorted),
 			timing(b.flushCounts.totalFilling),
+			timing(b.flushCounts.totalCompression),
 			timing(b.flushCounts.totalSort),
 			timing(b.flushCounts.totalFlush),
 			timing(b.sink.flushCounts.flushWait),
@@ -348,20 +411,23 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		b.onFlush(b.sink.GetBatchSummary())
 	}
 	b.curBuf.Reset()
+	b.buffers.reset()
 	b.kvSize = 0
 	b.lastFlush = timeutil.Now()
 	return nil
 }
 
 func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
-	log.Infof(ctx, "%s adder creating up to %d initial splits from %d KVs in %s buffer",
-		b.name, b.initialSplits, b.curBuf.Len(), b.curBuf.MemSize)
+	log.Infof(ctx, "%s adder creating up to %d initial splits from %d collected candidates keys from %d KVs in %s buffer",
+		b.name, b.initialSplits, len(b.splitCandidates), b.buffers.len, b.buffers.memSize)
+
+	sort.Sort(keySlice(b.splitCandidates))
 
 	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
 	before := timeutil.Now()
 
 	created := 0
-	width := len(b.curBuf.entries) / b.initialSplits
+	width := len(b.splitCandidates) / b.initialSplits
 	for i := 0; i < b.initialSplits; i++ {
 		expire := hour
 		if i == 0 {
@@ -376,7 +442,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 
 		splitAt := i * width
-		if splitAt >= len(b.curBuf.entries) {
+		if splitAt >= len(b.splitCandidates) {
 			break
 		}
 		// Typically we split at splitAt if, and only if, its range still includes
@@ -388,17 +454,19 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		predicateAt := splitAt - width
 		if predicateAt < 0 {
 			next := splitAt + width
-			if next > len(b.curBuf.entries)-1 {
-				next = len(b.curBuf.entries) - 1
+			if next > len(b.splitCandidates)-1 {
+				next = len(b.splitCandidates) - 1
 			}
 			predicateAt = next
 		}
-		splitKey, err := keys.EnsureSafeSplitKey(b.curBuf.Key(splitAt))
+
+		splitKey, err := keys.EnsureSafeSplitKey(b.splitCandidates[splitAt])
 		if err != nil {
-			log.Warningf(ctx, "failed to generate pre-split key for key %s", b.curBuf.Key(splitAt))
+			log.Warningf(ctx, "failed to generate pre-split key for key %s", b.splitCandidates[splitAt])
 			continue
 		}
-		predicateKey := b.curBuf.Key(predicateAt)
+		predicateKey := b.splitCandidates[predicateAt]
+
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
 		resp, err := b.sink.db.SplitAndScatter(ctx, splitKey, expire, predicateKey)
 		if err != nil {
@@ -425,11 +493,16 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	}
 
 	log.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
-		b.name, created, timing(timeutil.Since(before)), b.curBuf.Len(), b.curBuf.MemSize)
+		b.name, created, timing(timeutil.Since(before)), b.buffers.len, b.buffers.memSize)
 
-	b.sink.initialSplitDone = true
 	return nil
 }
+
+type keySlice []roachpb.Key
+
+func (s keySlice) Len() int           { return len(s) }
+func (s keySlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *BufferingAdder) GetSummary() roachpb.BulkOpSummary {
