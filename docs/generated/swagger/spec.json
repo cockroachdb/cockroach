@@ -1580,12 +1580,12 @@
           "format": "int32",
           "x-go-name": "Internal"
         },
-        "major_val": {
+        "major": {
           "type": "integer",
           "format": "int32",
           "x-go-name": "Major"
         },
-        "minor_val": {
+        "minor": {
           "type": "integer",
           "format": "int32",
           "x-go-name": "Minor"
