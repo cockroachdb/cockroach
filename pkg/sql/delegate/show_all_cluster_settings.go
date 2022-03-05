@@ -25,10 +25,6 @@ func (d *delegator) delegateShowClusterSettingList(
 	if err != nil {
 		return nil, err
 	}
-	if stmt.TenantID.IsSet() {
-		return nil, unimplemented.NewWithIssue(73857,
-			`unimplemented: tenant-level cluster settings not supported`)
-	}
 	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return nil, err
@@ -53,4 +49,11 @@ func (d *delegator) delegateShowClusterSettingList(
      FROM   crdb_internal.cluster_settings
      WHERE  public IS TRUE`,
 	)
+}
+
+func (d *delegator) delegateShowTenantClusterSettingList(
+	stmt *tree.ShowTenantClusterSettingList,
+) (tree.Statement, error) {
+	return nil, unimplemented.NewWithIssue(73857,
+		`unimplemented: tenant-level cluster settings not supported`)
 }
