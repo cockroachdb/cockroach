@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -58,14 +57,23 @@ var (
 
 type sz int64
 
-func (b sz) String() string {
-	return redact.StringWithoutMarkers(b)
-}
+func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
+func (b sz) SafeValue()     {}
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (b sz) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print(humanizeutil.IBytes(int64(b)))
+type timing time.Duration
+
+func (t timing) String() string { return time.Duration(t).Round(time.Second).String() }
+func (t timing) SafeValue()     {}
+
+type sorted bool
+
+func (t sorted) String() string {
+	if t {
+		return "sorted"
+	}
+	return "unsorted"
 }
+func (t sorted) SafeValue() {}
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
 // SSTBatcher can be handed KVs repeatedly and will make them into SSTs that are
@@ -117,8 +125,9 @@ type SSTBatcher struct {
 		sstSize int
 		files   int // a single flush might create multiple files.
 
-		scatterMoved int64
+		scatterMoved sz
 
+		flushWait   time.Duration
 		sendWait    time.Duration
 		splitWait   time.Duration
 		scatterWait time.Duration
@@ -320,6 +329,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	if b.sstWriter.DataSize == 0 {
 		return nil
 	}
+	beforeFlush := timeutil.Now()
+
 	b.flushCounts.total++
 
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
@@ -333,7 +344,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		}
 	}
 
-	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
+	hour := hlc.Timestamp{WallTime: beforeFlush.Add(time.Hour).UnixNano()}
 
 	start := roachpb.Key(append([]byte(nil), b.batchStartKey...))
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
@@ -370,7 +381,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
 					if reply.Stats != nil {
-						b.flushCounts.scatterMoved += reply.Stats.Total()
+						b.flushCounts.scatterMoved += sz(reply.Stats.Total())
 					}
 				}
 			}
@@ -427,7 +438,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
 					if reply.Stats != nil {
-						b.flushCounts.scatterMoved += reply.Stats.Total()
+						b.flushCounts.scatterMoved += sz(reply.Stats.Total())
 					}
 				}
 				b.flushedToCurrentRange = 0
@@ -437,6 +448,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	b.rowCounter.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
+	b.flushCounts.flushWait += timeutil.Since(beforeFlush)
 	return nil
 }
 
