@@ -200,6 +200,37 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				require.Equal(t, ts3.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
 			},
 		},
+		{
+			// Set up such that multiple protection policies apply to the replica that
+			// has been marked as excluded from backups. Some protection policies can
+			// be ignored as they were "written by backups" and should not hold up GC
+			// on a replica whose data will not be picked up in a backup.
+			name: "exclude replica from backup",
+			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
+				r.mu.conf.ExcludeDataFromBackup = true
+				mp.asOf = r.store.Clock().Now().Next()
+				thresh := r.mu.state.GCThreshold
+				ts1 := thresh.Add(14*time.Second.Nanoseconds(), 0)
+				ts2 := thresh.Add(20*time.Second.Nanoseconds(), 0)
+				ts3 := thresh.Add(25*time.Second.Nanoseconds(), 0)
+				mp.protections = append(mp.protections, manualPTSReaderProtection{
+					sp: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionPolicies: []roachpb.ProtectionPolicy{
+						{ProtectedTimestamp: ts1, IgnoreIfExcludedFromBackup: true},
+						{ProtectedTimestamp: ts2, IgnoreIfExcludedFromBackup: true},
+						{ProtectedTimestamp: ts3}},
+				})
+				mp.shuffleAllProtectionTimestamps()
+				// We should allow gc to proceed up to the timestamp of the last
+				// protection policy that should not be ignored (t3) . This means we
+				// expect a GC timestamp 10 seconds after ts3.Prev() given the policy.
+				canGC, _, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
+				require.True(t, canGC)
+				require.False(t, newThreshold.Equal(oldThreshold))
+				require.Equal(t, ts3.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
+			},
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			tc := testContext{}

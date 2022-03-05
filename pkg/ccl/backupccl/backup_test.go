@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1790,7 +1791,7 @@ func createAndWaitForJob(
 		t, `INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
 		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progressBytes,
 	).Scan(&jobID)
-	jobutils.WaitForJob(t, db, jobID)
+	jobutils.WaitForJobToSucceed(t, db, jobID)
 }
 
 // TestBackupRestoreResume tests whether backup and restore jobs are properly
@@ -2015,7 +2016,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-			jobutils.WaitForJob(t, sqlDB, jobID)
+			jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 		}
 
 		sqlDB.CheckQueryResults(t,
@@ -2051,7 +2052,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 				sqlDB.CheckQueryResults(t, fmt.Sprintf("SHOW BACKUP '%s'", noOfflineDir), [][]string{})
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-			jobutils.WaitForJob(t, sqlDB, jobID)
+			jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 		}
 		sqlDB.CheckQueryResults(t,
 			`SELECT count(*) FROM pause.bank`,
@@ -2071,7 +2072,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error while running backup %+v", err)
 		}
-		jobutils.WaitForJob(t, sqlDB, backupJobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, backupJobID)
 
 		sqlDB.Exec(t, `DROP DATABASE data`)
 
@@ -9051,7 +9052,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 	}
 
 	// But the job should be restarted and succeed eventually.
-	jobutils.WaitForJob(t, sqlDB, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 
 	// Drop database and restore to ensure that the backup was successful.
 	sqlDB.Exec(t, `DROP DATABASE data`)
@@ -9398,7 +9399,7 @@ DROP INDEX foo@bar;
 	close(allowGC)
 
 	// Wait for the GC to complete.
-	jobutils.WaitForJob(t, sqlRunner, gcJobID)
+	jobutils.WaitForJobToSucceed(t, sqlRunner, gcJobID)
 	waitForTableSplit(t, conn, "foo", "test")
 
 	// This backup should succeed since the spans being backed up have a default
@@ -9640,7 +9641,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	}
 	args.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	args.ServerArgs.ExternalIODir = localExternalDir
-	tc := testcluster.StartTestCluster(t, 3, args)
+	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
 	tc.WaitForNodeLiveness(t)
@@ -9682,21 +9683,6 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-	const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
-	processedRegexp := regexp.MustCompile(processedPattern)
-
-	gcSoon := func() {
-		testutils.SucceedsSoon(t, func() error {
-			upsertUntilBackpressure()
-			s, repl := getStoreAndReplica(t, tc, conn, "foo", "defaultdb")
-			trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, false)
-			require.NoError(t, err)
-			if !processedRegexp.MatchString(trace.String()) {
-				return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)
-			}
-			return nil
-		})
-	}
 
 	waitForTableSplit(t, conn, "foo", "defaultdb")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
@@ -9708,7 +9694,15 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 
 	var tsBefore string
 	require.NoError(t, conn.QueryRow("SELECT cluster_logical_timestamp()").Scan(&tsBefore))
-	gcSoon()
+	upsertUntilBackpressure()
+	runGCAndCheckTrace(ctx, t, tc, conn, false /* skipShouldQueue */, "foo", "defaultdb", func(traceStr string) error {
+		const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+		processedRegexp := regexp.MustCompile(processedPattern)
+		if !processedRegexp.MatchString(traceStr) {
+			return errors.Errorf("%q does not match %q", traceStr, processedRegexp)
+		}
+		return nil
+	})
 
 	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo)
 	testutils.IsError(err, "must be after replica GC threshold")
@@ -9724,6 +9718,116 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 
 	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo)
 	require.NoError(t, err)
+}
+
+// TestExcludeDataFromBackupDoesNotHoldupGC tests that a table marked as
+// `exclude_data_from_backup` and with a protected timestamp record covering it
+// does not holdup GC, since its data is not going to be backed up.
+func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		DisableGCQueue:            true,
+		DisableLastProcessedCheck: true,
+	}
+	params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
+		EnableProtectedTimestampForMultiTenant: true}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	// speeds up the test
+	runner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	runner.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
+
+	runner.Exec(t, `CREATE DATABASE test;`)
+	runner.Exec(t, `CREATE TABLE test.foo (k INT PRIMARY KEY, v BYTES)`)
+
+	// Exclude the table from backup so that it does not hold up GC.
+	runner.Exec(t, `ALTER TABLE test.foo SET (exclude_data_from_backup = true)`)
+
+	const tableRangeMaxBytes = 1 << 18
+	runner.Exec(t, "ALTER TABLE test.foo CONFIGURE ZONE USING "+
+		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
+
+	rRand, _ := randutil.NewTestRand()
+	upsertUntilBackpressure := func() {
+		for {
+			_, err := conn.Exec("UPSERT INTO test.foo VALUES (1, $1)",
+				randutil.RandBytes(rRand, 1<<15))
+			if testutils.IsError(err, "backpressure") {
+				break
+			}
+			require.NoError(t, err)
+		}
+	}
+
+	// Wait for the span config fields to apply.
+	waitForTableSplit(t, conn, "foo", "test")
+	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
+		if !r.ExcludeDataFromBackup() {
+			return false, errors.New("waiting for exclude_data_from_backup to be applied")
+		}
+		conf := r.SpanConfig()
+		if conf.TTL() != 1*time.Second {
+			return false, errors.New("waiting for gc.ttlseconds to be applied")
+		}
+		if r.GetMaxBytes() != tableRangeMaxBytes {
+			return false, errors.New("waiting for range_max_bytes to be applied")
+		}
+		return true, nil
+	})
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow'`)
+	if _, err := conn.Exec(`BACKUP DATABASE test INTO $1`, localFoo); !testutils.IsError(err, "pause") {
+		t.Fatal(err)
+	}
+	// We pause the backup resumer before it plans its flow so this timestamp
+	// should be very close to the timestamp protected by the record written by
+	// the backup.
+	afterBackup := tc.Server(0).Clock().Now()
+	var jobID jobspb.JobID
+	err := conn.QueryRow(fmt.Sprintf(
+		`SELECT job_id FROM [show jobs] WHERE job_type = 'BACKUP'`)).Scan(&jobID)
+	require.NoError(t, err)
+	jobutils.WaitForJobToPause(t, runner, jobID)
+
+	// Ensure that the replica sees the ProtectionPolicies.
+	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
+		if len(r.SpanConfig().GCPolicy.ProtectionPolicies) == 0 {
+			return false, errors.New("no protection policy applied to replica")
+		}
+		return true, nil
+	})
+
+	// Now that the backup has written a PTS record protecting the database, we
+	// check that the replica corresponding to `test.foo` continue to GC data
+	// since it has been marked as `exclude_data_from_backup`.
+	upsertUntilBackpressure()
+	runGCAndCheckTrace(ctx, t, tc, conn, false /* skipShouldQueue */, "foo", "test", func(traceStr string) error {
+		const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+		processedRegexp := regexp.MustCompile(processedPattern)
+		if !processedRegexp.MatchString(traceStr) {
+			return errors.Errorf("%q does not match %q", traceStr, processedRegexp)
+		}
+		thresh := thresholdFromTrace(t, traceStr)
+		require.Truef(t, afterBackup.Less(thresh), "%v >= %v", afterBackup, thresh)
+		return nil
+	})
 }
 
 // TestBackupRestoreSystemUsers tests RESTORE SYSTEM USERS feature which allows user to

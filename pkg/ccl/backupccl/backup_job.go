@@ -529,6 +529,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		MaxRetries: 5,
 	}
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before_flow"); err != nil {
+		return err
+	}
+
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res roachpb.RowCount

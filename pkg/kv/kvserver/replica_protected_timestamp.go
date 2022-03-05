@@ -80,8 +80,16 @@ func (r *Replica) readProtectedTimestampsRLocked(
 	if err != nil {
 		return ts, err
 	}
+
+	excludeReplicaFromBackup := r.excludeReplicaFromBackupRLocked()
 	earliestTS := hlc.Timestamp{}
 	for _, protection := range protectionPolicies {
+		// If the replica has been marked to be excluded from backup, and the
+		// protection policy can be ignored for such a replica, then ignore it. This
+		// prevents this ProtectionPolicy from holding up GC over the replica.
+		if excludeReplicaFromBackup && protection.IgnoreIfExcludedFromBackup {
+			continue
+		}
 		// Check if the timestamp the record was trying to protect is strictly
 		// below the GCThreshold, in which case, we know the record does not apply.
 		if isValid := gcThreshold.LessEq(protection.ProtectedTimestamp); !isValid {
