@@ -364,7 +364,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		//
 		// We only do this splitting if the caller expects the sst_batcher to
 		// split and scatter the data as it ingests it i.e. splitAfter > 0.
-		if b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 && !b.initialSplitDone {
+		if !b.initialSplitDone && b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "failed to generate split key to separate ingestion span: %v", err)
 			} else {
@@ -380,8 +380,12 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 				} else {
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
-					if reply.Stats != nil {
-						b.flushCounts.scatterMoved += sz(reply.Stats.Total())
+					if reply.ScatteredStats != nil {
+						moved := sz(reply.ScatteredStats.Total())
+						b.flushCounts.scatterMoved += moved
+						if moved > 0 {
+							log.VEventf(ctx, 1, "starting split scattered %s in non-empty range %s", moved, reply.ScatteredSpan)
+						}
 					}
 				}
 			}
@@ -437,8 +441,12 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 					}
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
-					if reply.Stats != nil {
-						b.flushCounts.scatterMoved += sz(reply.Stats.Total())
+					if reply.ScatteredStats != nil {
+						moved := sz(reply.ScatteredStats.Total())
+						b.flushCounts.scatterMoved += moved
+						if moved > 0 {
+							log.VEventf(ctx, 1, "filled-range split scattered %s in non-empty range %s", moved, reply.ScatteredSpan)
+						}
 					}
 				}
 				b.flushedToCurrentRange = 0
