@@ -14,12 +14,12 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -27,11 +27,10 @@ import (
 // alterTenantSetClusterSettingNode represents an
 // ALTER TENANT ... SET CLUSTER SETTING statement.
 type alterTenantSetClusterSettingNode struct {
-	name      string
-	tenantID  roachpb.TenantID
-	tenantAll bool
-	st        *cluster.Settings
-	setting   settings.NonMaskedSetting
+	name     string
+	tenantID tree.TypedExpr // tenantID or nil for "all tenants"
+	st       *cluster.Settings
+	setting  settings.NonMaskedSetting
 	// If value is nil, the setting should be reset.
 	value tree.TypedExpr
 }
@@ -42,6 +41,18 @@ func (p *planner) AlterTenantSetClusterSetting(
 	ctx context.Context, n *tree.AlterTenantSetClusterSetting,
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
+
+	var typedTenantID tree.TypedExpr
+	if !n.TenantAll {
+		var dummyHelper tree.IndexedVarHelper
+		var err error
+		typedTenantID, err = p.analyzeExpr(
+			ctx, n.TenantID, nil, dummyHelper, types.Int, true, "ALTER TENANT SET CLUSTER SETTING "+name)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	st := p.EvalContext().Settings
 	v, ok := settings.Lookup(name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
@@ -74,7 +85,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 	}
 
 	node := alterTenantSetClusterSettingNode{
-		name: name, tenantID: n.TenantID, tenantAll: n.TenantAll, st: st,
+		name: name, tenantID: typedTenantID, st: st,
 		setting: setting, value: value,
 	}
 	return &node, nil
