@@ -98,6 +98,7 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
+  optional int64 job_id = 19 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
@@ -165,7 +166,7 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 19
+  // NEXTID: 20.
 }
 
 message StreamIngestionDataSpec {

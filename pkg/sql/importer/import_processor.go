@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var csvOutputTypes = []*types.T{
@@ -190,6 +191,7 @@ func newReadImportDataProcessor(
 
 // Start is part of the RowSource interface.
 func (idp *readImportDataProcessor) Start(ctx context.Context) {
+	ctx = logtags.AddTag(ctx, "job", idp.spec.JobID)
 	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
 	log.Infof(ctx, "starting read import")
 	// We don't have to worry about this go routine leaking because next we loop over progCh
