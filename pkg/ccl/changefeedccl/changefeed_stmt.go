@@ -64,7 +64,7 @@ var featureChangefeedEnabled = settings.RegisterBoolSetting(
 ).WithPublic()
 
 func init() {
-	sql.AddPlanHook(changefeedPlanHook)
+	sql.AddPlanHook("changefeed", changefeedPlanHook)
 	jobs.RegisterConstructor(
 		jobspb.TypeChangefeed,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {

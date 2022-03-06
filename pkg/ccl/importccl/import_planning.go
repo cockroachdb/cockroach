@@ -1192,5 +1192,5 @@ func (u *unsupportedStmtLogger) flush() error {
 }
 
 func init() {
-	sql.AddPlanHook(importPlanHook)
+	sql.AddPlanHook("import", importPlanHook)
 }

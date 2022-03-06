@@ -146,7 +146,7 @@ func ingestionPlanHook(
 }
 
 func init() {
-	sql.AddPlanHook(ingestionPlanHook)
+	sql.AddPlanHook("ingestion", ingestionPlanHook)
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamIngestion,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
