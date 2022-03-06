@@ -137,6 +137,25 @@ func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
 	return defaultValue
 }
 
+// ConstantWithMetamorphicTestChoice is like ConstantWithMetamorphicTestValue except
+// it returns a random choice (equally weighted) of the given values. The default
+// value is included in the random choice.
+//
+// The given name is used for logging.
+func ConstantWithMetamorphicTestChoice(
+	name string, defaultValue interface{}, otherValues ...interface{},
+) interface{} {
+	if metamorphicBuild {
+		values := append([]interface{}{defaultValue}, otherValues...)
+		rng.Lock()
+		defer rng.Unlock()
+		value := values[rng.r.Int63n(int64(len(values)))]
+		logMetamorphicValue(name, value)
+		return value
+	}
+	return defaultValue
+}
+
 func logMetamorphicValue(name string, value interface{}) {
 	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
 }
