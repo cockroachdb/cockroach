@@ -315,8 +315,8 @@ func (b *Bytes) ensureLengthForAppend(destIdx, newLen int) {
 // AppendSlice appends srcStartIdx inclusive and srcEndIdx exclusive []byte
 // values from src into the receiver starting at destIdx.
 func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
-	if b == src && srcStartIdx != srcEndIdx {
-		panic("AppendSlice when b == src is only supported when srcStartIdx == srcEndIdx")
+	if b == src {
+		panic("AppendSlice when b == src is not supported")
 	}
 	if b.isWindow {
 		panic("AppendSlice is called on a window into Bytes")
@@ -361,8 +361,8 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 // appendSliceWithSel appends all values specified in sel from the source into
 // the receiver starting at position destIdx.
 func (b *Bytes) appendSliceWithSel(src *Bytes, destIdx int, sel []int) {
-	if b == src && len(sel) != 0 {
-		panic("appendSliceWithSel when b == src is only supported when len(sel) == 0")
+	if b == src {
+		panic("appendSliceWithSel when b == src is not supported")
 	}
 	if b.isWindow {
 		panic("appendSliceWithSel is called on a window into Bytes")
