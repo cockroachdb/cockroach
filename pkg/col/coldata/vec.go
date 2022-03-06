@@ -91,8 +91,7 @@ type Vec interface {
 	// Vec.
 	// Refer to the SliceArgs comment for specifics and TestAppend for examples.
 	//
-	// Note: Append()'ing from a Vector into itself is only supported when
-	// args.SrcStartIdx == args.SrcEndIdx.
+	// Note: Append()'ing from a Vector into itself is not supported.
 	Append(SliceArgs)
 
 	// Copy uses SliceArgs to copy elements of a source Vec into this Vec. It is
