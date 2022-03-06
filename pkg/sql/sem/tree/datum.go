@@ -1525,8 +1525,7 @@ func (d *DBytes) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBytes) AmbiguousFormat() bool { return true }
 
-func writeAsHexString(ctx *FmtCtx, d *DBytes) {
-	b := string(*d)
+func writeAsHexString(ctx *FmtCtx, b string) {
 	for i := 0; i < len(b); i++ {
 		ctx.Write(stringencoding.RawHexMap[b[i]])
 	}
@@ -1537,7 +1536,7 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(`"\\x`)
-		writeAsHexString(ctx, d)
+		writeAsHexString(ctx, string(*d))
 		ctx.WriteString(`"`)
 	} else if f.HasFlags(fmtFormatByteLiterals) {
 		ctx.WriteByte('x')
@@ -1550,7 +1549,7 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 			ctx.WriteByte('\'')
 		}
 		ctx.WriteString("\\x")
-		writeAsHexString(ctx, d)
+		writeAsHexString(ctx, string(*d))
 		if withQuotes {
 			ctx.WriteByte('\'')
 		}
@@ -1559,6 +1558,96 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DBytes) Size() uintptr {
+	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+// DEncodedKey is the bytes Datum. The underlying type is a string because we want
+// the immutability, but this may contain arbitrary bytes.
+type DEncodedKey string
+
+// NewDEncodedKey is a helper routine to create a *DEncodedKey initialized from its
+// argument.
+func NewDEncodedKey(d DEncodedKey) *DEncodedKey {
+	return &d
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DEncodedKey) ResolvedType() *types.T {
+	return types.EncodedKey
+}
+
+// Compare implements the Datum interface.
+func (d *DEncodedKey) Compare(ctx *EvalContext, other Datum) int {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+// CompareError implements the Datum interface.
+func (d *DEncodedKey) CompareError(ctx *EvalContext, other Datum) (int, error) {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+// Prev implements the Datum interface.
+func (d *DEncodedKey) Prev(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DEncodedKey) Next(_ *EvalContext) (Datum, bool) {
+	return nil, true
+}
+
+// IsMax implements the Datum interface.
+func (*DEncodedKey) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DEncodedKey) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Min implements the Datum interface.
+func (d *DEncodedKey) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Max implements the Datum interface.
+func (d *DEncodedKey) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DEncodedKey) AmbiguousFormat() bool {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DEncodedKey) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(fmtPgwireFormat) {
+		ctx.WriteString(`"\\x`)
+		writeAsHexString(ctx, string(*d))
+		ctx.WriteString(`"`)
+	} else if f.HasFlags(fmtFormatByteLiterals) {
+		ctx.WriteByte('x')
+		ctx.WriteByte('\'')
+		_, _ = hex.NewEncoder(ctx).Write([]byte(*d))
+		ctx.WriteByte('\'')
+	} else {
+		withQuotes := !f.HasFlags(FmtFlags(lexbase.EncBareStrings))
+		if withQuotes {
+			ctx.WriteByte('\'')
+		}
+		ctx.WriteString("\\x")
+		writeAsHexString(ctx, string(*d))
+		if withQuotes {
+			ctx.WriteByte('\'')
+		}
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DEncodedKey) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
 }
 

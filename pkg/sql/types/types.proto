@@ -374,6 +374,10 @@ enum Family {
     //   Void
     VoidFamily = 26;
 
+    // EncodedKeyFamily is a special type family used internally for inverted
+    // index keys, which do not fully encode an object.
+    EncodedKeyFamily = 27;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
