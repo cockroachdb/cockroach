@@ -165,6 +165,7 @@ func backup(
 		planCtx,
 		execCtx,
 		dsp,
+		int64(job.ID()),
 		spans,
 		introducedSpans,
 		pkIDs,

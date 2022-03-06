@@ -38,6 +38,8 @@ import "roachpb/api.proto";
 // descriptor in the database, and doesn't emit any rows nor support
 // any post-processing.
 message BackfillerSpec {
+  optional int64 job_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+
   enum Type {
     Invalid = 0;
     Column = 1;
@@ -83,6 +85,8 @@ message BackfillerSpec {
   // Note that older nodes do not respect this flag so callers should
   // check MVCCAddSSTable before setting this option.
   optional bool write_at_batch_timestamp = 12 [(gogoproto.nullable) = false];
+
+  // NEXTID: 14.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -98,6 +102,7 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
+  optional int64 job_id = 19 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
@@ -165,7 +170,7 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 19
+  // NEXTID: 20.
 }
 
 message StreamIngestionDataSpec {
@@ -213,6 +218,7 @@ message StreamIngestionFrontierSpec {
 }
 
 message BackupDataSpec {
+  optional int64 job_id = 11 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
   repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
   optional string default_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "DefaultURI"];
@@ -229,6 +235,8 @@ message BackupDataSpec {
   // User who initiated the backup. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+
+  // NEXTID: 12.
 }
 
 message RestoreFileSpec {
@@ -263,6 +271,7 @@ message RestoreSpanEntry {
 }
 
 message RestoreDataSpec {
+  optional int64 job_id = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
   optional roachpb.FileEncryptionOptions encryption = 2;
   repeated TableRekey table_rekeys = 3 [(gogoproto.nullable) = false];
@@ -270,10 +279,11 @@ message RestoreDataSpec {
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
-  // NEXT ID: 6.
+  // NEXT ID: 7.
 }
 
 message SplitAndScatterSpec {
+  optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   message RestoreEntryChunk {
     repeated RestoreSpanEntry entries = 1 [(gogoproto.nullable) = false];
   }
@@ -281,6 +291,8 @@ message SplitAndScatterSpec {
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
   repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
   repeated TenantRekey tenant_rekeys = 3 [(gogoproto.nullable) = false];
+
+  // NEXTID: 5.
 }
 
 // ExporterSpec is the specification for a processor that consumes rows and
