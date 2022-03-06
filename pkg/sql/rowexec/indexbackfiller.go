@@ -347,6 +347,7 @@ func (ib *indexBackfiller) runBackfill(
 
 func (ib *indexBackfiller) Run(ctx context.Context) {
 	opName := "indexBackfillerProcessor"
+	ctx = logtags.AddTag(ctx, "job", ib.spec.JobID)
 	ctx = logtags.AddTag(ctx, opName, int(ib.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
 	defer span.Finish()
