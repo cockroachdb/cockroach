@@ -125,12 +125,6 @@ func applyMethodsAndVerify(
 			b1.copy(b1Source, destIdx, srcIdx)
 			b2[destIdx] = append([]byte(nil), b2Source[srcIdx]...)
 		case copySlice, appendSlice:
-			if m == appendSlice && selfReferencingSources {
-				// AppendSlice with selfReferencingSources is only supported
-				// when srcStartIdx == srcEndIdx, so we skip this method to
-				// avoid whittling down our destination slice.
-				continue
-			}
 			// Generate a length-inclusive destIdx.
 			destIdx := rng.Intn(n + 1)
 			srcStartIdx := rng.Intn(sourceN)
@@ -158,12 +152,6 @@ func applyMethodsAndVerify(
 				b2Slice[i] = append([]byte(nil), b2Slice[i]...)
 			}
 		case appendSliceWithSel:
-			if selfReferencingSources {
-				// appendSliceWithSel with selfReferencingSources is only
-				// supported when srcStartIdx == srcEndIdx, so we skip this
-				// method to avoid whittling down our destination slice.
-				continue
-			}
 			// Generate a length-inclusive destIdx.
 			destIdx := rng.Intn(n + 1)
 			var sel []int
@@ -287,7 +275,15 @@ func TestBytesRefImpl(t *testing.T) {
 		numCalls := 1 + rng.Intn(maxNumberOfCalls)
 		methods := make([]bytesMethod, 0, numCalls)
 		for i := 0; i < numCalls; i++ {
-			methods = append(methods, bytesMethods[rng.Intn(len(bytesMethods))])
+			m := bytesMethods[rng.Intn(len(bytesMethods))]
+			if selfReferencingSources {
+				// appendSlice and appendSliceWithSel are not supported with
+				// self-referencing sources.
+				for m == appendSlice || m == appendSliceWithSel {
+					m = bytesMethods[rng.Intn(len(bytesMethods))]
+				}
+			}
+			methods = append(methods, m)
 		}
 		if err := applyMethodsAndVerify(rng, flat, flatSource, reference, referenceSource, methods, selfReferencingSources); err != nil {
 			t.Logf("nRun = %d\n", nRun)
@@ -341,23 +337,6 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, 2, b1.Len())
 		require.Equal(t, "source bytes value", string(b1.Get(0)))
 		require.Equal(t, "hello again", string(b1.Get(1)))
-	})
-
-	t.Run("AppendZeroSlice", func(t *testing.T) {
-		// This test makes sure that b.maxSetIndex is updated correctly when we
-		// create a long flat bytes vector but not set all the values and then
-		// truncate the vector. The expected behavior is that offsets must be
-		// backfilled, and once a new value is appended, it should be
-		// retrievable.
-		b := NewBytes(5)
-		b.Set(0, []byte("zero"))
-		require.Equal(t, 5, b.Len())
-		b.AppendSlice(b, 3, 0, 0)
-		require.Equal(t, 3, b.Len())
-		b.AppendVal([]byte("three"))
-		require.Equal(t, 4, b.Len())
-		require.Equal(t, "zero", string(b.Get(0)))
-		require.Equal(t, "three", string(b.Get(3)))
 	})
 
 	t.Run("Copy", func(t *testing.T) {
