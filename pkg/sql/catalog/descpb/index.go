@@ -116,12 +116,12 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 }
 
 // InvertedColumnKeyType returns the type of the data element that is encoded
-// as the inverted index key. This is currently always Bytes.
+// as the inverted index key. This is currently always EncodedKey.
 //
 // Panics if the index is not inverted.
 func (desc *IndexDescriptor) InvertedColumnKeyType() *types.T {
 	if desc.Type != IndexDescriptor_INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
-	return types.Bytes
+	return types.EncodedKey
 }

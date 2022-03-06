@@ -1444,8 +1444,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		}
 
 		// We treat the fixed values for JSON and Array as DBytes.
-		leftVal := tree.DBytes(vals[0])
-		rightVal := tree.DBytes(vals[1])
+		leftVal := tree.DEncodedKey(vals[0])
+		rightVal := tree.DEncodedKey(vals[1])
 
 		zigzagJoin := memo.ZigzagJoinExpr{
 			On: filters,

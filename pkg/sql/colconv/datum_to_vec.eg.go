@@ -155,6 +155,15 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 				return datum.(*tree.DJSON).JSON
 			}
 		}
+	case types.EncodedKeyFamily:
+		switch ct.Width() {
+		case -1:
+		default:
+			return func(datum tree.Datum) interface{} {
+
+				return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DEncodedKey)))
+			}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 	default:
 		switch ct.Width() {

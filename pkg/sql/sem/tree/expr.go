@@ -1643,6 +1643,7 @@ func (node *Datums) String() string           { return AsString(node) }
 func (node *DBitArray) String() string        { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
+func (node *DEncodedKey) String() string      { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }
 func (node *DTime) String() string            { return AsString(node) }
 func (node *DTimeTZ) String() string          { return AsString(node) }

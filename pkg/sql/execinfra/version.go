@@ -64,17 +64,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 64
+const Version execinfrapb.DistSQLVersion = 65
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 63
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 65
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 65 (MinAcceptedVersion: 65)
+  - Processor columns for inverted index keys now are presented as having
+    a new EncodedKey type.
 
 - Version: 64 (MinAcceptedVersion: 63)
   - final_covar_samp, final_corr, and final_sqrdiff aggregate functions were

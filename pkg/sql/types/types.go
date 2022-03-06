@@ -463,6 +463,16 @@ var (
 		},
 	}
 
+	// EncodedKey is a special type used internally for inverted index keys, which
+	// do not fully encode an object.
+	EncodedKey = &T{
+		InternalType: InternalType{
+			Family: EncodedKeyFamily,
+			Oid:    oid.T_unknown,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -1392,6 +1402,7 @@ var familyNames = map[Family]string{
 	UnknownFamily:        "unknown",
 	UuidFamily:           "uuid",
 	VoidFamily:           "void",
+	EncodedKeyFamily:     "encodedkey",
 }
 
 // Name returns a user-friendly word indicating the family type.

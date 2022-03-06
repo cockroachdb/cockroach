@@ -71,7 +71,7 @@ func DecodeKeyValsToCols(
 			var isNull bool
 			key, isNull, scratch, err = decodeTableKeyToCol(
 				da, vecs, vecIdx, rowIdx,
-				keyCols[j].Type, key, keyCols[j].Direction, keyCols[j].IsInverted,
+				keyCols[j].Type, key, keyCols[j].Direction,
 				scratch,
 			)
 			foundNull = isNull || foundNull
@@ -95,7 +95,6 @@ func decodeTableKeyToCol(
 	valType *types.T,
 	key []byte,
 	dir descpb.IndexDescriptor_Direction,
-	isInverted bool,
 	scratch []byte,
 ) (_ []byte, _ bool, retScratch []byte, _ error) {
 	if (dir != descpb.IndexDescriptor_ASC) && (dir != descpb.IndexDescriptor_DESC) {
@@ -110,17 +109,6 @@ func decodeTableKeyToCol(
 	// Find the position of the target vector among the typed columns of its
 	// type.
 	colIdx := vecs.ColsMap[vecIdx]
-
-	// Inverted columns should not be decoded, but should instead be
-	// passed on as a DBytes datum.
-	if isInverted {
-		keyLen, err := encoding.PeekLength(key)
-		if err != nil {
-			return nil, false, scratch, err
-		}
-		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
-		return key[keyLen:], false, scratch, nil
-	}
 
 	var rkey []byte
 	var err error
@@ -202,6 +190,14 @@ func decodeTableKeyToCol(
 		jsonLen, err = encoding.PeekLength(key)
 		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, key[:jsonLen])
 		rkey = key[jsonLen:]
+	case types.EncodedKeyFamily:
+		// Don't attempt to decode the inverted key.
+		keyLen, err := encoding.PeekLength(key)
+		if err != nil {
+			return nil, false, scratch, err
+		}
+		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
+		rkey = key[keyLen:]
 	default:
 		var d tree.Datum
 		encDir := encoding.Ascending

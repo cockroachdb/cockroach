@@ -726,6 +726,9 @@ func (expr *DBool) Walk(_ Visitor) Expr { return expr }
 func (expr *DBytes) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DEncodedKey) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DDate) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
