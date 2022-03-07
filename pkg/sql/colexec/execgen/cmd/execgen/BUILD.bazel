@@ -81,6 +81,7 @@ go_library(
 go_binary(
     name = "execgen",
     embed = [":execgen_lib"],
+    gotags = ["metamorphic_disable"],
     visibility = ["//visibility:public"],
 )
 
