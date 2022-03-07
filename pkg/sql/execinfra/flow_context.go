@@ -34,11 +34,7 @@ type FlowCtx struct {
 
 	Cfg *ServerConfig
 
-	// ID is a unique identifier for a remote flow. It is mainly used as a key
-	// into the flowRegistry. Since local flows do not need to exist in the flow
-	// registry (no inbound stream connections need to be performed), they are not
-	// assigned ids. This is done for performance reasons, as local flows are
-	// more likely to be dominated by setup time.
+	// ID is a unique identifier for a flow.
 	ID execinfrapb.FlowID
 
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.

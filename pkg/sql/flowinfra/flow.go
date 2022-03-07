@@ -107,8 +107,14 @@ type Flow interface {
 	// canceled before all goroutines exit, it calls f.cancel().
 	Wait()
 
-	// IsLocal returns whether this flow does not have any remote execution.
+	// IsLocal returns whether this flow is being run as part of a local-only
+	// query.
 	IsLocal() bool
+
+	// HasInboundStreams returns whether this flow has any inbound streams (i.e.
+	// it is part of the distributed plan and other nodes are sending data to
+	// this flow).
+	HasInboundStreams() bool
 
 	// IsVectorized returns whether this flow will run with vectorized execution.
 	IsVectorized() bool
@@ -385,7 +391,7 @@ func (f *FlowBase) StartInternal(
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.
-	if !f.IsLocal() {
+	if f.HasInboundStreams() {
 		// Once we call RegisterFlow, the inbound streams become accessible; we must
 		// set up the WaitGroup counter before.
 		// The counter will be further incremented below to account for the
@@ -418,13 +424,18 @@ func (f *FlowBase) StartInternal(
 	// a vectorized flow with a parallel unordered synchronizer. That component
 	// starts goroutines on its own, so we need to preserve that fact so that we
 	// correctly wait in Wait().
-	f.startedGoroutines = f.startedGoroutines || len(f.startables) > 0 || len(processors) > 0 || !f.IsLocal()
+	f.startedGoroutines = f.startedGoroutines || len(f.startables) > 0 || len(processors) > 0 || f.HasInboundStreams()
 	return nil
 }
 
-// IsLocal returns whether this flow does not have any remote execution.
+// IsLocal returns whether this flow is being run as part of a local-only query.
 func (f *FlowBase) IsLocal() bool {
-	return len(f.inboundStreams) == 0
+	return f.Local
+}
+
+// HasInboundStreams returns whether this flow has any inbound streams.
+func (f *FlowBase) HasInboundStreams() bool {
+	return len(f.inboundStreams) != 0
 }
 
 // IsVectorized returns whether this flow will run with vectorized execution.
@@ -535,8 +546,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
-	// Local flows do not get registered.
-	if !f.IsLocal() && f.Started() {
+	if f.HasInboundStreams() && f.Started() {
 		f.flowRegistry.UnregisterFlow(f.ID)
 	}
 	f.status = flowFinished
@@ -556,8 +566,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
 func (f *FlowBase) cancel() {
-	// If the flow is local, there are no inbound streams to cancel.
-	if f.IsLocal() {
+	if !f.HasInboundStreams() {
 		return
 	}
 	// Pending streams have yet to be started; send an error to its receivers
