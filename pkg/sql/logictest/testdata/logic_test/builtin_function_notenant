@@ -47,6 +47,12 @@ SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
 ----
 true
 
+# Run a full consistency check across all ranges. 
+query B
+SELECT count(*) > 10 FROM crdb_internal.check_consistency(false, '', '')
+----
+true
+
 # Test crdb_internal commands which execute as root, but
 # only checks for permissions afterwards.
 subtest crdb_internal_privileged_only
