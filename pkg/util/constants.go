@@ -16,7 +16,6 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -84,15 +83,14 @@ var rng struct {
 	syncutil.Mutex
 }
 
-// DisableMetamorphicEnvVar can be used to disable metamorhpic tests for
+// DisableMetamorphicEnvVar can be used to disable metamorphic tests for
 // sub-processes. If it exists and is set to something truthy as defined by
 // strconv.ParseBool then metamorphic testing will not be enabled.
 const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
 
 func init() {
 	if buildutil.CrdbTestBuild {
-		disabled := envutil.EnvOrDefaultBool(DisableMetamorphicEnvVar, false)
-		if !disabled {
+		if !disableMetamorphicTesting {
 			rng.r, _ = randutil.NewTestRand()
 			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
 		}

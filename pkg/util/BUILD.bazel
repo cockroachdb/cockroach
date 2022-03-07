@@ -6,6 +6,8 @@ go_library(
     name = "util",
     srcs = [
         "constants.go",
+        "constants_metamorphic_disable.go",  # keep
+        "constants_metamorphic_enable.go",
         "every_n.go",
         "fast_int_map.go",
         "fast_int_set.go",  # keep
