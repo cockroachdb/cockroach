@@ -1,0 +1,136 @@
+exec-ddl
+CREATE TABLE t1 (
+	id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+	number INT8 NOT NULL,
+	hash STRING NOT NULL,
+	UNIQUE INDEX number_idx (number ASC),
+	INDEX hash_idx (hash ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t2 (
+	number INT8 NOT NULL PRIMARY KEY,
+	hash STRING NULL,
+	INDEX hash_index (hash ASC)
+)
+----
+
+# If we don't have high cardinality a topk is preferred.
+exec-ddl
+ALTER TABLE t1 INJECT STATISTICS '[
+ {
+        "columns": [
+            "hash"
+        ],
+        "created_at": "2022-02-21 19:32:56.04874",
+        "distinct_count": 1000000,
+        "histo_col_type": "STRING",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000000
+    },
+    {
+        "columns": [
+            "number"
+        ],
+        "created_at": "2022-02-21 19:32:56.04874",
+        "distinct_count": 994431,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000000
+    }
+    ]'
+----
+
+exec-ddl
+ALTER TABLE t2 INJECT STATISTICS '[
+    {
+        "columns": [
+            "number"
+        ],
+        "created_at": "2022-02-22 13:26:29.210178",
+        "distinct_count": 994430,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 1000000
+    },
+    {
+        "columns": [
+            "hash"
+        ],
+        "created_at": "2022-02-22 13:26:29.210178",
+        "distinct_count": 1000000,
+        "histo_col_type": "STRING",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 1000000
+    }
+]'
+----
+
+opt format=show-all
+SELECT
+  a.hash, a.number
+FROM
+  t1 AS a
+  INNER JOIN t2 AS b ON a.hash = b.hash
+ORDER BY
+  a.number DESC
+LIMIT
+  1
+----
+project
+ ├── columns: hash:3(string!null) number:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 2947.03157
+ ├── key: ()
+ ├── fd: ()-->(2,3)
+ ├── prune: (2,3)
+ └── limit
+      ├── columns: t.public.t1.number:2(int!null) t.public.t1.hash:3(string!null) t.public.t2.hash:7(string!null)
+      ├── internal-ordering: -2
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 2947.01157
+      ├── key: ()
+      ├── fd: ()-->(2,3,7), (7)==(3), (3)==(7)
+      ├── interesting orderings: (-2)
+      ├── inner-join (lookup t.public.t2@hash_index [as=b])
+      │    ├── columns: t.public.t1.number:2(int!null) t.public.t1.hash:3(string!null) t.public.t2.hash:7(string!null)
+      │    ├── key columns: [3] = [7]
+      │    ├── stats: [rows=1000000, distinct(3)=1e+06, null(3)=0, avgsize(3)=4, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+      │    ├── cost: 2946.99157
+      │    ├── fd: (2)-->(3), (3)==(7), (7)==(3)
+      │    ├── ordering: -2
+      │    ├── limit hint: 1.00
+      │    ├── prune: (2)
+      │    ├── interesting orderings: (+2) (+3) (+7)
+      │    ├── index-join t1
+      │    │    ├── columns: t.public.t1.number:2(int!null) t.public.t1.hash:3(string!null)
+      │    │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+      │    │    ├── cost: 742.971569
+      │    │    ├── key: (2)
+      │    │    ├── fd: (2)-->(3)
+      │    │    ├── ordering: -2
+      │    │    ├── limit hint: 100.00
+      │    │    ├── prune: (2,3)
+      │    │    ├── interesting orderings: (+2) (+3)
+      │    │    ├── unfiltered-cols: (1-5)
+      │    │    └── scan t.public.t1@number_idx,rev [as=a]
+      │    │         ├── columns: t.public.t1.id:1(uuid!null) t.public.t1.number:2(int!null)
+      │    │         ├── stats: [rows=1000000]
+      │    │         ├── cost: 137.951569
+      │    │         ├── key: (1)
+      │    │         ├── fd: (1)-->(2), (2)-->(1)
+      │    │         ├── ordering: -2
+      │    │         ├── limit hint: 100.00
+      │    │         ├── prune: (1,2)
+      │    │         └── interesting orderings: (+2)
+      │    └── filters (true)
+      └── const: 1 [type=int]

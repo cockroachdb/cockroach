@@ -1,0 +1,933 @@
+exec-ddl
+CREATE TABLE t1 (
+	id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+	number INT8 NOT NULL,
+	hash STRING NOT NULL,
+	UNIQUE INDEX number_idx (number ASC),
+	INDEX hash_idx (hash ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t2 (
+	number INT8 NOT NULL PRIMARY KEY,
+	hash STRING NULL,
+	INDEX hash_index (hash ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE t1 INJECT STATISTICS '[
+ {
+        "columns": [
+            "hash"
+        ],
+        "created_at": "2022-02-21 19:32:56.04874",
+        "distinct_count": 1000000,
+        "histo_col_type": "STRING",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000000
+    },
+    {
+        "columns": [
+            "number"
+        ],
+        "created_at": "2022-02-21 19:32:56.04874",
+        "distinct_count": 994431,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000000
+    }
+    ]'
+----
+
+exec-ddl
+ALTER TABLE t2 INJECT STATISTICS '[
+    {
+        "columns": [
+            "number"
+        ],
+        "created_at": "2022-02-22 13:26:29.210178",
+        "distinct_count": 994430,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 1000000
+    },
+    {
+        "columns": [
+            "hash"
+        ],
+        "created_at": "2022-02-22 13:26:29.210178",
+        "distinct_count": 1000000,
+        "histo_col_type": "STRING",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 1000000
+    }
+]'
+----
+
+# Disable GenerateTopK so we can see what 21.2 did
+optsteps disable=GenerateTopK
+SELECT
+  a.hash, a.number
+FROM
+  t1 AS a
+  LEFT JOIN t2 AS b ON a.hash = b.hash
+ORDER BY
+  a.number DESC
+LIMIT
+  1
+----
+================================================================================
+Initial expression
+  Cost: 2941164.02
+================================================================================
+  limit
+   ├── columns: hash:3!null number:2!null
+   ├── internal-ordering: -2
+   ├── cardinality: [0 - 1]
+   ├── stats: [rows=1]
+   ├── cost: 2941164.02
+   ├── key: ()
+   ├── fd: ()-->(2,3)
+   ├── ordering: -2 [actual: ]
+   ├── sort
+   │    ├── columns: a.number:2!null a.hash:3!null
+   │    ├── stats: [rows=1000000]
+   │    ├── cost: 2941164
+   │    ├── fd: (2)-->(3)
+   │    ├── ordering: -2
+   │    ├── limit hint: 1.00
+   │    └── project
+   │         ├── columns: a.number:2!null a.hash:3!null
+   │         ├── stats: [rows=1000000]
+   │         ├── cost: 2346291.04
+   │         ├── fd: (2)-->(3)
+   │         └── left-join (hash)
+   │              ├── columns: id:1!null a.number:2!null a.hash:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.number:6 b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+   │              ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+   │              ├── cost: 2336291.02
+   │              ├── key: (1,6)
+   │              ├── fd: (1)-->(2-5), (2)-->(1,3-5), (6)-->(7-9)
+   │              ├── scan t1 [as=a]
+   │              │    ├── columns: id:1!null a.number:2!null a.hash:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+   │              │    ├── stats: [rows=1000000, distinct(1)=1e+06, null(1)=0, avgsize(1)=4, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+   │              │    ├── cost: 1080024.82
+   │              │    ├── key: (1)
+   │              │    └── fd: (1)-->(2-5), (2)-->(1,3-5)
+   │              ├── scan t2 [as=b]
+   │              │    ├── columns: b.number:6!null b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+   │              │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+   │              │    ├── cost: 1060024.62
+   │              │    ├── key: (6)
+   │              │    └── fd: (6)-->(7-9)
+   │              └── filters
+   │                   └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+   └── 1
+================================================================================
+PruneJoinLeftCols
+  Cost: 2911163.72
+================================================================================
+   limit
+    ├── columns: hash:3!null number:2!null
+    ├── internal-ordering: -2
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 2941164.02
+  + ├── cost: 2911163.72
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    ├── ordering: -2 [actual: ]
+    ├── sort
+    │    ├── columns: a.number:2!null a.hash:3!null
+    │    ├── stats: [rows=1000000]
+  - │    ├── cost: 2941164
+  + │    ├── cost: 2911163.7
+    │    ├── fd: (2)-->(3)
+    │    ├── ordering: -2
+    │    ├── limit hint: 1.00
+    │    └── project
+    │         ├── columns: a.number:2!null a.hash:3!null
+    │         ├── stats: [rows=1000000]
+  - │         ├── cost: 2346291.04
+  + │         ├── cost: 2316290.74
+    │         ├── fd: (2)-->(3)
+    │         └── left-join (hash)
+  - │              ├── columns: id:1!null a.number:2!null a.hash:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5 b.number:6 b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+  + │              ├── columns: a.number:2!null a.hash:3!null b.number:6 b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+    │              ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  - │              ├── cost: 2336291.02
+  - │              ├── key: (1,6)
+  - │              ├── fd: (1)-->(2-5), (2)-->(1,3-5), (6)-->(7-9)
+  + │              ├── cost: 2306290.72
+  + │              ├── key: (2,6)
+  + │              ├── fd: (2)-->(3), (6)-->(7-9)
+    │              ├── scan t1 [as=a]
+  - │              │    ├── columns: id:1!null a.number:2!null a.hash:3!null a.crdb_internal_mvcc_timestamp:4 a.tableoid:5
+  - │              │    ├── stats: [rows=1000000, distinct(1)=1e+06, null(1)=0, avgsize(1)=4, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  - │              │    ├── cost: 1080024.82
+  - │              │    ├── key: (1)
+  - │              │    └── fd: (1)-->(2-5), (2)-->(1,3-5)
+  + │              │    ├── columns: a.number:2!null a.hash:3!null
+  + │              │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  + │              │    ├── cost: 1050024.52
+  + │              │    ├── key: (2)
+  + │              │    └── fd: (2)-->(3)
+    │              ├── scan t2 [as=b]
+    │              │    ├── columns: b.number:6!null b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+    │              │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+    │              │    ├── cost: 1060024.62
+    │              │    ├── key: (6)
+    │              │    └── fd: (6)-->(7-9)
+    │              └── filters
+    │                   └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+    └── 1
+================================================================================
+PruneJoinRightCols
+  Cost: 2881163.42
+================================================================================
+   limit
+    ├── columns: hash:3!null number:2!null
+    ├── internal-ordering: -2
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 2911163.72
+  + ├── cost: 2881163.42
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    ├── ordering: -2 [actual: ]
+    ├── sort
+    │    ├── columns: a.number:2!null a.hash:3!null
+    │    ├── stats: [rows=1000000]
+  - │    ├── cost: 2911163.7
+  + │    ├── cost: 2881163.4
+    │    ├── fd: (2)-->(3)
+    │    ├── ordering: -2
+    │    ├── limit hint: 1.00
+    │    └── project
+    │         ├── columns: a.number:2!null a.hash:3!null
+    │         ├── stats: [rows=1000000]
+  - │         ├── cost: 2316290.74
+  + │         ├── cost: 2286290.44
+    │         ├── fd: (2)-->(3)
+    │         └── left-join (hash)
+  - │              ├── columns: a.number:2!null a.hash:3!null b.number:6 b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+  + │              ├── columns: a.number:2!null a.hash:3!null b.hash:7
+    │              ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  - │              ├── cost: 2306290.72
+  - │              ├── key: (2,6)
+  - │              ├── fd: (2)-->(3), (6)-->(7-9)
+  + │              ├── cost: 2276290.42
+  + │              ├── fd: (2)-->(3)
+    │              ├── scan t1 [as=a]
+    │              │    ├── columns: a.number:2!null a.hash:3!null
+    │              │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+    │              │    ├── cost: 1050024.52
+    │              │    ├── key: (2)
+    │              │    └── fd: (2)-->(3)
+    │              ├── scan t2 [as=b]
+  - │              │    ├── columns: b.number:6!null b.hash:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+  + │              │    ├── columns: b.hash:7
+    │              │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  - │              │    ├── cost: 1060024.62
+  - │              │    ├── key: (6)
+  - │              │    └── fd: (6)-->(7-9)
+  + │              │    └── cost: 1030024.32
+    │              └── filters
+    │                   └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+    └── 1
+================================================================================
+PushLimitIntoProject
+  Cost: 2881163.42
+================================================================================
+  -limit
+  +project
+    ├── columns: hash:3!null number:2!null
+  - ├── internal-ordering: -2
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+    ├── cost: 2881163.42
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    ├── ordering: -2 [actual: ]
+  - ├── sort
+  - │    ├── columns: a.number:2!null a.hash:3!null
+  - │    ├── stats: [rows=1000000]
+  - │    ├── cost: 2881163.4
+  - │    ├── fd: (2)-->(3)
+  - │    ├── ordering: -2
+  - │    ├── limit hint: 1.00
+  - │    └── project
+  - │         ├── columns: a.number:2!null a.hash:3!null
+  - │         ├── stats: [rows=1000000]
+  - │         ├── cost: 2286290.44
+  - │         ├── fd: (2)-->(3)
+  - │         └── left-join (hash)
+  - │              ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  - │              ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  - │              ├── cost: 2276290.42
+  - │              ├── fd: (2)-->(3)
+  - │              ├── scan t1 [as=a]
+  - │              │    ├── columns: a.number:2!null a.hash:3!null
+  - │              │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  - │              │    ├── cost: 1050024.52
+  - │              │    ├── key: (2)
+  - │              │    └── fd: (2)-->(3)
+  - │              ├── scan t2 [as=b]
+  - │              │    ├── columns: b.hash:7
+  - │              │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  - │              │    └── cost: 1030024.32
+  - │              └── filters
+  - │                   └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+  - └── 1
+  + └── limit
+  +      ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  +      ├── internal-ordering: -2
+  +      ├── cardinality: [0 - 1]
+  +      ├── stats: [rows=1]
+  +      ├── cost: 2881163.4
+  +      ├── key: ()
+  +      ├── fd: ()-->(2,3,7)
+  +      ├── sort
+  +      │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  +      │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │    ├── cost: 2881163.38
+  +      │    ├── fd: (2)-->(3)
+  +      │    ├── ordering: -2
+  +      │    ├── limit hint: 1.00
+  +      │    └── left-join (hash)
+  +      │         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  +      │         ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │         ├── cost: 2276290.42
+  +      │         ├── fd: (2)-->(3)
+  +      │         ├── scan t1 [as=a]
+  +      │         │    ├── columns: a.number:2!null a.hash:3!null
+  +      │         │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  +      │         │    ├── cost: 1050024.52
+  +      │         │    ├── key: (2)
+  +      │         │    └── fd: (2)-->(3)
+  +      │         ├── scan t2 [as=b]
+  +      │         │    ├── columns: b.hash:7
+  +      │         │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │         │    └── cost: 1030024.32
+  +      │         └── filters
+  +      │              └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+  +      └── 1
+================================================================================
+PushLimitIntoJoinLeft
+  Cost: 2848663.53
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 2881163.42
+  + ├── cost: 2848663.53
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    ├── ordering: -2 [actual: ]
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── internal-ordering: -2
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 2881163.4
+  +      ├── cost: 2848663.51
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+         ├── sort
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 2881163.38
+  -      │    ├── fd: (2)-->(3)
+  -      │    ├── ordering: -2
+  +      │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  +      │    ├── cost: 2848663.49
+  +      │    ├── fd: ()-->(2,3,7)
+  +      │    ├── ordering: -2 [actual: ]
+         │    ├── limit hint: 1.00
+         │    └── left-join (hash)
+         │         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      │         ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  -      │         ├── cost: 2276290.42
+  -      │         ├── fd: (2)-->(3)
+  -      │         ├── scan t1 [as=a]
+  +      │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+  +      │         ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  +      │         ├── cost: 2848663.42
+  +      │         ├── fd: ()-->(2,3,7)
+  +      │         ├── limit
+         │         │    ├── columns: a.number:2!null a.hash:3!null
+  -      │         │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  -      │         │    ├── cost: 1050024.52
+  -      │         │    ├── key: (2)
+  -      │         │    └── fd: (2)-->(3)
+  +      │         │    ├── internal-ordering: -2
+  +      │         │    ├── cardinality: [0 - 1]
+  +      │         │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+  +      │         │    ├── cost: 1644897.49
+  +      │         │    ├── key: ()
+  +      │         │    ├── fd: ()-->(2,3)
+  +      │         │    ├── sort
+  +      │         │    │    ├── columns: a.number:2!null a.hash:3!null
+  +      │         │    │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  +      │         │    │    ├── cost: 1644897.47
+  +      │         │    │    ├── key: (2)
+  +      │         │    │    ├── fd: (2)-->(3)
+  +      │         │    │    ├── ordering: -2
+  +      │         │    │    ├── limit hint: 1.00
+  +      │         │    │    └── scan t1 [as=a]
+  +      │         │    │         ├── columns: a.number:2!null a.hash:3!null
+  +      │         │    │         ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  +      │         │    │         ├── cost: 1050024.52
+  +      │         │    │         ├── key: (2)
+  +      │         │    │         └── fd: (2)-->(3)
+  +      │         │    └── 1
+         │         ├── scan t2 [as=b]
+         │         │    ├── columns: b.hash:7
+         │         │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+         │         │    └── cost: 1030024.32
+         │         └── filters
+         │              └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+         └── 1
+================================================================================
+SimplifyLimitOrdering
+  Cost: 2848663.46
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 2848663.53
+  + ├── cost: 2848663.46
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    ├── ordering: -2 [actual: ]
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      ├── internal-ordering: -2
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 2848663.51
+  +      ├── cost: 2848663.44
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+  -      ├── sort
+  +      ├── left-join (hash)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  +      │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 2848663.49
+  +      │    ├── cost: 2848663.42
+         │    ├── fd: ()-->(2,3,7)
+  -      │    ├── ordering: -2 [actual: ]
+         │    ├── limit hint: 1.00
+  -      │    └── left-join (hash)
+  -      │         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+  -      │         ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │         ├── cost: 2848663.42
+  -      │         ├── fd: ()-->(2,3,7)
+  -      │         ├── limit
+  -      │         │    ├── columns: a.number:2!null a.hash:3!null
+  -      │         │    ├── internal-ordering: -2
+  -      │         │    ├── cardinality: [0 - 1]
+  -      │         │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+  -      │         │    ├── cost: 1644897.49
+  -      │         │    ├── key: ()
+  -      │         │    ├── fd: ()-->(2,3)
+  -      │         │    ├── sort
+  -      │         │    │    ├── columns: a.number:2!null a.hash:3!null
+  -      │         │    │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  -      │         │    │    ├── cost: 1644897.47
+  -      │         │    │    ├── key: (2)
+  -      │         │    │    ├── fd: (2)-->(3)
+  -      │         │    │    ├── ordering: -2
+  -      │         │    │    ├── limit hint: 1.00
+  -      │         │    │    └── scan t1 [as=a]
+  -      │         │    │         ├── columns: a.number:2!null a.hash:3!null
+  -      │         │    │         ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  -      │         │    │         ├── cost: 1050024.52
+  -      │         │    │         ├── key: (2)
+  -      │         │    │         └── fd: (2)-->(3)
+  -      │         │    └── 1
+  -      │         ├── scan t2 [as=b]
+  -      │         │    ├── columns: b.hash:7
+  -      │         │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  -      │         │    └── cost: 1030024.32
+  -      │         └── filters
+  -      │              └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+  +      │    ├── limit
+  +      │    │    ├── columns: a.number:2!null a.hash:3!null
+  +      │    │    ├── internal-ordering: -2
+  +      │    │    ├── cardinality: [0 - 1]
+  +      │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+  +      │    │    ├── cost: 1644897.49
+  +      │    │    ├── key: ()
+  +      │    │    ├── fd: ()-->(2,3)
+  +      │    │    ├── sort
+  +      │    │    │    ├── columns: a.number:2!null a.hash:3!null
+  +      │    │    │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  +      │    │    │    ├── cost: 1644897.47
+  +      │    │    │    ├── key: (2)
+  +      │    │    │    ├── fd: (2)-->(3)
+  +      │    │    │    ├── ordering: -2
+  +      │    │    │    ├── limit hint: 1.00
+  +      │    │    │    └── scan t1 [as=a]
+  +      │    │    │         ├── columns: a.number:2!null a.hash:3!null
+  +      │    │    │         ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  +      │    │    │         ├── cost: 1050024.52
+  +      │    │    │         ├── key: (2)
+  +      │    │    │         └── fd: (2)-->(3)
+  +      │    │    └── 1
+  +      │    ├── scan t2 [as=b]
+  +      │    │    ├── columns: b.hash:7
+  +      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │    │    └── cost: 1030024.32
+  +      │    └── filters
+  +      │         └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+         └── 1
+================================================================================
+SimplifyRootOrdering
+  Cost: 2848663.46
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+    ├── cost: 2848663.46
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+  - ├── ordering: -2 [actual: ]
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+         ├── cost: 2848663.44
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+         ├── left-join (hash)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+         │    ├── cost: 2848663.42
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.00
+         │    ├── limit
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    ├── internal-ordering: -2
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+         │    │    ├── cost: 1644897.49
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+         │    │    ├── sort
+         │    │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+         │    │    │    ├── cost: 1644897.47
+         │    │    │    ├── key: (2)
+         │    │    │    ├── fd: (2)-->(3)
+         │    │    │    ├── ordering: -2
+         │    │    │    ├── limit hint: 1.00
+         │    │    │    └── scan t1 [as=a]
+         │    │    │         ├── columns: a.number:2!null a.hash:3!null
+         │    │    │         ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+         │    │    │         ├── cost: 1050024.52
+         │    │    │         ├── key: (2)
+         │    │    │         └── fd: (2)-->(3)
+         │    │    └── 1
+         │    ├── scan t2 [as=b]
+         │    │    ├── columns: b.hash:7
+         │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+         │    │    └── cost: 1030024.32
+         │    └── filters
+         │         └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+         └── 1
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+GenerateLimitedScans
+  Cost: 1203777.07
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 2848663.46
+  + ├── cost: 1203777.07
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 2848663.44
+  +      ├── cost: 1203777.05
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+         ├── left-join (hash)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 2848663.42
+  +      │    ├── cost: 1203777.03
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.0
+  -      │    ├── limit
+  +      │    ├── index-join t1
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+  -      │    │    ├── internal-ordering: -2
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+  -      │    │    ├── cost: 1644897.49
+  +      │    │    ├── cost: 11.11
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+  -      │    │    ├── sort
+  -      │    │    │    ├── columns: a.number:2!null a.hash:3!null
+  -      │    │    │    ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  -      │    │    │    ├── cost: 1644897.47
+  -      │    │    │    ├── key: (2)
+  -      │    │    │    ├── fd: (2)-->(3)
+  -      │    │    │    ├── ordering: -2
+  -      │    │    │    ├── limit hint: 1.00
+  -      │    │    │    └── scan t1 [as=a]
+  -      │    │    │         ├── columns: a.number:2!null a.hash:3!null
+  -      │    │    │         ├── stats: [rows=1000000, distinct(2)=994431, null(2)=0, avgsize(2)=4, distinct(3)=1e+06, null(3)=0, avgsize(3)=4]
+  -      │    │    │         ├── cost: 1050024.52
+  -      │    │    │         ├── key: (2)
+  -      │    │    │         └── fd: (2)-->(3)
+  -      │    │    └── 1
+  +      │    │    └── scan t1@number_idx,rev [as=a]
+  +      │    │         ├── columns: id:1!null a.number:2!null
+  +      │    │         ├── limit: 1(rev)
+  +      │    │         ├── stats: [rows=1]
+  +      │    │         ├── cost: 5.05
+  +      │    │         ├── key: ()
+  +      │    │         └── fd: ()-->(1,2)
+         │    ├── scan t2 [as=b]
+         │    │    ├── columns: b.hash:7
+         │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+         │    │    └── cost: 1030024.32
+         │    └── filters
+         │         └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+         └── 1
+--------------------------------------------------------------------------------
+GenerateIndexScans (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+    ├── cost: 1203777.07
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+         ├── cost: 1203777.05
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+         ├── left-join (hash)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+         │    ├── cost: 1203777.03
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.00
+         │    ├── index-join t1
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+         │    │    ├── cost: 11.11
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+         │    │    └── scan t1@number_idx,rev [as=a]
+         │    │         ├── columns: id:1!null a.number:2!null
+         │    │         ├── limit: 1(rev)
+         │    │         ├── stats: [rows=1]
+         │    │         ├── cost: 5.05
+         │    │         ├── key: ()
+         │    │         └── fd: ()-->(1,2)
+  -      │    ├── scan t2 [as=b]
+  +      │    ├── scan t2@hash_index [as=b]
+         │    │    ├── columns: b.hash:7
+         │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+         │    │    └── cost: 1030024.32
+         │    └── filters
+         │         └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+         └── 1
+--------------------------------------------------------------------------------
+ReorderJoins (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+CommuteLeftJoin
+  Cost: 1042535.52
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 1203777.07
+  + ├── cost: 1042535.52
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 1203777.05
+  +      ├── cost: 1042535.5
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+  -      ├── left-join (hash)
+  +      ├── right-join (hash)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 1203777.03
+  +      │    ├── cost: 1042535.48
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.00
+  +      │    ├── scan t2 [as=b]
+  +      │    │    ├── columns: b.hash:7
+  +      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │    │    └── cost: 1030024.32
+         │    ├── index-join t1
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+         │    │    ├── cost: 11.11
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+         │    │    └── scan t1@number_idx,rev [as=a]
+         │    │         ├── columns: id:1!null a.number:2!null
+         │    │         ├── limit: 1(rev)
+         │    │         ├── stats: [rows=1]
+         │    │         ├── cost: 5.05
+         │    │         ├── key: ()
+         │    │         └── fd: ()-->(1,2)
+  -      │    ├── scan t2 [as=b]
+  -      │    │    ├── columns: b.hash:7
+  -      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  -      │    │    └── cost: 1030024.32
+         │    └── filters
+         │         └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+         └── 1
+================================================================================
+GenerateMergeJoins
+  Cost: 1041035.51
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 1042535.52
+  + ├── cost: 1041035.51
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 1042535.5
+  +      ├── cost: 1041035.49
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+  -      ├── right-join (hash)
+  +      ├── left-join (merge)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  +      │    ├── left ordering: +3
+  +      │    ├── right ordering: +7
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 1042535.48
+  +      │    ├── cost: 1041035.47
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.00
+  -      │    ├── scan t2 [as=b]
+  -      │    │    ├── columns: b.hash:7
+  -      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  -      │    │    └── cost: 1030024.32
+         │    ├── index-join t1
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+         │    │    ├── cost: 11.11
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+         │    │    └── scan t1@number_idx,rev [as=a]
+         │    │         ├── columns: id:1!null a.number:2!null
+         │    │         ├── limit: 1(rev)
+         │    │         ├── stats: [rows=1]
+         │    │         ├── cost: 5.05
+         │    │         ├── key: ()
+         │    │         └── fd: ()-->(1,2)
+  -      │    └── filters
+  -      │         └── a.hash:3 = b.hash:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+  +      │    ├── scan t2@hash_index [as=b]
+  +      │    │    ├── columns: b.hash:7
+  +      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │    │    ├── cost: 1030024.32
+  +      │    │    └── ordering: +7
+  +      │    └── filters (true)
+         └── 1
+================================================================================
+GenerateLookupJoins
+  Cost: 33.21
+================================================================================
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 1041035.51
+  + ├── cost: 33.21
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 1041035.49
+  +      ├── cost: 33.19
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+  -      ├── left-join (merge)
+  +      ├── left-join (lookup t2@hash_index [as=b])
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      │    ├── left ordering: +3
+  -      │    ├── right ordering: +7
+  +      │    ├── key columns: [3] = [7]
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 1041035.47
+  +      │    ├── cost: 33.17
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.00
+         │    ├── index-join t1
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+         │    │    ├── cost: 11.11
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+  +      │    │    ├── limit hint: 1.00
+         │    │    └── scan t1@number_idx,rev [as=a]
+         │    │         ├── columns: id:1!null a.number:2!null
+         │    │         ├── limit: 1(rev)
+         │    │         ├── stats: [rows=1]
+         │    │         ├── cost: 5.05
+         │    │         ├── key: ()
+  -      │    │         └── fd: ()-->(1,2)
+  -      │    ├── scan t2@hash_index [as=b]
+  -      │    │    ├── columns: b.hash:7
+  -      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  -      │    │    ├── cost: 1030024.32
+  -      │    │    └── ordering: +7
+  +      │    │         ├── fd: ()-->(1,2)
+  +      │    │         └── limit hint: 1.00
+         │    └── filters (true)
+         └── 1
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: hash:3!null number:2!null
+    ├── cardinality: [0 - 1]
+    ├── stats: [rows=1]
+  - ├── cost: 33.21
+  + ├── cost: 1039035.51
+    ├── key: ()
+    ├── fd: ()-->(2,3)
+    └── limit
+         ├── columns: a.number:2!null a.hash:3!null b.hash:7
+         ├── cardinality: [0 - 1]
+         ├── stats: [rows=1]
+  -      ├── cost: 33.19
+  +      ├── cost: 1039035.49
+         ├── key: ()
+         ├── fd: ()-->(2,3,7)
+  -      ├── left-join (lookup t2@hash_index [as=b])
+  +      ├── right-join (merge)
+         │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+  -      │    ├── key columns: [3] = [7]
+  +      │    ├── left ordering: +7
+  +      │    ├── right ordering: +3
+         │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+  -      │    ├── cost: 33.17
+  +      │    ├── cost: 1039035.47
+         │    ├── fd: ()-->(2,3,7)
+         │    ├── limit hint: 1.00
+  +      │    ├── scan t2@hash_index [as=b]
+  +      │    │    ├── columns: b.hash:7
+  +      │    │    ├── stats: [rows=1000000, distinct(7)=1e+06, null(7)=0, avgsize(7)=4]
+  +      │    │    ├── cost: 1030024.32
+  +      │    │    └── ordering: +7
+         │    ├── index-join t1
+         │    │    ├── columns: a.number:2!null a.hash:3!null
+         │    │    ├── cardinality: [0 - 1]
+         │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+         │    │    ├── cost: 11.11
+         │    │    ├── key: ()
+         │    │    ├── fd: ()-->(2,3)
+  -      │    │    ├── limit hint: 1.00
+         │    │    └── scan t1@number_idx,rev [as=a]
+         │    │         ├── columns: id:1!null a.number:2!null
+         │    │         ├── limit: 1(rev)
+         │    │         ├── stats: [rows=1]
+         │    │         ├── cost: 5.05
+         │    │         ├── key: ()
+  -      │    │         ├── fd: ()-->(1,2)
+  -      │    │         └── limit hint: 1.00
+  +      │    │         └── fd: ()-->(1,2)
+         │    └── filters (true)
+         └── 1
+================================================================================
+Final best expression
+  Cost: 33.21
+================================================================================
+  project
+   ├── columns: hash:3!null number:2!null
+   ├── cardinality: [0 - 1]
+   ├── stats: [rows=1]
+   ├── cost: 33.21
+   ├── key: ()
+   ├── fd: ()-->(2,3)
+   └── limit
+        ├── columns: a.number:2!null a.hash:3!null b.hash:7
+        ├── cardinality: [0 - 1]
+        ├── stats: [rows=1]
+        ├── cost: 33.19
+        ├── key: ()
+        ├── fd: ()-->(2,3,7)
+        ├── left-join (lookup t2@hash_index [as=b])
+        │    ├── columns: a.number:2!null a.hash:3!null b.hash:7
+        │    ├── key columns: [3] = [7]
+        │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+        │    ├── cost: 33.17
+        │    ├── fd: ()-->(2,3,7)
+        │    ├── limit hint: 1.00
+        │    ├── index-join t1
+        │    │    ├── columns: a.number:2!null a.hash:3!null
+        │    │    ├── cardinality: [0 - 1]
+        │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+        │    │    ├── cost: 11.11
+        │    │    ├── key: ()
+        │    │    ├── fd: ()-->(2,3)
+        │    │    ├── limit hint: 1.00
+        │    │    └── scan t1@number_idx,rev [as=a]
+        │    │         ├── columns: id:1!null a.number:2!null
+        │    │         ├── limit: 1(rev)
+        │    │         ├── stats: [rows=1]
+        │    │         ├── cost: 5.05
+        │    │         ├── key: ()
+        │    │         ├── fd: ()-->(1,2)
+        │    │         └── limit hint: 1.00
+        │    └── filters (true)
+        └── 1
