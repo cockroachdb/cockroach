@@ -13,12 +13,221 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 )
+
+// defaultTransferTimeout corresponds to the timeout period for the connection
+// migration process. If the timeout gets triggered, and we're in a non
+// recoverable state, the connection will be closed.
+const defaultTransferTimeout = 15 * time.Second
+
+func (f *forwarder) runTransfer() (retErr error) {
+	// There should not be concurrent transfers for the same forwarder.
+	f.mu.Lock()
+	if f.mu.isTransferring {
+		f.mu.Unlock()
+		return nil
+	}
+	f.mu.isTransferring = true
+	f.mu.Unlock()
+	defer func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.mu.isTransferring = false
+	}()
+
+	// Prepare the transfer:
+	// - recoverableConn indicates whether the connection is recoverable.
+	// - closerCh will be closed whenever the timeout handler returns.
+	var mu struct {
+		syncutil.Mutex
+		recoverableConn bool
+	}
+	mu.recoverableConn = true
+	closerCh := make(chan struct{})
+
+	// Start the timeout handler the moment we attempt the transfer.
+	f.metrics.ConnMigrationAttemptedCount.Inc(1)
+	timeout := defaultTransferTimeout
+	if f.testingKnobs.transferTimeoutDuration != nil {
+		timeout = f.testingKnobs.transferTimeoutDuration()
+	}
+	transferCtx, cancel := context.WithTimeout(f.ctx, timeout) // nolint:context
+
+	// Use a separate context for logging because f.ctx will be closed whenever
+	// the connection is non-recoverable.
+	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(f.ctx))
+	defer func() {
+		// Block until timeout goroutine has terminated.
+		<-closerCh
+
+		// Non-recoverable.
+		if f.ctx.Err() != nil {
+			log.Infof(logCtx, "transfer failed: connection closed, err=%v", retErr)
+			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
+		} else {
+			// Transfer was successful.
+			if retErr == nil {
+				log.Infof(logCtx, "transfer successful")
+				f.metrics.ConnMigrationSuccessCount.Inc(1)
+			} else {
+				log.Infof(logCtx, "transfer failed: connection recovered, err=%v", retErr)
+				f.metrics.ConnMigrationErrorRecoverableCount.Inc(1)
+			}
+			f.resumeProcessors()
+		}
+	}()
+	defer cancel()
+
+	// Use a goroutine to check whether the connection is recoverable when
+	// transferCtx is done (either through a timeout, or when runTransfer
+	// returns).
+	go func() {
+		<-transferCtx.Done()
+		mu.Lock()
+		defer mu.Unlock()
+		if !mu.recoverableConn {
+			f.Close()
+		}
+		close(closerCh)
+	}()
+
+	// Suspend request processor.
+	f.req.Suspend()
+	f.req.WaitUntilSuspended()
+
+	// Context was cancelled.
+	if transferCtx.Err() != nil {
+		return transferCtx.Err()
+	}
+
+	// Can we perform the transfer?
+	if !f.isSafeTransferPoint() {
+		return errors.New("transfer is unsafe")
+	}
+
+	// Suspend the response processor first before sending the transfer request.
+	// If we don't do this, transfer responses may be sent to the client, which
+	// is incorrect.
+	f.res.Suspend()
+
+	transferKey := uuid.MakeV4().String()
+
+	// Send the SHOW TRANSFER STATE statement, and mark connection as
+	// non-recoverable.
+	mu.Lock()
+	mu.recoverableConn = false
+	mu.Unlock()
+	if err := runShowTransferState(f.mu.serverConn, transferKey); err != nil {
+		return errors.Wrap(err, "sending transfer request")
+	}
+
+	// Wait for response processor to terminate.
+	f.res.WaitUntilSuspended()
+
+	if transferCtx.Err() != nil {
+		return transferCtx.Err()
+	}
+
+	// Process the transfer.
+	transferErr, state, revivalToken, err := waitForShowTransferState(
+		transferCtx, f.mu.serverConn, f.clientConn, transferKey)
+	if err != nil {
+		return errors.Wrap(err, "waiting for transfer state")
+	}
+
+	// Updating the state also means that failures after this point are
+	// recoverable (i.e. connections should not be terminated).
+	mu.Lock()
+	mu.recoverableConn = true
+	mu.Unlock()
+
+	// If we managed to consume until ReadyForQuery without errors, but the
+	// transfer state response returns an error, we could still continue with
+	// the connection, but the transfer process will need to be aborted.
+	//
+	// This case may happen pretty frequently (e.g. open transactions, temporary
+	// tables, etc.).
+	if transferErr != "" {
+		return errors.Newf("%s", transferErr)
+	}
+
+	// Connect to a new SQL pod.
+	//
+	// TODO(jaylim-crl): There is a possibility where the same pod will get
+	// selected. Some ideas to solve this: pass in the remote address of
+	// serverConn to avoid choosing that pod, or maybe a filter callback?
+	// We can also consider adding a target pod as an argument to RequestTransfer.
+	// That way a central component gets to choose where the connections go.
+	netConn, err := f.connector.OpenTenantConnWithToken(transferCtx, revivalToken)
+	if err != nil {
+		return errors.Wrap(err, "opening connection")
+	}
+	defer func() {
+		if retErr != nil {
+			netConn.Close()
+		}
+	}()
+	newServerConn := interceptor.NewFrontendConn(netConn)
+
+	// Deserialize session state within the new SQL pod.
+	if err := runAndWaitForDeserializeSession(transferCtx, newServerConn, state); err != nil {
+		return errors.Wrap(err, "deserializing session")
+	}
+
+	// Transfer was successful - use the new server connections.
+	f.mu.Lock()
+	f.mu.serverConn.Close()
+	f.mu.serverConn = newServerConn
+	f.mu.clientMessageTypeSent = clientMsgAny
+	f.mu.isServerMsgReadyReceived = true
+	f.mu.Unlock()
+	return nil
+}
+
+// isSafeTransferPoint returns true if we're at a point where we're safe to
+// transfer, and false otherwise. This should only be called during the
+// transferRequested state.
+func (f *forwarder) isSafeTransferPoint() bool {
+	if f.testingKnobs.isSafeTransferPoint != nil {
+		return f.testingKnobs.isSafeTransferPoint()
+	}
+	// Three conditions when evaluating a safe transfer point:
+	//   1. The last message sent to the SQL pod was a Sync(S) or
+	//      SimpleQuery(Q), and a ReadyForQuery(Z) has already been
+	//      received at the time of evaluation.
+	//   2. The last message sent to the SQL pod was a CopyDone(c), and
+	//      a ReadyForQuery(Z) has already been received at the time of
+	//      evaluation.
+	//   3. The last message sent to the SQL pod was a CopyFail(f), and
+	//      a ReadyForQuery(Z) has already been received at the time of
+	//      evaluation.
+	//
+	// NOTE: clientMessageTypeSent does not require a mutex because it is only
+	// set in the transferInProgress state, and this method should only be
+	// called in the transferRequested state.
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch f.mu.clientMessageTypeSent {
+	case clientMsgAny,
+		pgwirebase.ClientMsgSync,
+		pgwirebase.ClientMsgSimpleQuery,
+		pgwirebase.ClientMsgCopyDone,
+		pgwirebase.ClientMsgCopyFail:
+		return f.mu.isServerMsgReadyReceived
+	default:
+		return false
+	}
+}
 
 // runShowTransferState sends a SHOW TRANSFER STATE query with the input
 // transferKey to the given writer. The transferKey will be used to uniquely
@@ -45,7 +254,7 @@ func runShowTransferState(w io.Writer, transferKey string) error {
 // context of a transfer, the client-to-server processor must be blocked.
 var waitForShowTransferState = func(
 	ctx context.Context,
-	serverInterceptor *interceptor.FrontendInterceptor,
+	serverConn *interceptor.FrontendConn,
 	clientConn io.Writer,
 	transferKey string,
 ) (transferErr string, state string, revivalToken string, retErr error) {
@@ -66,7 +275,7 @@ var waitForShowTransferState = func(
 	// 1. Wait for the relevant RowDescription.
 	if err := waitForSmallRowDescription(
 		ctx,
-		serverInterceptor,
+		serverConn,
 		clientConn,
 		func(msg *pgproto3.RowDescription) bool {
 			// Do we have the right number of columns?
@@ -92,7 +301,7 @@ var waitForShowTransferState = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverInterceptor, func(msg *pgproto3.DataRow) bool {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow) bool {
 		// This has to be 4 since we validated RowDescription earlier.
 		if len(msg.Values) != 4 {
 			return false
@@ -116,12 +325,12 @@ var waitForShowTransferState = func(
 	}
 
 	// 3. Read CommandComplete.
-	if err := expectCommandComplete(ctx, serverInterceptor, "SHOW TRANSFER STATE 1"); err != nil {
+	if err := expectCommandComplete(ctx, serverConn, "SHOW TRANSFER STATE 1"); err != nil {
 		return "", "", "", errors.Wrap(err, "expecting CommandComplete")
 	}
 
 	// 4. Read ReadyForQuery.
-	if err := expectReadyForQuery(ctx, serverInterceptor); err != nil {
+	if err := expectReadyForQuery(ctx, serverConn); err != nil {
 		return "", "", "", errors.Wrap(err, "expecting ReadyForQuery")
 	}
 
@@ -138,10 +347,7 @@ var waitForShowTransferState = func(
 // WARNING: When using this, we assume that no other goroutines are using both
 // serverConn and clientConn, and their respective interceptors.
 var runAndWaitForDeserializeSession = func(
-	ctx context.Context,
-	serverConn io.Writer,
-	serverInterceptor *interceptor.FrontendInterceptor,
-	state string,
+	ctx context.Context, serverConn *interceptor.FrontendConn, state string,
 ) error {
 	// Send deserialization query.
 	if err := writeQuery(serverConn,
@@ -169,7 +375,7 @@ var runAndWaitForDeserializeSession = func(
 	//    so we can guarantee that there won't be pipelined queries.
 	if err := waitForSmallRowDescription(
 		ctx,
-		serverInterceptor,
+		serverConn,
 		&errWriter{},
 		func(msg *pgproto3.RowDescription) bool {
 			return len(msg.Fields) == 1 &&
@@ -180,19 +386,19 @@ var runAndWaitForDeserializeSession = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverInterceptor, func(msg *pgproto3.DataRow) bool {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow) bool {
 		return len(msg.Values) == 1 && string(msg.Values[0]) == "t"
 	}); err != nil {
 		return errors.Wrap(err, "expecting DataRow")
 	}
 
 	// 3. Read CommandComplete.
-	if err := expectCommandComplete(ctx, serverInterceptor, "SELECT 1"); err != nil {
+	if err := expectCommandComplete(ctx, serverConn, "SELECT 1"); err != nil {
 		return errors.Wrap(err, "expecting CommandComplete")
 	}
 
 	// 4. Read ReadyForQuery.
-	if err := expectReadyForQuery(ctx, serverInterceptor); err != nil {
+	if err := expectReadyForQuery(ctx, serverConn); err != nil {
 		return errors.Wrap(err, "expecting ReadyForQuery")
 	}
 
@@ -217,8 +423,8 @@ func writeQuery(w io.Writer, format string, a ...interface{}) error {
 // message that we're waiting.
 func waitForSmallRowDescription(
 	ctx context.Context,
-	interceptor *interceptor.FrontendInterceptor,
-	conn io.Writer,
+	serverConn *interceptor.FrontendConn,
+	clientConn io.Writer,
 	matchFn func(*pgproto3.RowDescription) bool,
 ) error {
 	// Since we're waiting for the first message that matches the given
@@ -228,7 +434,7 @@ func waitForSmallRowDescription(
 			return ctx.Err()
 		}
 
-		typ, size, err := interceptor.PeekMsg()
+		typ, size, err := serverConn.PeekMsg()
 		if err != nil {
 			return errors.Wrap(err, "peeking message")
 		}
@@ -237,7 +443,7 @@ func waitForSmallRowDescription(
 		// or a previous pipelined query, so return an error.
 		if typ == pgwirebase.ServerMsgErrorResponse {
 			// Error messages are small, so read for debugging purposes.
-			msg, err := interceptor.ReadMsg()
+			msg, err := serverConn.ReadMsg()
 			if err != nil {
 				return errors.Wrap(err, "ambiguous ErrorResponse")
 			}
@@ -253,13 +459,13 @@ func waitForSmallRowDescription(
 		// right away.
 		const maxSmallMsgSize = 1 << 12 // 4KB
 		if typ != pgwirebase.ServerMsgRowDescription || size > maxSmallMsgSize {
-			if _, err := interceptor.ForwardMsg(conn); err != nil {
+			if _, err := serverConn.ForwardMsg(clientConn); err != nil {
 				return errors.Wrap(err, "forwarding message")
 			}
 			continue
 		}
 
-		msg, err := interceptor.ReadMsg()
+		msg, err := serverConn.ReadMsg()
 		if err != nil {
 			return errors.Wrap(err, "reading RowDescription")
 		}
@@ -277,7 +483,7 @@ func waitForSmallRowDescription(
 
 		// Matching fails, so forward the message back to the client, and
 		// continue searching.
-		if _, err := conn.Write(msg.Encode(nil)); err != nil {
+		if _, err := clientConn.Write(msg.Encode(nil)); err != nil {
 			return errors.Wrap(err, "writing message")
 		}
 	}
@@ -296,13 +502,13 @@ func waitForSmallRowDescription(
 // whereas for the latter, the response is expected to be small.
 func expectDataRow(
 	ctx context.Context,
-	interceptor *interceptor.FrontendInterceptor,
+	serverConn *interceptor.FrontendConn,
 	validateFn func(*pgproto3.DataRow) bool,
 ) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	msg, err := interceptor.ReadMsg()
+	msg, err := serverConn.ReadMsg()
 	if err != nil {
 		return errors.Wrap(err, "reading message")
 	}
@@ -320,12 +526,12 @@ func expectDataRow(
 // a CommandComplete message with the input tag, and returns an error if it
 // isn't.
 func expectCommandComplete(
-	ctx context.Context, interceptor *interceptor.FrontendInterceptor, tag string,
+	ctx context.Context, serverConn *interceptor.FrontendConn, tag string,
 ) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	msg, err := interceptor.ReadMsg()
+	msg, err := serverConn.ReadMsg()
 	if err != nil {
 		return errors.Wrap(err, "reading message")
 	}
@@ -338,11 +544,11 @@ func expectCommandComplete(
 
 // expectReadyForQuery expects that the next message from the interceptor is a
 // ReadyForQuery message, and returns an error if it isn't.
-func expectReadyForQuery(ctx context.Context, interceptor *interceptor.FrontendInterceptor) error {
+func expectReadyForQuery(ctx context.Context, serverConn *interceptor.FrontendConn) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	msg, err := interceptor.ReadMsg()
+	msg, err := serverConn.ReadMsg()
 	if err != nil {
 		return errors.Wrap(err, "reading message")
 	}

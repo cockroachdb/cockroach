@@ -154,18 +154,18 @@ var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttl
 // other end, the writer should be the same connection. That way, a
 // sqlproxyccl.Conn can be used to read-from, or write-to the same component.
 var readTokenAuthResult = func(serverConn net.Conn) error {
-	// This interceptor is discarded once this function returns. Just like
-	// pgproto3.NewFrontend, this interceptor has an internal buffer.
+	// This is discarded once this function returns. Just like
+	// pgproto3.NewFrontend, this frontendConn has an internal buffer.
 	// Discarding the buffer is fine since there won't be any other messages
 	// from the server once we receive the ReadyForQuery message because the
 	// caller (i.e. proxy) does not forward client messages until then.
-	serverInterceptor := interceptor.NewFrontendInterceptor(serverConn)
+	frontendConn := interceptor.NewFrontendConn(serverConn)
 
 	// The auth step should require only a few back and forths so 20 iterations
 	// should be enough.
 	var i int
 	for ; i < 20; i++ {
-		backendMsg, err := serverInterceptor.ReadMsg()
+		backendMsg, err := frontendConn.ReadMsg()
 		if err != nil {
 			return newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
 		}

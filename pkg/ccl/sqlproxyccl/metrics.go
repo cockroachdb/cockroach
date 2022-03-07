@@ -25,7 +25,6 @@ type metrics struct {
 	SuccessfulConnCount                *metric.Counter
 	AuthFailedCount                    *metric.Counter
 	ExpiredClientConnCount             *metric.Counter
-	ConnMigrationRequestedCount        *metric.Counter
 	ConnMigrationSuccessCount          *metric.Counter
 	ConnMigrationErrorFatalCount       *metric.Counter
 	ConnMigrationErrorRecoverableCount *metric.Counter
@@ -101,13 +100,7 @@ var (
 	}
 	// Connection migration metrics.
 	//
-	// requested ~= success + error_fatal + error_recoverable
-	metaConnMigrationRequestedCount = metric.Metadata{
-		Name:        "proxy.conn_migration.requested",
-		Help:        "Number of requested connection migrations",
-		Measurement: "Connection Migrations",
-		Unit:        metric.Unit_COUNT,
-	}
+	// requested = success + error_fatal + error_recoverable
 	metaConnMigrationSuccessCount = metric.Metadata{
 		Name:        "proxy.conn_migration.success",
 		Help:        "Number of successful connection migrations",
@@ -157,7 +150,6 @@ func makeProxyMetrics() metrics {
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
 		// Connection migration metrics.
-		ConnMigrationRequestedCount:        metric.NewCounter(metaConnMigrationRequestedCount),
 		ConnMigrationSuccessCount:          metric.NewCounter(metaConnMigrationSuccessCount),
 		ConnMigrationErrorFatalCount:       metric.NewCounter(metaConnMigrationErrorFatalCount),
 		ConnMigrationErrorRecoverableCount: metric.NewCounter(metaConnMigrationErrorRecoverableCount),

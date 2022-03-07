@@ -11,76 +11,21 @@ package sqlproxyccl
 import (
 	"context"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
-
-const (
-	// stateReady represents the state where the forwarder is ready to forward
-	// packets from the client to the server (and vice-versa).
-	stateReady int = iota
-
-	// stateTransferRequested represents the state where a session transfer was
-	// requested.
-	stateTransferRequested
-
-	// stateTransferSession{Serialization,Deserialization} represents state
-	// where the connection migration is in-progress, and all incoming pgwire
-	// messages are buffered in the kernel's socket buffer. The client will be
-	// blocked until the migration process completes.
-	//
-	// Once we transition into the SessionSerialization state, the connection
-	// is not recoverable if there was a non-SQL error. Only when we move into
-	// the SessionDeserialization state, the connection will be recoverable,
-	// since we can guarantee that the proxy-to-server connection is still
-	// usable (and in its original state as-if the transfer never happened).
-	stateTransferSessionSerialization
-	stateTransferSessionDeserialization
-)
-
-// transferTimeout corresponds to the timeout while waiting for the transfer
-// state response. If this gets triggered, the transfer is aborted, and the
-// connection will be terminated.
-const defaultTransferTimeout = 15 * time.Second
 
 // clientMsgAny is used to denote a wildcard client message type.
 var clientMsgAny = pgwirebase.ClientMessageType(0)
 
-var (
-	// errReadAbortedDueToTransfer is returned whenever a Read call exits due
-	// to a session transfer.
-	errReadAbortedDueToTransfer = errors.New("read aborted due to transfer")
-
-	// errTransferProtocol indicates that an invariant has failed.
-	errTransferProtocol = errors.New("transfer protocol error")
-)
-
 // forwarder is used to forward pgwire messages from the client to the server,
 // and vice-versa. The forwarder instance should always be constructed through
 // the forward function, which also starts the forwarder.
-//
-// The forwarder always starts with the ready state, which means that all
-// messages from the client are forwarded to the server, and vice-versa. When
-// a connection migration is requested through RequestTransfer, the forwarder
-// transitions to the transferRequested state.
-//
-//   If we are safe to transfer, the forwarder will transition to the
-//   transferSessionSerialization state, followed by the
-//   transferSessionDeserialization state.
-//
-//   If we are not, the forwarder aborts the transfer and transitions back to
-//   the ready state.
-//
-// Once the transfer process completes, the forwarder goes back to the ready
-// state. At any point during the transfer process, we may also transition back
-// to the ready state if the connection is recoverable.
 type forwarder struct {
 	// ctx is a single context used to control all goroutines spawned by the
 	// forwarder.
@@ -96,90 +41,60 @@ type forwarder struct {
 	// the same as the metrics field in the proxyHandler instance.
 	metrics *metrics
 
-	// serverConn is only set after the authentication phase for the initial
-	// connection. In the context of a connection migration, serverConn is only
-	// replaced once the session has successfully been deserialized, and the
-	// old connection will be closed. Whenever serverConn gets updated, both
-	// clientMessageTypeSent and isServerMsgReadyReceived fields have to reset
-	// to their initial values.
-	//
-	// All reads from these connections must go through the interceptors. It is
-	// not safe to read from these directly as the interceptors may have
-	// buffered data.
-	clientConn net.Conn // client <-> proxy
-	serverConn net.Conn // proxy <-> server
-
-	// clientInterceptor and serverInterceptor provides a convenient way to
-	// read and forward Postgres messages, while minimizing IO reads and memory
-	// allocations.
-	//
-	// These interceptors have to match clientConn and serverConn. See comment
-	// above on when those fields will be updated.
-	clientInterceptor *interceptor.BackendInterceptor  // clientConn's reader
-	serverInterceptor *interceptor.FrontendInterceptor // serverConn's reader
-
-	// disableClientInterrupts denotes that clientConn should not be interrupted
-	// by the custom readTimeoutConn that is wrapping the original clientConn,
-	// with the exception of context cancellations.
-	//
-	// This is false by default.
-	disableClientInterrupts bool
+	// req and res represent the processors used to handle client-to-server
+	// and server-to-client messages.
+	req *requestProcessor
+	res *responseProcessor
 
 	// errCh is a buffered channel that contains the first forwarder error.
-	// This channel may receive nil errors.
+	// This channel may receive nil errors. When an error is written to this
+	// channel, it is guaranteed that the forwarder and all connections will
+	// be closed.
 	errCh chan error
+
+	// clientConn (and serverConn) provides a convenient way to read and forward
+	// Postgres messages, while minimizing IO reads and memory allocations.
+	//
+	// clientConn is set once during initialization, and stays the same
+	// throughout the lifetime of the forwarder.
+	//
+	// All reads from these connections must go through the interceptors. It is
+	// not safe to call Read directly as the interceptors may have buffered data.
+	clientConn *interceptor.BackendConn // client <-> proxy
 
 	// mu contains state protected by the forwarder's mutex. This is necessary
 	// since fields will be read and write from different goroutines.
 	mu struct {
 		syncutil.Mutex
 
-		// state represents the forwarder's state. Most of the time, this will
-		// be stateReady.
-		state int
+		// isTransferring indicates that a connection migration is in progress.
+		isTransferring bool
+
+		// serverConn is only set after the authentication phase for the initial
+		// connection. In the context of a connection migration, serverConn is
+		// only replaced once the session has successfully been deserialized,
+		// and the old connection will be closed. Whenever serverConn gets
+		// updated, both clientMessageTypeSent and isServerMsgReadyReceived
+		// fields have to reset to their initial values.
+		//
+		// See clientConn for more information.
+		serverConn *interceptor.FrontendConn // proxy <-> server
+
+		// clientMessageTypeSent indicates the message type for the last pgwire
+		// message sent to serverConn. This will be initialized to clientMsgAny.
+		//
+		// Used for connection migration.
+		clientMessageTypeSent pgwirebase.ClientMessageType
 
 		// isServerMsgReadyReceived denotes whether a ReadyForQuery message has
-		// been received by the server-to-client processor *after* a message has
-		// been sent to the server through a Write on serverConn, either directly
-		// or through ForwardMsg.
+		// been received by the response processor *after* a message has been
+		// sent to the server through a Write on serverConn, either directly
+		// or through ForwardMsg. This will be initialized to true to implicitly
+		// denote that the server is ready to accept queries.
 		//
-		// This will be initialized to true to implicitly denote that the server
-		// is ready to accept queries.
+		// Used for connection migration.
 		isServerMsgReadyReceived bool
 	}
-
-	// ------------------------------------------------------------------------
-	// The following fields are used for connection migration.
-	//
-	// For details on how connection migration works, read the following RFC:
-	// https://github.com/cockroachdb/cockroach/pull/75707.
-	// ------------------------------------------------------------------------
-
-	// transferKey is a unique string used to identify the transfer request,
-	// and will be passed into the SHOW TRANSFER STATE statement. This will
-	// be set to a randomly generated UUID whenever the transfer is requested
-	// through the RequestTransfer API, and back to an empty string whenever the
-	// transfer completes successfully or with a recoverable error.
-	transferKey string
-
-	// transferCtx has to be derived from ctx, and is created by the timeout
-	// handler. All transfer related operations will use this so that they can
-	// react to the timeout handler when that gets triggered.
-	transferCtx context.Context
-
-	// transferCloserCh is a channel that gets closed whenever the forwarder
-	// transitions back to the ready state, which signifies that the transfer
-	// process has completed successfully. Closing this will unblock the
-	// client-to-server processor and stop the timeout handler.
-	transferCloserCh chan struct{}
-
-	// clientMessageTypeSent indicates the message type for the last pgwire
-	// message sent to serverConn. This is used to determine a safe transfer
-	// point.
-	//
-	// If no message has been sent to serverConn by this forwarder, this will be
-	// clientMsgAny.
-	clientMessageTypeSent pgwirebase.ClientMessageType
 
 	// Knobs used for testing.
 	testingKnobs struct {
@@ -192,9 +107,9 @@ type forwarder struct {
 
 // forward returns a new instance of forwarder, and starts forwarding messages
 // from clientConn to serverConn. When this is called, it is expected that the
-// caller passes ownership of serverConn to the forwarder, which implies that
-// the forwarder will clean up serverConn. clientConn and serverConn must not
-// be nil in all cases except for testing.
+// caller passes ownership of both clientConn and serverConn to the forwarder,
+// which implies that the forwarder will clen them up. clientConn and serverConn
+// must not be nil in all cases except for testing.
 //
 // Note that callers MUST call Close in all cases, even if ctx was cancelled.
 //
@@ -207,102 +122,45 @@ func forward(
 	serverConn net.Conn,
 ) *forwarder {
 	ctx, cancelFn := context.WithCancel(ctx)
-
-	// The forwarder starts with a state where connections migration can occur.
 	f := &forwarder{
-		ctx:       ctx,
-		ctxCancel: cancelFn,
-		errCh:     make(chan error, 1),
-		connector: connector,
-		metrics:   metrics,
+		ctx:        ctx,
+		ctxCancel:  cancelFn,
+		errCh:      make(chan error, 1),
+		connector:  connector,
+		metrics:    metrics,
+		clientConn: interceptor.NewBackendConn(clientConn),
 	}
-
-	// The net.Conn object for the client is switched to a net.Conn that
-	// unblocks Read every second on idle to check for exit conditions. This is
-	// mainly used to unblock the client-to-server processor whenever the
-	// forwarder has stopped, or a transfer has been requested.
-	clientConn = pgwire.NewReadTimeoutConn(clientConn, func() error {
-		// Context was cancelled.
-		if f.ctx.Err() != nil {
-			return f.ctx.Err()
-		}
-
-		// Client interrupts are disabled.
-		if f.disableClientInterrupts {
-			return nil
-		}
-
-		// We want to unblock idle clients whenever a transfer has been
-		// requested. This allows the client-to-server processor to be freed up
-		// to start the transfer.
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		if f.mu.state != stateReady {
-			return errReadAbortedDueToTransfer
-		}
-		return nil
-	})
-
-	f.setClientConn(clientConn)
-	f.setServerConn(serverConn)
-
-	// Start client-to-server and server-to-client processors. We will copy all
-	// pgwire messages from client to server (and vice-versa) until we encounter
-	// an error, or a shutdown signal (i.e. context cancellation).
-	go func() {
-		defer f.Close()
-
-		err := wrapClientToServerError(f.handleClientToServer())
-		if errors.Is(err, errTransferProtocol) {
-			f.metrics.ConnMigrationProtocolErrorCount.Inc(1)
-		}
-
-		select {
-		case f.errCh <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
-	go func() {
-		defer f.Close()
-
-		err := wrapServerToClientError(f.handleServerToClient())
-		if errors.Is(err, errTransferProtocol) {
-			f.metrics.ConnMigrationProtocolErrorCount.Inc(1)
-		}
-
-		// Check if there's a pending transfer. This works because we don't
-		// call finishTransfer whenever a transfer has failed fatally.
-		//
-		// This may happen in three scenarios:
-		// 1. Parent's context was actually cancelled (e.g. shutting down).
-		// 2. Timeout handler was triggered, and that closes the forwarder,
-		//    which causes context to be cancelled.
-		// 3. The transfer process actually failed (e.g. parsing).
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		if f.mu.state != stateReady {
-			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
-		}
-
-		select {
-		case f.errCh <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
-
+	f.mu.serverConn = interceptor.NewFrontendConn(serverConn)
+	f.mu.clientMessageTypeSent = clientMsgAny
+	f.mu.isServerMsgReadyReceived = true
+	f.req = &requestProcessor{f: f}
+	f.res = &responseProcessor{f: f}
+	f.resumeProcessors()
 	return f
 }
 
-// Close closes the forwarder, and stops the forwarding process. This is
-// idempotent.
+// Close closes the forwarder and all connections. This is idempotent.
 func (f *forwarder) Close() {
 	f.ctxCancel()
 
-	// Since Close is idempotent, we'll ignore the error from Close in case it
-	// has already been closed.
-	f.serverConn.Close()
+	// Whenever Close is called while both of the processors are suspended, the
+	// main goroutine will be stuck waiting for a reponse from the forwarder.
+	// Send an error to unblock that. If an error has been sent, this error will
+	// be ignored.
+	//
+	// We don't use tryReportError here since that will call Close, leading to
+	// a recursive call.
+	select {
+	case f.errCh <- errors.New("forwarder closed"): /* error reported */
+	default: /* the channel already contains an error */
+	}
+
+	// Since Close is idempotent, we'll ignore the error from Close calls in
+	// case they have already been closed.
+	f.clientConn.Close()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.mu.serverConn.Close()
 }
 
 // RequestTransfer requests that the forwarder performs a best-effort connection
@@ -310,509 +168,26 @@ func (f *forwarder) Close() {
 // the forwarder is not in a state that is eligible for a connection migration.
 // If a transfer is already in progress, or has been requested, this is a no-op.
 func (f *forwarder) RequestTransfer() {
-	// We'll get an error if the forwarder is already in one of the transfer
-	// states. In that case, just ignore it since we want RequestTransfer to
-	// be idempotent.
-	if err := f.prepareTransfer(); err != nil {
-		return
-	}
-	f.metrics.ConnMigrationRequestedCount.Inc(1)
+	go f.runTransfer()
 }
 
-// handleClientToServer handles the communication from the client to the server.
-// This returns a context cancellation error whenever the forwarder's context
-// is cancelled, or whenever forwarding fails.
-func (f *forwarder) handleClientToServer() error {
-	for f.ctx.Err() == nil {
-		// Always peek the message to ensure that we're blocked on reading the
-		// header, rather than when forwarding.
-		typ, _, err := f.clientInterceptor.PeekMsg()
-		if err != nil && !errors.Is(err, errReadAbortedDueToTransfer) {
-			return errors.Wrap(err, "peeking message in client-to-server")
-		}
-
-		// Note that if state changes the moment we unlock mu, that's fine.
-		// The fact that we got here signifies that there was already a message
-		// in the interceptor's buffer, which is valid for the state that was
-		// stale. Since this can only happen for the ready->transferRequested
-		// case, it follows that when a transfer gets requested the moment the
-		// message was read, we'll finish forwarding that last message before
-		// starting the transfer in the next iteration.
-		f.mu.Lock()
-		localState := f.mu.state
-		f.mu.Unlock()
-
-		switch localState {
-		case stateReady:
-			// If we exit PeekMsg due to a transfer, the state must be in
-			// stateTransferRequested unless there's a bug. Be defensive here
-			// and peek again so that we don't end up blocking on the peek
-			// call within ForwardMsg because client interrupts will be
-			// disabled.
-			if errors.Is(err, errReadAbortedDueToTransfer) {
-				log.Error(f.ctx, "read aborted in client-to-server, but state is ready")
-				continue
-			}
-
-			if forwardErr := func() error {
-				// We may be blocked waiting for more packets when reading the
-				// message's body. If a transfer was requested, there's no point
-				// interrupting Reads since we're not at a message boundary, and
-				// we cannot start a transfer, so don't interrupt at all.
-				f.disableClientInterrupts = true
-				defer func() { f.disableClientInterrupts = false }()
-
-				f.clientMessageTypeSent = typ
-
-				f.mu.Lock()
-				f.mu.isServerMsgReadyReceived = false
-				f.mu.Unlock()
-
-				// When ForwardMsg gets blocked on Read, we will unblock that
-				// through our custom readTimeoutConn wrapper.
-				_, err := f.clientInterceptor.ForwardMsg(f.serverConn)
-				return err
-			}(); forwardErr != nil {
-				return errors.Wrap(forwardErr, "forwarding message in server-to-client")
-			}
-
-		case stateTransferRequested:
-			// We transition into the transferRequested state in prepareTransfer
-			// after all of the relevant transfer variables are set. Be
-			// defensive here.
-			if f.transferKey == "" || f.transferCloserCh == nil {
-				return errors.Wrapf(
-					errTransferProtocol,
-					"transferKey=%v and transferCloserCh=%v",
-					f.transferKey,
-					f.transferCloserCh,
-				)
-			}
-
-			f.metrics.ConnMigrationAttemptedCount.Inc(1)
-
-			// Can we perform the transfer?
-			if !f.isSafeTransferPoint() {
-				f.metrics.ConnMigrationErrorRecoverableCount.Inc(1)
-				// Abort the transfer safely.
-				if err := f.finishTransfer(); err != nil {
-					return errors.Wrap(
-						errTransferProtocol,
-						"aborting transfer due to unsafe transfer point",
-					)
-				}
-				continue
-			}
-
-			// Once we update the state below, there's a chance that
-			// finishTransfer will be called, so we should backup a local copy
-			// first to prevent a race.
-			key, closer := f.transferKey, f.transferCloserCh
-
-			// Update the state first so that the server-to-client processor
-			// could start processing. If we update the state after sending the
-			// request, we may miss response messages.
-			f.mu.Lock()
-			f.mu.state = stateTransferSessionSerialization
-			f.mu.Unlock()
-
-			// Once we send the request, the forwarder should not send any
-			// further messages to the server. Since requests and responses
-			// are in a FIFO order, we can guarantee that the server will no
-			// longer return messages intended for the client once we receive
-			// responses for the SHOW TRANSFER STATE query.
-			if err := runShowTransferState(f.serverConn, key); err != nil {
-				return errors.Wrap(err, "writing transfer state request")
-			}
-
-			// Wait until transfer is completed. Client-to-server processor is
-			// blocked to ensure that we don't send more client messagess to
-			// the server.
-			select {
-			case <-f.ctx.Done():
-				return f.ctx.Err()
-			case <-closer:
-				// Channel is closed whenever transfer completes, so we are done.
-			}
-
-		default:
-			// This cannot happen unless there is a bug. While the transfer is
-			// in progress, the client-to-server processor has to be blocked,
-			// and the only way to transition into these states
-			// (e.g. transferSessionSerialization) is to go through the
-			// stateTransferRequested state.
-			//
-			// Return an error to close the connection, rather than letting it
-			// continue silently.
-			return errors.Wrapf(
-				errTransferProtocol,
-				"unexpected state in client-to-server processor, state=%v",
-				localState,
-			)
-		}
-	}
-	return f.ctx.Err()
-}
-
-// handleServerToClient handles the communication from the server to the client.
-// This returns an error whenever the forwarder's context is cancelled, or the
-// connection can no longer be used due to the state of the server (e.g. failed
-// forwarding, or non-recoverable transfers).
-func (f *forwarder) handleServerToClient() error {
-	for f.ctx.Err() == nil {
-		// Always peek the message to ensure that we're blocked on reading the
-		// header, rather than when forwarding or reading the entire message.
-		typ, _, err := f.serverInterceptor.PeekMsg()
-		if err != nil {
-			return errors.Wrap(err, "peeking message in server-to-client")
-		}
-
-		// When we unlock mu, localState may be stale when transitioning from
-		// ready->transferRequested, or transferRequested->transferSessionSerialization.
-		// This is fine because the moment we got here, we know that there must
-		// be a message in the interceptor's buffer, and that is valid for the
-		// previous state, so finish up the current message first.
-		localState := func() int {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-
-			// Have we seen a ReadyForQuery message?
-			//
-			// It doesn't matter which state we're in. Even if the transfer
-			// message has already been sent, the first message that we're going
-			// to be looking for isn't ReadyForQuery. This is only used to
-			// determine a safe transfer point.
-			if typ == pgwirebase.ServerMsgReady {
-				f.mu.isServerMsgReadyReceived = true
-			}
-
-			return f.mu.state
-		}()
-
-		switch localState {
-		case stateReady, stateTransferRequested:
-			// When ForwardMsg gets blocked on Read, we will unblock that by
-			// closing serverConn through f.Close().
-			if _, err := f.serverInterceptor.ForwardMsg(f.clientConn); err != nil {
-				return errors.Wrap(err, "forwarding message in server-to-client")
-			}
-
-		case stateTransferSessionSerialization:
-			// We transition into this state once we enter the transferRequested
-			// state in the client-to-server processor. Be defensive here.
-			if f.transferKey == "" || f.transferCtx == nil {
-				return errors.Wrapf(
-					errTransferProtocol,
-					"transferKey=%v and transferCtx=%v",
-					f.transferKey,
-					f.transferCtx,
-				)
-			}
-
-			if err := f.processTransfer(); err != nil {
-				// Connection is not recoverable; terminate it right away.
-				f.mu.Lock()
-				state := f.mu.state
-				f.mu.Unlock()
-
-				// If we've not started deserializing, then we're in a non
-				// recoverable state.
-				if state != stateTransferSessionDeserialization {
-					return errors.Wrap(err,
-						"terminating due to non-recoverable connection during transfer")
-				}
-				log.Infof(f.ctx, "transfer failed, but connection is recoverable: %s", err)
-				f.metrics.ConnMigrationErrorRecoverableCount.Inc(1)
-			} else {
-				log.Infof(f.ctx, "transfer successful")
-				f.metrics.ConnMigrationSuccessCount.Inc(1)
-			}
-			if err := f.finishTransfer(); err != nil {
-				return errors.Wrap(errTransferProtocol, "wrapping up transfer process")
-			}
-
-		default:
-			// This cannot happen unless there is a bug. When we exit from the
-			// block above, we have to be in the ready state. This state is
-			// internal, and will be handled within processTransfer.
-			//
-			// Return an error to close the connection, rather than letting it
-			// continue silently.
-			return errors.Wrapf(
-				errTransferProtocol,
-				"unexpected state in server-to-client processor, state=%v",
-				localState,
-			)
-		}
-	}
-	return f.ctx.Err()
-}
-
-// isSafeTransferPoint returns true if we're at a point where we're safe to
-// transfer, and false otherwise. This should only be called during the
-// transferRequested state.
-func (f *forwarder) isSafeTransferPoint() bool {
-	if f.testingKnobs.isSafeTransferPoint != nil {
-		return f.testingKnobs.isSafeTransferPoint()
-	}
-	// Three conditions when evaluating a safe transfer point:
-	//   1. The last message sent to the SQL pod was a Sync(S) or
-	//      SimpleQuery(Q), and a ReadyForQuery(Z) has already been
-	//      received at the time of evaluation.
-	//   2. The last message sent to the SQL pod was a CopyDone(c), and
-	//      a ReadyForQuery(Z) has already been received at the time of
-	//      evaluation.
-	//   3. The last message sent to the SQL pod was a CopyFail(f), and
-	//      a ReadyForQuery(Z) has already been received at the time of
-	//      evaluation.
-	//
-	// NOTE: clientMessageTypeSent does not require a mutex because it is only
-	// set in the transferInProgress state, and this method should only be
-	// called in the transferRequested state.
-	switch f.clientMessageTypeSent {
-	case clientMsgAny,
-		pgwirebase.ClientMsgSync,
-		pgwirebase.ClientMsgSimpleQuery,
-		pgwirebase.ClientMsgCopyDone,
-		pgwirebase.ClientMsgCopyFail:
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		return f.mu.isServerMsgReadyReceived
-	default:
-		return false
-	}
-}
-
-// prepareTransfer sets up the transfer metadata. This moves the forwarder into
-// the transferRequested state, and generates a unique transfer key for the
-// forwarder. If the forwarder's state is not ready, this will return an error.
-func (f *forwarder) prepareTransfer() error {
-	// Note that we don't need the lock for the entire method, but we'll do so
-	// for simplicity.
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.mu.state != stateReady {
-		return errors.New("transfer is already in-progress")
-	}
-
-	f.transferKey = uuid.MakeV4().String()
-	f.transferCloserCh = make(chan struct{})
-	f.mu.state = stateTransferRequested
-
-	// Start the timeout handler, which will set transferCtx. Do this after
-	// setting the closer above.
-	timeout := defaultTransferTimeout
-	if f.testingKnobs.transferTimeoutDuration != nil {
-		timeout = f.testingKnobs.transferTimeoutDuration()
-	}
-	f.runAsyncTransferTimeoutHandlerLocked(timeout)
-
-	return nil
-}
-
-// finishTransfer moves the forwarder back to the ready state, and closes the
-// transferCloser channel (which unblocks the client-to-server processor). This
-// returns an error if it is called during the steady state.
-//
-// NOTE: This should only be called if the connection is safe to continue
-// because this unblocks the client-to-server processor, which may result in
-// more packets being sent to the server. If the connection is unsafe to
-// proceed, we should just call Close().
-func (f *forwarder) finishTransfer() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.mu.state == stateReady {
-		return errors.New("no transfer in-progress")
-	}
-
-	f.transferKey = ""
-	// This nil case should not happen, but we'll check to avoid closing nil
-	// channels, which causes panics.
-	if f.transferCloserCh != nil {
-		close(f.transferCloserCh)
-	}
-	f.transferCloserCh = nil
-	f.mu.state = stateReady
-
-	// Reset transferCtx created by the timeout handler.
-	f.transferCtx = nil
-	return nil
-}
-
-// processTransfer attempts to perform the connection migration, and blocks
-// until the connection has been migrated, or an error has occurred. If the
-// connection has been migrated successfully, retErr == nil. If retErr != nil,
-// the forwarder has to be closed by the caller to prevent any data corruption.
-//
-// NOTE: f.transferCtx has to be set before calling this. We use transferCtx
-// instead of ctx here to ensure that we can recover if we fail to connect, or
-// deserialize the session. On the other hand, binding to ctx means the only way
-// to abort is to close the forwarder, which is not the intended idea.
-func (f *forwarder) processTransfer() (retErr error) {
-	transferErr, state, revivalToken, err := waitForShowTransferState(f.transferCtx,
-		f.serverInterceptor, f.clientConn, f.transferKey)
-	if err != nil {
-		return errors.Wrap(err, "waiting for transfer state")
-	}
-
-	// Updating the state also means that failures after this point are
-	// recoverable (i.e. connections should not be terminated).
-	f.mu.Lock()
-	f.mu.state = stateTransferSessionDeserialization
-	f.mu.Unlock()
-
-	// If we managed to consume until ReadyForQuery without errors, but the
-	// transfer state response returns an error, we could still continue with
-	// the connection, but the transfer process will need to be aborted.
-	//
-	// This case may happen pretty frequently (e.g. open transactions, temporary
-	// tables, etc.).
-	if transferErr != "" {
-		return errors.Newf("%s", transferErr)
-	}
-
-	// Connect to a new SQL pod.
-	//
-	// TODO(jaylim-crl): There is a possibility where the same pod will get
-	// selected. Some ideas to solve this: pass in the remote address of
-	// serverConn to avoid choosing that pod, or maybe a filter callback?
-	// We can also consider adding a target pod as an argument to RequestTransfer.
-	// That way a central component gets to choose where the connections go.
-	newServerConn, err := f.connector.OpenTenantConnWithToken(f.transferCtx, revivalToken)
-	if err != nil {
-		return errors.Wrap(err, "opening connection")
-	}
-	defer func() {
-		if retErr != nil {
-			newServerConn.Close()
-		}
-	}()
-	newServerInterceptor := interceptor.NewFrontendInterceptor(newServerConn)
-
-	// Deserialize session state within the new SQL pod.
-	err = runAndWaitForDeserializeSession(
-		f.transferCtx, newServerConn, newServerInterceptor, state)
-	if err != nil {
-		return errors.Wrap(err, "deserializing session")
-	}
-
-	// Transfer was successful - use the new server connections.
-	f.serverConn.Close()
-	f.setServerConnAndInterceptor(newServerConn, newServerInterceptor)
-	return nil
-}
-
-// runAsyncTransferTimeoutHandlerLocked starts a timeout handler in the
-// background for a duration of waitTimeout until the transfer completes; this
-// happens whenever the transferCloserCh channel is closed. If the transfer
-// doesn't complete by the given duration, the forwarder will be closed if we're
-// in a non-recoverable state.
-//
-// NOTE: This should only be called during a transfer process. We assume that
-// transferCloserCh has already been initialized.
-func (f *forwarder) runAsyncTransferTimeoutHandlerLocked(waitTimeout time.Duration) {
-	// No timeout. Only used in testing.
-	if waitTimeout == 0 {
-		f.transferCtx = f.ctx
-		return
-	}
-
-	// This nolint rule is intended; transferCtx isn't used here.
-	transferCtx, cancel := context.WithTimeout(f.ctx, waitTimeout) // nolint:context
-	f.transferCtx = transferCtx
-
-	// Keep a local copy since this lock will be released upon returning. There
-	// could be a chance where the goroutine hasn't run yet, but we called
-	// finishTransfer, causing a data race.
-	closer := f.transferCloserCh
-
-	// We use a goroutine instead of the returned error value in the processors
-	// to allow us to unblock runShowTransferState if the write to the server
-	// took a long time.
+// resumeProcessors starts both the request and response processors
+// asynchronously. The forwarder will be closed if any of the processors
+// return an error while resuming. This is idempotent as Resume() will return
+// nil if the processor has already been started.
+func (f *forwarder) resumeProcessors() {
 	go func() {
-		defer cancel()
-
-		if f.testingKnobs.onTransferTimeoutHandlerStart != nil {
-			f.testingKnobs.onTransferTimeoutHandlerStart()
-		}
-		select {
-		case <-f.ctx.Done():
-			// Forwarder's context was cancelled. Do nothing.
-		case <-closer:
-			// Transfer has completed.
-		case <-transferCtx.Done():
-			// If we transitioned to ready, this means that the transfer timeout
-			// was triggered right after the transition.
-			f.mu.Lock()
-			recoverable := (f.mu.state == stateReady ||
-				f.mu.state == stateTransferSessionDeserialization)
-			f.mu.Unlock()
-
-			// Connection is recoverable, don't close the connection. Context
-			// cancellation will be propagated up accordingly.
-			if recoverable {
-				break
-			}
-
-			// If we're waiting for a message through the server's interceptor,
-			// this will unblock that call with a closed pipe. If we're busy
-			// processing other messages, the cancelled context will eventually
-			// be read.
-			f.Close()
-		}
-		if f.testingKnobs.onTransferTimeoutHandlerFinish != nil {
-			f.testingKnobs.onTransferTimeoutHandlerFinish()
+		err := f.req.Resume()
+		if err != nil {
+			f.tryReportError(wrapClientToServerError(err))
 		}
 	}()
-}
-
-// setClientConn is a convenient helper to update clientConn, and will also
-// create a matching interceptor for the given connection. It is the caller's
-// responsibility to close the old connection before calling this, or there
-// may be a leak.
-//
-// It is the responsibility of the caller to know when this is safe to call
-// since this updates clientConn and clientInterceptor, and is not thread-safe.
-func (f *forwarder) setClientConn(clientConn net.Conn) {
-	f.clientConn = clientConn
-	f.clientInterceptor = interceptor.NewBackendInterceptor(f.clientConn)
-}
-
-// setServerConn is a convenient helper to update serverConn, and will also
-// create a matching interceptor for the given connection. It is the caller's
-// responsibility to close the old connection before calling this, or there
-// may be a leak.
-//
-// It is the responsibility of the caller to know when this is safe to call
-// since this updates serverConn and serverInterceptor, and is not thread-safe.
-func (f *forwarder) setServerConn(serverConn net.Conn) {
-	f.setServerConnAndInterceptor(serverConn, nil /* serverInterceptor */)
-}
-
-// setServerConnAndInterceptor, is similar to setServerConn, but takes in a
-// serverInterceptor as well. That way, an existing interceptor can be used.
-// If serverInterceptor is nil, an interceptor will be created for the given
-// serverConn.
-//
-// See setServerConn for more information.
-func (f *forwarder) setServerConnAndInterceptor(
-	serverConn net.Conn, serverInterceptor *interceptor.FrontendInterceptor,
-) {
-	f.serverConn = serverConn
-	if serverInterceptor == nil {
-		f.serverInterceptor = interceptor.NewFrontendInterceptor(f.serverConn)
-	} else {
-		f.serverInterceptor = serverInterceptor
-	}
-	f.clientMessageTypeSent = clientMsgAny
-
-	// This method will only be called during initialization, or whenever the
-	// transfer is being processed, which in this case, there are no reads on
-	// this variable, so there won't be a race.
-	f.mu.isServerMsgReadyReceived = true
+	go func() {
+		err := f.res.Resume()
+		if err != nil {
+			f.tryReportError(wrapServerToClientError(err))
+		}
+	}()
 }
 
 // wrapClientToServerError overrides client to server errors for external
@@ -843,4 +218,254 @@ func wrapServerToClientError(err error) error {
 		return nil
 	}
 	return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
+}
+
+// tryReportError tries to send err to errChan, and closes the forwarder if
+// it succeeds. If an error has already been reported, err will be dropped.
+func (f *forwarder) tryReportError(err error) {
+	select {
+	case f.errCh <- err: /* error reported */
+		f.Close()
+	default: /* the channel already contains an error */
+	}
+}
+
+// aLongTimeAgo is a non-zero time, far in the past, used for immediate
+// cancellation of dials.
+var aLongTimeAgo = time.Unix(1, 0)
+
+type requestProcessor struct {
+	f *forwarder
+
+	mu struct {
+		syncutil.Mutex
+		resumed    bool
+		cond       *sync.Cond
+		inPeek     bool
+		suspendReq bool
+	}
+	wg sync.WaitGroup
+}
+
+func (p *requestProcessor) lock() {
+	p.mu.Lock()
+	if p.mu.cond == nil {
+		p.mu.cond = sync.NewCond(&p.mu)
+	}
+}
+
+func (p *requestProcessor) unlock() { p.mu.Unlock() }
+
+// Once this returns an error, Resume should not be called again.
+func (p *requestProcessor) Resume() error {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
+	if p.f.ctx.Err() != nil {
+		return p.f.ctx.Err()
+	}
+
+	p.lock()
+	if p.mu.resumed {
+		p.unlock()
+		return nil
+	}
+	p.mu.resumed = true
+	p.unlock()
+	defer func() {
+		p.lock()
+		defer p.unlock()
+		p.mu.resumed = false
+	}()
+
+	for p.f.ctx.Err() == nil {
+		// inPeek has to be false before this because the resumed field guards
+		// against concurrent runs.
+		p.lock()
+		if p.mu.suspendReq {
+			p.mu.suspendReq = false
+			p.unlock()
+			return nil
+		}
+		p.mu.inPeek = true
+		p.unlock()
+
+		// Always peek the message to ensure that we're blocked on reading the
+		// header, rather than when forwarding.
+		typ, _, err := p.f.clientConn.PeekMsg()
+
+		p.lock()
+		suspend := p.mu.suspendReq
+		p.mu.suspendReq = false
+		p.mu.inPeek = false
+		p.unlock()
+		p.mu.cond.Broadcast()
+
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && suspend && ne.Timeout() {
+				// Do nothing.
+				err = nil
+			} else {
+				err = errors.Wrap(err, "peeking message in client-to-server")
+			}
+		}
+		if err != nil || suspend {
+			return err
+		}
+
+		p.f.mu.Lock()
+		p.f.mu.clientMessageTypeSent = typ
+		p.f.mu.isServerMsgReadyReceived = false
+		p.f.mu.Unlock()
+
+		// NOTE: No need to obtain lock for serverConn since that can only
+		// be updated during a transfer, and when that happens, the request
+		// processor must have already been suspended.
+		if _, err := p.f.clientConn.ForwardMsg(p.f.mu.serverConn); err != nil {
+			return errors.Wrap(err, "forwarding message in client-to-server")
+		}
+	}
+	return p.f.ctx.Err()
+}
+
+func (p *requestProcessor) Suspend() {
+	p.lock()
+	defer p.unlock()
+	if !p.mu.resumed {
+		return
+	}
+	if !p.mu.inPeek {
+		p.mu.suspendReq = true
+		return
+	}
+	for p.mu.inPeek {
+		p.mu.suspendReq = true
+		p.f.clientConn.SetReadDeadline(aLongTimeAgo)
+		p.mu.cond.Wait()
+	}
+	p.f.clientConn.SetReadDeadline(time.Time{})
+}
+
+func (p *requestProcessor) WaitUntilSuspended() {
+	p.wg.Wait()
+}
+
+type responseProcessor struct {
+	f *forwarder
+
+	mu struct {
+		syncutil.Mutex
+		resumed    bool
+		cond       *sync.Cond
+		inPeek     bool
+		suspendReq bool
+	}
+	wg sync.WaitGroup
+}
+
+func (p *responseProcessor) lock() {
+	p.mu.Lock()
+	if p.mu.cond == nil {
+		p.mu.cond = sync.NewCond(&p.mu)
+	}
+}
+
+func (p *responseProcessor) unlock() { p.mu.Unlock() }
+
+// Once this returns an error, Resume should not be called again.
+func (p *responseProcessor) Resume() error {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
+	if p.f.ctx.Err() != nil {
+		return p.f.ctx.Err()
+	}
+
+	p.lock()
+	if p.mu.resumed {
+		p.unlock()
+		return nil
+	}
+	p.mu.resumed = true
+	p.unlock()
+	defer func() {
+		p.lock()
+		defer p.unlock()
+		p.mu.resumed = false
+	}()
+
+	// NOTE: No need to obtain lock for serverConn since that can only be
+	// updated during a transfer, and when that happens, the request processor
+	// must have already been suspended.
+	for p.f.ctx.Err() == nil {
+		// inPeek has to be false before this because the resumed field guards
+		// against concurrent runs.
+		p.lock()
+		if p.mu.suspendReq {
+			p.mu.suspendReq = false
+			p.unlock()
+			return nil
+		}
+		p.mu.inPeek = true
+		p.unlock()
+
+		// Always peek the message to ensure that we're blocked on reading the
+		// header, rather than when forwarding or reading the entire message.
+		typ, _, err := p.f.mu.serverConn.PeekMsg()
+
+		p.lock()
+		suspend := p.mu.suspendReq
+		p.mu.suspendReq = false
+		p.mu.inPeek = false
+		p.unlock()
+		p.mu.cond.Broadcast()
+
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && suspend && ne.Timeout() {
+				// Do nothing.
+				err = nil
+			} else {
+				err = errors.Wrap(err, "peeking message in server-to-client")
+			}
+		}
+		if err != nil || suspend {
+			return err
+		}
+
+		p.f.mu.Lock()
+		// Did we see a ReadyForQuery message?
+		if typ == pgwirebase.ServerMsgReady {
+			p.f.mu.isServerMsgReadyReceived = true
+		}
+		p.f.mu.Unlock()
+
+		if _, err := p.f.mu.serverConn.ForwardMsg(p.f.clientConn); err != nil {
+			return errors.Wrap(err, "forwarding message in server-to-client")
+		}
+	}
+	return p.f.ctx.Err()
+}
+
+func (p *responseProcessor) Suspend() {
+	p.lock()
+	defer p.unlock()
+	if !p.mu.resumed {
+		return
+	}
+	if !p.mu.inPeek {
+		p.mu.suspendReq = true
+		return
+	}
+	// No need to obtain locks for serverConn since the processor is still
+	// running, which guarantees that there won't be writes to it.
+	for p.mu.inPeek {
+		p.mu.suspendReq = true
+		p.f.mu.serverConn.SetReadDeadline(aLongTimeAgo)
+		p.mu.cond.Wait()
+	}
+	p.f.mu.serverConn.SetReadDeadline(time.Time{})
+}
+
+func (p *responseProcessor) WaitUntilSuspended() {
+	p.wg.Wait()
 }
