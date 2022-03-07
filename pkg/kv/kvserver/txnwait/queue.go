@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -69,9 +70,21 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 	if !(req.PushType == roachpb.PUSH_ABORT || req.PushType == roachpb.PUSH_TIMESTAMP) {
 		return true
 	}
-	p1, p2 := req.PusherTxn.Priority, req.PusheeTxn.Priority
+	return CanPushWithPriority(&req.PusherTxn.TxnMeta, &req.PusheeTxn)
+}
+
+// CanPushWithPriority returns true if the given pusher can push the pushee
+// based on its priority.
+func CanPushWithPriority(pusher, pushee *enginepb.TxnMeta) bool {
+	p1, p2 := pusher.Priority, pushee.Priority
 	if p1 > p2 && (p1 == enginepb.MaxTxnPriority || p2 == enginepb.MinTxnPriority) {
 		return true
+	}
+	if p1 == enginepb.MaxTxnPriority {
+		_, pusheeTenantID, err := keys.DecodeTenantPrefix(pushee.Key)
+		if err == nil && !pusheeTenantID.IsSystem() {
+			return true
+		}
 	}
 	return false
 }
