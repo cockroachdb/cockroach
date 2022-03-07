@@ -10,6 +10,8 @@ package interceptor_test
 
 import (
 	"bytes"
+	"io"
+	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
@@ -19,38 +21,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFrontendInterceptor tests the FrontendInterceptor. Note that the tests
-// here are shallow. For detailed ones, see the tests for the internal
-// interceptor in base_test.go.
-func TestFrontendInterceptor(t *testing.T) {
+// TestFrontendConn tests the FrontendConn. Note that the tests here are shallow.
+// For detailed ones, see the tests for the internal interceptor in base_test.go.
+func TestFrontendConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 
-	buildSrc := func(t *testing.T, count int) *bytes.Buffer {
+	writeAsync := func(t *testing.T, w io.Writer) <-chan error {
 		t.Helper()
-		src := new(bytes.Buffer)
-		_, err := src.Write(q)
-		require.NoError(t, err)
-		return src
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := w.Write(q)
+			errCh <- err
+		}()
+		return errCh
 	}
 
 	t.Run("PeekMsg returns the right message type", func(t *testing.T) {
-		src := buildSrc(t, 1)
+		w, r := net.Pipe()
+		errCh := writeAsync(t, w)
 
-		fi := interceptor.NewFrontendInterceptor(src)
+		fi := interceptor.NewFrontendConn(r)
 		require.NotNil(t, fi)
 
 		typ, size, err := fi.PeekMsg()
 		require.NoError(t, err)
 		require.Equal(t, pgwirebase.ServerMsgReady, typ)
 		require.Equal(t, 6, size)
+
+		err = <-errCh
+		require.Nil(t, err)
 	})
 
 	t.Run("ReadMsg decodes the message correctly", func(t *testing.T) {
-		src := buildSrc(t, 1)
+		w, r := net.Pipe()
+		errCh := writeAsync(t, w)
 
-		fi := interceptor.NewFrontendInterceptor(src)
+		fi := interceptor.NewFrontendConn(r)
 		require.NotNil(t, fi)
 
 		msg, err := fi.ReadMsg()
@@ -58,18 +66,25 @@ func TestFrontendInterceptor(t *testing.T) {
 		rmsg, ok := msg.(*pgproto3.ReadyForQuery)
 		require.True(t, ok)
 		require.Equal(t, byte('I'), rmsg.TxStatus)
+
+		err = <-errCh
+		require.Nil(t, err)
 	})
 
 	t.Run("ForwardMsg forwards data to dst", func(t *testing.T) {
-		src := buildSrc(t, 1)
+		w, r := net.Pipe()
+		errCh := writeAsync(t, w)
 		dst := new(bytes.Buffer)
 
-		fi := interceptor.NewFrontendInterceptor(src)
+		fi := interceptor.NewFrontendConn(r)
 		require.NotNil(t, fi)
 
 		n, err := fi.ForwardMsg(dst)
 		require.NoError(t, err)
 		require.Equal(t, 6, n)
 		require.Equal(t, 6, dst.Len())
+
+		err = <-errCh
+		require.Nil(t, err)
 	})
 }
