@@ -11,33 +11,34 @@
 package roachpb
 
 import (
+	context "context"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // NewReplicaUnavailableError initializes a new *ReplicaUnavailableError. It is
 // provided with the range descriptor known to the replica, and the relevant
 // replica descriptor within.
-func NewReplicaUnavailableError(desc *RangeDescriptor, replDesc ReplicaDescriptor) error {
+func NewReplicaUnavailableError(
+	cause error, desc *RangeDescriptor, replDesc ReplicaDescriptor,
+) error {
 	return &ReplicaUnavailableError{
 		Desc:    *desc,
 		Replica: replDesc,
+		Cause:   errors.EncodeError(context.Background(), cause),
 	}
 }
 
 var _ errors.SafeFormatter = (*ReplicaUnavailableError)(nil)
 var _ fmt.Formatter = (*ReplicaUnavailableError)(nil)
+var _ errors.Wrapper = (*ReplicaUnavailableError)(nil)
 
 // SafeFormatError implements errors.SafeFormatter.
 func (e *ReplicaUnavailableError) SafeFormatError(p errors.Printer) error {
-	e.printTo(p.Printf)
+	p.Printf("replica %s unable to serve request to %s: %s", e.Replica, e.Desc, e.Unwrap())
 	return nil
-}
-
-// See https://github.com/cockroachdb/errors/issues/88.
-func (e *ReplicaUnavailableError) printTo(printf func(string, ...interface{})) {
-	printf("replica %s unable to serve request to %s", e.Replica, e.Desc)
 }
 
 // Format implements fmt.Formatter.
@@ -45,9 +46,23 @@ func (e *ReplicaUnavailableError) Format(s fmt.State, verb rune) { errors.Format
 
 // Error implements error.
 func (e *ReplicaUnavailableError) Error() string {
-	var s string
-	e.printTo(func(format string, args ...interface{}) {
-		s = fmt.Sprintf(format, args...)
-	})
-	return s
+	return fmt.Sprint(e)
+}
+
+// Unwrap implements errors.Wrapper.
+func (e *ReplicaUnavailableError) Unwrap() error {
+	return errors.DecodeError(context.Background(), e.Cause)
+}
+
+func init() {
+	encode := func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
+		errors.As(err, &payload) // payload = err.(proto.Message)
+		return "", nil, payload
+	}
+	decode := func(ctx context.Context, cause error, msgPrefix string, safeDetails []string, payload proto.Message) error {
+		return payload.(*ReplicaUnavailableError)
+	}
+	typeName := errors.GetTypeKey((*ReplicaUnavailableError)(nil))
+	errors.RegisterWrapperEncoder(typeName, encode)
+	errors.RegisterWrapperDecoder(typeName, decode)
 }
