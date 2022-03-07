@@ -11,5 +11,6 @@ go_library(
 go_binary(
     name = "gen",
     embed = [":gen_lib"],
+    gotags = ["metamorphic_disable"],
     visibility = ["//visibility:public"],
 )
