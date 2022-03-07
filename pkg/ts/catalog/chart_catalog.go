@@ -1648,8 +1648,12 @@ var charts = []sectionDescription{
 		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
 		Charts: []chartDescription{
 			{
-				Title:   "Add Replica Count",
-				Metrics: []string{"queue.replicate.addreplica"},
+				Title: "Add Replica Count",
+				Metrics: []string{
+					"queue.replicate.addreplica",
+					"queue.replicate.addvoterreplica",
+					"queue.replicate.addnonvoterreplica",
+				},
 			},
 			{
 				Title:   "Lease Transfer Count",
@@ -1664,8 +1668,12 @@ var charts = []sectionDescription{
 				Metrics: []string{"queue.replicate.purgatory"},
 			},
 			{
-				Title:   "Rebalance Count",
-				Metrics: []string{"queue.replicate.rebalancereplica"},
+				Title: "Rebalance Count",
+				Metrics: []string{
+					"queue.replicate.rebalancereplica",
+					"queue.replicate.rebalancevoterreplica",
+					"queue.replicate.rebalancenonvoterreplica",
+				},
 			},
 			{
 				Title:   "Demotions of Voters to Non Voters",
@@ -1679,8 +1687,15 @@ var charts = []sectionDescription{
 				Title: "Remove Replica Count",
 				Metrics: []string{
 					"queue.replicate.removedeadreplica",
+					"queue.replicate.removedeadvoterreplica",
+					"queue.replicate.removedeadnonvoterreplica",
 					"queue.replicate.removereplica",
+					"queue.replicate.removevoterreplica",
+					"queue.replicate.removenonvoterreplica",
 					"queue.replicate.removelearnerreplica",
+					"queue.replicate.removedecommissioningreplica",
+					"queue.replicate.removedecommissioningvoterreplica",
+					"queue.replicate.removedecommissioningnonvoterreplica",
 				},
 			},
 			{
