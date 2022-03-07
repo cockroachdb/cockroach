@@ -222,15 +222,9 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 		if err != nil {
 			return err
 		}
-		homeDir, err := os.UserHomeDir()
+		success, err = d.checkPresenceInBazelRc(bazelRcLine)
 		if err != nil {
 			return err
-		}
-		bazelRcContents, err := d.os.ReadFile(filepath.Join(homeDir, ".bazelrc"))
-		if err != nil || !strings.Contains(bazelRcContents, bazelRcLine) {
-			log.Printf("Please add the string `%s` to your ~/.bazelrc:\n", bazelRcLine)
-			log.Printf("    echo \"%s\" >> ~/.bazelrc", bazelRcLine)
-			success = false
 		}
 	}
 
@@ -243,4 +237,32 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 	}
 	log.Println("You are ready to build :)")
 	return nil
+}
+
+func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (found bool, _ error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		if !found {
+			log.Printf("Please add the string `%s` to your ~/.bazelrc:\n", expectedBazelRcLine)
+			log.Printf("    echo \"%s\" >> ~/.bazelrc", expectedBazelRcLine)
+		}
+	}()
+
+	bazelRcContents, err := d.os.ReadFile(filepath.Join(homeDir, ".bazelrc"))
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(bazelRcContents, "\n") {
+		if !strings.Contains(line, expectedBazelRcLine) {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
 }
