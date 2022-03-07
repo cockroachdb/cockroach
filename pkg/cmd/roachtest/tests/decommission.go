@@ -148,31 +148,21 @@ func runDrainAndDecommission(
 		t.L().Printf("run: %s\n", stmt)
 	}
 
-	run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
-	run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+	{
+		db := c.Conn(ctx, t.L(), pinnedNode)
+		defer db.Close()
 
-	// Speed up the decommissioning.
-	run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
-	run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+		// Set the replication factor.
+		run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+		run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
 
-	t.Status("waiting for initial up-replication")
-	db := c.Conn(ctx, t.L(), pinnedNode)
-	defer func() {
-		_ = db.Close()
-	}()
-	for {
-		fullReplicated := false
-		if err := db.QueryRow(
-			// Check if all ranges are fully replicated.
-			"SELECT min(array_length(replicas, 1)) >= $1 FROM crdb_internal.ranges",
-			defaultReplicationFactor,
-		).Scan(&fullReplicated); err != nil {
-			t.Fatal(err)
-		}
-		if fullReplicated {
-			break
-		}
-		time.Sleep(time.Second)
+		// Speed up the decommissioning.
+		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+
+		// Wait for initial up-replication.
+		err := WaitForReplication(ctx, t, db, defaultReplicationFactor)
+		require.NoError(t, err)
 	}
 
 	var m *errgroup.Group
@@ -1057,7 +1047,8 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.NoError(t, err)
 
 		// Wait for initial up-replication.
-		WaitFor3XReplication(t, db)
+		err = WaitFor3XReplication(ctx, t, db)
+		require.NoError(t, err)
 	}
 
 	// Connect to node 4 (the target node of the decommission).

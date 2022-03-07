@@ -151,7 +151,8 @@ func setupTPCC(
 			_, err := db.Exec(`SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '15s'`)
 			require.NoError(t, err)
 		}
-		WaitFor3XReplication(t, c.Conn(ctx, t.L(), crdbNodes[0]))
+		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), crdbNodes[0]))
+		require.NoError(t, err)
 		switch opts.SetupType {
 		case usingExistingData:
 			// Do nothing.
@@ -982,9 +983,10 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.L().Printf("restoring tpcc fixture\n")
-	WaitFor3XReplication(t, db)
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
-	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
+	if err = c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
 	if rebalanceWait == 0 || len(roachNodes) <= 3 {
