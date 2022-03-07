@@ -561,6 +561,11 @@ func AddSSTable(
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
 				}
+				// Retry on AmbiguousResult.
+				if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, i, err)
+					continue
+				}
 				// This range has split -- we need to split the SST to try again.
 				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
 					// TODO(andrei): We just use the first of m.Ranges; presumably we
@@ -588,11 +593,6 @@ func AddSSTable(
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)
 					return nil
-				}
-				// Retry on AmbiguousResult.
-				if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
-					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, i, err)
-					continue
 				}
 			}
 			return errors.Wrapf(err, "addsstable [%s,%s)", item.start, item.end)

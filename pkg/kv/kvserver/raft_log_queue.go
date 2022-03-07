@@ -364,6 +364,17 @@ const (
 	truncatableIndexChosenViaLastIndex       = "last index"
 )
 
+// No assumption should be made about the relationship between
+// RaftStatus.Commit, FirstIndex, LastIndex. This is because:
+// - In some cases they are not updated or read atomically.
+// - FirstIndex is a potentially future first index, after the pending
+//   truncations have been applied. Currently, pending truncations are being
+//   proposed through raft, so one can be sure that these pending truncations
+//   do not refer to entries that are not already in the log. However, this
+//   situation may change in the future. In general, we should not make an
+//   assumption on what is in the local raft log based solely on FirstIndex,
+//   and should be based on whether [FirstIndex,LastIndex] is a non-empty
+//   interval.
 type truncateDecisionInput struct {
 	RaftStatus            raft.Status
 	LogSize, MaxLogSize   int64
@@ -569,20 +580,24 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	}
 
 	// We've inherited the unfortunate semantics for {First,Last}Index from
-	// raft.Storage. Specifically, both {First,Last}Index are inclusive, so
-	// there's no way to represent an empty log. The way we've initialized
-	// repl.FirstIndex is to set it to the first index in the possibly-empty log
-	// (TruncatedState.Index + 1), and allowing LastIndex to fall behind it when
-	// the log is empty (TruncatedState.Index). The initialization is done when
-	// minting a new replica from either the truncated state of incoming
-	// snapshot, or using the default initial log index. This makes for the
-	// confusing situation where FirstIndex > LastIndex. We can detect this
-	// special empty log case by comparing checking if
-	// `FirstIndex == LastIndex + 1` (`logEmpty` below). Similar to this, we can
-	// have the case that `FirstIndex = CommitIndex + 1` when there are no
-	// committed entries (which we check for in `noCommittedEntries` below).
-	// Having done that (i.e. if the raft log is not empty, and there are
-	// committed entries), we can assert on the following invariants:
+	// raft.Storage: both {First,Last}Index are inclusive. The way we've
+	// initialized repl.FirstIndex is to set it to the first index in the
+	// possibly-empty log (TruncatedState.Index + 1), and allowing LastIndex to
+	// fall behind it when the log is empty (TruncatedState.Index). The
+	// initialization is done when minting a new replica from either the
+	// truncated state of incoming snapshot, or using the default initial log
+	// index. This makes for the confusing situation where FirstIndex >
+	// LastIndex. We can detect this special empty log case by comparing
+	// checking if `FirstIndex == LastIndex + 1`. Similar to this, we can have
+	// the case that `FirstIndex = CommitIndex + 1` when there are no committed
+	// entries. Additionally, FirstIndex adjusts for the pending log
+	// truncations, which allows for FirstIndex to be greater than LastIndex and
+	// commited index by more than 1 (see the comment with
+	// truncateDecisionInput). So all invariant checking below is gated on first
+	// ensuring that the log is not empty, i.e., FirstIndex <= LastIndex.
+	//
+	// If the raft log is not empty, and there are committed entries, we can
+	// assert on the following invariants:
 	//
 	//         FirstIndex    <= LastIndex                                    (0)
 	//         NewFirstIndex >= FirstIndex                                   (1)
@@ -602,8 +617,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// consider the empty case. Something like
 	// https://github.com/nvanbenschoten/optional could help us emulate an
 	// `option<uint64>` type if we care enough.
-	logEmpty := input.FirstIndex == input.LastIndex+1
-	noCommittedEntries := input.FirstIndex == input.RaftStatus.Commit+1
+	logEmpty := input.FirstIndex > input.LastIndex
+	noCommittedEntries := input.FirstIndex > input.RaftStatus.Commit
 
 	logIndexValid := logEmpty ||
 		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex)

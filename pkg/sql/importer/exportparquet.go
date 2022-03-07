@@ -180,9 +180,9 @@ func populateLogicalStringCol(schemaEl *parquet.SchemaElement) {
 	schemaEl.ConvertedType = parquet.ConvertedTypePtr(parquet.ConvertedType_UTF8)
 }
 
-// roundtripStringer pretty prints the datum's value as string, allowing the
+// RoundtripStringer pretty prints the datum's value as string, allowing the
 // parser in certain decoders to work.
-func roundtripStringer(d tree.Datum) string {
+func RoundtripStringer(d tree.Datum) string {
 	fmtCtx := tree.NewFmtCtx(tree.FmtBareStrings)
 	d.Format(fmtCtx)
 	return fmtCtx.CloseAndGetString()
@@ -386,7 +386,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 		col.encodeFn = func(d tree.Datum) (interface{}, error) {
 			// TODO(MB): investigate whether bit arrays should be encoded as an array of longs,
 			// like in avro changefeeds
-			baS := roundtripStringer(d.(*tree.DBitArray))
+			baS := RoundtripStringer(d.(*tree.DBitArray))
 			return []byte(baS), nil
 		}
 		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
@@ -448,7 +448,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 		populateLogicalStringCol(schemaEl)
 		col.encodeFn = func(d tree.Datum) (interface{}, error) {
 			date := d.(*tree.DDate)
-			ds := roundtripStringer(date)
+			ds := RoundtripStringer(date)
 			return []byte(ds), nil
 		}
 		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
@@ -510,7 +510,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 		// of overflow. See comment associated with time.Time.UnixMicro().
 		populateLogicalStringCol(schemaEl)
 		col.encodeFn = func(d tree.Datum) (interface{}, error) {
-			ts := roundtripStringer(d.(*tree.DTimestamp))
+			ts := RoundtripStringer(d.(*tree.DTimestamp))
 			return []byte(ts), nil
 		}
 		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
@@ -535,7 +535,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 		populateLogicalStringCol(schemaEl)
 
 		col.encodeFn = func(d tree.Datum) (interface{}, error) {
-			ts := roundtripStringer(d.(*tree.DTimestampTZ))
+			ts := RoundtripStringer(d.(*tree.DTimestampTZ))
 			return []byte(ts), nil
 		}
 		col.DecodeFn = func(x interface{}) (tree.Datum, error) {

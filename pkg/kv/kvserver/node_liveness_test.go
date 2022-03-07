@@ -1020,7 +1020,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		if val := injectError.Load(); val != nil && val.(bool) {
 			atomic.AddInt32(&injectedErrorCount, 1)
 			injectError.Store(false)
-			return roachpb.NewError(roachpb.NewAmbiguousResultError("test"))
+			return roachpb.NewError(roachpb.NewAmbiguousResultErrorf("test"))
 		}
 		return nil
 	}
@@ -1063,7 +1063,7 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	errorsToTest := []error{
-		roachpb.NewAmbiguousResultError("test"),
+		roachpb.NewAmbiguousResultErrorf("test"),
 		roachpb.NewTransactionStatusError(roachpb.TransactionStatusError_REASON_UNKNOWN, "foo"),
 		kv.OnePCNotAllowedError{},
 	}
@@ -1207,8 +1207,7 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 
 	// Check that Heartbeat() returned an ambiguous error, and take that as proof
 	// that the heartbeat wasn't retried.
-	require.Error(t, err)
-	require.Equal(t, "result is ambiguous (context done during DistSender.Send: context canceled)", err.Error())
+	require.True(t, errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)), "%+v", err)
 }
 
 func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, nodeID roachpb.NodeID) {

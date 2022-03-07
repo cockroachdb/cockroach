@@ -252,8 +252,6 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			cancelCommit()
 			commitErr := <-commitCh
 			require.IsType(t, &roachpb.AmbiguousResultError{}, commitErr)
-			require.Regexp(t, `result is ambiguous \(context done during DistSender.Send: context canceled\)`,
-				commitErr)
 
 			// If the test wants the upcoming rollback to find a COMMITTED record,
 			// we'll perform transaction recovery. This will leave the transaction in

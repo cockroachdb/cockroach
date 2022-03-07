@@ -3151,14 +3151,14 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
 				return roachpb.ABORTED, txnRecordSynthesized, nil
 			},
-			expErr: "result is ambiguous (intent missing and record aborted)",
+			expErr: "result is ambiguous: intent missing and record aborted",
 		},
 		{
 			name: "QueryTxn error, unresolved ambiguity",
 			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
 				return 0, false, errors.New("unable to query txn")
 			},
-			expErr: "result is ambiguous (error=unable to query txn [intent missing])",
+			expErr: "result is ambiguous: error=unable to query txn [intent missing]",
 		},
 	}
 	for _, test := range testCases {

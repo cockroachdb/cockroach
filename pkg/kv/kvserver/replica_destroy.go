@@ -209,8 +209,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		// share the error across proposals).
 		p.finishApplication(ctx, proposalResult{
 			Err: roachpb.NewError(
-				roachpb.NewAmbiguousResultError(
-					apply.ErrRemoved.Error())),
+				roachpb.NewAmbiguousResultError(apply.ErrRemoved)),
 		})
 	}
 	r.mu.internalRaftGroup = nil
