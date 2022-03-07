@@ -9,7 +9,8 @@
 package interceptor_test
 
 import (
-	"bytes"
+	"encoding/json"
+	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
@@ -19,60 +20,100 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSimpleProxy illustrates how the frontend and backend interceptors can be
+// TestSimpleProxy illustrates how the frontend and backend connections can be
 // used as a proxy.
 func TestSimpleProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// These represents connections for client<->proxy and proxy<->server.
-	fromClient := new(bytes.Buffer)
-	toClient := new(bytes.Buffer)
-	fromServer := new(bytes.Buffer)
-	toServer := new(bytes.Buffer)
-
-	// Create client and server interceptors.
-	clientInt := interceptor.NewBackendInterceptor(fromClient)
-	serverInt := interceptor.NewFrontendInterceptor(fromServer)
-
 	t.Run("client to server", func(t *testing.T) {
+		// These represents connections for client<->proxy and proxy<->server.
+		clientProxy, client := net.Pipe()
+		serverProxy, server := net.Pipe()
+		defer clientProxy.Close()
+		defer client.Close()
+		defer serverProxy.Close()
+		defer server.Close()
+
+		// Create client and server interceptors.
+		clientConn := interceptor.NewBackendConn(clientProxy)
+		serverConn := interceptor.NewFrontendConn(serverProxy)
+
 		// Client sends a list of SQL queries.
 		queries := []pgproto3.FrontendMessage{
 			&pgproto3.Query{String: "SELECT 1"},
-			&pgproto3.Query{String: "SELECT * FROM foo.bar"},
+			&pgproto3.Query{String: "SELECT 2 FROM foobar"},
 			&pgproto3.Query{String: "UPDATE foo SET x = 42"},
 			&pgproto3.Sync{},
 			&pgproto3.Terminate{},
 		}
-		for _, msg := range queries {
-			_, err := fromClient.Write(msg.Encode(nil))
-			require.NoError(t, err)
-		}
-		totalBytes := fromClient.Len()
+		errCh := make(chan error, len(queries))
+		go func() {
+			for _, msg := range queries {
+				_, err := client.Write(msg.Encode(nil))
+				errCh <- err
+			}
+		}()
+		msgCh := make(chan pgproto3.FrontendMessage, 10)
+		go func() {
+			backend := interceptor.NewBackendConn(server)
+			for {
+				msg, err := backend.ReadMsg()
+				if err != nil {
+					return
+				}
+				msgCh <- msg
+			}
+		}()
 
 		customQuery := &pgproto3.Query{
 			String: "SELECT * FROM crdb_internal.serialize_session()"}
 
 		for {
-			typ, _, err := clientInt.PeekMsg()
+			typ, _, err := clientConn.PeekMsg()
 			require.NoError(t, err)
 
 			// Forward message to server.
-			_, err = clientInt.ForwardMsg(toServer)
+			_, err = clientConn.ForwardMsg(serverConn)
 			require.NoError(t, err)
 
 			if typ == pgwirebase.ClientMsgTerminate {
 				// Right before we terminate, we could also craft a custom
 				// message, and send it to the server.
-				_, err := toServer.Write(customQuery.Encode(nil))
+				_, err := serverConn.Write(customQuery.Encode(nil))
 				require.NoError(t, err)
 				break
 			}
 		}
-		require.Equal(t, 0, fromClient.Len())
-		require.Equal(t, totalBytes+len(customQuery.Encode(nil)), toServer.Len())
+
+		expectedMsg := []string{
+			`"Type":"Query","String":"SELECT 1"`,
+			`"Type":"Query","String":"SELECT 2 FROM foobar"`,
+			`"Type":"Query","String":"UPDATE foo SET x = 42"`,
+			`"Type":"Sync"`,
+			`"Type":"Terminate"`,
+			`"Type":"Query","String":"SELECT \* FROM crdb_internal.serialize_session\(\)"`,
+		}
+		var m1 []byte
+		for _, m2 := range expectedMsg {
+			msg := <-msgCh
+			m1, _ = json.Marshal(msg)
+			require.Regexp(t, m2, string(m1))
+		}
 	})
 
 	t.Run("server to client", func(t *testing.T) {
+		// These represents connections for client<->proxy and proxy<->server.
+		clientProxy, client := net.Pipe()
+		serverProxy, server := net.Pipe()
+		defer clientProxy.Close()
+		defer client.Close()
+		defer serverProxy.Close()
+		defer server.Close()
+
+		// Create client and server interceptors.
+		clientConn := interceptor.NewBackendConn(clientProxy)
+		serverConn := interceptor.NewFrontendConn(serverProxy)
+
 		// Server sends back responses.
 		queries := []pgproto3.BackendMessage{
 			// Forward these back to the client.
@@ -83,15 +124,27 @@ func TestSimpleProxy(t *testing.T) {
 			// Terminator.
 			&pgproto3.ReadyForQuery{},
 		}
-		for _, msg := range queries {
-			_, err := fromServer.Write(msg.Encode(nil))
-			require.NoError(t, err)
-		}
-		// Exclude bytes from second message.
-		totalBytes := fromServer.Len() - len(queries[2].Encode(nil))
+		errCh := make(chan error, len(queries))
+		go func() {
+			for _, msg := range queries {
+				_, err := server.Write(msg.Encode(nil))
+				errCh <- err
+			}
+		}()
+		msgCh := make(chan pgproto3.BackendMessage, 10)
+		go func() {
+			frontend := interceptor.NewFrontendConn(client)
+			for {
+				msg, err := frontend.ReadMsg()
+				if err != nil {
+					return
+				}
+				msgCh <- msg
+			}
+		}()
 
 		for {
-			typ, size, err := serverInt.PeekMsg()
+			typ, size, err := serverConn.PeekMsg()
 			require.NoError(t, err)
 
 			switch typ {
@@ -99,13 +152,13 @@ func TestSimpleProxy(t *testing.T) {
 				// Assuming that we're only interested in small messages, then
 				// we could skip all the large ones.
 				if size > 12 {
-					_, err := serverInt.ForwardMsg(toClient)
+					_, err := serverConn.ForwardMsg(clientConn)
 					require.NoError(t, err)
 					continue
 				}
 
 				// Decode message.
-				msg, err := serverInt.ReadMsg()
+				msg, err := serverConn.ReadMsg()
 				require.NoError(t, err)
 
 				// Once we've decoded the message, we could store the message
@@ -114,7 +167,7 @@ func TestSimpleProxy(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, "short", string(dmsg.CommandTag))
 			case pgwirebase.ServerMsgBackendKeyData:
-				msg, err := serverInt.ReadMsg()
+				msg, err := serverConn.ReadMsg()
 				require.NoError(t, err)
 
 				dmsg, ok := msg.(*pgproto3.BackendKeyData)
@@ -124,11 +177,11 @@ func TestSimpleProxy(t *testing.T) {
 				// the client.
 				dmsg.SecretKey = 100
 
-				_, err = toClient.Write(dmsg.Encode(nil))
+				_, err = clientConn.Write(dmsg.Encode(nil))
 				require.NoError(t, err)
 			default:
 				// Forward message that we're not interested to the client.
-				_, err := serverInt.ForwardMsg(toClient)
+				_, err := serverConn.ForwardMsg(clientConn)
 				require.NoError(t, err)
 			}
 
@@ -136,7 +189,17 @@ func TestSimpleProxy(t *testing.T) {
 				break
 			}
 		}
-		require.Equal(t, 0, fromServer.Len())
-		require.Equal(t, totalBytes, toClient.Len())
+
+		expectedMsg := []string{
+			`"Type":"CommandComplete","CommandTag":"averylongstring"`,
+			`"Type":"BackendKeyData","ProcessID":100,"SecretKey":100`,
+			`"Type":"ReadyForQuery"`,
+		}
+		var m1 []byte
+		for _, m2 := range expectedMsg {
+			msg := <-msgCh
+			m1, _ = json.Marshal(msg)
+			require.Regexp(t, m2, string(m1))
+		}
 	})
 }
