@@ -197,22 +197,36 @@ func resolveIncrementalsBackupLocation(
 	// incremental layer iff all of them do. So it suffices to check only the
 	// first.
 	// Check we can read from this location, though we don't need the backups here.
-	prev, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocationOld[0])
+	prevOld, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocationOld[0])
 	if err != nil {
 		return nil, err
 	}
 
-	if len(prev) > 0 || !execCfg.Settings.Version.IsActive(ctx, clusterversion.IncrementalBackupSubdir) {
+	resolvedIncrementalsBackupLocation, err := appendPaths(fullBackupCollections, DefaultIncrementalsSubdir, subdir)
+	if err != nil {
+		return nil, err
+	}
+
+	prev, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocation[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(bardin): This algorithm divides "destination resolution" and "actual backup lookup" for historical reasons,
+	// but this doesn't quite make sense now that destination resolution depends on backup lookup.
+	// Try to figure out a clearer way to organize this.
+	if len(prevOld) > 0 && len(prev) > 0 {
+		return nil, errors.New(
+			"Incremental layers found in both old and new default locations. " +
+				"Please choose a location manually with the `incremental_location` parameter.")
+	}
+
+	// If the cluster isn't fully migrated, or we have backups in the old default
+	// location, continue to use the old location.
+	if len(prevOld) > 0 || !execCfg.Settings.Version.IsActive(ctx, clusterversion.IncrementalBackupSubdir) {
 		return resolvedIncrementalsBackupLocationOld, nil
 	}
-	incPaths, err := appendPaths(fullBackupCollections, DefaultIncrementalsSubdir, subdir)
-	if err != nil {
-		return nil, err
-	}
-	// Check we can read from this location, though we don't need the backups here.
-	_, err = backupsFromLocation(ctx, user, execCfg, incPaths[0])
-	if err != nil {
-		return nil, err
-	}
-	return incPaths, nil
+
+	// Otherwise, use the new location.
+	return resolvedIncrementalsBackupLocation, nil
 }

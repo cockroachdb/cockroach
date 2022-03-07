@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -93,6 +94,34 @@ ORDER BY object_type, object_name`, full)
 
 	// Check the appended base backup.
 	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
+	require.Equal(t, [][]string{
+		// Full.
+		{"data", "full", "NULL", beforeTS, "NULL", "false"},
+		{"public", "full", "NULL", beforeTS, "NULL", "false"},
+		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"welcome", "full", "NULL", beforeTS, "NULL", "false"},
+		{"_welcome", "full", "NULL", beforeTS, "NULL", "false"},
+		{"sc", "full", "NULL", beforeTS, "NULL", "false"},
+		{"t1", "full", "NULL", beforeTS, "0", "false"},
+		{"t2", "full", "NULL", beforeTS, "0", "false"},
+		// Incremental.
+		{"data", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"public", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"bank", "incremental", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
+		{"welcome", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"_welcome", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"sc", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"t1", "incremental", beforeTS, incTS, "0", "false"},
+		{"t2", "incremental", beforeTS, incTS, "0", "false"},
+	}, res)
+
+	backupTime, err := time.Parse("2006-01-02 15:04:05.000000", beforeTS)
+	require.NoError(t, err)
+	backupFolder := backupTime.Format(DateBasedIntoFolderName)
+	resolvedBackupFolder := full + backupFolder
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, incTS), full)
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, resolvedBackupFolder)
 	require.Equal(t, [][]string{
 		// Full.
 		{"data", "full", "NULL", beforeTS, "NULL", "false"},
