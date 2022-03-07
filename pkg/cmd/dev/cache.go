@@ -75,8 +75,14 @@ func (d *dev) cache(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.checkPresenceInBazelRc(bazelRcLine)
-	return err
+	errStr, err := d.checkPresenceInBazelRc(bazelRcLine)
+	if err != nil {
+		return err
+	}
+	if errStr != "" {
+		return fmt.Errorf("%s", errStr)
+	}
+	return nil
 }
 
 func bazelRemoteCacheDir() (string, error) {
@@ -130,6 +136,10 @@ func (d *dev) setUpCache(ctx context.Context) (string, error) {
 
 	log.Printf("Configuring cache...\n")
 
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", bazelRemoteTarget)
+	if err != nil {
+		return "", err
+	}
 	bazelRemoteLoc, err := d.exec.CommandContextSilent(ctx, "bazel", "run", bazelRemoteTarget, "--run_under=//build/bazelutil/whereis")
 	if err != nil {
 		return "", err

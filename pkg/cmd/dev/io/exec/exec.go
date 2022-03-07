@@ -25,6 +25,21 @@ import (
 	"github.com/irfansharif/recorder"
 )
 
+// ExitError is an error type similar to os.ExitError. The stderr for
+// failed commands is captured as `Stderr`.
+type ExitError struct {
+	Stderr []byte
+	Inner  error
+}
+
+func (e *ExitError) Unwrap() error {
+	return e.Inner
+}
+
+func (e *ExitError) Error() string {
+	return e.Inner.Error()
+}
+
 // Exec is a convenience wrapper around the stdlib os/exec package. It lets us:
 //
 // (a) mock all instances where we shell out, for tests, and
@@ -223,13 +238,13 @@ func (e *Exec) commandContextImpl(
 
 	output, err := e.Next(command, func(outTrace, errTrace io.Writer) (string, error) {
 		cmd := exec.CommandContext(ctx, name, args...)
-		var buffer bytes.Buffer
+		var stdoutBuffer, stderrBuffer bytes.Buffer
 		if silent {
-			cmd.Stdout = io.MultiWriter(&buffer, outTrace)
-			cmd.Stderr = errTrace
+			cmd.Stdout = io.MultiWriter(&stdoutBuffer, outTrace)
+			cmd.Stderr = io.MultiWriter(&stderrBuffer, errTrace)
 		} else {
-			cmd.Stdout = io.MultiWriter(e.stdout, &buffer, outTrace)
-			cmd.Stderr = io.MultiWriter(e.stderr, errTrace)
+			cmd.Stdout = io.MultiWriter(e.stdout, &stdoutBuffer, outTrace)
+			cmd.Stderr = io.MultiWriter(e.stderr, &stderrBuffer, errTrace)
 		}
 		if stdin != nil {
 			cmd.Stdin = stdin
@@ -240,9 +255,9 @@ func (e *Exec) commandContextImpl(
 			return "", err
 		}
 		if err := cmd.Wait(); err != nil {
-			return "", err
+			return "", &ExitError{Inner: err, Stderr: stderrBuffer.Bytes()}
 		}
-		return buffer.String(), nil
+		return stdoutBuffer.String(), nil
 	})
 
 	if err != nil {
