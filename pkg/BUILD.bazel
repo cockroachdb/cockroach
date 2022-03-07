@@ -139,6 +139,7 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/closedts/sidetransport:sidetransport_test",
     "//pkg/kv/kvserver/closedts/tracker:tracker_test",
     "//pkg/kv/kvserver/closedts:closedts_test",
+    "//pkg/kv/kvserver/concurrency/poison:poison_test",
     "//pkg/kv/kvserver/concurrency:concurrency_test",
     "//pkg/kv/kvserver/gc:gc_test",
     "//pkg/kv/kvserver/idalloc:idalloc_test",

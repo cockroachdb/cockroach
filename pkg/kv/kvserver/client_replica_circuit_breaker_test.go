@@ -89,7 +89,7 @@ func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 	// Disable the probe so that when the breaker trips, it stays tripped.
 	tc.SetProbeEnabled(n1, false)
-	tc.Report(n1, errors.New("injected breaker error"))
+	tc.TripBreaker(n1)
 
 	s1 := tc.GetFirstStoreFromServer(t, n1)
 	s2 := tc.GetFirstStoreFromServer(t, n2)
@@ -155,7 +155,7 @@ func TestReplicaCircuitBreaker_FollowerTripped(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 	// Disable the probe on n2 so that when the breaker trips, it stays tripped.
 	tc.SetProbeEnabled(n2, false)
-	tc.Report(n2, errors.New("injected breaker error"))
+	tc.TripBreaker(n2)
 
 	// We didn't trip the leaseholder n1, so it is unaffected.
 	require.NoError(t, tc.Read(n1))
@@ -200,7 +200,7 @@ func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 	// disabled.
 	require.NoError(t, tc.Write(n1))
 	tc.SetProbeEnabled(n1, false)
-	tc.Report(n1, errors.New("injected breaker error"))
+	tc.TripBreaker(n1)
 	resumeHeartbeats := tc.ExpireAllLeasesAndN1LivenessRecord(t, pauseHeartbeats)
 
 	// On n1, run into the circuit breaker when requesting lease. We have to
@@ -515,7 +515,7 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	// disabled, i.e. it will stay tripped.
 	require.NoError(t, tc.Write(n1))
 	tc.SetProbeEnabled(n1, false)
-	tc.Report(n1, errors.New("injected breaker error"))
+	tc.TripBreaker(n1)
 
 	exemptRequests := []func() roachpb.Request{
 		func() roachpb.Request { return &roachpb.ExportRequest{ReturnSST: true} },
@@ -780,8 +780,9 @@ func (cbt *circuitBreakerTest) SetProbeEnabled(idx int, to bool) {
 	cbt.repls[idx].setProbeEnabled(to)
 }
 
-func (cbt *circuitBreakerTest) Report(idx int, err error) {
-	cbt.repls[idx].Replica.Breaker().Report(err)
+func (cbt *circuitBreakerTest) TripBreaker(idx int) {
+	repl := cbt.repls[idx].Replica
+	repl.TripBreaker()
 }
 
 func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) error, idx int) {
@@ -938,6 +939,7 @@ func (*circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
 		err = aErr.WrappedErr.GoError()
 	}
 	require.True(t, errors.Is(err, circuit.ErrBreakerOpen), "%+v", err)
+	require.True(t, errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)), "%+v", err)
 }
 
 func (*circuitBreakerTest) RequireIsNotLeaseholderError(t *testing.T, err error) {
