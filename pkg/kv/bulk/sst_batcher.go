@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -58,14 +57,23 @@ var (
 
 type sz int64
 
-func (b sz) String() string {
-	return redact.StringWithoutMarkers(b)
-}
+func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
+func (b sz) SafeValue()     {}
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (b sz) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print(humanizeutil.IBytes(int64(b)))
+type timing time.Duration
+
+func (t timing) String() string { return time.Duration(t).Round(time.Second).String() }
+func (t timing) SafeValue()     {}
+
+type sorted bool
+
+func (t sorted) String() string {
+	if t {
+		return "sorted"
+	}
+	return "unsorted"
 }
+func (t sorted) SafeValue() {}
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
 // SSTBatcher can be handed KVs repeatedly and will make them into SSTs that are
@@ -117,8 +125,9 @@ type SSTBatcher struct {
 		sstSize int
 		files   int // a single flush might create multiple files.
 
-		scatterMoved int64
+		scatterMoved sz
 
+		flushWait   time.Duration
 		sendWait    time.Duration
 		splitWait   time.Duration
 		scatterWait time.Duration
@@ -320,6 +329,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	if b.sstWriter.DataSize == 0 {
 		return nil
 	}
+	beforeFlush := timeutil.Now()
+
 	b.flushCounts.total++
 
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
@@ -333,7 +344,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		}
 	}
 
-	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
+	hour := hlc.Timestamp{WallTime: beforeFlush.Add(time.Hour).UnixNano()}
 
 	start := roachpb.Key(append([]byte(nil), b.batchStartKey...))
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
@@ -353,7 +364,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		//
 		// We only do this splitting if the caller expects the sst_batcher to
 		// split and scatter the data as it ingests it i.e. splitAfter > 0.
-		if b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 && !b.initialSplitDone {
+		if !b.initialSplitDone && b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "failed to generate split key to separate ingestion span: %v", err)
 			} else {
@@ -369,8 +380,12 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 				} else {
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
-					if reply.Stats != nil {
-						b.flushCounts.scatterMoved += reply.Stats.Total()
+					if reply.ScatteredStats != nil {
+						moved := sz(reply.ScatteredStats.Total())
+						b.flushCounts.scatterMoved += moved
+						if moved > 0 {
+							log.VEventf(ctx, 1, "starting split scattered %s in non-empty range %s", moved, reply.ScatteredSpan)
+						}
 					}
 				}
 			}
@@ -417,17 +432,21 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 					log.Warningf(ctx, "%v", err)
 				} else {
 					log.VEventf(ctx, 2, "%s added since last split, splitting/scattering for next range at %v", sz(b.flushedToCurrentRange), end)
-					// NB: Passing 'hour' here is technically illegal until 19.2 is
-					// active, but the value will be ignored before that, and we don't
-					// have access to the cluster version here.
 					reply, err := b.db.SplitAndScatter(ctx, splitAt, hour)
 					if err != nil {
 						log.Warningf(ctx, "failed to split and scatter during ingest: %+v", err)
 					}
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
-					if reply.Stats != nil {
-						b.flushCounts.scatterMoved += reply.Stats.Total()
+					if reply.ScatteredStats != nil {
+						moved := sz(reply.ScatteredStats.Total())
+						b.flushCounts.scatterMoved += moved
+						if moved > 0 {
+							// This is unexpected, since 'filling' a range without hitting a
+							// an existing split suggests non-overlapping input, so we expect
+							// our still-to-fill RHS to be empty and cheap to move.
+							log.VEventf(ctx, 1, "filled-range split scattered %s in non-empty range %s", moved, reply.ScatteredSpan)
+						}
 					}
 				}
 				b.flushedToCurrentRange = 0
@@ -437,6 +456,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	b.rowCounter.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
+	b.flushCounts.flushWait += timeutil.Since(beforeFlush)
 	return nil
 }
 
