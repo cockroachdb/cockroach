@@ -12,10 +12,10 @@ package txnidcache
 
 import (
 	"sync"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -39,21 +39,19 @@ type fifoCache struct {
 }
 
 type blockListNode struct {
-	block
+	*block
 	next *blockListNode
 }
 
 // blockList is a singly-linked list of blocks. The list is used to
 // implement FIFO eviction.
 type blockList struct {
-	head *blockListNode
-	tail *blockListNode
-
-	// tailIdx is an index pointing into the next empty slot in block
-	// stored in the tail pointer.
-	tailIdx int
+	numNodes int
+	head     *blockListNode
+	tail     *blockListNode
 }
 
+// newFifoCache takes a function which returns a capacity in bytes.
 func newFIFOCache(capacity contentionutils.CapacityLimiter) *fifoCache {
 	c := &fifoCache{
 		capacity: capacity,
@@ -70,22 +68,14 @@ func (c *fifoCache) add(b *block) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	blockSize := 0
 	for i := range b {
 		if !b[i].Valid() {
 			break
 		}
 
 		c.mu.data[b[i].TxnID] = b[i].TxnFingerprintID
-		blockSize++
 	}
-
-	c.mu.eviction.append(b[:blockSize])
-
-	// Zeros out the block and put it back into the blockPool.
-	*b = block{}
-	blockPool.Put(b)
-
+	c.mu.eviction.addNode(b)
 	c.maybeEvictLocked()
 }
 
@@ -97,24 +87,25 @@ func (c *fifoCache) get(txnID uuid.UUID) (roachpb.TransactionFingerprintID, bool
 	return fingerprintID, found
 }
 
-func (c *fifoCache) size() int {
+func (c *fifoCache) size() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return len(c.mu.data)
+	return c.sizeLocked()
+}
+
+func (c *fifoCache) sizeLocked() int64 {
+	return int64(c.mu.eviction.numNodes)*
+		((entrySize*blockSize)+int64(unsafe.Sizeof(blockListNode{}))) +
+		int64(len(c.mu.data))*entrySize
 }
 
 func (c *fifoCache) maybeEvictLocked() {
-	for int64(len(c.mu.data)) > c.capacity() {
+	for c.sizeLocked() > c.capacity() {
 		node := c.mu.eviction.removeFront()
 		if node == nil {
 			return
 		}
-
 		c.evictNodeLocked(node)
-
-		// Zero out the node and put it back into the pool.
-		*node = blockListNode{}
-		nodePool.Put(node)
 	}
 }
 
@@ -127,40 +118,23 @@ func (c *fifoCache) evictNodeLocked(node *blockListNode) {
 
 		delete(c.mu.data, node.block[i].TxnID)
 	}
+
+	*node.block = block{}
+	blockPool.Put(node.block)
+	*node = blockListNode{}
+	nodePool.Put(node)
 }
 
-func (e *blockList) append(block []contentionpb.ResolvedTxnID) {
-	block = e.appendToTail(block)
-	for len(block) > 0 {
-		e.addNode()
-		block = e.appendToTail(block)
-	}
-}
-
-func (e *blockList) addNode() {
+func (e *blockList) addNode(b *block) {
 	newNode := nodePool.Get().(*blockListNode)
+	newNode.block = b
 	if e.head == nil {
 		e.head = newNode
 	} else {
 		e.tail.next = newNode
 	}
 	e.tail = newNode
-	e.tailIdx = 0
-}
-
-func (e *blockList) appendToTail(
-	block []contentionpb.ResolvedTxnID,
-) (remaining []contentionpb.ResolvedTxnID) {
-	if e.head == nil {
-		return block
-	}
-	toCopy := blockSize - e.tailIdx
-	if toCopy > len(block) {
-		toCopy = len(block)
-	}
-	copy(e.tail.block[e.tailIdx:], block[:toCopy])
-	e.tailIdx += toCopy
-	return block[toCopy:]
+	e.numNodes++
 }
 
 func (e *blockList) removeFront() *blockListNode {
@@ -168,7 +142,11 @@ func (e *blockList) removeFront() *blockListNode {
 		return nil
 	}
 
+	e.numNodes--
 	removedBlock := e.head
 	e.head = e.head.next
+	if e.head == nil {
+		e.tail = nil
+	}
 	return removedBlock
 }
