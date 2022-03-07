@@ -49,7 +49,6 @@ export class Duration extends React.PureComponent<{
         <span className={className}>
           {"Duration: " +
             formatDuration(moment.duration(finishedAt.diff(startedAt)))}
-          )
         </span>
       );
     }
