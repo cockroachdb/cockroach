@@ -543,7 +543,7 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 
 // purgeOldVersions removes old unused descriptor versions older than
 // minVersion and releases any associated leases.
-// If takenOffline is set, minVersion is ignored; no lease is acquired and all
+// If dropped is set, minVersion is ignored; no lease is acquired and all
 // existing unused versions are removed. The descriptor is further marked dropped,
 // which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.

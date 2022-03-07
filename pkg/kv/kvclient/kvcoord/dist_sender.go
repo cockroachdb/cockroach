@@ -2212,16 +2212,18 @@ func (ds *DistSender) sendToReplicas(
 
 		// Has the caller given up?
 		if ctx.Err() != nil {
-			reportedErr := errors.Wrap(ctx.Err(), "context done during DistSender.Send")
-			log.Eventf(ctx, "%v", reportedErr)
-			if ambiguousError != nil {
-				return nil, roachpb.NewAmbiguousResultErrorf(reportedErr.Error())
-			}
 			// Don't consider this a sendError, because sendErrors indicate that we
 			// were unable to reach a replica that could serve the request, and they
 			// cause range cache evictions. Context cancellations just mean the
 			// sender changed its mind or the request timed out.
-			return nil, errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
+
+			if ambiguousError != nil {
+				err = roachpb.NewAmbiguousResultError(errors.Wrapf(ambiguousError, "context done during DistSender.Send"))
+			} else {
+				err = errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
+			}
+			log.Eventf(ctx, "%v", err)
+			return nil, err
 		}
 	}
 }
