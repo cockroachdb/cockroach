@@ -9,7 +9,6 @@
 package sqlproxyccl
 
 import (
-	"bytes"
 	"context"
 	"net"
 	"testing"
@@ -186,62 +185,6 @@ func TestForwarder_Close(t *testing.T) {
 
 	f.Close()
 	require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
-}
-
-func TestForwarder_setClientConn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	f := &forwarder{serverConn: nil, serverInterceptor: nil}
-
-	w, r := net.Pipe()
-	defer w.Close()
-	defer r.Close()
-
-	f.setClientConn(r)
-	require.Equal(t, r, f.clientConn)
-
-	dst := new(bytes.Buffer)
-	errChan := make(chan error, 1)
-	go func() {
-		_, err := f.clientInterceptor.ForwardMsg(dst)
-		errChan <- err
-	}()
-
-	_, err := w.Write((&pgproto3.Query{String: "SELECT 1"}).Encode(nil))
-	require.NoError(t, err)
-
-	// Block until message has been forwarded. This checks that we are creating
-	// our interceptor properly.
-	err = <-errChan
-	require.NoError(t, err)
-	require.Equal(t, 14, dst.Len())
-}
-
-func TestForwarder_setServerConn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	f := &forwarder{serverConn: nil, serverInterceptor: nil}
-
-	w, r := net.Pipe()
-	defer w.Close()
-	defer r.Close()
-
-	f.setServerConn(r)
-	require.Equal(t, r, f.serverConn)
-
-	dst := new(bytes.Buffer)
-	errChan := make(chan error, 1)
-	go func() {
-		_, err := f.serverInterceptor.ForwardMsg(dst)
-		errChan <- err
-	}()
-
-	_, err := w.Write((&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil))
-	require.NoError(t, err)
-
-	// Block until message has been forwarded. This checks that we are creating
-	// our interceptor properly.
-	err = <-errChan
-	require.NoError(t, err)
-	require.Equal(t, 6, dst.Len())
 }
 
 func TestWrapClientToServerError(t *testing.T) {
