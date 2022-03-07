@@ -236,7 +236,19 @@ type WorkQueue struct {
 		// Tenants with waiting work.
 		tenantHeap tenantHeap
 		// All tenants, including those without waiting work. Periodically cleaned.
-		tenants map[uint64]*tenantInfo
+		tenants       map[uint64]*tenantInfo
+		tenantWeights struct {
+			mu syncutil.Mutex
+			// active refers to the currently active weights. mu is held for updates
+			// to the inactive weights, to prevent concurrent updates. After
+			// updating the inactive weights, it is made active by swapping with
+			// active, while also holding WorkQueue.mu. Therefore, reading
+			// tenantWeights.active does not require tenantWeights.mu. For lock
+			// ordering, tenantWeights.mu precedes WorkQueue.mu.
+			//
+			// The maps are lazily allocated.
+			active, inactive map[uint64]uint32
+		}
 		// The highest epoch that is closed.
 		closedEpochThreshold int64
 		// Following values are copied from the cluster settings.
@@ -483,7 +495,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.mu.Lock()
 	tenant, ok := q.mu.tenants[tenantID]
 	if !ok {
-		tenant = newTenantInfo(tenantID)
+		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
 		q.mu.tenants[tenantID] = tenant
 	}
 	if info.BypassAdmission && roachpb.IsSystemTenantID(tenantID) && q.workKind == KVWork {
@@ -547,7 +559,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			tenant.used--
 		} else {
 			if !ok {
-				tenant = newTenantInfo(tenantID)
+				tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
 				q.mu.tenants[tenantID] = tenant
 			}
 			// Don't want to overflow tenant.used if it is already 0 because of
@@ -767,8 +779,8 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, verb rune) {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
 		tenant := q.mu.tenants[id]
-		s.Printf("\n tenant-id: %d used: %d, fifo: %d", tenant.id, tenant.used,
-			tenant.fifoPriorityThreshold)
+		s.Printf("\n tenant-id: %d used: %d, w: %d, fifo: %d", tenant.id, tenant.used,
+			tenant.weight, tenant.fifoPriorityThreshold)
 		if len(tenant.waitingWorkHeap) > 0 {
 			s.Printf(" waiting work heap:")
 			for i := range tenant.waitingWorkHeap {
@@ -793,6 +805,109 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, verb rune) {
 					tenant.openEpochsHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
 			}
 		}
+	}
+}
+
+// Weight for tenants that are not assigned a weight. This typically applies
+// to tenants which weren't on this node in the prior call to
+// SetTenantWeights. Additionally, it is also the minimum tenant weight.
+const defaultTenantWeight = 1
+
+// The current cap on the weight of a tenant. We don't allow a single tenant
+// to use more than cap times the number of resources of the smallest tenant.
+// For KV slots, we have seen a range of slot counts from 50-200 for 16 cpu
+// nodes, for a KV50 workload, depending on how we set
+// admission.kv_slot_adjuster.overload_threshold. We don't want to starve
+// small tenants, so the cap is currently set to 20. A more sophisticated fair
+// sharing scheme would not need such a cap.
+const tenantWeightCap = 20
+
+func (q *WorkQueue) getTenantWeightLocked(tenantID uint64) uint32 {
+	weight := uint32(defaultTenantWeight)
+	if q.mu.tenantWeights.active != nil {
+		w, ok := q.mu.tenantWeights.active[tenantID]
+		if ok {
+			weight = w
+		}
+	}
+	return weight
+}
+
+// SetTenantWeights sets the weights of tenants.
+func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
+	q.mu.tenantWeights.mu.Lock()
+	defer q.mu.tenantWeights.mu.Unlock()
+	if q.mu.tenantWeights.inactive == nil {
+		q.mu.tenantWeights.inactive = make(map[uint64]uint32)
+	}
+	// Remove all elements from the inactive map.
+	for k := range q.mu.tenantWeights.inactive {
+		delete(q.mu.tenantWeights.inactive, k)
+	}
+	// Compute the max weight in the new map, for enforcing the tenantWeightCap.
+	maxWeight := uint32(1)
+	for _, v := range tenantWeights {
+		if v > maxWeight {
+			maxWeight = v
+		}
+	}
+	scaling := float64(1)
+	if maxWeight > tenantWeightCap {
+		scaling = tenantWeightCap / float64(maxWeight)
+	}
+	// Populate the weights in the inactive map.
+	for k, v := range tenantWeights {
+		w := uint32(math.Ceil(float64(v) * scaling))
+		if w < defaultTenantWeight {
+			w = defaultTenantWeight
+		}
+		q.mu.tenantWeights.inactive[k] = w
+	}
+	q.mu.Lock()
+	// Establish the new active map.
+	q.mu.tenantWeights.active, q.mu.tenantWeights.inactive =
+		q.mu.tenantWeights.inactive, q.mu.tenantWeights.active
+	// Create a slice for storing all the tenantIDs. We use this to split the
+	// update to the data-structures that require holding q.mu, in case there
+	// are 1000s of tenants (we don't want to hold q.mu for long durations).
+	tenantIDs := make([]uint64, len(q.mu.tenants))
+	i := 0
+	for k := range q.mu.tenants {
+		tenantIDs[i] = k
+		i++
+	}
+	q.mu.Unlock()
+	// Any tenants not in tenantIDs will see the latest weight when their
+	// tenantInfo is created. The existing ones need their weights to be
+	// updated.
+
+	// tenantIDs[index] represents the next tenantID that needs to be updated.
+	var index int
+	n := len(tenantIDs)
+	// updateNextBatch acquires q.mu and updates a batch of tenants.
+	updateNextBatch := func() (repeat bool) {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		// Arbitrary batch size of 5.
+		const batchSize = 5
+		for i := 0; i < batchSize; i++ {
+			if index >= n {
+				return false
+			}
+			tenantID := tenantIDs[index]
+			tenantInfo := q.mu.tenants[tenantID]
+			weight := q.getTenantWeightLocked(tenantID)
+			if tenantInfo != nil && tenantInfo.weight != weight {
+				tenantInfo.weight = weight
+				if isInTenantHeap(tenantInfo) {
+					q.mu.tenantHeap.fix(tenantInfo)
+				}
+			}
+			index++
+		}
+		return true
+	}
+	for updateNextBatch() {
 	}
 }
 
@@ -945,6 +1060,8 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 // tenantInfo is the per-tenant information in the tenantHeap.
 type tenantInfo struct {
 	id uint64
+	// The weight assigned to the tenant. Must be > 0.
+	weight uint32
 	// used can be the currently used slots, or the tokens granted within the last
 	// interval.
 	//
@@ -996,10 +1113,11 @@ var tenantInfoPool = sync.Pool{
 	},
 }
 
-func newTenantInfo(id uint64) *tenantInfo {
+func newTenantInfo(id uint64, weight uint32) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
 	*ti = tenantInfo{
 		id:                    id,
+		weight:                weight,
 		waitingWorkHeap:       ti.waitingWorkHeap,
 		openEpochsHeap:        ti.openEpochsHeap,
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
@@ -1043,7 +1161,8 @@ func (th *tenantHeap) Len() int {
 }
 
 func (th *tenantHeap) Less(i, j int) bool {
-	return (*th)[i].used < (*th)[j].used
+	// used_i/weight_i < used_j/weight_j
+	return (*th)[i].used*uint64((*th)[j].weight) < (*th)[j].used*uint64((*th)[i].weight)
 }
 
 func (th *tenantHeap) Swap(i, j int) {
