@@ -2492,6 +2492,12 @@ SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
 ----
 true
 
+# Run a full consistency check across all ranges. 
+query B
+SELECT count(*) > 10 FROM crdb_internal.check_consistency(false, '', '')
+----
+true
+
 # Tests for width_bucket builtin
 query I
 SELECT width_bucket(8.0, 2.0, 3.0, 5)
