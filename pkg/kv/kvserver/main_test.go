@@ -87,7 +87,8 @@ func TestMain(m *testing.M) {
 		delete(notBelowRaftProtos, reflect.TypeOf(&roachpb.InternalTimeSeriesData{}))
 		delete(notBelowRaftProtos, reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}))
 		for typ := range notBelowRaftProtos {
-			failed = true
+			// NB: don't set failed=true. In a bazel world, we may just end up sharding in a way that
+			// doesn't observe some of the protos below raft.
 			fmt.Printf("%s: not observed below raft!\n", typ)
 		}
 
