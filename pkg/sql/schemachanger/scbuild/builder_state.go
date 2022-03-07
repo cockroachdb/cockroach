@@ -319,6 +319,12 @@ func newTypeT(t *types.T) scpb.TypeT {
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) WrapExpression(expr tree.Expr) *scpb.Expression {
+	// Implicit table record references cannot be detected properly unless,
+	// we reparse the expression after serializing.
+	expr, err := parser.ParseExpr(tree.Serialize(expr))
+	if err != nil {
+		panic(err)
+	}
 	if expr == nil {
 		return nil
 	}
@@ -336,7 +342,14 @@ func (b *builderState) WrapExpression(expr tree.Expr) *scpb.Expression {
 				panic(err)
 			}
 			b.ensureDescriptor(id)
-			typ, err := catalog.AsTypeDescriptor(b.descCache[id].desc)
+			desc := b.descCache[id].desc
+			// Implicit record types will lead to table references, which will be
+			// disallowed.
+			if desc.DescriptorType() == catalog.Table {
+				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"cannot modify table record type %q", desc.GetName()))
+			}
+			typ, err := catalog.AsTypeDescriptor(desc)
 			if err != nil {
 				panic(err)
 			}
