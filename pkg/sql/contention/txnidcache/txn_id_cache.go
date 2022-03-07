@@ -132,10 +132,7 @@ func NewTxnIDCache(st *cluster.Settings, metrics *Metrics) *Cache {
 		closeCh: make(chan struct{}),
 	}
 
-	t.store = newFIFOCache(func() int64 {
-		return MaxSize.Get(&st.SV) / entrySize
-	} /* capacity */)
-
+	t.store = newFIFOCache(func() int64 { return MaxSize.Get(&st.SV) })
 	t.writer = newWriter(st, t)
 	return t
 }
@@ -189,7 +186,7 @@ func (t *Cache) DrainWriteBuffer() {
 	t.writer.DrainWriteBuffer()
 }
 
-// Size return the current size of the Cache.
+// Size return the current size of the Cache in bytes.
 func (t *Cache) Size() int64 {
-	return int64(t.store.size()) * entrySize
+	return t.store.size()
 }
