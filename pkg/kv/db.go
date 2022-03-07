@@ -594,7 +594,8 @@ type SplitAndScatterResult struct {
 		Scatter time.Duration
 	}
 	// Stats describe the scattered range, as returned by the AdminScatter call.
-	Stats *enginepb.MVCCStats
+	ScatteredStats *enginepb.MVCCStats
+	ScatteredSpan  roachpb.Span
 }
 
 // SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
@@ -624,7 +625,13 @@ func (db *DB) SplitAndScatter(
 	if !ok {
 		return reply, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
 	}
-	reply.Stats = resp.MVCCStats
+	reply.ScatteredStats = resp.MVCCStats
+	if len(resp.RangeInfos) > 0 {
+		reply.ScatteredSpan = roachpb.Span{
+			Key:    resp.RangeInfos[0].Desc.StartKey.AsRawKey(),
+			EndKey: resp.RangeInfos[0].Desc.EndKey.AsRawKey(),
+		}
+	}
 
 	return reply, nil
 }
