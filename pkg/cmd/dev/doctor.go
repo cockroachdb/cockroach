@@ -13,10 +13,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -79,7 +79,7 @@ func printStdoutAndErr(stdoutStr string, err error) {
 	if len(stdoutStr) > 0 {
 		log.Printf("stdout:   %s", stdoutStr)
 	}
-	var cmderr *osexec.ExitError
+	var cmderr *exec.ExitError
 	if errors.As(err, &cmderr) {
 		stderrStr := strings.TrimSpace(string(cmderr.Stderr))
 		if len(stderrStr) > 0 {
@@ -105,9 +105,13 @@ func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Co
 
 func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	success := true
+	failures := []string{}
 	noCache := mustGetFlagBool(cmd, noCacheFlag)
 	noCacheEnv := d.os.Getenv("DEV_NO_REMOTE_CACHE")
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
 	if noCacheEnv != "" {
 		noCache = true
 	}
@@ -117,16 +121,15 @@ func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 	if runtime.GOOS == "darwin" {
 		stdout, err := d.exec.CommandContextSilent(ctx, "/usr/bin/xcodebuild", "-version")
 		if err != nil {
-			success = false
-			log.Printf("Failed to run `/usr/bin/xcodebuild -version`.")
+			log.Println("Failed to run `/usr/bin/xcodebuild -version`.")
 			stdoutStr := strings.TrimSpace(string(stdout))
 			printStdoutAndErr(stdoutStr, err)
-			log.Println(`You must have a full installation of XCode to build with Bazel.
+			failures = append(failures, `You must have a full installation of XCode to build with Bazel.
 A command-line tools instance does not suffice.
 Please perform the following steps:
   1. Install XCode from the App Store.
   2. Launch Xcode.app at least once to perform one-time initialization of developer tools.
-  3. Run ` + "`xcode-select -switch /Applications/Xcode.app/`.")
+  3. Run `+"`xcode-select -switch /Applications/Xcode.app/`.")
 		}
 	}
 
@@ -136,25 +139,24 @@ Please perform the following steps:
 		stdout, err := d.exec.CommandContextSilent(ctx, "cmake", "--version")
 		stdoutStr := strings.TrimSpace(string(stdout))
 		if err != nil {
+			log.Println("Failed to run `cmake --version`.")
 			printStdoutAndErr(stdoutStr, err)
-			success = false
+			failures = append(failures, "Failed to run `cmake --version`; do you have it installed?")
 		} else {
 			versionFields := strings.Split(strings.TrimPrefix(stdoutStr, "cmake version "), ".")
 			if len(versionFields) < 3 {
-				log.Printf("malformed cmake version:   %q\n", stdoutStr)
-				success = false
+				failures = append(failures, fmt.Sprintf("malformed cmake version:   %q", stdoutStr))
 			} else {
 				major, majorErr := strconv.Atoi(versionFields[0])
 				minor, minorErr := strconv.Atoi(versionFields[1])
 				if majorErr != nil || minorErr != nil {
-					log.Printf("malformed cmake version:   %q\n", stdoutStr)
-					success = false
+					failures = append(failures, fmt.Sprintf("malformed cmake version:   %q", stdoutStr))
 				} else if major < cmakeRequiredMajor || minor < cmakeRequiredMinor {
-					log.Printf("cmake is too old, upgrade to 3.20.x+\n")
+					msg := "cmake is too old, upgrade to 3.20.x+"
 					if runtime.GOOS == "linux" {
-						log.Printf("\t If this is a gceworker you can use ./build/bootstrap/bootstrap-debian.sh to update all tools\n")
+						msg = msg + "\n\t If this is a gceworker you can use ./build/bootstrap/bootstrap-debian.sh to update all tools"
 					}
-					success = false
+					failures = append(failures, msg)
 				}
 			}
 		}
@@ -179,41 +181,43 @@ Please perform the following steps:
 	}
 
 	// Check whether the build is properly configured to use stamping.
-	passedStampTest := true
-	if _, err := d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_stamping"); err != nil {
-		passedStampTest = false
+	d.log.Println("doctor: running stamp test")
+	failedStampTestMsg := ""
+	stdout, err := d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_stamping")
+	if err != nil {
+		failedStampTestMsg = "Failed to run `bazel build //build/bazelutil:test_stamping`"
+		log.Println(failedStampTestMsg)
+		printStdoutAndErr(string(stdout), err)
 	} else {
 		bazelBin, err := d.getBazelBin(ctx)
 		if err != nil {
 			return err
 		}
-		fileContents, err := d.os.ReadFile(
-			filepath.Join(bazelBin, "build", "bazelutil", "test_stamping.txt"))
+		testStampingTxt := filepath.Join(bazelBin, "build", "bazelutil", "test_stamping.txt")
+		fileContents, err := d.os.ReadFile(testStampingTxt)
 		if err != nil {
 			return err
 		}
 		if !strings.Contains(fileContents, "STABLE_BUILD_GIT_BUILD_TYPE") {
-			passedStampTest = false
+			failedStampTestMsg = fmt.Sprintf("Could not find STABLE_BUILD_GIT_TYPE in %s\n", testStampingTxt)
 		}
 	}
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-	if !passedStampTest {
-		success = false
-		log.Printf(`Your machine is not configured to "stamp" your built executables.
-Please add one of the following to your %s/.bazelrc.user:`, workspace)
+	if failedStampTestMsg != "" {
+		failedStampTestMsg = failedStampTestMsg + fmt.Sprintf(`
+This may be because your Bazel is not configured to "stamp" built executables.
+Make sure one of the following lines is in the file %s/.bazelrc.user:
+`, workspace)
 		if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
-			log.Printf("    build --config=devdarwinx86_64")
+			failedStampTestMsg = failedStampTestMsg + "    build --config=devdarwinx86_64"
 		} else if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-			log.Printf("    build --config=dev")
-			log.Printf("             OR       ")
-			log.Printf("    build --config=crosslinux")
-			log.Printf("The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI.")
+			failedStampTestMsg = failedStampTestMsg + "    build --config=dev\n"
+			failedStampTestMsg = failedStampTestMsg + "             OR       \n"
+			failedStampTestMsg = failedStampTestMsg + "    build --config=crosslinux\n"
+			failedStampTestMsg = failedStampTestMsg + "The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI."
 		} else {
-			log.Printf("    build --config=dev")
+			failedStampTestMsg = failedStampTestMsg + "    build --config=dev"
 		}
+		failures = append(failures, failedStampTestMsg)
 	}
 
 	if !noCache {
@@ -222,13 +226,20 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 		if err != nil {
 			return err
 		}
-		success, err = d.checkPresenceInBazelRc(bazelRcLine)
+		msg, err := d.checkPresenceInBazelRc(bazelRcLine)
 		if err != nil {
 			return err
 		}
+		if msg != "" {
+			failures = append(failures, msg)
+		}
 	}
 
-	if !success {
+	if len(failures) > 0 {
+		log.Printf("doctor: encountered %d errors", len(failures))
+		for _, failure := range failures {
+			log.Println(failure)
+		}
 		return errors.New("please address the errors described above and try again")
 	}
 
@@ -239,22 +250,26 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 	return nil
 }
 
-func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (found bool, _ error) {
+// checkPresenceInBazelRc checks whether the given line is in ~/.bazelrc.
+// If it is, this function returns an empty string and a nil error.
+// If it isn't, this function returns a non-empty human-readable string describing
+// what the user should do to solve the issue and a nil error.
+// In other failure cases the function returns an empty string and a non-nil error.
+func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	defer func() {
-		if !found {
-			log.Printf("Please add the string `%s` to your ~/.bazelrc:\n", expectedBazelRcLine)
-			log.Printf("    echo \"%s\" >> ~/.bazelrc", expectedBazelRcLine)
-		}
-	}()
+	errString := fmt.Sprintf("Please add the string `%s` to your ~/.bazelrc:\n", expectedBazelRcLine)
+	errString = errString + fmt.Sprintf("    echo \"%s\" >> ~/.bazelrc", expectedBazelRcLine)
 
 	bazelRcContents, err := d.os.ReadFile(filepath.Join(homeDir, ".bazelrc"))
 	if err != nil {
-		return false, err
+		// The file may not exist; that's OK, but the line definitely is
+		// not in the file.
+		return errString, nil //nolint:returnerrcheck
 	}
+	found := false
 	for _, line := range strings.Split(bazelRcContents, "\n") {
 		if !strings.Contains(line, expectedBazelRcLine) {
 			continue
@@ -262,7 +277,10 @@ func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (found bool, _ 
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
-		return true, nil
+		found = true
 	}
-	return false, nil
+	if found {
+		return "", nil
+	}
+	return errString, nil
 }
