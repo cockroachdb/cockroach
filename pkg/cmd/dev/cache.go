@@ -61,25 +61,21 @@ func (d *dev) cache(cmd *cobra.Command, _ []string) error {
 	if clean {
 		return d.cleanCache(ctx)
 	}
+	if down {
+		return d.tearDownCache(ctx)
+	}
 	if reset {
 		// Errors here don't really mean much, we can just ignore them.
 		err := d.tearDownCache(ctx)
 		if err != nil {
 			log.Printf("%v\n", err)
 		}
-		bazelRcLine, err := d.setUpCache(ctx)
-		if bazelRcLine != "" {
-			fmt.Printf("Please add `%s` to your ~/.bazelrc\n", bazelRcLine)
-		}
-		return err
-	}
-	if down {
-		return d.tearDownCache(ctx)
 	}
 	bazelRcLine, err := d.setUpCache(ctx)
-	if bazelRcLine != "" {
-		fmt.Printf("Please add `%s` to your ~/.bazelrc\n", bazelRcLine)
+	if err != nil {
+		return err
 	}
+	_, err = d.checkPresenceInBazelRc(bazelRcLine)
 	return err
 }
 
