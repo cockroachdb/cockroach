@@ -650,3 +650,96 @@ WHERE tablename = 'intervalstyle_in_index'
 AND indexname = 'idx'
 ----
 idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::INTERVAL)
+
+# date_trunc
+statement ok
+SET intervalstyle = 'postgres'
+
+statement error pgcode 22023 interval units "invalid" not recognized
+SELECT
+  date_trunc('invalid', interval '1 month')
+
+query TTT
+SELECT
+  date_trunc('millennia', interval '1001 year 1 month 1 day 1 microsecond'),
+  date_trunc('millennium', interval '1001 year 1 month 1 day 1 microsecond'),
+  date_trunc('millenniums', interval '1001 year 1 month 1 day 1 microsecond')
+----
+1000 years  1000 years  1000 years
+
+query TT
+SELECT
+  date_trunc('century', interval '101 year 1 month 1 day 1 microsecond'),
+  date_trunc('centuries', interval '101 year 1 month 1 day 1 microsecond')
+----
+100 years  100 years
+
+query TT
+SELECT
+  date_trunc('decade', interval '11 year 1 month 1 day 1 microsecond'),
+  date_trunc('decades', interval '11 year 1 month 1 day 1 microsecond')
+----
+10 years  10 years
+
+query T
+SELECT
+  date_trunc('quarter', interval '4 month 1 day 1 microsecond')
+----
+3 mons
+
+query TT
+SELECT
+  date_trunc('month', interval '1 month 1 day 1 microsecond'),
+  date_trunc('months', interval '1 month 1 day 1 microsecond')
+----
+1 mon  1 mon
+
+statement error pgcode 0A000 interval units "week" not supported because months usually have fractional weeks
+SELECT
+  date_trunc('week', interval '1 month')
+
+statement error pgcode 0A000 interval units "weeks" not supported because months usually have fractional weeks
+SELECT
+  date_trunc('weeks', interval '1 month')
+
+query TT
+SELECT
+  date_trunc('day', interval '1 day 1 microsecond'),
+  date_trunc('days', interval '1 day 1 microsecond')
+----
+1 day  1 day
+
+query TT
+SELECT
+  date_trunc('hour', interval '1 hour 1 microsecond'),
+  date_trunc('hours', interval '1 hour 1 microsecond')
+----
+01:00:00  01:00:00
+
+query TT
+SELECT
+  date_trunc('minute', interval '1 minute 1 microsecond'),
+  date_trunc('minutes', interval '1 minute 1 microsecond')
+----
+00:01:00  00:01:00
+
+query TT
+SELECT
+  date_trunc('second', interval '1 second 1 microsecond'),
+  date_trunc('seconds', interval '1 second 1 microsecond')
+----
+00:00:01  00:00:01
+
+query TT
+SELECT
+  date_trunc('millisecond', interval '1 millisecond 1 microsecond'),
+  date_trunc('milliseconds', interval '1 millisecond 1 microsecond')
+----
+00:00:00.001  00:00:00.001
+
+query TT
+SELECT
+  date_trunc('microsecond', interval '1 microsecond'),
+  date_trunc('microseconds', interval '1 microsecond')
+----
+00:00:00.000001  00:00:00.000001
