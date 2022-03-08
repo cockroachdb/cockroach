@@ -33,7 +33,8 @@ type testData struct {
 
 func TestResolver(t *testing.T) {
 	statusServer := newFakeStatusServerCluster()
-	resolver := newResolver(statusServer.txnIDResolution, 0 /* sizeHint */)
+	metrics := NewMetrics()
+	resolver := newResolver(statusServer.txnIDResolution, &metrics, 0 /* sizeHint */)
 	ctx := context.Background()
 
 	t.Run("normal_resolution", func(t *testing.T) {
