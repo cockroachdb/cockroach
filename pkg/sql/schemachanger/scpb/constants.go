@@ -10,6 +10,12 @@
 
 package scpb
 
+import (
+	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+)
+
 const (
 	// PlaceHolderComment placeholder string for non-fetched comments.
 	PlaceHolderComment string = "__placeholder_comment__"
@@ -60,4 +66,27 @@ func AsTargetStatus(s Status) TargetStatus {
 	default:
 		return InvalidTarget
 	}
+}
+
+// StatusMax is the maximum value of Status.
+var orderedStatuses = func() (s []Status) {
+	for i := range Status_name {
+		s = append(s, Status(i))
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+	return s
+}()
+
+// IterateStatuses calls f for each value of status in a deterministic order.
+// If f returns iterutil.StopIteration, no error will be returned.
+func IterateStatuses(f func(s Status) error) error {
+	for _, s := range orderedStatuses {
+		if err := f(s); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
 }

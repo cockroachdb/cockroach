@@ -64,11 +64,10 @@ func (g *Graph) Database() *rel.Database {
 // targets. If they do not, an error will be returned.
 func New(cs scpb.CurrentState) (*Graph, error) {
 	db, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
-		{rel.Type, screl.DescID},
-		{screl.DescID, rel.Type},
-		{screl.Element},
-		{screl.Target},
-		// TODO(ajwerner): Decide what more predicates are needed
+		{screl.DescID, rel.Type, screl.ColumnID},
+		{screl.ReferencedDescID, rel.Type},
+		{rel.Type, screl.Element, screl.CurrentStatus},
+		{rel.Type, screl.Target, screl.TargetStatus},
 	})
 	if err != nil {
 		return nil, err
@@ -131,6 +130,18 @@ func (g *Graph) GetNode(t *scpb.Target, s scpb.Status) (*screl.Node, bool) {
 
 // Suppress the linter.
 var _ = (*Graph)(nil).GetNode
+
+// IterateTargetNodes iterates the set of nodes with the given target.
+func (g *Graph) IterateTargetNodes(t *scpb.Target, iterator NodeIterator) error {
+	return scpb.IterateStatuses(func(s scpb.Status) error {
+		if n, ok := g.GetNode(t, s); ok {
+			if err := iterator(n); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
 
 func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*screl.Node, error) {
 	targetStatuses := g.getTargetStatusMap(t)
