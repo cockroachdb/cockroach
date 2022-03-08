@@ -68,7 +68,7 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
+func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() error {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 
 	createdDefaultPrivileges := false
@@ -102,6 +102,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {
 		ddb.changes.Add(catalog.RemovedSelfEntryInSchemas)
 	}
+	return nil
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.

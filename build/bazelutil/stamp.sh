@@ -3,6 +3,15 @@
 # This command is used by bazel as the workspace_status_command
 # to implement build stamping with git information.
 
+# Usage: stamp.sh [target-triple] [build-channel] [build-tag] [build-type]
+# All arguments are optional and have appropriate defaults. In this way,
+# stamp.sh with no arguments is appropriate as the `workplace_status_command`
+# for a development build.
+#  target-triple: defaults to the value of `cc -dumpmachine`
+#  build-channel: defaults to `unknown`, but can be `official-binary`
+#  build-tag: defaults to a value that is gleaned from `git rev-parse`
+#  build-type: defaults to `development`, but can be `release`
+
 set -euo pipefail
 
 # Do not use plumbing commands, like git diff-index, in this target. Our build
@@ -14,21 +23,52 @@ set -euo pipefail
 # For details, see the "Possible timestamp problems with diff-files?" thread on
 # the Git mailing list (http://marc.info/?l=git&m=131687596307197).
 
-GIT_BUILD_TYPE="development"
-GIT_COMMIT=$(git rev-parse HEAD)
-GIT_TAG=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
-GIT_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
-
+# Handle target-triple.
 if [ -z "${1+x}" ]
 then
     TARGET_TRIPLE=$(cc -dumpmachine)
 else
     TARGET_TRIPLE="$1"
+    shift 1
 fi
 
-# TODO(ricky): Also provide a way to stamp the following variables:
-# - github.com/cockroachdb/cockroach/pkg/build.channel
-# - github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv
+# Handle build-channel.
+if [ -z "${1+x}" ]
+then
+    BUILD_CHANNEL="unknown"
+else
+    BUILD_CHANNEL="$1"
+    shift 1
+fi
+
+# Handle build-tag.
+if [ -z "${1+x}" ]
+then
+    BUILD_TAG=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
+else
+    BUILD_TAG="$1"
+    shift 1
+fi
+
+# Handle build-type.
+if [ -z "${1+x}" ]
+then
+    BUILD_TYPE="development"
+else
+    BUILD_TYPE="$1"
+    shift 1
+fi
+
+if [ "$BUILD_TYPE" = "release" ]
+then
+    CRASH_REPORT_ENV="$BUILD_TAG"
+else
+    CRASH_REPORT_ENV="development"
+fi
+
+BUILD_REV=$(git rev-parse HEAD)
+BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
+
 
 # Variables beginning with "STABLE" will be written to stable-status.txt, and
 # others will be written to volatile-status.txt.
@@ -38,9 +78,11 @@ fi
 # * https://docs.bazel.build/versions/main/user-manual.html#workspace_status
 # * https://github.com/bazelbuild/rules_go/blob/master/go/core.rst#defines-and-stamping
 cat <<EOF
-STABLE_BUILD_GIT_BUILD_TYPE ${GIT_BUILD_TYPE-}
+STABLE_BUILD_CHANNEL ${BUILD_CHANNEL-}
 STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
-BUILD_GIT_COMMIT ${GIT_COMMIT-}
-BUILD_GIT_TAG ${GIT_TAG-}
-BUILD_GIT_UTCTIME ${GIT_UTCTIME-}
+STABLE_BUILD_TYPE ${BUILD_TYPE-}
+STABLE_CRASH_REPORT_ENV ${CRASH_REPORT_ENV-}
+BUILD_REV ${BUILD_REV-}
+BUILD_TAG ${BUILD_TAG-}
+BUILD_UTCTIME ${BUILD_UTCTIME-}
 EOF

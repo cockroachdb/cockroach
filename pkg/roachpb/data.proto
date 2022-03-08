@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "kv/kvserver/concurrency/lock/lock_waiter.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/metadata.proto";
@@ -19,6 +20,7 @@ import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
 message Span {
@@ -540,6 +542,28 @@ message LockUpdate {
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+}
+
+// A LockStateInfo represents the metadata of a lock tracked in a replica's
+// lock table.  This includes any current lock holder, as well as waiting
+// readers and writers.
+message LockStateInfo {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The range that owns the Lock Table containing this lock.
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // The key that this lock controls access to.
+  bytes key = 2 [(gogoproto.casttype) = "Key"];
+  // The current lock holder, or nil if the lock is not held.
+  storage.enginepb.TxnMeta lock_holder = 3;
+  // The durability that the lock is held at, or Unreplicated if not held.
+  kv.kvserver.concurrency.lock.Durability durability = 4;
+  // The wall clock duration since this lock was acquired (or zero, if not held).
+  google.protobuf.Duration hold_duration = 5 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+  // The readers and writers currently waiting on the lock.  Stable ordering
+  // is not guaranteed.
+  repeated kv.kvserver.concurrency.lock.Waiter waiters = 6 [(gogoproto.nullable) = false];
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
