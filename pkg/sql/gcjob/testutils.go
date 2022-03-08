@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 )
 
-// GcTenant is a wrapper around the internal function that gc-s a tenant.
-func GcTenant(
+// TestingGCTenant is a wrapper around the internal function that gc-s a tenant
+// made public for testing.
+func TestingGCTenant(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	tenID uint64,
