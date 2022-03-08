@@ -11,23 +11,24 @@ package sqlproxyccl
 import (
 	"context"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // forwarder is used to forward pgwire messages from the client to the server,
-// and vice-versa. At the moment, this does a direct proxying, and there is
-// no intercepting. Once https://github.com/cockroachdb/cockroach/issues/76000
-// has been addressed, we will start intercepting pgwire messages at their
-// boundaries here.
-//
-// The forwarder instance should always be constructed through the forward
-// function, which also starts the forwarder.
+// and vice-versa. The forwarder instance should always be constructed through
+// the forward function, which also starts the forwarder.
 type forwarder struct {
 	// ctx is a single context used to control all goroutines spawned by the
-	// forwarder.
+	// forwarder. An exception to this is that if the goroutines are blocked
+	// due to IO on clientConn or serverConn, cancelling the context does not
+	// unblock them. Due to this, it is important to invoke Close() on the
+	// forwarder whenever ctx has been cancelled to prevent leaks.
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
@@ -37,115 +38,104 @@ type forwarder struct {
 	// clientConn is set once during initialization, and stays the same
 	// throughout the lifetime of the forwarder.
 	//
-	// serverConn is only set after the authentication phase for the initial
-	// connection. In the context of a connection migration, serverConn is only
-	// replaced once the session has successfully been deserialized, and the old
-	// connection will be closed. Whenever serverConn gets updated, both
-	// clientMessageTypeSent and isServerMsgReadyReceived fields have to reset
-	// to their initial values.
+	// serverConn is set during initialization, which happens after the
+	// authentication phase, and will be replaced if a connection migration
+	// occurs. During a connection migration, serverConn is only replaced once
+	// the session has successfully been deserialized, and the old connection
+	// will be closed.
 	//
-	// All reads from these connections must go through the interceptors. It is
-	// not safe to call Read directly as the interceptors may have buffered data.
-	clientConn *interceptor.BackendConn  // client <-> proxy
-	serverConn *interceptor.FrontendConn // proxy <-> server
+	// All reads from these connections must go through the PG interceptors.
+	// It is not safe to call Read directly as the interceptors may have
+	// buffered data.
+	clientConn *interceptor.PGConn // client <-> proxy
+	serverConn *interceptor.PGConn // proxy <-> server
 
-	// errChan is a buffered channel that contains the first forwarder error.
-	// This channel may receive nil errors.
-	errChan chan error
+	// request and response both represent the processors used to handle
+	// client-to-server and server-to-client messages.
+	request  *processor // client -> server
+	response *processor // server -> client
+
+	// errCh is a buffered channel that contains the first forwarder error.
+	// This channel may receive nil errors. When an error is written to this
+	// channel, it is guaranteed that the forwarder and all connections will
+	// be closed.
+	errCh chan error
 }
 
 // forward returns a new instance of forwarder, and starts forwarding messages
-// from clientConn to serverConn. When this is called, it is expected that the
-// caller passes ownership of serverConn to the forwarder, which implies that
-// the forwarder will clean up serverConn. clientConn and serverConn must not
-// be nil in all cases except for testing.
+// from clientConn to serverConn (and vice-versa). When this is called, it is
+// expected that the caller passes ownership of both clientConn and serverConn
+// to the forwarder, which implies that the forwarder will clean them up.
+// clientConn and serverConn must not be nil in all cases except for testing.
 //
-// Note that callers MUST call Close in all cases, even if ctx was cancelled.
+// Note that callers MUST call Close in all cases, even if ctx was cancelled,
+// and callers will need to detect that.
 func forward(ctx context.Context, clientConn, serverConn net.Conn) *forwarder {
 	ctx, cancelFn := context.WithCancel(ctx)
-
 	f := &forwarder{
-		ctx:       ctx,
-		ctxCancel: cancelFn,
-		errChan:   make(chan error, 1),
+		ctx:        ctx,
+		ctxCancel:  cancelFn,
+		errCh:      make(chan error, 1),
+		clientConn: interceptor.NewPGConn(clientConn),
+		serverConn: interceptor.NewPGConn(serverConn),
 	}
-
-	// The net.Conn object for the client is switched to a net.Conn that
-	// unblocks Read every second on idle to check for exit conditions.
-	// This is mainly used to unblock the request processor whenever the
-	// forwarder has stopped, or a transfer has been requested.
-	clientConn = pgwire.NewReadTimeoutConn(clientConn, func() error {
-		// Context was cancelled.
-		if f.ctx.Err() != nil {
-			return f.ctx.Err()
-		}
-		// TODO(jaylim-crl): Check for transfer state here.
-		return nil
-	})
-	f.clientConn = interceptor.NewBackendConn(clientConn)
-	f.serverConn = interceptor.NewFrontendConn(serverConn)
-
-	// Start request (client to server) and response (server to client)
-	// processors. We will copy all pgwire messages/ from client to server
-	// (and vice-versa) until we encounter an error or a shutdown signal
-	// (i.e. context cancellation).
-	go func() {
-		defer f.Close()
-
-		err := wrapClientToServerError(f.handleClientToServer())
-		select {
-		case f.errChan <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
-	go func() {
-		defer f.Close()
-
-		err := wrapServerToClientError(f.handleServerToClient())
-		select {
-		case f.errChan <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
-
+	f.request = newProcessor(f.clientConn, f.serverConn)  // client -> server
+	f.response = newProcessor(f.serverConn, f.clientConn) // server -> client
+	f.resumeProcessors()
 	return f
 }
 
-// Close closes the forwarder, and stops the forwarding process. This is
-// idempotent.
+// Close closes the forwarder and all connections. This is idempotent.
 func (f *forwarder) Close() {
 	f.ctxCancel()
 
-	// Since Close is idempotent, we'll ignore the error from Close in case it
-	// has already been closed.
+	// Whenever Close is called while both of the processors are suspended, the
+	// main goroutine will be stuck waiting for a reponse from the forwarder.
+	// Send an error to unblock that. If an error has been sent, this error will
+	// be ignored.
+	//
+	// We don't use tryReportError here since that will call Close, leading to
+	// a recursive call.
+	select {
+	case f.errCh <- errors.New("forwarder closed"): /* error reported */
+	default: /* the channel already contains an error */
+	}
+
+	// Since Close is idempotent, we'll ignore the error from Close calls in
+	// case they have already been closed.
+	f.clientConn.Close()
 	f.serverConn.Close()
 }
 
-// handleClientToServer handles the communication from the client to the server.
-// This returns a context cancellation error whenever the forwarder's context
-// is cancelled, or whenever forwarding fails. When ForwardMsg gets blocked on
-// Read, we will unblock that through our custom readTimeoutConn wrapper, which
-// gets triggered when context is cancelled.
-func (f *forwarder) handleClientToServer() error {
-	for f.ctx.Err() == nil {
-		if _, err := f.clientConn.ForwardMsg(f.serverConn); err != nil {
-			return err
+// resumeProcessors starts both the request and response processors
+// asynchronously. The forwarder will be closed if any of the processors
+// return an error while resuming. This is idempotent as resume() will return
+// nil if the processor has already been started.
+func (f *forwarder) resumeProcessors() {
+	go func() {
+		if err := f.request.resume(f.ctx); err != nil {
+			f.tryReportError(wrapClientToServerError(err))
 		}
-	}
-	return f.ctx.Err()
+	}()
+	go func() {
+		if err := f.response.resume(f.ctx); err != nil {
+			f.tryReportError(wrapServerToClientError(err))
+		}
+	}()
 }
 
-// handleServerToClient handles the communication from the server to the client.
-// This returns a context cancellation error whenever the forwarder's context
-// is cancelled, or whenever forwarding fails. When ForwardMsg gets blocked on
-// Read, we will unblock that by closing serverConn through f.Close().
-func (f *forwarder) handleServerToClient() error {
-	for f.ctx.Err() == nil {
-		if _, err := f.serverConn.ForwardMsg(f.clientConn); err != nil {
-			return err
-		}
+// tryReportError tries to send err to errCh, and closes the forwarder if
+// it succeeds. If an error has already been reported, err will be dropped.
+func (f *forwarder) tryReportError(err error) {
+	select {
+	case f.errCh <- err: /* error reported */
+		// Whenever an error has been reported, all processors must terminate to
+		// stop processing on either sides, and the easiest way to do so is to
+		// close the forwarder, which closes all connections. Doing this also
+		// ensures that resuming a processor again will return an error.
+		f.Close()
+	default: /* the channel already contains an error */
 	}
-	return f.ctx.Err()
 }
 
 // wrapClientToServerError overrides client to server errors for external
@@ -176,4 +166,154 @@ func wrapServerToClientError(err error) error {
 		return nil
 	}
 	return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
+}
+
+// aLongTimeAgo is a non-zero time, far in the past, used for immediate
+// cancellation of dials.
+var aLongTimeAgo = timeutil.Unix(1, 0)
+
+var (
+	errProcessorResumed  = errors.New("processor has already been resumed")
+	errSuspendInProgress = errors.New("suspension is already in progress")
+)
+
+// processor must always be constructed through newProcessor.
+type processor struct {
+	// src and dst are immutable fields. A new processor should be created if
+	// any of those fields need to be updated. When that happens, all existing
+	// processors must be terminated first to prevent concurrent reads on src.
+	src *interceptor.PGConn
+	dst *interceptor.PGConn
+
+	mu struct {
+		syncutil.Mutex
+		cond       *sync.Cond
+		resumed    bool
+		inPeek     bool
+		suspendReq bool // Indicates that a suspend has been requested.
+	}
+}
+
+func newProcessor(src *interceptor.PGConn, dst *interceptor.PGConn) *processor {
+	p := &processor{src: src, dst: dst}
+	p.mu.cond = sync.NewCond(&p.mu)
+	return p
+}
+
+// resume starts the processor and blocks during the processing. When the
+// processing has been terminated, this returns nil if the processor can be
+// resumed again in the future. If an error (except errProcessorResumed) was
+// returned, the processor should not be resumed again, and the forwarder should
+// be closed.
+func (p *processor) resume(ctx context.Context) error {
+	enterResume := func() error {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.mu.resumed {
+			return errProcessorResumed
+		}
+		p.mu.resumed = true
+		return nil
+	}
+	exitResume := func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.mu.resumed = false
+		p.mu.cond.Broadcast()
+	}
+	enterPeek := func() (terminate bool, err error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		// Suspend has been requested. Suspend now before blocking.
+		if p.mu.suspendReq {
+			return true, nil
+		}
+		p.mu.inPeek = true
+		return false, nil
+	}
+	exitPeek := func() (suspendReq bool, err error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.mu.inPeek = false
+		return p.mu.suspendReq, nil
+	}
+
+	// Has context been cancelled?
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err := enterResume(); err != nil {
+		return err
+	}
+	defer exitResume()
+
+	for ctx.Err() == nil {
+		// If suspend was requested, we terminate to avoid blocking on PeekMsg
+		// as an optimization.
+		if terminate, err := enterPeek(); terminate || err != nil {
+			return err
+		}
+
+		// Always peek the message to ensure that we're blocked on reading the
+		// header, rather than when forwarding during idle periods.
+		_, _, peekErr := p.src.PeekMsg()
+
+		suspendReq, err := exitPeek()
+		if err != nil {
+			return err
+		}
+
+		// If suspend was requested, there are two cases where we terminate:
+		//   1. peekErr == nil, where we read a header. In that case, suspension
+		//      gets priority.
+		//   2. peekErr != nil, where the error was due to a timeout. Connection
+		//      was likely idle here.
+		if peekErr != nil {
+			if netErr := (net.Error)(nil); errors.As(peekErr, &netErr) && suspendReq && netErr.Timeout() {
+				// Return nil so that the processor can be resumed in the future.
+				peekErr = nil
+			} else {
+				peekErr = errors.Wrap(peekErr, "peeking message")
+			}
+		}
+		if peekErr != nil || suspendReq {
+			return peekErr
+		}
+
+		if _, err := p.src.ForwardMsg(p.dst); err != nil {
+			return errors.Wrap(err, "forwarding message")
+		}
+	}
+	return ctx.Err()
+}
+
+// suspend requests for the processor to be suspended if it is in a safe state,
+// and blocks until the processor has been terminated. If the suspend request
+// failed, suspend returns an error, and the caller is safe to retry again.
+func (p *processor) suspend(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.mu.suspendReq {
+		return errSuspendInProgress
+	}
+
+	p.mu.suspendReq = true
+	defer func() {
+		p.mu.suspendReq = false
+		_ = p.src.SetReadDeadline(time.Time{})
+	}()
+
+	for p.mu.resumed {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if p.mu.inPeek {
+			if err := p.src.SetReadDeadline(aLongTimeAgo); err != nil {
+				return err
+			}
+		}
+		p.mu.cond.Wait()
+	}
+	return nil
 }
