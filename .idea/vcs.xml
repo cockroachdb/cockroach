@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/c-deps/geos" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/c-deps/jemalloc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/c-deps/krb5" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/c-deps/libedit" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/c-deps/proj" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pkg/ui/yarn-vendor" vcs="Git" />
+  </component>
+</project>

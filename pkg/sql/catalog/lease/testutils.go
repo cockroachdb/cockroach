@@ -94,3 +94,11 @@ func (m *Manager) TestingAcquireAndAssertMinVersion(
 func (m *Manager) TestingOutstandingLeasesGauge() *metric.Gauge {
 	return m.storage.outstandingLeases
 }
+
+func (m *Manager) TestingIfADescriptorExists(id descpb.ID) bool {
+	return m.findDescriptorState(id, false /* create */) != nil
+}
+
+func (m *Manager) TestingFrequentlyRefreshLeases(ctx context.Context) {
+	m.refreshSomeLeases(ctx)
+}

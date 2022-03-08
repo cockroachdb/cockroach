@@ -280,11 +280,13 @@ func TestLeaseManager(testingT *testing.T) {
 	}
 	t.expectLeases(descID, "/1/1")
 
+	fmt.Printf("Xiang: block begins.\n")
 	// Publish a new version and explicitly acquire it.
 	l2 = t.mustAcquire(1, descID)
 	t.mustPublish(ctx, 1, descID)
 	l3 := t.mustAcquireMinVersion(1, descID, 2)
 	t.expectLeases(descID, "/1/1 /2/1")
+	fmt.Printf("Xiang: block ends.\n")
 
 	// When the last local reference on the new version is released we don't
 	// release the node lease.
@@ -3139,4 +3141,72 @@ INSERT INTO t1 select a from generate_series(1, 100) g(a);
 		}
 		require.NoError(t, <-resultChan)
 	})
+}
+
+// Issue #67364
+func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	params := createTestServerParams()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t ();
+`
+	_, err := t.db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	leaseManager1 := t.node(1)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
+	t.mustAcquire(1, tableDesc.GetID())
+
+	t.expectLeases(tableDesc.GetID(), "/1/1")
+	fmt.Printf("Xiang: tableDesc = %v\n", tableDesc.TableDesc().String())
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// goroutine 1 frequently invokes `PeriodicallyRefreshSomeLeases` while goroutine 2 deletes
+	// the descriptor for table `d.foo`. This should result in goroutine 1 entering the block
+	// that catches an error while attempting to renew the lease for this descriptor, and hence
+	// delete this descriptor from cache subsequently.
+	goroutine1 := func() {
+		fmt.Printf("Xiang: goroutine 1 started.\n")
+		defer wg.Done()
+
+		for {
+			leaseManager1.TestingFrequentlyRefreshLeases(ctx)
+			// Break out of this infinite loop only when descriptor does not exist.
+			if !leaseManager1.TestingIfADescriptorExists(tableDesc.GetID()) {
+				break
+			}
+		}
+		fmt.Printf("Xiang: goroutine 1 is finished.\n")
+	}
+
+	goroutine2 := func() {
+		defer wg.Done()
+
+		fmt.Printf("Xiang: goroutine 2 started.\n")
+
+		sql := `
+DROP TABLE test.t;
+`
+		_, err := t.db.Exec(sql)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fmt.Sprintf("Xiang: goroutine 2 is finished\n")
+	}
+
+	go goroutine1()
+	go goroutine2()
+	wg.Wait()
 }

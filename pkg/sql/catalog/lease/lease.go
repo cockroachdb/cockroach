@@ -1184,6 +1184,10 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 		}
 	}
 	m.mu.Unlock()
+
+	fmt.Printf("Xiang: Inside refreshSomeLeases, m.mu.descriptors = %v\n", m.mu.descriptors)
+	fmt.Printf("Xiang: Inside refreshSomeLeases, descIDToRefresh = %v\n", ids)
+
 	// Limit the number of concurrent lease refreshes.
 	var wg sync.WaitGroup
 	for i := range ids {
@@ -1198,9 +1202,27 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 			},
 			func(ctx context.Context) {
 				defer wg.Done()
+
+				fmt.Printf("Xiang: Before acquireNodeLease, descriptorId=%v, expiration_time=%v\n", id, m.mu.descriptors[id].mu.active.findNewest().mu.expiration.String())
 				if _, err := acquireNodeLease(ctx, m, id); err != nil {
 					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
+
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+						fmt.Printf("Xiang: newly added code. caught the error!\n")
+						// Lease renewal failed due to removed descriptor; Remove this descriptor from cache.
+						if err := purgeOldVersions(ctx, m.DB(), id, true /* dropped */, 0 /* version */, m); err != nil {
+							log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
+								id, m.mu.descriptors[id].mu.active.findNewest().GetName(), err)
+						}
+						delete(m.mu.descriptors, id)
+					}
+
+					fmt.Printf("Xiang: cached descriptors = %v\n", m.mu.descriptors[id].mu.active)
+
+				} else {
+					fmt.Printf("Xiang: After acquireNode, descriptorId=%v, expiration_time=%v\n", id, m.mu.descriptors[id].mu.active.findNewest().mu.expiration.String())
 				}
+
 			}); err != nil {
 			log.Infof(ctx, "didnt refresh descriptor: %d lease: %s", id, err)
 			wg.Done()
