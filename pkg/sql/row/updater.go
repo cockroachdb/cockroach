@@ -421,12 +421,19 @@ func (ru *Updater) UpdateRow(
 						}
 					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
 						expValue = oldEntry.Value.TagAndDataBytes()
-					} else {
+					} else if !index.IsTemporaryIndexForBackfill() {
+						// If this is a temporary index for backfill, we want to make sure we write out all
+						// index values even in the case where they should be the same. We do this because the
+						// temporary index is eventually merged into a newly added index that might be in a
+						// DELETE_ONLY state at the time of this update and thus the temporary index needs to
+						// have all of the entries.
+						//
+						// Otherwise, skip this put since the key and value are the same.
 						continue
 					}
 
 					if index.ForcePut() {
-						// See the comemnt on (catalog.Index).ForcePut() for more details.
+						// See the comment on (catalog.Index).ForcePut() for more details.
 						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						if traceKV {
@@ -462,7 +469,7 @@ func (ru *Updater) UpdateRow(
 					}
 
 					if index.ForcePut() {
-						// See the comemnt on (catalog.Index).ForcePut() for more details.
+						// See the comment on (catalog.Index).ForcePut() for more details.
 						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						// In this case, the index now has a k/v that did not exist in the
@@ -498,7 +505,7 @@ func (ru *Updater) UpdateRow(
 				// predicate.
 				newEntry := &newEntries[newIdx]
 				if index.ForcePut() {
-					// See the comemnt on (catalog.Index).ForcePut() for more details.
+					// See the comment on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 				} else {
 					if traceKV {
@@ -520,7 +527,7 @@ func (ru *Updater) UpdateRow(
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
 				if index.ForcePut() {
-					// See the comemnt on (catalog.Index).ForcePut() for more details.
+					// See the comment on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
 				} else {
 					insertInvertedPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
