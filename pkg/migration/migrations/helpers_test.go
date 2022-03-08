@@ -78,7 +78,9 @@ func InjectLegacyTable(
 				return err
 			}
 			builder := tabledesc.NewBuilder(getDeprecatedDescriptor())
-			builder.RunPostDeserializationChanges()
+			if err := builder.RunPostDeserializationChanges(); err != nil {
+				return err
+			}
 			tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
 			tab.Version = tab.ClusterVersion.Version + 1
 			return descriptors.WriteDesc(ctx, false /* kvTrace */, tab, txn)

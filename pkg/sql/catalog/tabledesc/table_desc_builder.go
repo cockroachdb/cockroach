@@ -94,14 +94,14 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() {
+func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() error {
 	prevChanges := tdb.changes
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes = maybeFillInDescriptor(tdb.maybeModified)
 	prevChanges.ForEach(func(change catalog.PostDeserializationChangeType) {
 		tdb.changes.Add(change)
 	})
-
+	return nil
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.

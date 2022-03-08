@@ -1322,7 +1322,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			PrimaryIndex: descpb.IndexDescriptor{},
 		}
 		b := tabledesc.NewBuilder(&tableDesc)
-		b.RunPostDeserializationChanges()
+		require.NoError(t, b.RunPostDeserializationChanges())
 		return b.BuildImmutableTable()
 	}
 
