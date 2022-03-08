@@ -243,7 +243,9 @@ func (kd *kvDescriptors) getByIDs(
 	}
 	for j, desc := range kvDescs {
 		b := desc.NewBuilder()
-		b.RunPostDeserializationChanges()
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			return nil, err
+		}
 		ret[indexes[j]] = b.BuildExistingMutable()
 	}
 	return ret, nil
