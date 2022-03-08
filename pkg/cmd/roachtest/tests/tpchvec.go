@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
+	"github.com/stretchr/testify/require"
 )
 
 const tpchVecPerfSlownessThreshold = 1.5
@@ -559,7 +560,8 @@ func runTPCHVec(
 	}
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
-	WaitFor3XReplication(t, conn)
+	err := WaitFor3XReplication(ctx, t, conn)
+	require.NoError(t, err)
 
 	testRun(ctx, t, c, conn, testCase)
 	testCase.postTestRunHook(ctx, t, c, conn)

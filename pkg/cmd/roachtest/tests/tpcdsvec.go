@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func registerTPCDSVec(r registry.Registry) {
@@ -74,7 +75,8 @@ func registerTPCDSVec(r registry.Registry) {
 		}
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
-		WaitFor3XReplication(t, clusterConn)
+		err := WaitFor3XReplication(ctx, t, clusterConn)
+		require.NoError(t, err)
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a
 		// timeout, the query actually keeps on going and the connection

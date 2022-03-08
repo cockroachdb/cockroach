@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/stretchr/testify/require"
 )
 
 func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -37,9 +38,10 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// a node starts and contacts the cluster.
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-	WaitFor3XReplication(t, db)
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
-	err := retry.ForDuration(10*time.Second, func() error {
+	err = retry.ForDuration(10*time.Second, func() error {
 		rows, err := db.Query(
 			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = 'node_join'`,
 		)
