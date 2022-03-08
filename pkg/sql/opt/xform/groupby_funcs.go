@@ -59,7 +59,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 		// If the input to the scalar group by is a Select with filters, remap the
 		// column IDs in the filters and use that to build a new Select.
 		if len(filters) > 0 {
-			newFilters := c.MapFilterCols(filters, scanPrivate.Cols, newScanPrivate.Cols)
+			newFilters := c.RemapScanColsInFilter(filters, scanPrivate, newScanPrivate)
 			inputExpr = c.e.f.ConstructSelect(inputExpr, newFilters)
 		}
 
@@ -70,7 +70,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 		if !ok {
 			panic(errors.AssertionFailedf("expected a variable as input to the aggregate, but found %T", aggs[i].Agg.Child(0)))
 		}
-		newVarExpr := c.mapScalarExprCols(variable, scanPrivate.Cols, newScanPrivate.Cols)
+		newVarExpr := c.remapScanColsInScalarExpr(variable, scanPrivate, newScanPrivate)
 		var newAggrFunc opt.ScalarExpr
 		switch aggs[i].Agg.(type) {
 		case *memo.MaxExpr:

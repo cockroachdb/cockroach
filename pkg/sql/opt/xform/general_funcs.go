@@ -68,41 +68,33 @@ func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	return false
 }
 
-// MapFilterCols returns a new FiltersExpr with all the src column IDs in
-// the input expression replaced with column IDs in dst.
-//
-// NOTE: Every ColumnID in src must map to the a ColumnID in dst with the same
-// relative position in the ColSets. For example, if src and dst are (1, 5, 6)
-// and (7, 12, 15), then the following mapping would be applied:
-//
-//   1 => 7
-//   5 => 12
-//   6 => 15
-func (c *CustomFuncs) MapFilterCols(
-	filters memo.FiltersExpr, src, dst opt.ColSet,
+// RemapScanColsInFilter returns a new FiltersExpr where columns in src's table
+// are replaced with columns of the same ordinal in dst's table. src and dst
+// must scan the same base table.
+func (c *CustomFuncs) RemapScanColsInFilter(
+	filters memo.FiltersExpr, src, dst *memo.ScanPrivate,
 ) memo.FiltersExpr {
-	newFilters := c.mapScalarExprCols(&filters, src, dst).(*memo.FiltersExpr)
+	newFilters := c.remapScanColsInScalarExpr(&filters, src, dst).(*memo.FiltersExpr)
 	return *newFilters
 }
 
-func (c *CustomFuncs) mapScalarExprCols(scalar opt.ScalarExpr, src, dst opt.ColSet) opt.ScalarExpr {
-	if src.Len() != dst.Len() {
-		panic(errors.AssertionFailedf(
-			"src and dst must have the same number of columns, src: %v, dst: %v",
-			src,
-			dst,
-		))
+func (c *CustomFuncs) remapScanColsInScalarExpr(
+	scalar opt.ScalarExpr, src, dst *memo.ScanPrivate,
+) opt.ScalarExpr {
+	md := c.e.mem.Metadata()
+	if md.Table(src.Table).ID() != md.Table(dst.Table).ID() {
+		panic(errors.AssertionFailedf("src and dst must scan the same base table"))
 	}
-
-	// Map each column in src to a column in dst based on the relative position
-	// of both the src and dst ColumnIDs in the ColSet.
+	if src.Cols.Len() != dst.Cols.Len() {
+		panic(errors.AssertionFailedf("src and dst must have the same number of columns"))
+	}
+	// Remap each column in src to a column in dst.
 	var colMap opt.ColMap
-	dstCol, _ := dst.Next(0)
-	for srcCol, ok := src.Next(0); ok; srcCol, ok = src.Next(srcCol + 1) {
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		ord := src.Table.ColumnOrdinal(srcCol)
+		dstCol := dst.Table.ColumnID(ord)
 		colMap.Set(int(srcCol), int(dstCol))
-		dstCol, _ = dst.Next(dstCol + 1)
 	}
-
 	return c.RemapCols(scalar, colMap)
 }
 
@@ -523,9 +515,21 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 		}
 		for j, m := 0, singleKeySpans.Count(); j < m; j++ {
 			// Construct a new Scan for each span.
-			newScanOrSelect := c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
+			newScanPrivate := c.makeNewScanPrivate(
+				sp,
+				cons.Columns,
+				newHardLimit,
+				singleKeySpans.Get(j),
+			)
+			newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 			if !filters.IsTrue() {
-				newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, filters, limit)
+				newScanOrSelect = c.wrapScanInLimitedSelect(
+					newScanOrSelect,
+					sp,
+					newScanPrivate,
+					filters,
+					limit,
+				)
 			}
 			queue.PushBack(newScanOrSelect)
 			queueLength++
@@ -561,6 +565,10 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			// Not necessary, but keep spans with lower values in the left subtree.
 			left, right = right, left
 		}
+		// TODO(mgartner/msirek): Converting ColSets to ColLists here is only safe
+		// because column IDs are always allocated in a consistent, ascending order
+		// for each duplicated table in the metadata. If column ID allocation
+		// changes, this could break.
 		if noLimitSpans.Count() == 0 && queue.Len() == 0 {
 			outCols = sp.Cols.ToList()
 		} else {
@@ -594,8 +602,12 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	})
 	newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 	if !filters.IsTrue() {
-		newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, filters, limit)
+		newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, newScanPrivate, filters, limit)
 	}
+	// TODO(mgartner/msirek): Converting ColSets to ColLists here is only safe
+	// because column IDs are always allocated in a consistent, ascending order
+	// for each duplicated table in the metadata. If column ID allocation
+	// changes, this could break.
 	return makeNewUnion(last, newScanOrSelect, sp.Cols.ToList()), true
 }
 
@@ -651,12 +663,15 @@ func (c *CustomFuncs) numAllowedValues(
 // the originalScanPrivate columns to the columns in scan. If limit is non-zero,
 // the SelectExpr is wrapped in a LimitExpr with that limit.
 func (c *CustomFuncs) wrapScanInLimitedSelect(
-	scan memo.RelExpr, originalScanPrivate *memo.ScanPrivate, filters memo.FiltersExpr, limit int,
+	scan memo.RelExpr,
+	originalScanPrivate, newScanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
+	limit int,
 ) (limitedSelect memo.RelExpr) {
-	limitedSelect =
-		c.e.f.ConstructSelect(scan,
-			c.MapFilterCols(filters, originalScanPrivate.Cols,
-				c.OutputCols(scan)))
+	limitedSelect = c.e.f.ConstructSelect(
+		scan,
+		c.RemapScanColsInFilter(filters, originalScanPrivate, newScanPrivate),
+	)
 	if limit != 0 {
 		limitedSelect = c.e.f.ConstructLimit(
 			limitedSelect,
@@ -729,16 +744,16 @@ func indexHasOrderingSequence(
 	return ordering.ScanPrivateCanProvide(md, sp, &requiredOrdering)
 }
 
-// makeNewScan constructs a new Scan operator with a new TableID and the given
-// limit and span. All ColumnIDs and references to those ColumnIDs are
-// replaced with new ones from the new TableID. All other fields are simply
-// copied from the old ScanPrivate.
-func (c *CustomFuncs) makeNewScan(
+// makeNewScanPrivate returns a new ScanPrivate with a new TableID and the given
+// limit and span. All ColumnIDs and references to those ColumnIDs are replaced
+// with new ones from the new TableID. All other fields are simply copied from
+// the old ScanPrivate.
+func (c *CustomFuncs) makeNewScanPrivate(
 	sp *memo.ScanPrivate,
 	columns constraint.Columns,
 	newHardLimit memo.ScanLimit,
 	span *constraint.Span,
-) memo.RelExpr {
+) *memo.ScanPrivate {
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 
 	// duplicateScanPrivate does not initialize the Constraint or HardLimit
@@ -755,7 +770,7 @@ func (c *CustomFuncs) makeNewScan(
 	}
 	newScanPrivate.SetConstraint(c.e.evalCtx, newConstraint)
 
-	return c.e.f.ConstructScan(newScanPrivate)
+	return newScanPrivate
 }
 
 // getKnownScanConstraint returns a Constraint that is known to hold true for
