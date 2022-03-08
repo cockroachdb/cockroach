@@ -108,10 +108,10 @@
 
 /pkg/storage/                @cockroachdb/storage
 
-/pkg/ui/                     @cockroachdb/cluster-ui-prs
-/pkg/ui/embedded.go          @cockroachdb/cluster-ui-prs
-/pkg/ui/src/js/protos.d.ts   @cockroachdb/cluster-ui-prs
-/pkg/ui/src/js/protos.js     @cockroachdb/cluster-ui-prs
+/pkg/ui/                     @cockroachdb/crux
+/pkg/ui/embedded.go          @cockroachdb/crux
+/pkg/ui/src/js/protos.d.ts   @cockroachdb/crux
+/pkg/ui/src/js/protos.js     @cockroachdb/crux
 
 /docs/generated/http/        @cockroachdb/http-api-prs @cockroachdb/server-prs
 /pkg/cmd/docgen/http.go      @cockroachdb/http-api-prs @cockroachdb/server-prs
