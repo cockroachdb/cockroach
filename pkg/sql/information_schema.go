@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -212,30 +214,10 @@ var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 ` + docs.URL("information-schema.html#administrable_role_authorizations") + `
 https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html`,
 	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User()
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		grantee := tree.NewDString(currentUser.Normalized())
-		for roleName, isAdmin := range memberMap {
-			if !isAdmin {
-				// We only show memberships with the admin option.
-				continue
-			}
-
-			if err := addRow(
-				grantee,                                // grantee: always the current user
-				tree.NewDString(roleName.Normalized()), // role_name
-				yesString,                              // is_grantable: always YES
-			); err != nil {
-				return err
-			}
-		}
-
-		return nil
+	populate: func(
+		ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) error {
+		return populateRoleHierarchy(ctx, p, addRow, true /* onlyIsAdmin */)
 	},
 }
 
@@ -244,27 +226,40 @@ var informationSchemaApplicableRoles = virtualSchemaTable{
 ` + docs.URL("information-schema.html#applicable_roles") + `
 https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	schema: vtable.InformationSchemaApplicableRoles,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User()
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		grantee := tree.NewDString(currentUser.Normalized())
-
-		for roleName, isAdmin := range memberMap {
-			if err := addRow(
-				grantee,                                // grantee: always the current user
-				tree.NewDString(roleName.Normalized()), // role_name
-				yesOrNoDatum(isAdmin),                  // is_grantable
-			); err != nil {
-				return err
-			}
-		}
-
-		return nil
+	populate: func(
+		ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) error {
+		return populateRoleHierarchy(ctx, p, addRow, false /* onlyIsAdmin */)
 	},
+}
+
+func populateRoleHierarchy(
+	ctx context.Context, p *planner, addRow func(...tree.Datum) error, onlyIsAdmin bool,
+) error {
+	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+	if err != nil {
+		return err
+	}
+	return forEachRoleMembership(
+		ctx, p.ExecCfg().InternalExecutor, p.Txn(),
+		func(role, member security.SQLUsername, isAdmin bool) error {
+			// The ADMIN OPTION is inherited through the role hierarchy, and grantee
+			// is supposed to be the role that has the ADMIN OPTION. The current user
+			// inherits all the ADMIN OPTIONs of its ancestors.
+			isRole := member == p.User()
+			_, hasRole := allRoles[member]
+			if (hasRole || isRole) && (!onlyIsAdmin || isAdmin) {
+				if err := addRow(
+					tree.NewDString(member.Normalized()), // grantee
+					tree.NewDString(role.Normalized()),   // role_name
+					yesOrNoDatum(isAdmin),                // is_grantable
+				); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	)
 }
 
 var informationSchemaCharacterSets = virtualSchemaTable{
@@ -2646,12 +2641,13 @@ func forEachRole(
 }
 
 func forEachRoleMembership(
-	ctx context.Context, p *planner, fn func(role, member security.SQLUsername, isAdmin bool) error,
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	fn func(role, member security.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
-	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
-		ctx, "read-members", p.txn, query,
-	)
+	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
+	it, err := ie.QueryIterator(ctx, "read-members", txn, query)
 	if err != nil {
 		return err
 	}
