@@ -121,7 +121,8 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Stats.RowCount
-		s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(cols, sel, s))
+		selectivity, _ := sb.selectivityFromMultiColDistinctCounts(cols, sel, s)
+		s.ApplySelectivity(selectivity)
 
 		// Update null counts.
 		sb.updateNullCountsFromNotNullCols(relProps.NotNullCols, s)
@@ -178,7 +179,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs123 := constraint.SingleConstraint(&c123)
 	statsFunc(
 		cs123,
-		"[rows=36040, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=5, null(1-3)=0, avgsize(1-3)=12]",
+		"[rows=400, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=5, null(1-3)=0, avgsize(1-3)=12]",
 	)
 
 	cs123n := constraint.SingleConstraint(&c123n)
