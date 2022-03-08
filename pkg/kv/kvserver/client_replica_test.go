@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
@@ -3452,6 +3454,10 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 // TestStrictGCEnforcement ensures that strict GC enforcement is respected and
 // furthermore is responsive to changes in protected timestamps and in changes
 // to the zone configs.
+//
+// TODO(adityamaru,arulajmani): Once the protectedts.Cache goes away this test
+// will probably need a rewrite since it is tightly coupled with the freshness
+// of the Cache.
 func TestStrictGCEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3464,8 +3470,27 @@ func TestStrictGCEnforcement(t *testing.T) {
 	}
 	ctx := context.Background()
 
+	var mu struct {
+		syncutil.Mutex
+		blockOnTimestampUpdate func()
+	}
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
+						OnTimestampAdvance: func(timestamp hlc.Timestamp) {
+							mu.Lock()
+							defer mu.Unlock()
+							if mu.blockOnTimestampUpdate != nil {
+								mu.blockOnTimestampUpdate()
+							}
+						},
+					},
+				},
+			},
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -3483,11 +3508,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tenSecondsAgo hlc.Timestamp // written in setup
 		tableKey      = keys.SystemSQLCodec.TablePrefix(tableID)
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+		tableTarget   = ptpb.MakeSchemaObjectsTarget([]descpb.ID{descpb.ID(tableID)})
 		mkRecord      = func() ptpb.Record {
 			return ptpb.Record{
-				ID:              uuid.MakeV4().GetBytes(),
-				Timestamp:       tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
-				DeprecatedSpans: []roachpb.Span{tableSpan},
+				ID:        uuid.MakeV4().GetBytes(),
+				Timestamp: tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
+				Target:    tableTarget,
 			}
 		}
 		mkStaleTxn = func() *kv.Txn {
@@ -3511,24 +3537,6 @@ func TestStrictGCEnforcement(t *testing.T) {
 		assertScanOk = func(t *testing.T) {
 			t.Helper()
 			require.NoError(t, performScan())
-		}
-		// Make sure the cache has been updated. Once it has then we know it won't
-		// be for minutes. It should read on startup.
-		waitForCacheAfter = func(t *testing.T, min hlc.Timestamp) {
-			t.Helper()
-			testutils.SucceedsSoon(t, func() error {
-				for i := 0; i < tc.NumServers(); i++ {
-					ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
-					_, asOf, err := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
-					if err != nil {
-						return err
-					}
-					if asOf.Less(min) {
-						return errors.Errorf("not yet read")
-					}
-				}
-				return nil
-			})
 		}
 		setGCTTL = func(t *testing.T, object string, exp int) {
 			t.Helper()
@@ -3586,16 +3594,23 @@ func TestStrictGCEnforcement(t *testing.T) {
 				require.NoError(t, err)
 			}
 		}
-		refreshCacheAndUpdatePTSState = func(t *testing.T, nodeID roachpb.NodeID) {
+		waitForProtectionAndReadProtectedTimestamps = func(t *testing.T, nodeID roachpb.NodeID,
+			protectionTimestamp hlc.Timestamp, span roachpb.Span) {
 			for i := 0; i < tc.NumServers(); i++ {
 				if tc.Server(i).NodeID() != nodeID {
 					continue
 				}
-				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-				require.NoError(t, ptp.Refresh(ctx, tc.Server(i).Clock().Now()))
+				ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
-				err := r.ReadProtectedTimestamps(ctx)
-				require.NoError(t, err)
+				testutils.SucceedsSoon(t, func() error {
+					if err := verifyProtectionTimestampExistsOnSpans(ctx, t, tc, ptsReader, protectionTimestamp,
+						[]roachpb.Span{span}); err != nil {
+						return errors.Newf("protection timestamp %s does not exist on span %s",
+							protectionTimestamp, span)
+					}
+					return nil
+				})
+				require.NoError(t, r.ReadProtectedTimestamps(ctx))
 			}
 		}
 	)
@@ -3610,8 +3625,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, err)
 
 		setTableGCTTL(t, 1)
-		waitForCacheAfter(t, hlc.Timestamp{})
 
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 		defer sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
 		setStrictGC(t, true)
 		tenSecondsAgo = tc.Server(0).Clock().Now().Add(-10*time.Second.Nanoseconds(), 0)
@@ -3640,22 +3655,41 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("protected timestamps are respected", func(t *testing.T) {
-		waitForCacheAfter(t, hlc.Timestamp{})
+		// Block the KVSubscriber rangefeed from progressing.
+		blockKVSubscriberCh := make(chan struct{})
+		var isBlocked bool
+		mu.Lock()
+		mu.blockOnTimestampUpdate = func() {
+			isBlocked = true
+			<-blockKVSubscriberCh
+		}
+		mu.Unlock()
+
+		// Ensure that the KVSubscriber has been blocked.
+		testutils.SucceedsSoon(t, func() error {
+			if !isBlocked {
+				return errors.New("kvsubscriber not blocked yet")
+			}
+			return nil
+		})
+
 		ptp := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		assertScanRejected(t)
-		// Create a protected timestamp, don't verify it, make sure it's not
-		// respected.
+		// Create a protected timestamp, and make sure it's not respected since the
+		// KVSubscriber is blocked.
 		rec := mkRecord()
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return ptp.Protect(ctx, txn, &rec)
 		}))
 		assertScanRejected(t)
 
+		// Unblock the KVSubscriber and wait for the PTS record to reach KV.
+		close(blockKVSubscriberCh)
 		desc, err := tc.LookupRange(tableKey)
 		require.NoError(t, err)
 		target, err := tc.FindRangeLeaseHolder(desc, nil)
 		require.NoError(t, err)
-		refreshCacheAndUpdatePTSState(t, target.NodeID)
+		waitForProtectionAndReadProtectedTimestamps(t, target.NodeID, rec.Timestamp, tableSpan)
 		assertScanOk(t)
 
 		// Transfer the lease and demonstrate that the query succeeds because we're
