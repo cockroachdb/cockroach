@@ -49,6 +49,16 @@ func (w *writer) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	if MaxSize.Get(&w.st.SV) == 0 {
 		return
 	}
+
+	// There are edge cases where the txnID in the resolvedTxnID will be nil,
+	// (e.g. when the connExecutor closes while a transaction is still active).
+	// This causes that, occasionally, connExecutor will emit resolvedTxnIDs with
+	// invalid txnID but valid txnFingerprintID. Writing invalid txnID into the
+	// writer can potentially cause data loss. (Since the TxnID cache stops
+	// processing the input batch when it encounters the first invalid txnID).
+	if resolvedTxnID.TxnID.Equal(uuid.Nil) {
+		return
+	}
 	shardIdx := hashTxnID(resolvedTxnID.TxnID)
 	buffer := w.shards[shardIdx]
 	buffer.Record(resolvedTxnID)
