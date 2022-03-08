@@ -360,6 +360,11 @@ func (s *kafkaSink) workerLoop() {
 			ackMsg = m
 		case err := <-s.producer.Errors():
 			ackMsg, ackError = err.Msg, err.Err
+			if ackError != nil {
+				ackError = errors.Wrapf(ackError,
+					"while sending message with key=%s, size=%d",
+					err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length())
+			}
 		}
 
 		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
