@@ -10,14 +10,18 @@
 
 import { assert } from "chai";
 
-import { selectLocalityTree, LocalityTier } from "./localities";
+import {
+  selectLocalityTree,
+  LocalityTier,
+  selectNodeLocalities,
+} from "./localities";
 
 function makeStateWithLocalities(localities: LocalityTier[][]) {
   const nodes = localities.map((locality, i) => {
     return {
       desc: {
         node_id: i,
-        locality: { tiers: locality },
+        locality: locality ? { tiers: locality } : {},
       },
     };
   });
@@ -75,5 +79,30 @@ describe("selectLocalityTree", function() {
     assert.deepEqual(usEast2.tiers, [{ key: "region", value: "us-east-2" }]);
 
     assert.lengthOf(usEast2.nodes, 1);
+  });
+});
+
+describe("selectNodeLocalities", function() {
+  it("should return map of nodes with localities", function() {
+    const localities = [
+      [
+        { key: "region", value: "us-east-1" },
+        { key: "az", value: "a" },
+      ],
+      [{ key: "region", value: "us-east-2" }],
+    ];
+    const state = makeStateWithLocalities(localities);
+
+    const result = selectNodeLocalities.resultFunc(state.cachedData.nodes.data);
+    assert.equal(result.size, 2);
+    result.forEach((v, k) => {
+      assert.equal(v, localities[k].map(l => `${l.key}=${l.value}`).join(", "));
+    });
+  });
+
+  it("should return empty map if no locality is provided", function() {
+    const state = makeStateWithLocalities([]);
+    const result = selectNodeLocalities.resultFunc(state.cachedData.nodes.data);
+    assert.equal(result.size, 0);
   });
 });

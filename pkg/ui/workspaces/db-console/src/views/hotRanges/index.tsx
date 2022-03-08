@@ -26,6 +26,7 @@ import {
   lastErrorSelector,
   lastSetAtSelector,
 } from "src/redux/hotRanges";
+import { selectNodeLocalities } from "src/redux/localities";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
@@ -37,6 +38,7 @@ const HotRangesPage = () => {
   const lastError = useSelector(lastErrorSelector);
   const lastSetAt = useSelector(lastSetAtSelector);
   const isLoading = useSelector(isLoadingSelector);
+  const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
 
   useEffect(() => {
     if (!isValid) {
@@ -86,6 +88,7 @@ const HotRangesPage = () => {
             <HotRangesTable
               hotRangesList={hotRanges}
               lastUpdate={lastSetAt && formatCurrentDateTime(lastSetAt?.utc())}
+              nodeIdToLocalityMap={nodeIdToLocalityMap}
             />
           )}
           page={undefined}
