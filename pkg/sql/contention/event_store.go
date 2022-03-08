@@ -123,11 +123,11 @@ var (
 )
 
 func newEventStore(
-	st *cluster.Settings, endpoint ResolverEndpoint, timeSrc timeSource,
+	st *cluster.Settings, endpoint ResolverEndpoint, timeSrc timeSource, metrics *Metrics,
 ) *eventStore {
 	s := &eventStore{
 		st:             st,
-		resolver:       newResolver(endpoint, eventBatchSize /* sizeHint */),
+		resolver:       newResolver(endpoint, metrics, eventBatchSize /* sizeHint */),
 		eventBatchChan: make(chan *eventBatch, eventChannelSize),
 		closeCh:        make(chan struct{}),
 		timeSrc:        timeSrc,

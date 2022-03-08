@@ -12,8 +12,7 @@ package txnidcache
 
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
-// Metrics is a structs that include all metrics related to contention
-// subsystem.
+// Metrics is a struct that include all metrics related to txn id cache.
 type Metrics struct {
 	CacheMissCounter *metric.Counter
 	CacheReadCounter *metric.Counter
