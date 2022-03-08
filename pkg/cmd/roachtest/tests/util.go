@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -22,30 +23,35 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// WaitFor3XReplication waits until all ranges in the system are on at least
-// three voters.
-//
-// TODO(nvanbenschoten): this function should take a context and be responsive
-// to context cancellation.
-func WaitFor3XReplication(t test.Test, db *gosql.DB) {
-	t.L().Printf("waiting for up-replication...")
+// WaitFor3XReplication is like WaitForReplication but specifically requires
+// three as the minimum number of voters a range must be replicated on.
+func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error {
+	return WaitForReplication(ctx, t, db, 3 /* replicationFactor */)
+}
+
+// WaitForReplication waits until all ranges in the system are on at least
+// replicationFactor voters.
+func WaitForReplication(
+	ctx context.Context, t test.Test, db *gosql.DB, replicationFactor int,
+) error {
+	t.L().Printf("waiting for initial up-replication...")
 	tStart := timeutil.Now()
 	var oldN int
 	for {
-		ctx, cancel := context.WithTimeout(context.TODO(), 15*time.Second)
 		var n int
 		if err := db.QueryRowContext(
 			ctx,
-			"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < 3 ",
+			fmt.Sprintf(
+				"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < %d",
+				replicationFactor,
+			),
 		).Scan(&n); err != nil {
-			cancel()
-			t.Fatal(err)
+			return err
 		}
 		if n == 0 {
-			cancel()
-			return
+			t.L().Printf("up-replication complete")
+			return nil
 		}
-		cancel()
 		if timeutil.Since(tStart) > 30*time.Second || oldN != n {
 			t.L().Printf("still waiting for full replication (%d ranges left)", n)
 		}

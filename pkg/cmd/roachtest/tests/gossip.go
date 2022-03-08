@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func registerGossip(r registry.Registry) {
@@ -43,7 +44,8 @@ func registerGossip(r registry.Registry) {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=*=1")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
-		WaitFor3XReplication(t, c.Conn(ctx, t.L(), 1))
+		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
+		require.NoError(t, err)
 
 		// TODO(irfansharif): We could also look at gossip_liveness to determine
 		// cluster membership as seen by each gossip module, and ensure each
@@ -58,7 +60,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
 			var s gosql.NullString
-			if err := db.QueryRow(query).Scan(&s); err != nil {
+			if err = db.QueryRow(query).Scan(&s); err != nil {
 				t.Fatal(err)
 			}
 			if s.Valid {
