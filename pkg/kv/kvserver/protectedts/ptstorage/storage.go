@@ -52,11 +52,12 @@ type storage struct {
 
 var _ protectedts.Storage = (*storage)(nil)
 
+// TODO(adityamaru): Delete in 22.2.
 func useDeprecatedProtectedTSStorage(
 	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
 ) bool {
 	return !st.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn) ||
-		!knobs.EnableProtectedTimestampForMultiTenant
+		knobs.DisableProtectedTimestampForMultiTenant
 }
 
 // New creates a new Storage.

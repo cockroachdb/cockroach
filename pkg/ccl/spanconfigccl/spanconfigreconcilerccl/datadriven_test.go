@@ -19,7 +19,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -96,13 +95,11 @@ func TestDataDriven(t *testing.T) {
 			// Checkpoint noops frequently; speeds this test up.
 			SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
 		}
-		ptsKnobs := &protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
-					ProtectedTS:      ptsKnobs,
 				},
 			},
 		})
@@ -114,7 +111,7 @@ func TestDataDriven(t *testing.T) {
 			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		}
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, ptsKnobs)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		systemTenant := spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)

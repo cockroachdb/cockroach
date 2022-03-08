@@ -19,7 +19,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -87,23 +86,17 @@ func TestDataDriven(t *testing.T) {
 		// test cluster).
 		ManagerDisableJobCreation: true,
 	}
-	// TODO(adityamaru): Delete once the value for this knob defaults to true
-	// prior to release-22.1.
-	ptsKnobs := &protectedts.TestingKnobs{
-		EnableProtectedTimestampForMultiTenant: true,
-	}
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					SpanConfig:  scKnobs,
-					ProtectedTS: ptsKnobs,
+					SpanConfig: scKnobs,
 				},
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, ptsKnobs)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		var tenant *spanconfigtestcluster.Tenant

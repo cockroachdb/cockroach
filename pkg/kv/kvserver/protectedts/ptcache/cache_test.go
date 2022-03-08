@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,11 +45,23 @@ import (
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				ProtectedTS: &protectedts.TestingKnobs{
+					DisableProtectedTimestampForMultiTenant: true,
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor),
-		nil /* knobs */), s.DB())
+	p := ptstorage.WithDatabase(
+		ptstorage.New(s.ClusterSettings(),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		s.DB(),
+	)
 
 	// Set the poll interval to be very short.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Microsecond)
@@ -105,19 +118,28 @@ func TestRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := &scanTracker{}
+	ptsKnobs := &protectedts.TestingKnobs{
+		DisableProtectedTimestampForMultiTenant: true,
+	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: st.requestFilter,
 				},
+				ProtectedTS: ptsKnobs,
 			},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
+	p := ptstorage.WithDatabase(
+		ptstorage.New(
+			s.ClusterSettings(),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			ptsKnobs),
+		s.DB(),
+	)
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -222,9 +244,17 @@ func TestStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	setup := func() (*testcluster.TestCluster, *ptcache.Cache) {
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					ProtectedTS: &protectedts.TestingKnobs{
+						DisableProtectedTimestampForMultiTenant: true,
+					},
+				},
+			},
+		})
 		s := tc.Server(0)
-		p := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */)
+		p := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 		c := ptcache.New(ptcache.Config{
@@ -256,8 +286,13 @@ func TestQueryRecord(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
+	p := ptstorage.WithDatabase(
+		ptstorage.New(
+			s.ClusterSettings(),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		s.DB(),
+	)
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 	c := ptcache.New(ptcache.Config{
@@ -313,8 +348,12 @@ func TestIterate(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
+	p := ptstorage.WithDatabase(
+		ptstorage.New(s.ClusterSettings(),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		s.DB(),
+	)
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -375,7 +414,15 @@ func (recs *records) sorted() []*ptpb.Record {
 
 func TestGetProtectionTimestamps(t *testing.T) {
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				ProtectedTS: &protectedts.TestingKnobs{
+					DisableProtectedTimestampForMultiTenant: true,
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 	// Set the poll interval to be very long.
 	s := tc.Server(0)
@@ -450,8 +497,12 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-				s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
+			p := ptstorage.WithDatabase(
+				ptstorage.New(s.ClusterSettings(),
+					s.InternalExecutor().(sqlutil.InternalExecutor),
+					&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+				s.DB(),
+			)
 
 			c := ptcache.New(ptcache.Config{
 				Settings: s.ClusterSettings(),
@@ -474,8 +525,12 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
+	p := ptstorage.WithDatabase(
+		ptstorage.New(s.ClusterSettings(),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		s.DB(),
+	)
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
