@@ -440,6 +440,12 @@ func createStatsDefaultColumns(
 				colIDs = append(colIDs, col.GetID())
 			}
 
+			// Do not attempt to create multi-column stats with no columns. This
+			// can happen when an index contains only virtual computed columns.
+			if len(colIDs) == 0 {
+				continue
+			}
+
 			// Check for existing stats and remember the requested stats.
 			if !trackStatsIfNotExists(colIDs) {
 				continue
