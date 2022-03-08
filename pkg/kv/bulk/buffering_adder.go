@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -392,7 +393,11 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			}
 			predicateAt = next
 		}
-		splitKey := b.curBuf.Key(splitAt)
+		splitKey, err := keys.EnsureSafeSplitKey(b.curBuf.Key(splitAt))
+		if err != nil {
+			log.Warningf(ctx, "failed to generate pre-split key for key %s", b.curBuf.Key(splitAt))
+			continue
+		}
 		predicateKey := b.curBuf.Key(predicateAt)
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
 		resp, err := b.sink.db.SplitAndScatter(ctx, splitKey, expire, predicateKey)
