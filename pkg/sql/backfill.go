@@ -2653,6 +2653,9 @@ func (sc *SchemaChanger) distIndexMerge(
 	addedIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
 ) error {
+	mergeTimestamp := sc.clock.Now()
+	log.Infof(ctx, "merging all keys in temporary index before time %v...", mergeTimestamp)
+
 	// Gather the initial resume spans for the merge process.
 	progress, err := extractMergeProgress(sc.job, tableDesc, addedIndexes, temporaryIndexes)
 	if err != nil {
@@ -2694,7 +2697,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	defer func() { _ = stop() }()
 
 	run, err := planner.plan(ctx, tableDesc, progress.TodoSpans, progress.AddedIndexes,
-		progress.TemporaryIndexes, metaFn)
+		progress.TemporaryIndexes, metaFn, mergeTimestamp)
 	if err != nil {
 		return err
 	}

@@ -73,6 +73,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 		return nil
 	}
 
+	mergeSerializeCh := make(chan struct{}, 1)
 	mergeChunk := 0
 	var seenKey roachpb.Key
 	checkStartingKey := func(key roachpb.Key) error {
@@ -110,7 +111,13 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
 			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
 				PushesProgressEveryChunk: true,
-				RunBeforeMergeChunk:      checkStartingKey,
+				RunBeforeScanChunk:       checkStartingKey,
+				RunAfterScanChunk: func() {
+					<-mergeSerializeCh
+				},
+				RunAfterMergeChunk: func() {
+					mergeSerializeCh <- struct{}{}
+				},
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
@@ -232,7 +239,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: populateTempIndexWithWrites,
 			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
-				RunBeforeMergeChunk: func(key roachpb.Key) error {
+				RunBeforeScanChunk: func(key roachpb.Key) error {
 					notifyMerge()
 					return nil
 				},
