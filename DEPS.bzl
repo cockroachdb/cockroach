@@ -1297,10 +1297,10 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "cc3201e4197273c3ddc0adf72ab1f800d7b09e2b9d50422cab619a854d8e4e80",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220307192532-e2b7bb844759",
+        sha256 = "1d0c3142ce1a36b610e2c38c4b651fca37d19c79bc7938b5f8082ad471dac8bd",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220308000504-fcae8e494d06",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220307192532-e2b7bb844759.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220308000504-fcae8e494d06.zip",
         ],
     )
     go_repository(
@@ -4825,10 +4825,10 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sha256 = "25990a3b573b4568fa9c98c880e82abe5fe4dc6a3c784935923643ef28791acd",
-        strip_prefix = "github.com/klauspost/compress@v1.14.2",
+        sha256 = "a99fa43b5502194e7366c27e258b5cd33672ae087e3e4ca95efab75aa6542641",
+        strip_prefix = "github.com/klauspost/compress@v1.15.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.14.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.15.0.zip",
         ],
     )
     go_repository(
@@ -6817,10 +6817,10 @@ def go_deps():
         name = "com_github_rs_zerolog",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rs/zerolog",
-        sha256 = "bb7aa934fc89548dabf71c27427eab5920c9014af6cd06f53175411df09a4241",
-        strip_prefix = "github.com/rs/zerolog@v1.21.0",
+        sha256 = "8e98c48e7fd132aafbf129664e8fd65229d067d772bff4bd712a497b7a2f00c4",
+        strip_prefix = "github.com/rs/zerolog@v1.15.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/zerolog/com_github_rs_zerolog-v1.21.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/zerolog/com_github_rs_zerolog-v1.15.0.zip",
         ],
     )
     go_repository(
@@ -8107,10 +8107,10 @@ def go_deps():
         name = "com_shuralyov_dmitri_gpu_mtl",
         build_file_proto_mode = "disable_global",
         importpath = "dmitri.shuralyov.com/gpu/mtl",
-        sha256 = "d9992a60371571861985f191ac38954db2cc1bd36e834058ad50f989ccc8fa06",
-        strip_prefix = "dmitri.shuralyov.com/gpu/mtl@v0.0.0-20201218220906-28db891af037",
+        sha256 = "ca5330901fcda83d09553ac362576d196c531157bc9c502e76b237cca262b400",
+        strip_prefix = "dmitri.shuralyov.com/gpu/mtl@v0.0.0-20190408044501-666a987793e9",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/dmitri.shuralyov.com/gpu/mtl/com_shuralyov_dmitri_gpu_mtl-v0.0.0-20201218220906-28db891af037.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/dmitri.shuralyov.com/gpu/mtl/com_shuralyov_dmitri_gpu_mtl-v0.0.0-20190408044501-666a987793e9.zip",
         ],
     )
     go_repository(
@@ -8808,16 +8808,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "io_opentelemetry_go_otel_metric",
-        build_file_proto_mode = "disable_global",
-        importpath = "go.opentelemetry.io/otel/metric",
-        sha256 = "d7ae3abbdcf9ea48ff23a477f324cb3595c77f3eb83f6acde5c0c9300e23fedb",
-        strip_prefix = "go.opentelemetry.io/otel/metric@v0.20.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.opentelemetry.io/otel/metric/io_opentelemetry_go_otel_metric-v0.20.0.zip",
-        ],
-    )
-    go_repository(
         name = "io_opentelemetry_go_otel_sdk",
         build_file_proto_mode = "disable_global",
         importpath = "go.opentelemetry.io/otel/sdk",
@@ -9025,10 +9015,10 @@ def go_deps():
         name = "org_golang_x_exp",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/exp",
-        sha256 = "50e096afbb8e0f073519dd05f6573aefe410a829c87a7c1b64efb8c4a3948c50",
-        strip_prefix = "golang.org/x/exp@v0.0.0-20220104160115-025e73f80486",
+        sha256 = "2fcdd50578769bd6b506f6043e4e1f5b58e49235b702b0fc065a4d0b4a3b6f11",
+        strip_prefix = "golang.org/x/exp@v0.0.0-20220307200941-a1099baf94bf",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/exp/org_golang_x_exp-v0.0.0-20220104160115-025e73f80486.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/exp/org_golang_x_exp-v0.0.0-20220307200941-a1099baf94bf.zip",
         ],
     )
     go_repository(
@@ -9055,10 +9045,10 @@ def go_deps():
         name = "org_golang_x_mobile",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/mobile",
-        sha256 = "1fd2f665cdb7f64b80e2e1224941d1ecad10bd99327c6fc8906183d2ef3816df",
-        strip_prefix = "golang.org/x/mobile@v0.0.0-20201217150744-e6ae53a27f4f",
+        sha256 = "6b946c7da47acf3b6195336fd071bfc73d543cefab73f2d27528c5dc1dc829ec",
+        strip_prefix = "golang.org/x/mobile@v0.0.0-20190719004257-d2bd2a29d028",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/mobile/org_golang_x_mobile-v0.0.0-20201217150744-e6ae53a27f4f.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/mobile/org_golang_x_mobile-v0.0.0-20190719004257-d2bd2a29d028.zip",
         ],
     )
     go_repository(
@@ -9115,10 +9105,10 @@ def go_deps():
         name = "org_golang_x_sys",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sys",
-        sha256 = "84289ab5dec00ea6f7b911c392b59198d046eabe43185cba45cff79f5b1a9233",
-        strip_prefix = "golang.org/x/sys@v0.0.0-20220209214540-3681064d5158",
+        sha256 = "ad9747e9e441cd50c0a54c19bf9e135bd4acca92c5524590acc54ba2a31660cc",
+        strip_prefix = "golang.org/x/sys@v0.0.0-20220307203707-22a9840ba4d7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sys/org_golang_x_sys-v0.0.0-20220209214540-3681064d5158.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sys/org_golang_x_sys-v0.0.0-20220307203707-22a9840ba4d7.zip",
         ],
     )
     go_repository(
