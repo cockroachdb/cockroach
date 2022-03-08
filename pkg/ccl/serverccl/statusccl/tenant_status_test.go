@@ -867,22 +867,30 @@ func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper *tenantTest
 	testCases := []struct {
 		sessionID     string
 		expectedError string
+
+		// This is a temporary assertion. We should always show the following "not found" error messages,
+		// regardless of admin status, but our current behavior is slightly broken and will be fixed in #77676.
+		nonAdminSeesError bool
 	}{
 		{
-			sessionID:     "",
-			expectedError: "session ID 00000000000000000000000000000000 not found",
+			sessionID:         "",
+			expectedError:     "session ID 00000000000000000000000000000000 not found",
+			nonAdminSeesError: true,
 		},
 		{
-			sessionID:     "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
-			expectedError: "session ID 00000000000000000000000000000001 not found",
+			sessionID:         "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
+			expectedError:     "session ID 00000000000000000000000000000001 not found",
+			nonAdminSeesError: false,
 		},
 		{
-			sessionID:     "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
-			expectedError: "session ID 00000000000000000000000000000002 not found",
+			sessionID:         "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
+			expectedError:     "session ID 00000000000000000000000000000002 not found",
+			nonAdminSeesError: false,
 		},
 		{
-			sessionID:     "42", // This query ID claims to have SQL instance ID 42, which does not exist.
-			expectedError: "session ID 00000000000000000000000000000042 not found",
+			sessionID:         "42", // This query ID claims to have SQL instance ID 42, which does not exist.
+			expectedError:     "session ID 00000000000000000000000000000042 not found",
+			nonAdminSeesError: true,
 		},
 	}
 
@@ -898,7 +906,7 @@ func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper *tenantTest
 				err = client.PostJSONChecked("/_status/cancel_session/0", &serverpb.CancelSessionRequest{
 					SessionID: sessionID.GetBytes(),
 				}, &resp)
-				if isAdmin {
+				if isAdmin || testCase.nonAdminSeesError {
 					require.NoError(t, err)
 					require.Equal(t, testCase.expectedError, resp.Error)
 				} else {
@@ -986,27 +994,36 @@ func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper *tenantTestHe
 	testCases := []struct {
 		queryID       string
 		expectedError string
+
+		// This is a temporary assertion. We should always show the following "not found" error messages,
+		// regardless of admin status, but our current behavior is slightly broken and will be fixed in #77676.
+		nonAdminSeesError bool
 	}{
 		{
 			queryID: "BOGUS_QUERY_ID",
 			expectedError: "query ID 00000000000000000000000000000000 malformed: " +
 				"could not decode BOGUS_QUERY_ID as hex: encoding/hex: invalid byte: U+004F 'O'",
+			nonAdminSeesError: true,
 		},
 		{
-			queryID:       "",
-			expectedError: "query ID 00000000000000000000000000000000 not found",
+			queryID:           "",
+			expectedError:     "query ID 00000000000000000000000000000000 not found",
+			nonAdminSeesError: true,
 		},
 		{
-			queryID:       "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
-			expectedError: "query ID 00000000000000000000000000000001 not found",
+			queryID:           "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
+			expectedError:     "query ID 00000000000000000000000000000001 not found",
+			nonAdminSeesError: false,
 		},
 		{
-			queryID:       "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
-			expectedError: "query ID 00000000000000000000000000000002 not found",
+			queryID:           "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
+			expectedError:     "query ID 00000000000000000000000000000002 not found",
+			nonAdminSeesError: false,
 		},
 		{
-			queryID:       "42", // This query ID claims to have SQL instance ID 42, which does not exist.
-			expectedError: "query ID 00000000000000000000000000000042 not found",
+			queryID:           "42", // This query ID claims to have SQL instance ID 42, which does not exist.
+			expectedError:     "query ID 00000000000000000000000000000042 not found",
+			nonAdminSeesError: true,
 		},
 	}
 
@@ -1020,7 +1037,7 @@ func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper *tenantTestHe
 				err := client.PostJSONChecked("/_status/cancel_query/0", &serverpb.CancelQueryRequest{
 					QueryID: testCase.queryID,
 				}, &resp)
-				if isAdmin {
+				if isAdmin || testCase.nonAdminSeesError {
 					require.NoError(t, err)
 					require.Equal(t, testCase.expectedError, resp.Error)
 				} else {
