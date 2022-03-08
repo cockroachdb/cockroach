@@ -26,10 +26,8 @@ import (
 // waitForShowTransferState.
 //
 // Unlike runAndWaitForDeserializeSession, we split the SHOW TRANSFER STATE
-// operation into `run` and `wait` since they both will be invoked in different
-// goroutines. If we combined them, we'll have to wait for at least one of the
-// goroutines to pause, which can introduce a latency of about 1-2s per transfer
-// while waiting for Read in readTimeoutConn to be unblocked.
+// operation into `run` and `wait` since doing so allows us to send the query
+// ahead of time.
 func runShowTransferState(w io.Writer, transferKey string) error {
 	return writeQuery(w, "SHOW TRANSFER STATE WITH '%s'", transferKey)
 }
