@@ -17,18 +17,31 @@ import (
 	"regexp"
 )
 
+var rustUnitTestOutputRegex = regexp.MustCompile(`(?P<type>.*) (?P<class>.*)::(?P<name>.*) .\.\.\ (?P<result>.*)`)
 var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*?)(?: u?['"](?P<reason>.*)['"])?$`)
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(
 	input []byte, expectedFailures blocklist, ignoredList blocklist,
 ) {
+	r.parseUnitTestOutput(pythonUnitTestOutputRegex, input, expectedFailures, ignoredList)
+}
+
+func (r *ormTestsResults) parseRustUnitTestOutput(
+	input []byte, expectedFailures blocklist, ignoredList blocklist,
+) {
+	r.parseUnitTestOutput(rustUnitTestOutputRegex, input, expectedFailures, ignoredList)
+}
+
+func (r *ormTestsResults) parseUnitTestOutput(
+	regex *regexp.Regexp, input []byte, expectedFailures blocklist, ignoredList blocklist,
+) {
 	scanner := bufio.NewScanner(bytes.NewReader(input))
 	for scanner.Scan() {
-		match := pythonUnitTestOutputRegex.FindStringSubmatch(scanner.Text())
+		match := regex.FindStringSubmatch(scanner.Text())
 		if match != nil {
 			groups := map[string]string{}
 			for i, name := range match {
-				groups[pythonUnitTestOutputRegex.SubexpNames()[i]] = name
+				groups[regex.SubexpNames()[i]] = name
 			}
 			test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
 			skipped := groups["result"] == "skipped" || groups["result"] == "expected failure"
