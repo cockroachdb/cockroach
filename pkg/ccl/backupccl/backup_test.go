@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -6436,6 +6437,9 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
+	runner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
+
 	close(allowRequest)
 
 	for _, testrun := range []struct {
@@ -6465,7 +6469,6 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		baseBackupURI := "nodelocal://0/foo" + testrun.name
 		testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s'`, baseBackupURI), runner) // create a base backup.
 		allowRequest = make(chan struct{})
-		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		rRand, _ := randutil.NewTestRand()
 		writeGarbage := func(from, to int) {
@@ -6924,8 +6927,6 @@ func TestRestoreErrorPropagates(t *testing.T) {
 
 // TestProtectedTimestampsFailDueToLimits ensures that when creating a protected
 // timestamp record fails, we return the correct error.
-//
-// TODO(adityamaru): Remove in 22.2 once no records protect spans.
 func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6941,12 +6942,32 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
 	runner.Exec(t, "CREATE TABLE bar (k INT PRIMARY KEY, v BYTES)")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_spans = 1")
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_bytes = 1")
 
 	// Creating the protected timestamp record should fail because there are too
 	// many spans. Ensure that we get the appropriate error.
 	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo'`)
-	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
+	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+30 > 1 bytes")
+
+	// TODO(adityamaru): Remove in 22.2 once no records protect spans.
+	t.Run("deprecated-spans-limit", func(t *testing.T) {
+		params := base.TestClusterArgs{}
+		params.ServerArgs.ExternalIODir = dir
+		params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
+			DisableProtectedTimestampForMultiTenant: true}
+		tc := testcluster.StartTestCluster(t, 1, params)
+		defer tc.Stopper().Stop(ctx)
+		db := tc.ServerConn(0)
+		runner := sqlutils.MakeSQLRunner(db)
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+		runner.Exec(t, "CREATE TABLE bar (k INT PRIMARY KEY, v BYTES)")
+		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_spans = 1")
+
+		// Creating the protected timestamp record should fail because there are too
+		// many spans. Ensure that we get the appropriate error.
+		_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo'`)
+		require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
+	})
 }
 
 func TestPaginatedBackupTenant(t *testing.T) {

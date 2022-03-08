@@ -16,7 +16,6 @@ go_test(
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
-        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

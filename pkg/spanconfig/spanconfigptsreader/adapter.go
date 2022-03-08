@@ -14,12 +14,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // adapter implements the spanconfig.ProtectedTSReader interface and is intended
@@ -87,8 +89,12 @@ func TestingRefreshPTSState(
 	if !ok {
 		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
+	// First refresh the cache past asOf.
+	require.NoError(t, a.cache.Refresh(ctx, asOf))
+
+	// Now ensure the KVSubscriber is fresh enough.
 	testutils.SucceedsSoon(t, func() error {
-		_, fresh, err := a.GetProtectionTimestamps(ctx, roachpb.Span{})
+		_, fresh, err := a.GetProtectionTimestamps(ctx, keys.EverythingSpan)
 		if err != nil {
 			return err
 		}
@@ -97,5 +103,5 @@ func TestingRefreshPTSState(
 		}
 		return nil
 	})
-	return a.cache.Refresh(ctx, asOf)
+	return nil
 }
