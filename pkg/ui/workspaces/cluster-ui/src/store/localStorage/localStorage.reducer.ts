@@ -21,13 +21,19 @@ type SortSetting = {
 
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
+  "showColumns/ActiveStatementsPage": string;
+  "showColumns/ActiveTransactionsPage": string;
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
   "showColumns/SessionsPage": string;
   "timeScale/SQLActivity": TimeScale;
+  "sortSetting/ActiveStatementsPage": SortSetting;
+  "sortSetting/ActiveTransactionsPage": SortSetting;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
+  "filters/ActiveStatementsPage": Filters;
+  "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
   "filters/SessionsPage": Filters;
@@ -45,6 +51,15 @@ const defaultSortSetting: SortSetting = {
   columnTitle: "executionCount",
 };
 
+const defaultSortSettingActiveExecutions: SortSetting = {
+  ascending: false,
+  columnTitle: "startTime",
+};
+
+const defaultFiltersActiveExecutions = {
+  app: defaultFilters.app,
+};
+
 const defaultSessionsSortSetting: SortSetting = {
   ascending: false,
   columnTitle: "statementAge",
@@ -55,6 +70,12 @@ const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
     Boolean(JSON.parse(localStorage.getItem("adminUi/showDiagnosticsModal"))) ||
     false,
+  "showColumns/ActiveStatementsPage":
+    JSON.parse(localStorage.getItem("showColumns/ActiveStatementsPage")) ??
+    null,
+  "showColumns/ActiveTransactionsPage":
+    JSON.parse(localStorage.getItem("showColumns/ActiveTransactionsPage")) ??
+    null,
   "showColumns/StatementsPage":
     JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
   "showColumns/TransactionPage":
@@ -64,6 +85,12 @@ const initialState: LocalStorageState = {
   "timeScale/SQLActivity":
     JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
     defaultTimeScaleSelected,
+  "sortSetting/ActiveStatementsPage":
+    JSON.parse(localStorage.getItem("sortSetting/ActiveStatementsPage")) ||
+    defaultSortSettingActiveExecutions,
+  "sortSetting/ActiveTransactionsPage":
+    JSON.parse(localStorage.getItem("sortSetting/ActiveTransactionsPage")) ||
+    defaultSortSettingActiveExecutions,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
     defaultSortSetting,
@@ -73,6 +100,12 @@ const initialState: LocalStorageState = {
   "sortSetting/SessionsPage":
     JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
     defaultSessionsSortSetting,
+  "filters/ActiveStatementsPage":
+    JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
+    defaultFiltersActiveExecutions,
+  "filters/ActiveTransactionsPage":
+    JSON.parse(localStorage.getItem("filters/ActiveTransactionsPage")) ||
+    defaultFiltersActiveExecutions,
   "filters/StatementsPage":
     JSON.parse(localStorage.getItem("filters/StatementsPage")) ||
     defaultFilters,
