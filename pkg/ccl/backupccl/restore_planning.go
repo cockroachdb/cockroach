@@ -868,7 +868,9 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 		} else {
 			b = desc.NewBuilder()
 		}
-		b.RunPostDeserializationChanges()
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
+		}
 		err := b.RunRestoreChanges(func(id descpb.ID) catalog.Descriptor {
 			for _, d := range descs {
 				if d.GetID() == id {

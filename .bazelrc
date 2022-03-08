@@ -26,18 +26,27 @@ build:cross --stamp
 build:cross --define cockroach_cross=y
 
 # Cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
-build:crosslinux --platforms=//build/toolchains:cross_linux
+# Generally these should be used for development builds. Each cross config has
+# a corresponding `base` config that is the same thing but without the
+# `--workspace_status_command`; if using these `base` configs, you need to
+# specify an appropriate `--workspace_status_command`. These `base` configs are
+# used by the release process which needs to have more control over stamping.
 build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
-build:crosslinux --config=cross
-build:crosswindows --platforms=//build/toolchains:cross_windows
+build:crosslinux --config=crosslinuxbase
+build:crosslinuxbase --platforms=//build/toolchains:cross_linux
+build:crosslinuxbase --config=cross
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
-build:crosswindows --config=cross
-build:crossmacos --platforms=//build/toolchains:cross_macos
+build:crosswindows --config=crosswindowsbase
+build:crosswindowsbase --platforms=//build/toolchains:cross_windows
+build:crosswindowsbase --config=cross
 build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19'
-build:crossmacos --config=cross
-build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
+build:crossmacos --config=crossmacosbase
+build:crossmacosbase --platforms=//build/toolchains:cross_macos
+build:crossmacosbase --config=cross
 build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
-build:crosslinuxarm --config=cross
+build:crosslinuxarm --config=crosslinuxarmbase
+build:crosslinuxarmbase --platforms=//build/toolchains:cross_linux_arm
+build:crosslinuxarmbase --config=cross
 
 # Developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
 # NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).

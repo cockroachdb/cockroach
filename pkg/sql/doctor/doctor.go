@@ -81,7 +81,9 @@ func processDescriptorTable(
 		}
 		b := descbuilder.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
 		if b != nil {
-			b.RunPostDeserializationChanges()
+			if err := b.RunPostDeserializationChanges(); err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
+			}
 			m[r.ID] = b.BuildImmutable()
 		}
 	}
@@ -92,7 +94,9 @@ func processDescriptorTable(
 			continue
 		}
 		b := desc.NewBuilder()
-		b.RunPostDeserializationChanges()
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
+		}
 		if err := b.RunRestoreChanges(func(id descpb.ID) catalog.Descriptor {
 			return m[int64(id)]
 		}); err != nil {

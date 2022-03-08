@@ -320,7 +320,7 @@ func TestFixDroppedSchemaName(t *testing.T) {
 		Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 	}
 	b := NewBuilder(&dbDesc)
-	b.RunPostDeserializationChanges()
+	require.NoError(t, b.RunPostDeserializationChanges())
 	desc := b.BuildCreatedMutableDatabase()
 	require.Truef(t, desc.GetPostDeserializationChanges().HasChanges(),
 		"expected changes in descriptor, found none")

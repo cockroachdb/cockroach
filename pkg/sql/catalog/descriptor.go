@@ -75,7 +75,9 @@ type DescriptorBuilder interface {
 
 	// RunPostDeserializationChanges attempts to perform changes to the descriptor
 	// being built from a deserialized protobuf.
-	RunPostDeserializationChanges()
+	// NOTE: any error returned by this function should be treated as an assertion
+	// failure, and indicates either corruption or a programming error.
+	RunPostDeserializationChanges() error
 
 	// RunRestoreChanges attempts to perform changes to the descriptor being
 	// built from a deserialized protobuf obtained by restoring a backup.

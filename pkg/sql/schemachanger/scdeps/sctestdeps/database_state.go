@@ -66,7 +66,9 @@ ORDER BY id`)
 			t.Fatal(err)
 		}
 		b := descbuilder.NewBuilderWithMVCCTimestamp(descProto, ts)
-		b.RunPostDeserializationChanges()
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			t.Fatal(err)
+		}
 		desc := b.BuildCreatedMutable()
 		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
 			continue

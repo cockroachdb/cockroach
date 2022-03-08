@@ -79,7 +79,10 @@ func TestSpanAssembler(t *testing.T) {
 								probOfOmittingRow = 0.3
 							}
 							sel := coldatatestutils.RandomSel(rng, coldata.BatchSize(), probOfOmittingRow)
-							testTable := makeTable(useColFamilies)
+							testTable, err := makeTable(useColFamilies)
+							if err != nil {
+								t.Fatal(err)
+							}
 							neededColumns := util.MakeFastIntSet(1, 2, 3, 4)
 
 							cols := make([]coldata.Vec, len(typs))
@@ -197,7 +200,7 @@ func spanGeneratorOracle(
 	return spans
 }
 
-func makeTable(useColFamilies bool) catalog.TableDescriptor {
+func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
 	tableID := bootstrap.TestingUserDescID(0)
 	if !useColFamilies {
 		// We can prevent the span builder from splitting spans into separate column
@@ -248,6 +251,8 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 	}
 
 	b := tabledesc.NewBuilder(&testTableDesc)
-	b.RunPostDeserializationChanges()
-	return b.BuildImmutableTable()
+	if err := b.RunPostDeserializationChanges(); err != nil {
+		return nil, err
+	}
+	return b.BuildImmutableTable(), nil
 }
