@@ -20,7 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -28,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -246,6 +250,66 @@ func TestTransactionIDCache(t *testing.T) {
 			"expected to found provisional txn id cache record, "+
 				"but it was not found")
 	})
+}
+
+// TestInvalidTxnID tests how TxnIDCache handles invalid txnID input. This can
+// happen when connExecutor closes when a transaction is still active.
+func TestInvalidTxnID(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	metrics := txnidcache.NewMetrics()
+
+	txnidcache.MaxSize.Override(ctx, &st.SV, 1<<20)
+	txnIDCache := txnidcache.NewTxnIDCache(st, &metrics)
+	txnIDCache.Start(ctx, stopper)
+	defer stopper.Stop(ctx)
+
+	// Record an invalid input. This should not cause data loss.
+	txnIDCache.Record(contentionpb.ResolvedTxnID{})
+
+	inputData := []contentionpb.ResolvedTxnID{
+		{
+			TxnID:            uuid.FastMakeV4(),
+			TxnFingerprintID: roachpb.TransactionFingerprintID(1),
+		},
+		{
+			TxnID:            uuid.FastMakeV4(),
+			TxnFingerprintID: roachpb.TransactionFingerprintID(2),
+		},
+	}
+
+	for _, input := range inputData {
+		txnIDCache.Record(input)
+	}
+
+	// Sanity check, before the write-buffer is drained, nothing should be present
+	// in the cache.
+	for _, input := range inputData {
+		_, found := txnIDCache.Lookup(input.TxnID)
+		require.Falsef(t, found, "expected txnID %s to be not in the"+
+			" cache, but it is", input.TxnID.String())
+	}
+
+	txnIDCache.DrainWriteBuffer()
+
+	testutils.SucceedsWithin(t, func() error {
+		for _, input := range inputData {
+			actualTxnFingerprintID, found := txnIDCache.Lookup(input.TxnID)
+			if !found {
+				return errors.Newf("expected txnID %s to be in the"+
+					" cache, but it is not", input.TxnID.String())
+			}
+
+			if actualTxnFingerprintID != input.TxnFingerprintID {
+				return errors.Newf("expected txn %s to have txn fingerprint id %d, "+
+					"but its txn fingerprint id is %d", input.TxnID.String(),
+					input.TxnFingerprintID, actualTxnFingerprintID)
+			}
+		}
+
+		return nil
+	}, 5*time.Second)
 }
 
 // runtimeHookInjector provides a way to dynamically inject a testing knobs
