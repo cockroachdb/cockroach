@@ -2473,7 +2473,7 @@ alter_default_privileges_target_object ::=
 	| 'SCHEMAS'
 
 alter_changefeed_cmd ::=
-	'ADD' changefeed_targets
+	'ADD' changefeed_targets opt_with_options
 	| 'DROP' changefeed_targets
 	| 'SET' kv_option_list
 	| 'UNSET' name_list
