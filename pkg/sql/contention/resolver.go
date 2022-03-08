@@ -109,13 +109,16 @@ type resolverQueueImpl struct {
 	}
 
 	resolverEndpoint ResolverEndpoint
+
+	metrics *Metrics
 }
 
 var _ resolverQueue = &resolverQueueImpl{}
 
-func newResolver(endpoint ResolverEndpoint, sizeHint int) *resolverQueueImpl {
+func newResolver(endpoint ResolverEndpoint, metrics *Metrics, sizeHint int) *resolverQueueImpl {
 	s := &resolverQueueImpl{
 		resolverEndpoint: endpoint,
+		metrics:          metrics,
 	}
 
 	s.mu.unresolvedEvents = make([]contentionpb.ExtendedContentionEvent, 0, sizeHint)
@@ -131,6 +134,7 @@ func (q *resolverQueueImpl) enqueue(block []contentionpb.ExtendedContentionEvent
 	defer q.mu.Unlock()
 
 	q.mu.unresolvedEvents = append(q.mu.unresolvedEvents, block...)
+	q.metrics.ResolverQueueSize.Inc(int64(len(block)))
 }
 
 // dequeue implements the resolverQueue interface.
@@ -143,6 +147,8 @@ func (q *resolverQueueImpl) dequeue(
 	err := q.resolveLocked(ctx)
 	result := q.mu.resolvedEvents
 	q.mu.resolvedEvents = q.mu.resolvedEvents[:0]
+
+	q.metrics.ResolverQueueSize.Dec(int64(len(result)))
 
 	return result, err
 }
@@ -288,11 +294,13 @@ func (q *resolverQueueImpl) maybeRequeueEventForRetryLocked(
 
 		if remainingRetryBudget == 0 {
 			delete(q.mu.remainingRetries, event.Hash())
+			q.metrics.ResolverFailed.Inc(1)
 			return false /* requeued */
 		}
 	}
 
 	q.mu.unresolvedEvents = append(q.mu.unresolvedEvents, event)
+	q.metrics.ResolverRetries.Inc(1)
 	return true /* requeued */
 }
 

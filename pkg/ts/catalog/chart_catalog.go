@@ -1934,6 +1934,18 @@ var charts = []sectionDescription{
 				Title:   "Transaction ID Cache Read",
 				Metrics: []string{"sql.contention.txn_id_cache.read"},
 			},
+			{
+				Title:   "Resolver Queue Size",
+				Metrics: []string{"sql.contention.resolver.queue_size"},
+			},
+			{
+				Title:   "Resolve Retries",
+				Metrics: []string{"sql.contention.resolver.retries"},
+			},
+			{
+				Title:   "Resolve Failed",
+				Metrics: []string{"sql.contention.resolver.failed_resolution"},
+			},
 		},
 	},
 	{
