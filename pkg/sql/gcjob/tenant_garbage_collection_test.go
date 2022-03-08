@@ -40,7 +40,7 @@ func TestGCTenant(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	gcClosure := func(tenID uint64, progress *jobspb.SchemaChangeGCProgress) error {
-		return gcjob.GcTenant(ctx, &execCfg, tenID, progress)
+		return gcjob.TestingGCTenant(ctx, &execCfg, tenID, progress)
 	}
 
 	const (
