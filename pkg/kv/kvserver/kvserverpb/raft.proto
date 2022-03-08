@@ -154,6 +154,8 @@ message SnapshotRequest {
   }
 
   message Header {
+    reserved 1;
+
     // The replica state at the time the snapshot was generated. Note
     // that ReplicaState.Desc differs from the above range_descriptor
     // field which holds the updated descriptor after the new replica
@@ -187,8 +189,6 @@ message SnapshotRequest {
     //
     // TODO(irfansharif): Remove this in v22.1.
     bool deprecated_unreplicated_truncated_state = 8;
-
-    reserved 1, 4;
   }
 
   Header header = 1;
@@ -207,7 +207,7 @@ message SnapshotResponse {
     ACCEPTED = 1;
     APPLIED = 2;
     ERROR = 3;
-    reserved 4;
+    DECLINED = 4;
   }
   Status status = 1;
   string message = 2;

@@ -850,15 +850,30 @@ func TestStorePoolThrottle(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
-	sp.throttle(throttleFailed, "", 1)
+	{
+		expected := sp.clock.Now().GoTime().Add(DeclinedSnapshotTimeout.Get(&sp.st.SV))
+		sp.throttle(throttleDeclined, "", 1)
 
-	sp.detailsMu.Lock()
-	detail := sp.getStoreDetailLocked(1)
-	sp.detailsMu.Unlock()
-	if !detail.throttledUntil.Equal(expected) {
-		t.Errorf("expected store to have been throttled to %v, found %v",
-			expected, detail.throttledUntil)
+		sp.detailsMu.Lock()
+		detail := sp.getStoreDetailLocked(1)
+		sp.detailsMu.Unlock()
+		if !detail.throttledUntil.Equal(expected) {
+			t.Errorf("expected store to have been throttled to %v, found %v",
+				expected, detail.throttledUntil)
+		}
+	}
+
+	{
+		expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
+		sp.throttle(throttleFailed, "", 1)
+
+		sp.detailsMu.Lock()
+		detail := sp.getStoreDetailLocked(1)
+		sp.detailsMu.Unlock()
+		if !detail.throttledUntil.Equal(expected) {
+			t.Errorf("expected store to have been throttled to %v, found %v",
+				expected, detail.throttledUntil)
+		}
 	}
 }
 

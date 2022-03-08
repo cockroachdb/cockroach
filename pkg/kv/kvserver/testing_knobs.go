@@ -233,6 +233,10 @@ type StoreTestingKnobs struct {
 	// SplitQueuePurgatoryChan allows a test to control the channel used to
 	// trigger split queue purgatory processing.
 	SplitQueuePurgatoryChan <-chan time.Time
+	// EnableDiskFullnessCheckForSnapshots enables the check that rejects
+	// snapshots to stores with an almost full disk. This check is always enabled
+	// in production code, but disabled in test code unless this knob is set.
+	EnableDiskFullnessCheckForSnapshots bool
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool

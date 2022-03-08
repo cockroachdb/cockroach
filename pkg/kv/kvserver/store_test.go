@@ -59,7 +59,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -2737,13 +2737,16 @@ func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotRequest) error {
 }
 
 type fakeStorePool struct {
-	failedThrottles int
+	failedThrottles   int
+	declinedThrottles int
 }
 
-func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID roachpb.StoreID) {
+func (sp *fakeStorePool) throttle(reason throttleReason, _ string, _ roachpb.StoreID) {
 	switch reason {
 	case throttleFailed:
 		sp.failedThrottles++
+	case throttleDeclined:
+		sp.declinedThrottles++
 	default:
 		panic("unknown reason")
 	}
@@ -2797,6 +2800,25 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			t.Fatalf("expected error, found nil")
 		}
 	}
+
+	// Test that a declined snapshot causes a declined throttle.
+	{
+		sp := &fakeStorePool{}
+		resp := &kvserverpb.SnapshotResponse{
+			Status: kvserverpb.SnapshotResponse_DECLINED,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
+		if sp.failedThrottles != 0 {
+			t.Fatalf("expected 0 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if sp.declinedThrottles != 1 {
+			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
+		}
+	}
 }
 
 func TestReserveSnapshotThrottling(t *testing.T) {
@@ -2832,10 +2854,6 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 	cleanupEmpty()
 
-	if n := s.ReservationCount(); n != 1 {
-		t.Fatalf("expected 1 reservation, but found %d", n)
-	}
-
 	// Verify we block concurrent snapshots by spawning a goroutine which will
 	// execute the cleanup after a short delay but only if another snapshot was
 	// not allowed through.
@@ -2861,8 +2879,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 }
 
-// TestReserveSnapshotFullnessLimit documents that we have no mechanism to
-// decline snapshots based on the remaining capacity of the target store.
+// TestReserveSnapshotFullnessLimit verifies that rebalancing snapshots are
+// rejected when the recipient store's disk is near full.
 func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2871,7 +2889,11 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc := testContext{}
-	tc.Start(ctx, t, stopper)
+	tc.manualClock = hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.EnableDiskFullnessCheckForSnapshots = true
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
 	s := tc.store
 
 	desc, err := s.Descriptor(ctx, false /* useCached */)
@@ -2885,21 +2907,12 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
 	s.cfg.StorePool.detailsMu.Unlock()
 
-	if n := s.ReservationCount(); n != 0 {
-		t.Fatalf("expected 0 reservations, but found %d", n)
-	}
-
-	// A snapshot should be allowed.
-	cleanupAccepted, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	// A recovery snapshot should be allowed.
+	declined, _ := s.shouldDeclineSnapshot(&kvserverpb.SnapshotRequest_Header{
+		Priority:  kvserverpb.SnapshotRequest_RECOVERY,
 		RangeSize: 1,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := s.ReservationCount(); n != 1 {
-		t.Fatalf("expected 1 reservation, but found %d", n)
-	}
-	cleanupAccepted()
+	require.False(t, declined)
 
 	// Even if the store isn't mostly full, a range that's larger than the
 	// available disk space should be rejected.
@@ -2909,9 +2922,13 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
 	s.cfg.StorePool.detailsMu.Unlock()
 
-	if n := s.ReservationCount(); n != 0 {
-		t.Fatalf("expected 0 reservations, but found %d", n)
-	}
+	// A rebalancing snapshot to a nearly full store should be rejected.
+	declined, reason := s.shouldDeclineSnapshot(&kvserverpb.SnapshotRequest_Header{
+		Priority:  kvserverpb.SnapshotRequest_REBALANCE,
+		RangeSize: desc.Capacity.Available + 1,
+	})
+	require.True(t, declined)
+	require.Regexp(t, "out of disk space", reason)
 }
 
 // TestSnapshotReservationQueueTimeoutAvoidsStarvation verifies that the
