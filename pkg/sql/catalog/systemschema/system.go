@@ -777,7 +777,7 @@ func registerSystemTable(
 ) catalog.TableDescriptor {
 	ctx := context.Background()
 	if _, alreadyExists := SystemTableDescriptors[createTableStmt]; alreadyExists {
-		log.Fatalf(ctx, "System table %q cannot be registered, existing entry for %s", tbl.Name, createTableStmt)
+		log.Fatalf(ctx, "system table %q cannot be registered, existing entry for %s", tbl.Name, createTableStmt)
 	}
 	{
 		nameInfo := descpb.NameInfo{
@@ -787,7 +787,7 @@ func registerSystemTable(
 		}
 		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
 		if privs == nil {
-			log.Fatalf(ctx, "No superuser privileges found when building descriptor of system table %q", tbl.Name)
+			log.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
 		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
 	}
@@ -795,7 +795,12 @@ func registerSystemTable(
 		fn(&tbl)
 	}
 	b := tabledesc.NewBuilder(&tbl)
-	b.RunPostDeserializationChanges()
+	if err := b.RunPostDeserializationChanges(); err != nil {
+		log.Fatalf(
+			ctx, "system table %q cannot be registered, error during RunPostDeserializationChanges: %+v",
+			tbl.Name, err,
+		)
+	}
 	desc := b.BuildImmutableTable()
 	SystemTableDescriptors[createTableStmt] = desc
 	return desc
