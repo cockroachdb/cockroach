@@ -771,6 +771,21 @@ func clearRangeData(
 	return nil
 }
 
+// maybeThrottleSnapshot determines whether throttling should be applied to the
+// receiving snapshot avoid overloading the store.
+func (r *Replica) maybeThrottleSnapshot(ctx context.Context) {
+	before := timeutil.Now()
+	r.store.engine.PreIngestDelay(ctx)
+	after := timeutil.Now()
+
+	waited := after.Sub(before)
+	r.store.metrics.RangeSnapshotsProposalTotalDelay.Inc(waited.Nanoseconds())
+	if waited > time.Second {
+		log.Infof(ctx, "Snapshot ingestion was delayed by %v",
+			waited)
+	}
+}
+
 // applySnapshot updates the replica and its store based on the given
 // (non-empty) snapshot and associated HardState. All snapshots must pass
 // through Raft for correctness, i.e. the parameters to this method must be
@@ -797,6 +812,10 @@ func (r *Replica) applySnapshot(
 	if desc.RangeID != r.RangeID {
 		log.Fatalf(ctx, "unexpected range ID %d", desc.RangeID)
 	}
+
+	// Check store health and delay processing the raft snapshot request if
+	// the store is unhealthy or overloaded.
+	r.maybeThrottleSnapshot(ctx)
 
 	isInitialSnap := !r.IsInitialized()
 	{
