@@ -3,10 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "interceptor",
     srcs = [
-        "backend_interceptor.go",
+        "backend_conn.go",
         "base.go",
         "chunkreader.go",
-        "frontend_interceptor.go",
+        "frontend_conn.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor",
     visibility = ["//visibility:public"],
@@ -21,10 +21,10 @@ go_library(
 go_test(
     name = "interceptor_test",
     srcs = [
-        "backend_interceptor_test.go",
+        "backend_conn_test.go",
         "base_test.go",
         "chunkreader_test.go",
-        "frontend_interceptor_test.go",
+        "frontend_conn_test.go",
         "interceptor_test.go",
     ],
     embed = [":interceptor"],

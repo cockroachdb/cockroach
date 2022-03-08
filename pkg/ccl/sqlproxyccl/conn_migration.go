@@ -41,11 +41,11 @@ func runShowTransferState(w io.Writer, transferKey string) error {
 // forwarding of messages back to the client in case we don't see our state yet.
 //
 // WARNING: When using this, we assume that no other goroutines are using both
-// serverConn and clientConn, as well as their respective interceptors. In the
-// context of a transfer, the client-to-server processor must be blocked.
+// serverConn and clientConn. In the context of a transfer, the response
+// processor must be blocked to avoid concurrent reads from serverConn.
 var waitForShowTransferState = func(
 	ctx context.Context,
-	serverInterceptor *interceptor.FrontendInterceptor,
+	serverConn *interceptor.FrontendConn,
 	clientConn io.Writer,
 	transferKey string,
 ) (transferErr string, state string, revivalToken string, retErr error) {
@@ -66,7 +66,7 @@ var waitForShowTransferState = func(
 	// 1. Wait for the relevant RowDescription.
 	if err := waitForSmallRowDescription(
 		ctx,
-		serverInterceptor,
+		serverConn,
 		clientConn,
 		func(msg *pgproto3.RowDescription) bool {
 			// Do we have the right number of columns?
@@ -92,7 +92,7 @@ var waitForShowTransferState = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverInterceptor, func(msg *pgproto3.DataRow) bool {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow) bool {
 		// This has to be 4 since we validated RowDescription earlier.
 		if len(msg.Values) != 4 {
 			return false
@@ -116,12 +116,12 @@ var waitForShowTransferState = func(
 	}
 
 	// 3. Read CommandComplete.
-	if err := expectCommandComplete(ctx, serverInterceptor, "SHOW TRANSFER STATE 1"); err != nil {
+	if err := expectCommandComplete(ctx, serverConn, "SHOW TRANSFER STATE 1"); err != nil {
 		return "", "", "", errors.Wrap(err, "expecting CommandComplete")
 	}
 
 	// 4. Read ReadyForQuery.
-	if err := expectReadyForQuery(ctx, serverInterceptor); err != nil {
+	if err := expectReadyForQuery(ctx, serverConn); err != nil {
 		return "", "", "", errors.Wrap(err, "expecting ReadyForQuery")
 	}
 
@@ -136,12 +136,9 @@ var waitForShowTransferState = func(
 // forwarded back to the client.
 //
 // WARNING: When using this, we assume that no other goroutines are using both
-// serverConn and clientConn, and their respective interceptors.
+// serverConn and clientConn.
 var runAndWaitForDeserializeSession = func(
-	ctx context.Context,
-	serverConn io.Writer,
-	serverInterceptor *interceptor.FrontendInterceptor,
-	state string,
+	ctx context.Context, serverConn *interceptor.FrontendConn, state string,
 ) error {
 	// Send deserialization query.
 	if err := writeQuery(serverConn,
@@ -169,7 +166,7 @@ var runAndWaitForDeserializeSession = func(
 	//    so we can guarantee that there won't be pipelined queries.
 	if err := waitForSmallRowDescription(
 		ctx,
-		serverInterceptor,
+		serverConn,
 		&errWriter{},
 		func(msg *pgproto3.RowDescription) bool {
 			return len(msg.Fields) == 1 &&
@@ -180,19 +177,19 @@ var runAndWaitForDeserializeSession = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverInterceptor, func(msg *pgproto3.DataRow) bool {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow) bool {
 		return len(msg.Values) == 1 && string(msg.Values[0]) == "t"
 	}); err != nil {
 		return errors.Wrap(err, "expecting DataRow")
 	}
 
 	// 3. Read CommandComplete.
-	if err := expectCommandComplete(ctx, serverInterceptor, "SELECT 1"); err != nil {
+	if err := expectCommandComplete(ctx, serverConn, "SELECT 1"); err != nil {
 		return errors.Wrap(err, "expecting CommandComplete")
 	}
 
 	// 4. Read ReadyForQuery.
-	if err := expectReadyForQuery(ctx, serverInterceptor); err != nil {
+	if err := expectReadyForQuery(ctx, serverConn); err != nil {
 		return errors.Wrap(err, "expecting ReadyForQuery")
 	}
 
@@ -206,19 +203,19 @@ func writeQuery(w io.Writer, format string, a ...interface{}) error {
 	return err
 }
 
-// waitForSmallRowDescription waits until the next message from the interceptor
+// waitForSmallRowDescription waits until the next message from serverConn
 // is a *small* RowDescription message (i.e. within 4K bytes), and one that
 // passes matchFn. When that happens, this returns nil.
 //
 // For all other messages (i.e. non RowDescription or large messages), they will
-// be forwarded to conn. One exception to this would be the ErrorResponse
+// be forwarded to clientConn. One exception to this would be the ErrorResponse
 // message, which will result in an error since we're in an ambiguous state.
 // The ErrorResponse message may be for a pipelined query, or the RowDescription
 // message that we're waiting.
 func waitForSmallRowDescription(
 	ctx context.Context,
-	interceptor *interceptor.FrontendInterceptor,
-	conn io.Writer,
+	serverConn *interceptor.FrontendConn,
+	clientConn io.Writer,
 	matchFn func(*pgproto3.RowDescription) bool,
 ) error {
 	// Since we're waiting for the first message that matches the given
@@ -228,7 +225,7 @@ func waitForSmallRowDescription(
 			return ctx.Err()
 		}
 
-		typ, size, err := interceptor.PeekMsg()
+		typ, size, err := serverConn.PeekMsg()
 		if err != nil {
 			return errors.Wrap(err, "peeking message")
 		}
@@ -237,7 +234,7 @@ func waitForSmallRowDescription(
 		// or a previous pipelined query, so return an error.
 		if typ == pgwirebase.ServerMsgErrorResponse {
 			// Error messages are small, so read for debugging purposes.
-			msg, err := interceptor.ReadMsg()
+			msg, err := serverConn.ReadMsg()
 			if err != nil {
 				return errors.Wrap(err, "ambiguous ErrorResponse")
 			}
@@ -253,13 +250,13 @@ func waitForSmallRowDescription(
 		// right away.
 		const maxSmallMsgSize = 1 << 12 // 4KB
 		if typ != pgwirebase.ServerMsgRowDescription || size > maxSmallMsgSize {
-			if _, err := interceptor.ForwardMsg(conn); err != nil {
+			if _, err := serverConn.ForwardMsg(clientConn); err != nil {
 				return errors.Wrap(err, "forwarding message")
 			}
 			continue
 		}
 
-		msg, err := interceptor.ReadMsg()
+		msg, err := serverConn.ReadMsg()
 		if err != nil {
 			return errors.Wrap(err, "reading RowDescription")
 		}
@@ -277,13 +274,13 @@ func waitForSmallRowDescription(
 
 		// Matching fails, so forward the message back to the client, and
 		// continue searching.
-		if _, err := conn.Write(msg.Encode(nil)); err != nil {
+		if _, err := clientConn.Write(msg.Encode(nil)); err != nil {
 			return errors.Wrap(err, "writing message")
 		}
 	}
 }
 
-// expectDataRow expects that the next message from the interceptor is a DataRow
+// expectDataRow expects that the next message from serverConn is a DataRow
 // message. If the next message is a DataRow message, validateFn will be called
 // to validate the contents. This function will return an error if we don't see
 // a DataRow message or the validation failed.
@@ -296,13 +293,13 @@ func waitForSmallRowDescription(
 // whereas for the latter, the response is expected to be small.
 func expectDataRow(
 	ctx context.Context,
-	interceptor *interceptor.FrontendInterceptor,
+	serverConn *interceptor.FrontendConn,
 	validateFn func(*pgproto3.DataRow) bool,
 ) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	msg, err := interceptor.ReadMsg()
+	msg, err := serverConn.ReadMsg()
 	if err != nil {
 		return errors.Wrap(err, "reading message")
 	}
@@ -316,16 +313,15 @@ func expectDataRow(
 	return nil
 }
 
-// expectCommandComplete expects that the next message from the interceptor is
-// a CommandComplete message with the input tag, and returns an error if it
-// isn't.
+// expectCommandComplete expects that the next message from serverConn is a
+// CommandComplete message with the input tag, and returns an error if it isn't.
 func expectCommandComplete(
-	ctx context.Context, interceptor *interceptor.FrontendInterceptor, tag string,
+	ctx context.Context, serverConn *interceptor.FrontendConn, tag string,
 ) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	msg, err := interceptor.ReadMsg()
+	msg, err := serverConn.ReadMsg()
 	if err != nil {
 		return errors.Wrap(err, "reading message")
 	}
@@ -336,13 +332,13 @@ func expectCommandComplete(
 	return nil
 }
 
-// expectReadyForQuery expects that the next message from the interceptor is a
+// expectReadyForQuery expects that the next message from serverConn is a
 // ReadyForQuery message, and returns an error if it isn't.
-func expectReadyForQuery(ctx context.Context, interceptor *interceptor.FrontendInterceptor) error {
+func expectReadyForQuery(ctx context.Context, serverConn *interceptor.FrontendConn) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	msg, err := interceptor.ReadMsg()
+	msg, err := serverConn.ReadMsg()
 	if err != nil {
 		return errors.Wrap(err, "reading message")
 	}
