@@ -582,7 +582,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, avgsize(2)=4, distinct(3)=0.910811, null(3)=0, avgsize(3)=4, distinct(2,3)=0.910811, null(2,3)=0, avgsize(2,3)=8]
+ ├── stats: [rows=0.1000001, distinct(2)=0.1, null(2)=0, avgsize(2)=4, distinct(3)=0.1, null(3)=0, avgsize(3)=4]
  ├── cost: 1e+100
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
@@ -612,7 +612,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, avgsize(2)=4, distinct(3)=0.910811, null(3)=0, avgsize(3)=4, distinct(2,3)=0.910811, null(2,3)=0, avgsize(2,3)=8]
+ ├── stats: [rows=0.1000001, distinct(2)=0.1, null(2)=0, avgsize(2)=4, distinct(3)=0.1, null(3)=0, avgsize(3)=4]
  ├── cost: 1e+100
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
@@ -642,7 +642,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, avgsize(2)=4, distinct(3)=0.910811, null(3)=0, avgsize(3)=4, distinct(2,3)=0.910811, null(2,3)=0, avgsize(2,3)=8]
+ ├── stats: [rows=0.1000001, distinct(2)=0.1, null(2)=0, avgsize(2)=4, distinct(3)=0.1, null(3)=0, avgsize(3)=4]
  ├── cost: 1e+100
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
@@ -672,7 +672,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b =
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, avgsize(2)=4, distinct(3)=0.910811, null(3)=0, avgsize(3)=4, distinct(2,3)=0.910811, null(2,3)=0, avgsize(2,3)=8]
+ ├── stats: [rows=0.1000001, distinct(2)=0.1, null(2)=0, avgsize(2)=4, distinct(3)=0.1, null(3)=0, avgsize(3)=4]
  ├── cost: 1e+100
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)

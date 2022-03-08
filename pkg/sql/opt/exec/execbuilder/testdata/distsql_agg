@@ -1023,8 +1023,8 @@ group-by (streaming)
  ├── columns: b:2 count:5
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
- ├── stats: [rows=9.561792, distinct(2)=9.56179, null(2)=0, avgsize(2)=4]
- ├── cost: 25.1456179
+ ├── stats: [rows=9.561793, distinct(2)=9.56179, null(2)=0, avgsize(2)=4]
+ ├── cost: 25.145618
  ├── key: (2)
  ├── fd: (2)-->(5)
  ├── distribution: test
@@ -1033,7 +1033,7 @@ group-by (streaming)
  │    ├── columns: a:1 b:2
  │    ├── constraint: /1/2: [/1 - /1]
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=9.56179, null(2)=0, avgsize(2)=4]
- │    ├── cost: 24.82
+ │    ├── cost: 24.8200001
  │    ├── key: (2)
  │    ├── fd: ()-->(1)
  │    ├── ordering: +2 opt(1) [actual: +2]

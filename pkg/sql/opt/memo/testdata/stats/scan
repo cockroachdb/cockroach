@@ -253,7 +253,7 @@ SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d > 5
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
  ├── immutable
- ├── stats: [rows=650, distinct(3)=1, null(3)=0, avgsize(3)=20, distinct(4)=650, null(4)=0, avgsize(4)=5, distinct(3,4)=650, null(3,4)=0, avgsize(3,4)=25]
+ ├── stats: [rows=500, distinct(3)=1, null(3)=0, avgsize(3)=20, distinct(4)=500, null(4)=0, avgsize(4)=5]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  ├── scan a
@@ -271,7 +271,7 @@ SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
  ├── immutable
- ├── stats: [rows=650, distinct(3)=1, null(3)=0, avgsize(3)=20, distinct(4)=650, null(4)=0, avgsize(4)=5, distinct(3,4)=650, null(3,4)=0, avgsize(3,4)=25]
+ ├── stats: [rows=500, distinct(3)=1, null(3)=0, avgsize(3)=20, distinct(4)=500, null(4)=0, avgsize(4)=5]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  ├── scan a
@@ -456,13 +456,13 @@ SELECT * FROM abcde WHERE b = 1 AND c LIKE '+1-1000%'
 ----
 index-join abcde
  ├── columns: a:1(int!null) b:2(int!null) c:3(string!null) d:4(int) e:5(int)
- ├── stats: [rows=9.111111, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=9.11111, null(3)=0, avgsize(3)=4, distinct(2,3)=9.11111, null(2,3)=0, avgsize(2,3)=8]
+ ├── stats: [rows=1.111111, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1.11111, null(3)=0, avgsize(3)=4]
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  └── scan abcde@good
       ├── columns: a:1(int!null) b:2(int!null) c:3(string!null) d:4(int)
       ├── constraint: /2/3/4/1: [/1/'+1-1000' - /1/'+1-1001')
-      ├── stats: [rows=9.111111, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=9.11111, null(3)=0, avgsize(3)=4, distinct(2,3)=9.11111, null(2,3)=0, avgsize(2,3)=8]
+      ├── stats: [rows=1.111111, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1.11111, null(3)=0, avgsize(3)=4]
       ├── key: (1)
       └── fd: ()-->(2), (1)-->(3,4)
 
@@ -568,12 +568,12 @@ WHERE
 project
  ├── columns: "?column?":30(int!null)
  ├── immutable
- ├── stats: [rows=1]
+ ├── stats: [rows=1.000001]
  ├── fd: ()-->(30)
  ├── select
  │    ├── columns: col1:29(bool!null)
  │    ├── immutable
- │    ├── stats: [rows=1, distinct(29)=1, null(29)=0, avgsize(29)=20]
+ │    ├── stats: [rows=1.000001, distinct(29)=1, null(29)=0, avgsize(29)=20]
  │    ├── fd: ()-->(29)
  │    ├── project
  │    │    ├── columns: col1:29(bool)
@@ -865,13 +865,13 @@ SELECT * FROM hist WHERE f = '2019-10-30 23:00:00'::TIMESTAMPTZ
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz!null) g:7(string)
- ├── stats: [rows=1e-07, distinct(6)=1e-07, null(6)=0, avgsize(6)=8]
+ ├── stats: [rows=2e-07, distinct(6)=2e-07, null(6)=0, avgsize(6)=8]
  │   histogram(6)=
  ├── fd: ()-->(6)
  └── scan hist@idx_f
       ├── columns: f:6(timestamptz!null) rowid:8(int!null)
       ├── constraint: /6/8: [/'2019-10-30 23:00:00+00:00' - /'2019-10-30 23:00:00+00:00']
-      ├── stats: [rows=1e-07, distinct(6)=1e-07, null(6)=0, avgsize(6)=8]
+      ├── stats: [rows=2e-07, distinct(6)=2e-07, null(6)=0, avgsize(6)=8]
       │   histogram(6)=
       ├── key: (8)
       └── fd: ()-->(6)
@@ -901,10 +901,10 @@ SELECT * FROM hist WHERE (a = 10 OR a = 20) AND (b = '2018-08-31'::DATE OR b = '
 ----
 select
  ├── columns: a:1(int!null) b:2(date!null) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=6.63, distinct(1)=2, null(1)=0, avgsize(1)=2, distinct(2)=2, null(2)=0, avgsize(2)=6, distinct(1,2)=4, null(1,2)=0, avgsize(1,2)=8]
- │   histogram(1)=  0 2.21 0 4.42
+ ├── stats: [rows=1.5, distinct(1)=1.5, null(1)=0, avgsize(1)=2, distinct(2)=1.5, null(2)=0, avgsize(2)=6]
+ │   histogram(1)=  0 0.5  0  1
  │                <--- 10 --- 20
- │   histogram(2)=  0     2.652      0     3.978
+ │   histogram(2)=  0      0.6       0      0.9
  │                <--- '2018-08-31' --- '2018-09-30'
  ├── index-join hist
  │    ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
@@ -927,10 +927,10 @@ SELECT * FROM hist WHERE (a = 30 OR a = 40) AND (b = '2018-06-30'::DATE OR b = '
 ----
 select
  ├── columns: a:1(int!null) b:2(date!null) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=3.094, distinct(1)=2, null(1)=0, avgsize(1)=2, distinct(2)=1, null(2)=0, avgsize(2)=6, distinct(1,2)=2, null(1,2)=0, avgsize(1,2)=8]
- │   histogram(1)=  0 1.326 0 1.768
- │                <--- 30 ---- 40 -
- │   histogram(2)=  0     3.094
+ ├── stats: [rows=0.7000001, distinct(1)=0.7, null(1)=0, avgsize(1)=2, distinct(2)=0.7, null(2)=0, avgsize(2)=6]
+ │   histogram(1)=  0 0.3  0 0.4
+ │                <--- 30 --- 40
+ │   histogram(2)=  0      0.7
  │                <--- '2018-07-31'
  ├── index-join hist
  │    ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
@@ -1005,16 +1005,16 @@ SELECT * FROM xyz WHERE x=1 AND z>990
 ----
 index-join xyz
  ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) other:4(int)
- ├── stats: [rows=0.8288288, distinct(1)=0.828829, null(1)=0, avgsize(1)=4, distinct(3)=0.828829, null(3)=0, avgsize(3)=4, distinct(1,3)=0.828829, null(1,3)=0, avgsize(1,3)=8]
- │   histogram(3)=  0   0   0.82883   0
+ ├── stats: [rows=0.1801802, distinct(1)=0.18018, null(1)=0, avgsize(1)=4, distinct(3)=0.18018, null(3)=0, avgsize(3)=4]
+ │   histogram(3)=  0   0   0.18018   0
  │                <--- 990 --------- 1000
  ├── key: (2)
  ├── fd: ()-->(1), (2)-->(3,4), (3)-->(2,4)
  └── scan xyz@xyz_x_z_key
       ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
       ├── constraint: /1/3: [/1/991 - /1]
-      ├── stats: [rows=0.8288288, distinct(1)=0.828829, null(1)=0, avgsize(1)=4, distinct(3)=0.828829, null(3)=0, avgsize(3)=4, distinct(1,3)=0.828829, null(1,3)=0, avgsize(1,3)=8]
-      │   histogram(3)=  0   0   0.82883   0
+      ├── stats: [rows=0.1801802, distinct(1)=0.18018, null(1)=0, avgsize(1)=4, distinct(3)=0.18018, null(3)=0, avgsize(3)=4]
+      │   histogram(3)=  0   0   0.18018   0
       │                <--- 990 --------- 1000
       ├── key: (2)
       └── fd: ()-->(1), (2)-->(3), (3)-->(2)
@@ -1024,16 +1024,16 @@ SELECT * FROM xyz WHERE x=1 AND z<990 AND (other=11 OR other=13)
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) other:4(int!null)
- ├── stats: [rows=1.8396, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(3)=1.8396, null(3)=0, avgsize(3)=4, distinct(4)=1.8396, null(4)=0, avgsize(4)=4, distinct(1,3,4)=1.8396, null(1,3,4)=0, avgsize(1,3,4)=12]
- │   histogram(3)=  0  0  1.8377 0.0018601
+ ├── stats: [rows=0.395996, distinct(1)=0.395996, null(1)=0, avgsize(1)=4, distinct(3)=0.395996, null(3)=0, avgsize(3)=4, distinct(4)=0.395996, null(4)=0, avgsize(4)=4]
+ │   histogram(3)=  0  0  0.3956 0.0004004
  │                <--- 0 ---------- 989 --
- │   histogram(4)=  0 0.9198 0 0.9198
- │                <---- 11 ----- 13 -
+ │   histogram(4)=  0 0.198 0 0.198
+ │                <--- 11 ---- 13 -
  ├── key: (2)
  ├── fd: ()-->(1), (2)-->(3,4), (3)-->(2,4)
  ├── index-join xyz
  │    ├── columns: x:1(int!null) y:2(int!null) z:3(int) other:4(int)
- │    ├── stats: [rows=0.58]
+ │    ├── stats: [rows=0.4]
  │    ├── key: (2)
  │    ├── fd: ()-->(1), (2)-->(3,4), (1,3)~~>(2,4)
  │    └── scan xyz@xyz_x_other_z
@@ -1041,8 +1041,8 @@ select
  │         ├── constraint: /1/-4/2
  │         │    ├── [/1/13 - /1/13]
  │         │    └── [/1/11 - /1/11]
- │         ├── stats: [rows=0.58, distinct(1)=0.58, null(1)=0, avgsize(1)=4, distinct(4)=0.58, null(4)=0, avgsize(4)=4, distinct(1,4)=0.58, null(1,4)=0, avgsize(1,4)=8]
- │         │   histogram(4)=  0 0.29 0 0.29
+ │         ├── stats: [rows=0.4, distinct(1)=0.4, null(1)=0, avgsize(1)=4, distinct(4)=0.4, null(4)=0, avgsize(4)=4]
+ │         │   histogram(4)=  0 0.2  0 0.2
  │         │                <--- 11 --- 13
  │         ├── key: (2)
  │         └── fd: ()-->(1), (2)-->(4)
@@ -1134,16 +1134,16 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.810857, distinct(1)=0.810857, null(1)=0, avgsize(1)=4, distinct(2)=0.810857, null(2)=0, avgsize(2)=4, distinct(3)=0.810857, null(3)=0, avgsize(3)=4, distinct(4)=0.810857, null(4)=0, avgsize(4)=4, distinct(5)=0.810857, null(5)=0, avgsize(5)=4, distinct(6)=0.810857, null(6)=0, avgsize(6)=4, distinct(1-4)=0.810857, null(1-4)=0, avgsize(1-4)=16, distinct(1-6)=0.810857, null(1-6)=0, avgsize(1-6)=24]
+ ├── stats: [rows=1.66e-05, distinct(1)=1.66e-05, null(1)=0, avgsize(1)=4, distinct(2)=1.66e-05, null(2)=0, avgsize(2)=4, distinct(3)=1.66e-05, null(3)=0, avgsize(3)=4, distinct(4)=1.66e-05, null(4)=0, avgsize(4)=4, distinct(5)=1.66e-05, null(5)=0, avgsize(5)=4, distinct(6)=1.66e-05, null(6)=0, avgsize(6)=4]
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.8108603]
+ │    ├── stats: [rows=4.96e-05]
  │    ├── fd: ()-->(1-4)
  │    └── scan multi_col@abcde_idx
  │         ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) rowid:7(int!null)
  │         ├── constraint: /1/2/-3/4/5/7: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/11 - /'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/20]
- │         ├── stats: [rows=0.8108603, distinct(1)=0.81086, null(1)=0, avgsize(1)=4, distinct(2)=0.81086, null(2)=0, avgsize(2)=4, distinct(3)=0.81086, null(3)=0, avgsize(3)=4, distinct(4)=0.81086, null(4)=0, avgsize(4)=4, distinct(5)=0.81086, null(5)=0, avgsize(5)=4, distinct(1-4)=0.81086, null(1-4)=0, avgsize(1-4)=16, distinct(1-5)=0.81086, null(1-5)=0, avgsize(1-5)=20]
+ │         ├── stats: [rows=4.96e-05, distinct(1)=4.96e-05, null(1)=0, avgsize(1)=4, distinct(2)=4.96e-05, null(2)=0, avgsize(2)=4, distinct(3)=4.96e-05, null(3)=0, avgsize(3)=4, distinct(4)=4.96e-05, null(4)=0, avgsize(4)=4, distinct(5)=4.96e-05, null(5)=0, avgsize(5)=4]
  │         ├── key: (7)
  │         └── fd: ()-->(1-4), (7)-->(5)
  └── filters
@@ -1161,17 +1161,17 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.810857, distinct(1)=0.810857, null(1)=0, avgsize(1)=4, distinct(2)=0.810857, null(2)=0, avgsize(2)=4, distinct(3)=0.810857, null(3)=0, avgsize(3)=4, distinct(4)=0.810857, null(4)=0, avgsize(4)=4, distinct(5)=0.810857, null(5)=0, avgsize(5)=4, distinct(6)=0.810857, null(6)=0, avgsize(6)=4, distinct(1-4)=0.810857, null(1-4)=0, avgsize(1-4)=16, distinct(1-6)=0.810857, null(1-6)=0, avgsize(1-6)=24]
+ ├── stats: [rows=1.66e-05, distinct(1)=1.66e-05, null(1)=0, avgsize(1)=4, distinct(2)=1.66e-05, null(2)=0, avgsize(2)=4, distinct(3)=1.66e-05, null(3)=0, avgsize(3)=4, distinct(4)=1.66e-05, null(4)=0, avgsize(4)=4, distinct(5)=1.66e-05, null(5)=0, avgsize(5)=4, distinct(6)=1.66e-05, null(6)=0, avgsize(6)=4]
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=9.1]
+ │    ├── stats: [rows=1]
  │    ├── fd: ()-->(3)
  │    └── scan multi_col@ce_idx
  │         ├── columns: c:3(int!null) e:5(int!null) rowid:7(int!null)
  │         ├── constraint: /3/5/7: [/5/11 - /5/20]
  │         ├── flags: force-index=ce_idx
- │         ├── stats: [rows=9.1, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=9.1, null(5)=0, avgsize(5)=4, distinct(3,5)=9.1, null(3,5)=0, avgsize(3,5)=8]
+ │         ├── stats: [rows=1, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=1, null(5)=0, avgsize(5)=4]
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
@@ -1191,17 +1191,17 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.810857, distinct(1)=0.810857, null(1)=0, avgsize(1)=4, distinct(2)=0.810857, null(2)=0, avgsize(2)=4, distinct(3)=0.810857, null(3)=0, avgsize(3)=4, distinct(4)=0.810857, null(4)=0, avgsize(4)=4, distinct(5)=0.810857, null(5)=0, avgsize(5)=4, distinct(6)=0.810857, null(6)=0, avgsize(6)=4, distinct(1-4)=0.810857, null(1-4)=0, avgsize(1-4)=16, distinct(1-6)=0.810857, null(1-6)=0, avgsize(1-6)=24]
+ ├── stats: [rows=1.66e-05, distinct(1)=1.66e-05, null(1)=0, avgsize(1)=4, distinct(2)=1.66e-05, null(2)=0, avgsize(2)=4, distinct(3)=1.66e-05, null(3)=0, avgsize(3)=4, distinct(4)=1.66e-05, null(4)=0, avgsize(4)=4, distinct(5)=1.66e-05, null(5)=0, avgsize(5)=4, distinct(6)=1.66e-05, null(6)=0, avgsize(6)=4]
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.90585]
+ │    ├── stats: [rows=0.0495001]
  │    ├── fd: ()-->(1,2,4)
  │    └── scan multi_col@bad_idx
  │         ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) rowid:7(int!null)
  │         ├── constraint: /2/-1/4/7: [/true/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'foo' - /true/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'foo']
  │         ├── flags: force-index=bad_idx
- │         ├── stats: [rows=0.90585, distinct(1)=0.90585, null(1)=0, avgsize(1)=4, distinct(2)=0.90585, null(2)=0, avgsize(2)=4, distinct(4)=0.90585, null(4)=0, avgsize(4)=4, distinct(1,2,4)=0.90585, null(1,2,4)=0, avgsize(1,2,4)=12]
+ │         ├── stats: [rows=0.0495001, distinct(1)=0.0495001, null(1)=0, avgsize(1)=4, distinct(2)=0.0495001, null(2)=0, avgsize(2)=4, distinct(4)=0.0495001, null(4)=0, avgsize(4)=4]
  │         ├── key: (7)
  │         └── fd: ()-->(1,2,4)
  └── filters
@@ -1220,22 +1220,22 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.810857, distinct(1)=0.810857, null(1)=0, avgsize(1)=4, distinct(2)=0.810857, null(2)=0, avgsize(2)=4, distinct(3)=0.810857, null(3)=0, avgsize(3)=4, distinct(4)=0.810857, null(4)=0, avgsize(4)=4, distinct(5)=0.810857, null(5)=0, avgsize(5)=4, distinct(6)=0.810857, null(6)=0, avgsize(6)=4, distinct(1-4)=0.810857, null(1-4)=0, avgsize(1-4)=16, distinct(1-6)=0.810857, null(1-6)=0, avgsize(1-6)=24]
+ ├── stats: [rows=1.66e-05, distinct(1)=1.66e-05, null(1)=0, avgsize(1)=4, distinct(2)=1.66e-05, null(2)=0, avgsize(2)=4, distinct(3)=1.66e-05, null(3)=0, avgsize(3)=4, distinct(4)=1.66e-05, null(4)=0, avgsize(4)=4, distinct(5)=1.66e-05, null(5)=0, avgsize(5)=4, distinct(6)=1.66e-05, null(6)=0, avgsize(6)=4]
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=3.391172]
+ │    ├── stats: [rows=0.9900001]
  │    ├── fd: ()-->(4)
  │    └── select
  │         ├── columns: d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
- │         ├── stats: [rows=3.391172, distinct(6)=2.91209, null(6)=0, avgsize(6)=4]
+ │         ├── stats: [rows=0.9900001, distinct(6)=0.99, null(6)=0, avgsize(6)=4]
  │         ├── key: (7)
  │         ├── fd: ()-->(4), (7)-->(5,6)
  │         ├── scan multi_col@def_idx
  │         │    ├── columns: d:4(string!null) e:5(int!null) f:6(float) rowid:7(int!null)
  │         │    ├── constraint: /4/5/6/7: [/'foo'/11/5e-324 - /'foo'/20]
  │         │    ├── flags: force-index=def_idx
- │         │    ├── stats: [rows=9.1, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=9.1, null(5)=0, avgsize(5)=4, distinct(6)=8.73626, null(6)=0.091, avgsize(6)=4, distinct(7)=9.1, null(7)=0, avgsize(7)=4, distinct(4,5)=9.1, null(4,5)=0, avgsize(4,5)=8]
+ │         │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=1, null(5)=0, avgsize(5)=4, distinct(6)=0.995512, null(6)=0.01, avgsize(6)=4, distinct(7)=1, null(7)=0, avgsize(7)=4]
  │         │    ├── key: (7)
  │         │    └── fd: ()-->(4), (7)-->(5,6)
  │         └── filters
@@ -1255,11 +1255,11 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=3.162509, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=3.16251, null(5)=0, avgsize(5)=4, distinct(6)=3.16251, null(6)=0, avgsize(6)=4, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=8, distinct(2,3,5,6)=3.16251, null(2,3,5,6)=0, avgsize(2,3,5,6)=16]
+ ├── stats: [rows=0.0825001, distinct(2)=0.0825001, null(2)=0, avgsize(2)=4, distinct(3)=0.0825001, null(3)=0, avgsize(3)=4, distinct(5)=0.0825001, null(5)=0, avgsize(5)=4, distinct(6)=0.0825001, null(6)=0, avgsize(6)=4]
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=4.554054]
+ │    ├── stats: [rows=0.5000001]
  │    ├── fd: ()-->(3)
  │    └── scan multi_col@ce_idx
  │         ├── columns: c:3(int!null) e:5(int!null) rowid:7(int!null)
@@ -1269,7 +1269,7 @@ select
  │         │    ├── [/5/5 - /5/5]
  │         │    ├── [/5/7 - /5/7]
  │         │    └── [/5/9 - /5/9]
- │         ├── stats: [rows=4.554054, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=4.55405, null(5)=0, avgsize(5)=4, distinct(3,5)=4.55405, null(3,5)=0, avgsize(3,5)=8]
+ │         ├── stats: [rows=0.5000001, distinct(3)=0.5, null(3)=0, avgsize(3)=4, distinct(5)=0.5, null(5)=0, avgsize(5)=4]
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
@@ -1286,11 +1286,11 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=3.162509, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=3.16251, null(5)=0, avgsize(5)=4, distinct(6)=3.16251, null(6)=0, avgsize(6)=4, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=8, distinct(2,3,5,6)=3.16251, null(2,3,5,6)=0, avgsize(2,3,5,6)=16]
+ ├── stats: [rows=0.0825001, distinct(2)=0.0825001, null(2)=0, avgsize(2)=4, distinct(3)=0.0825001, null(3)=0, avgsize(3)=4, distinct(5)=0.0825001, null(5)=0, avgsize(5)=4, distinct(6)=0.0825001, null(6)=0, avgsize(6)=4]
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=16.5963]
+ │    ├── stats: [rows=8.25]
  │    ├── fd: ()-->(2)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
@@ -1301,7 +1301,7 @@ select
  │         │    ├── [/true/7/5e-324 - /true/7]
  │         │    └── [/true/9/5e-324 - /true/9]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=16.5963, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(5)=5, null(5)=0, avgsize(5)=4, distinct(6)=16.5963, null(6)=0, avgsize(6)=4, distinct(2,5,6)=16.5963, null(2,5,6)=0, avgsize(2,5,6)=12]
+ │         ├── stats: [rows=8.25, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(5)=5, null(5)=0, avgsize(5)=4, distinct(6)=8.25, null(6)=0, avgsize(6)=4]
  │         ├── key: (7)
  │         └── fd: ()-->(2), (7)-->(5,6)
  └── filters
@@ -1525,16 +1525,16 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.8100211, distinct(1)=0.810021, null(1)=0, avgsize(1)=1, distinct(2)=0.810021, null(2)=0, avgsize(2)=2, distinct(3)=0.810021, null(3)=0, avgsize(3)=3, distinct(4)=0.810021, null(4)=0, avgsize(4)=4, distinct(5)=0.810021, null(5)=0, avgsize(5)=5, distinct(6)=0.810021, null(6)=0, avgsize(6)=6, distinct(1-4)=0.810021, null(1-4)=0, avgsize(1-4)=16, distinct(1-6)=0.810021, null(1-6)=0, avgsize(1-6)=21]
+ ├── stats: [rows=7.819546e-06, distinct(1)=7.81955e-06, null(1)=0, avgsize(1)=1, distinct(2)=7.81955e-06, null(2)=0, avgsize(2)=2, distinct(3)=7.81955e-06, null(3)=0, avgsize(3)=3, distinct(4)=7.81955e-06, null(4)=0, avgsize(4)=4, distinct(5)=7.81955e-06, null(5)=0, avgsize(5)=5, distinct(6)=7.81955e-06, null(6)=0, avgsize(6)=6]
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.8100225]
+ │    ├── stats: [rows=2.166116e-05]
  │    ├── fd: ()-->(1-4)
  │    └── scan multi_col@abcde_idx
  │         ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) rowid:7(int!null)
  │         ├── constraint: /1/2/-3/4/5/7: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/11 - /'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/20]
- │         ├── stats: [rows=0.8100225, distinct(1)=0.810023, null(1)=0, avgsize(1)=1, distinct(2)=0.810023, null(2)=0, avgsize(2)=2, distinct(3)=0.810023, null(3)=0, avgsize(3)=3, distinct(4)=0.810023, null(4)=0, avgsize(4)=4, distinct(5)=0.810023, null(5)=0, avgsize(5)=5, distinct(1-4)=0.810023, null(1-4)=0, avgsize(1-4)=16, distinct(1-5)=0.810023, null(1-5)=0, avgsize(1-5)=20]
+ │         ├── stats: [rows=2.166116e-05, distinct(1)=2.16612e-05, null(1)=0, avgsize(1)=1, distinct(2)=2.16612e-05, null(2)=0, avgsize(2)=2, distinct(3)=2.16612e-05, null(3)=0, avgsize(3)=3, distinct(4)=2.16612e-05, null(4)=0, avgsize(4)=4, distinct(5)=2.16612e-05, null(5)=0, avgsize(5)=5]
  │         ├── key: (7)
  │         └── fd: ()-->(1-4), (7)-->(5)
  └── filters
@@ -1550,7 +1550,7 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=27.81534, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=27.8153, null(6)=0, avgsize(6)=6, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=5, distinct(2,3,5,6)=27.8153, null(2,3,5,6)=0, avgsize(2,3,5,6)=16]
+ ├── stats: [rows=0.3409783, distinct(2)=0.340978, null(2)=0, avgsize(2)=2, distinct(3)=0.340978, null(3)=0, avgsize(3)=3, distinct(5)=0.340978, null(5)=0, avgsize(5)=5, distinct(6)=0.340978, null(6)=0, avgsize(6)=6]
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
@@ -1581,11 +1581,11 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=27.81534, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=27.8153, null(6)=0, avgsize(6)=6, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=5, distinct(2,3,5,6)=27.8153, null(2,3,5,6)=0, avgsize(2,3,5,6)=16]
+ ├── stats: [rows=0.3409783, distinct(2)=0.340978, null(2)=0, avgsize(2)=2, distinct(3)=0.340978, null(3)=0, avgsize(3)=3, distinct(5)=0.340978, null(5)=0, avgsize(5)=5, distinct(6)=0.340978, null(6)=0, avgsize(6)=6]
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=197.1439]
+ │    ├── stats: [rows=67.58324]
  │    ├── fd: ()-->(2)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
@@ -1596,7 +1596,7 @@ select
  │         │    ├── [/true/7/5e-324 - /true/7]
  │         │    └── [/true/9/5e-324 - /true/9]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=197.1439, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=197.144, null(6)=0, avgsize(6)=6, distinct(2,5,6)=197.144, null(2,5,6)=0, avgsize(2,5,6)=12]
+ │         ├── stats: [rows=67.58324, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=67.5832, null(6)=0, avgsize(6)=6, distinct(2,5,6)=67.5832, null(2,5,6)=0, avgsize(2,5,6)=12]
  │         ├── key: (7)
  │         └── fd: ()-->(2), (7)-->(5,6)
  └── filters
@@ -1862,24 +1862,24 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=16.18099, distinct(1)=1, null(1)=0, avgsize(1)=1, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=10, null(5)=0, avgsize(5)=5, distinct(6)=16.181, null(6)=0, avgsize(6)=6, distinct(1-4)=1, null(1-4)=0, avgsize(1-4)=16, distinct(1-6)=16.181, null(1-6)=0, avgsize(1-6)=21]
- │   histogram(2)=  0 16.181
- │                <--- true
- │   histogram(4)=  0 16.181
- │                <--- 'foo'
+ ├── stats: [rows=0.0001372273, distinct(1)=0.000137227, null(1)=0, avgsize(1)=1, distinct(2)=0.000137227, null(2)=0, avgsize(2)=2, distinct(3)=0.000137227, null(3)=0, avgsize(3)=3, distinct(4)=0.000137227, null(4)=0, avgsize(4)=4, distinct(5)=0.000137227, null(5)=0, avgsize(5)=5, distinct(6)=0.000137227, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0 0.00013723
+ │                <----- true --
+ │   histogram(4)=  0 0.00013723
+ │                <---- 'foo' --
  ├── fd: ()-->(1-4)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=16.18101]
+ │    ├── stats: [rows=0.0004137274]
  │    ├── fd: ()-->(1-4)
  │    └── scan multi_col@abcde_idx
  │         ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int!null) d:4(string!null) e:5(int!null) rowid:7(int!null)
  │         ├── constraint: /1/2/-3/4/5/7: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/11 - /'37685f26-4b07-40ba-9bbf-42916ed9bc61'/true/5/'foo'/20]
- │         ├── stats: [rows=16.18101, distinct(1)=1, null(1)=0, avgsize(1)=1, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=10, null(5)=0, avgsize(5)=5, distinct(1-4)=1, null(1-4)=0, avgsize(1-4)=16, distinct(1-5)=10, null(1-5)=0, avgsize(1-5)=20]
- │         │   histogram(2)=  0 16.181
- │         │                <--- true
- │         │   histogram(4)=  0 16.181
- │         │                <--- 'foo'
+ │         ├── stats: [rows=0.0004137274, distinct(1)=0.000413727, null(1)=0, avgsize(1)=1, distinct(2)=0.000413727, null(2)=0, avgsize(2)=2, distinct(3)=0.000413727, null(3)=0, avgsize(3)=3, distinct(4)=0.000413727, null(4)=0, avgsize(4)=4, distinct(5)=0.000413727, null(5)=0, avgsize(5)=5]
+ │         │   histogram(2)=  0 0.00041373
+ │         │                <----- true --
+ │         │   histogram(4)=  0 0.00041373
+ │         │                <---- 'foo' --
  │         ├── key: (7)
  │         └── fd: ()-->(1-4), (7)-->(5)
  └── filters
@@ -1895,9 +1895,9 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=55.61955, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=55.6196, null(6)=0, avgsize(6)=6, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=5, distinct(2,3,5,6)=55.6196, null(2,3,5,6)=0, avgsize(2,3,5,6)=16]
- │   histogram(2)=  0 55.62
- │                <--- true
+ ├── stats: [rows=0.6818192, distinct(2)=0.681819, null(2)=0, avgsize(2)=2, distinct(3)=0.681819, null(3)=0, avgsize(3)=3, distinct(5)=0.681819, null(5)=0, avgsize(5)=5, distinct(6)=0.681819, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0 0.68182
+ │                <--- true -
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
@@ -1928,13 +1928,13 @@ AND f > 0
 ----
 select
  ├── columns: a:1(uuid) b:2(bool!null) c:3(int!null) d:4(string) e:5(int!null) f:6(float!null)
- ├── stats: [rows=55.61955, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=55.6196, null(6)=0, avgsize(6)=6, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=5, distinct(2,3,5,6)=55.6196, null(2,3,5,6)=0, avgsize(2,3,5,6)=16]
- │   histogram(2)=  0 55.62
- │                <--- true
+ ├── stats: [rows=0.6818192, distinct(2)=0.681819, null(2)=0, avgsize(2)=2, distinct(3)=0.681819, null(3)=0, avgsize(3)=3, distinct(5)=0.681819, null(5)=0, avgsize(5)=5, distinct(6)=0.681819, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0 0.68182
+ │                <--- true -
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=394.2088]
+ │    ├── stats: [rows=1872.168]
  │    ├── fd: ()-->(2)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
@@ -1945,8 +1945,8 @@ select
  │         │    ├── [/true/7/5e-324 - /true/7]
  │         │    └── [/true/9/5e-324 - /true/9]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=394.2088, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=394.209, null(6)=0, avgsize(6)=6, distinct(2,5,6)=394.209, null(2,5,6)=0, avgsize(2,5,6)=12]
- │         │   histogram(2)=  0 394.21
+ │         ├── stats: [rows=1872.168, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(5)=5, null(5)=0, avgsize(5)=5, distinct(6)=1666.67, null(6)=0, avgsize(6)=6, distinct(2,5,6)=1872.17, null(2,5,6)=0, avgsize(2,5,6)=12]
+ │         │   histogram(2)=  0 1872.2
  │         │                <--- true
  │         ├── key: (7)
  │         └── fd: ()-->(2), (7)-->(5,6)
@@ -1966,22 +1966,22 @@ AND f = 0
 ----
 select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=17.97841, distinct(1)=1, null(1)=0, avgsize(1)=1, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=1, null(5)=0, avgsize(5)=5, distinct(6)=1, null(6)=0, avgsize(6)=6, distinct(1,2,4-6)=1, null(1,2,4-6)=0, avgsize(1,2,4-6)=18]
- │   histogram(2)=  0 17.978
+ ├── stats: [rows=2e-06, distinct(1)=2e-06, null(1)=0, avgsize(1)=1, distinct(2)=2e-06, null(2)=0, avgsize(2)=2, distinct(4)=2e-06, null(4)=0, avgsize(4)=4, distinct(5)=2e-06, null(5)=0, avgsize(5)=5, distinct(6)=2e-06, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0 2e-06
  │                <--- true
- │   histogram(4)=  0 17.978
+ │   histogram(4)=  0  2e-06
  │                <--- 'foo'
  ├── fd: ()-->(1,2,4-6)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=1.990723]
+ │    ├── stats: [rows=2507.378]
  │    ├── fd: ()-->(2,5,6)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
  │         ├── constraint: /2/5/6/7: [/true/5/0.0 - /true/5/0.0]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=1.990723, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(5)=1, null(5)=0, avgsize(5)=5, distinct(6)=1, null(6)=0, avgsize(6)=6, distinct(2,5,6)=1, null(2,5,6)=0, avgsize(2,5,6)=12]
- │         │   histogram(2)=  0 1.9907
+ │         ├── stats: [rows=2507.378, distinct(2)=1, null(2)=0, avgsize(2)=2, distinct(5)=1, null(5)=0, avgsize(5)=5, distinct(6)=1, null(6)=0, avgsize(6)=6, distinct(2,5,6)=1, null(2,5,6)=0, avgsize(2,5,6)=12]
+ │         │   histogram(2)=  0 2507.4
  │         │                <--- true
  │         ├── key: (7)
  │         └── fd: ()-->(2,5,6)
@@ -1997,29 +1997,34 @@ AND d = 'bar'
 AND e = 5
 AND f = 0
 ----
-select
+inner-join (lookup multi_col)
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.00179964, distinct(1)=0.00179964, null(1)=0, avgsize(1)=1, distinct(2)=0.00179964, null(2)=0, avgsize(2)=2, distinct(4)=0.00179964, null(4)=0, avgsize(4)=4, distinct(5)=0.00179964, null(5)=0, avgsize(5)=5, distinct(6)=0.00179964, null(6)=0, avgsize(6)=6, distinct(1,2,4-6)=0.00179964, null(1,2,4-6)=0, avgsize(1,2,4-6)=18]
- │   histogram(2)=  0 0.0017996
- │                <---- true --
- │   histogram(4)=  0 0.0017996
- │                <---- 'bar' -
+ ├── key columns: [7] = [7]
+ ├── lookup columns are key
+ ├── stats: [rows=2e-06, distinct(1)=2e-06, null(1)=0, avgsize(1)=1, distinct(2)=2e-06, null(2)=0, avgsize(2)=2, distinct(4)=2e-06, null(4)=0, avgsize(4)=4, distinct(5)=2e-06, null(5)=0, avgsize(5)=5, distinct(6)=2e-06, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0 2e-06
+ │                <--- true
+ │   histogram(4)=  0  2e-06
+ │                <--- 'bar'
  ├── fd: ()-->(1,2,4-6)
- ├── index-join multi_col
- │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.00090018]
- │    ├── fd: ()-->(4-6)
- │    └── scan multi_col@def_idx
- │         ├── columns: d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
- │         ├── constraint: /4/5/6/7: [/'bar'/5/0.0 - /'bar'/5/0.0]
- │         ├── stats: [rows=0.00090018, distinct(4)=0.00090018, null(4)=0, avgsize(4)=4, distinct(5)=0.00090018, null(5)=0, avgsize(5)=5, distinct(6)=0.00090018, null(6)=0, avgsize(6)=6, distinct(4-6)=0.00090018, null(4-6)=0, avgsize(4-6)=12]
- │         │   histogram(4)=  0 0.00090018
- │         │                <---- 'bar' --
- │         ├── key: (7)
- │         └── fd: ()-->(4-6)
- └── filters
-      ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      └── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ ├── inner-join (zigzag multi_col@bad_idx multi_col@bef_idx)
+ │    ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
+ │    ├── eq columns: [7] = [7]
+ │    ├── left fixed columns: [2 1 4] = [true '37685f26-4b07-40ba-9bbf-42916ed9bc61' 'bar']
+ │    ├── right fixed columns: [2 5 6] = [true 5 0.0]
+ │    ├── stats: [rows=1e-06, distinct(1)=1e-06, null(1)=0, avgsize(1)=1, distinct(2)=1e-06, null(2)=0, avgsize(2)=2, distinct(4)=1e-06, null(4)=0, avgsize(4)=4, distinct(5)=1e-06, null(5)=0, avgsize(5)=5, distinct(6)=1e-06, null(6)=0, avgsize(6)=6]
+ │    │   histogram(2)=  0 1e-06
+ │    │                <--- true
+ │    │   histogram(4)=  0  1e-06
+ │    │                <--- 'bar'
+ │    ├── fd: ()-->(1,2,4-6)
+ │    └── filters
+ │         ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
+ │         ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │         ├── d:4 = 'bar' [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
+ │         ├── e:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+ │         └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
+ └── filters (true)
 
 opt
 SELECT * FROM multi_col
@@ -2029,31 +2034,34 @@ AND d = 'bar'
 AND e = 5
 AND f = 0
 ----
-select
+inner-join (lookup multi_col)
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=3.6e-07, distinct(1)=3.6e-07, null(1)=0, avgsize(1)=1, distinct(2)=3.6e-07, null(2)=0, avgsize(2)=2, distinct(4)=3.6e-07, null(4)=0, avgsize(4)=4, distinct(5)=3.6e-07, null(5)=0, avgsize(5)=5, distinct(6)=3.6e-07, null(6)=0, avgsize(6)=6, distinct(1,2,4-6)=3.6e-07, null(1,2,4-6)=0, avgsize(1,2,4-6)=18]
- │   histogram(2)=  0 3.6e-07
+ ├── key columns: [7] = [7]
+ ├── lookup columns are key
+ ├── stats: [rows=2e-06, distinct(1)=2e-06, null(1)=0, avgsize(1)=1, distinct(2)=2e-06, null(2)=0, avgsize(2)=2, distinct(4)=2e-06, null(4)=0, avgsize(4)=4, distinct(5)=2e-06, null(5)=0, avgsize(5)=5, distinct(6)=2e-06, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0  2e-06
  │                <--- false
- │   histogram(4)=  0 3.6e-07
+ │   histogram(4)=  0  2e-06
  │                <--- 'bar'
  ├── fd: ()-->(1,2,4-6)
- ├── index-join multi_col
- │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=3.61e-07]
- │    ├── fd: ()-->(1,2,4)
- │    └── scan multi_col@bad_idx
- │         ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) rowid:7(int!null)
- │         ├── constraint: /2/-1/4/7: [/false/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'bar' - /false/'37685f26-4b07-40ba-9bbf-42916ed9bc61'/'bar']
- │         ├── stats: [rows=3.61e-07, distinct(1)=3.61e-07, null(1)=0, avgsize(1)=1, distinct(2)=3.61e-07, null(2)=0, avgsize(2)=2, distinct(4)=3.61e-07, null(4)=0, avgsize(4)=4, distinct(1,2,4)=3.61e-07, null(1,2,4)=0, avgsize(1,2,4)=12]
- │         │   histogram(2)=  0 3.61e-07
- │         │                <--- false -
- │         │   histogram(4)=  0 3.61e-07
- │         │                <--- 'bar' -
- │         ├── key: (7)
- │         └── fd: ()-->(1,2,4)
- └── filters
-      ├── e:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-      └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
+ ├── inner-join (zigzag multi_col@bad_idx multi_col@bef_idx)
+ │    ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
+ │    ├── eq columns: [7] = [7]
+ │    ├── left fixed columns: [2 1 4] = [false '37685f26-4b07-40ba-9bbf-42916ed9bc61' 'bar']
+ │    ├── right fixed columns: [2 5 6] = [false 5 0.0]
+ │    ├── stats: [rows=1e-06, distinct(1)=1e-06, null(1)=0, avgsize(1)=1, distinct(2)=1e-06, null(2)=0, avgsize(2)=2, distinct(4)=1e-06, null(4)=0, avgsize(4)=4, distinct(5)=1e-06, null(5)=0, avgsize(5)=5, distinct(6)=1e-06, null(6)=0, avgsize(6)=6]
+ │    │   histogram(2)=  0  1e-06
+ │    │                <--- false
+ │    │   histogram(4)=  0  1e-06
+ │    │                <--- 'bar'
+ │    ├── fd: ()-->(1,2,4-6)
+ │    └── filters
+ │         ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
+ │         ├── NOT b:2 [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+ │         ├── d:4 = 'bar' [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
+ │         ├── e:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+ │         └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
+ └── filters (true)
 
 opt
 SELECT * FROM multi_col
@@ -2063,29 +2071,34 @@ AND d = 'foo'
 AND e = 5
 AND f = 0
 ----
-select
+inner-join (lookup multi_col)
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── stats: [rows=0.0035964, distinct(1)=0.0035964, null(1)=0, avgsize(1)=1, distinct(2)=0.0035964, null(2)=0, avgsize(2)=2, distinct(4)=0.0035964, null(4)=0, avgsize(4)=4, distinct(5)=0.0035964, null(5)=0, avgsize(5)=5, distinct(6)=0.0035964, null(6)=0, avgsize(6)=6, distinct(1,2,4-6)=0.0035964, null(1,2,4-6)=0, avgsize(1,2,4-6)=18]
- │   histogram(2)=  0 0.0035964
- │                <---- false -
- │   histogram(4)=  0 0.0035964
- │                <---- 'foo' -
+ ├── key columns: [7] = [7]
+ ├── lookup columns are key
+ ├── stats: [rows=2e-06, distinct(1)=2e-06, null(1)=0, avgsize(1)=1, distinct(2)=2e-06, null(2)=0, avgsize(2)=2, distinct(4)=2e-06, null(4)=0, avgsize(4)=4, distinct(5)=2e-06, null(5)=0, avgsize(5)=5, distinct(6)=2e-06, null(6)=0, avgsize(6)=6]
+ │   histogram(2)=  0  2e-06
+ │                <--- false
+ │   histogram(4)=  0  2e-06
+ │                <--- 'foo'
  ├── fd: ()-->(1,2,4-6)
- ├── index-join multi_col
- │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=0.0003982243]
- │    ├── fd: ()-->(2,5,6)
- │    └── scan multi_col@bef_idx
- │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
- │         ├── constraint: /2/5/6/7: [/false/5/0.0 - /false/5/0.0]
- │         ├── stats: [rows=0.0003982243, distinct(2)=0.000398224, null(2)=0, avgsize(2)=2, distinct(5)=0.000398224, null(5)=0, avgsize(5)=5, distinct(6)=0.000398224, null(6)=0, avgsize(6)=6, distinct(2,5,6)=0.000398224, null(2,5,6)=0, avgsize(2,5,6)=12]
- │         │   histogram(2)=  0 0.00039822
- │         │                <---- false --
- │         ├── key: (7)
- │         └── fd: ()-->(2,5,6)
- └── filters
-      ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      └── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ ├── inner-join (zigzag multi_col@bad_idx multi_col@bef_idx)
+ │    ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
+ │    ├── eq columns: [7] = [7]
+ │    ├── left fixed columns: [2 1 4] = [false '37685f26-4b07-40ba-9bbf-42916ed9bc61' 'foo']
+ │    ├── right fixed columns: [2 5 6] = [false 5 0.0]
+ │    ├── stats: [rows=1e-06, distinct(1)=1e-06, null(1)=0, avgsize(1)=1, distinct(2)=1e-06, null(2)=0, avgsize(2)=2, distinct(4)=1e-06, null(4)=0, avgsize(4)=4, distinct(5)=1e-06, null(5)=0, avgsize(5)=5, distinct(6)=1e-06, null(6)=0, avgsize(6)=6]
+ │    │   histogram(2)=  0  1e-06
+ │    │                <--- false
+ │    │   histogram(4)=  0  1e-06
+ │    │                <--- 'foo'
+ │    ├── fd: ()-->(1,2,4-6)
+ │    └── filters
+ │         ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
+ │         ├── NOT b:2 [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+ │         ├── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         ├── e:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+ │         └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
+ └── filters (true)
 
 # Regression test for #50409.
 exec-ddl
@@ -2133,7 +2146,7 @@ index-join t
       ├── constraint: /2/1
       │    ├── [/NULL/5 - /NULL/5]
       │    └── [/5 - /5]
-      ├── stats: [rows=1.952004, distinct(1)=1.952, null(1)=0, avgsize(1)=4, distinct(2)=1.952, null(2)=1.952, avgsize(2)=4]
+      ├── stats: [rows=1.502004, distinct(1)=1.502, null(1)=0, avgsize(1)=4, distinct(2)=1.502, null(2)=1.502, avgsize(2)=4]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -2273,8 +2286,8 @@ SELECT * FROM t76485 WHERE a = 20 AND b = 30 AND c < 'foo';
 scan t76485@t76485_a_b_c_idx
  ├── columns: a:1(int!null) b:2(int!null) c:3(string!null)
  ├── constraint: /1/2/3/4: (/20/30/NULL - /20/30/'foo')
- ├── stats: [rows=9.310865, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=9.31087, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=9.31087, null(1-3)=0, avgsize(1-3)=12]
- │   histogram(1)=  0 9.3109
+ ├── stats: [rows=3.270595, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=3.2706, null(3)=0, avgsize(3)=4]
+ │   histogram(1)=  0 3.2706
  │                <---- 20 -
  └── fd: ()-->(1,2)
 
@@ -2381,12 +2394,12 @@ SELECT * FROM a_check WHERE s < 'a'
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
- ├── stats: [rows=2e-07]
+ ├── stats: [rows=4e-07]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
-      ├── stats: [rows=2e-07, distinct(3)=2e-07, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=4e-07, distinct(3)=4e-07, null(3)=0, avgsize(3)=4]
       │   histogram(3)=
       ├── key: (1)
       ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
@@ -2627,3 +2640,435 @@ project
       │    └── fd: (1,2)-->(3-5), (1)-->(2)
       └── filters
            └── crdb_internal_a_shard_8:2 > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
+
+exec-ddl
+DROP TABLE abcde
+----
+
+# Regression test for #67966. Ensure that histograms and multi-column stats
+# are combined so as to choose the correct index.
+exec-ddl
+CREATE TABLE abcde (
+	start_time TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	a INT8 NULL,
+	b INT8 NOT NULL,
+	c INT2 NOT NULL,
+	d DECIMAL(1) NOT NULL,
+	e INT4 NOT NULL,
+	id UUID NOT NULL DEFAULT gen_random_uuid(),
+	CONSTRAINT "primary" PRIMARY KEY (e ASC, id ASC),
+	INDEX abcde_e_b_d_idx (e ASC, b ASC, d ASC),
+	INDEX abcde_e_c_b_d_a_start_time (e ASC, c ASC, b ASC, d ASC, a ASC, start_time ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE abcde INJECT STATISTICS '[
+    {
+        "columns": [
+            "e"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 2,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 8473077,
+                "num_range": 0,
+                "upper_bound": "3"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1798,
+                "num_range": 0,
+                "upper_bound": "5"
+            }
+        ],
+        "histo_col_type": "INT4",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "id"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 8474875,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "id"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 8466498,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "start_time"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7822288,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 2000,
+                "num_range": 0,
+                "upper_bound": "2001-05-15 00:55:32.317+00:00"
+            },
+            {
+                "distinct_range": 7782286,
+                "num_eq": 2000,
+                "num_range": 8428875,
+                "upper_bound": "2021-12-04 09:24:00.692+00:00"
+            },
+            {
+                "distinct_range": 40000,
+                "num_eq": 2000,
+                "num_range": 40000,
+                "upper_bound": "2022-02-12 10:29:50.632+00:00"
+            }
+        ],
+        "histo_col_type": "TIMESTAMPTZ",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "start_time"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7643961,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 127991,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 2000,
+                "num_range": 0,
+                "upper_bound": "10"
+            },
+            {
+                "distinct_range": 127989,
+                "num_eq": 2000,
+                "num_range": 8470875,
+                "upper_bound": "10000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "b"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 127003,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "d"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 9,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1000000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 8,
+                "num_eq": 1000000,
+                "num_range": 6474875,
+                "upper_bound": "9"
+            }
+        ],
+        "histo_col_type": "DECIMAL(1)",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "b",
+            "d"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 127240,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 52092,
+        "name": "__auto__",
+        "null_count": 8010611,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "d"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 19,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "c"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 4,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 2292693,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0.6666666666666666,
+                "num_eq": 129470,
+                "num_range": 1,
+                "upper_bound": "4"
+            },
+            {
+                "distinct_range": 0.3333333333333333,
+                "num_eq": 6052711,
+                "num_range": 0,
+                "upper_bound": "6"
+            }
+        ],
+        "histo_col_type": "INT2",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "c"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 8,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "c",
+            "start_time"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7721692,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "start_time",
+            "b"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7633757,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "start_time",
+            "b",
+            "d"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7729900,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "c",
+            "b"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 236874,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "c",
+            "b",
+            "d"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 236072,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "c",
+            "b",
+            "d",
+            "a"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 285557,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "c",
+            "b",
+            "d",
+            "a",
+            "start_time"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7762600,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "b",
+            "d",
+            "c",
+            "start_time"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 7765002,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    },
+    {
+        "columns": [
+            "e",
+            "a"
+        ],
+        "created_at": "2022-02-16 21:43:36.877981",
+        "distinct_count": 51682,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8474875
+    }
+]';
+----
+
+opt
+SELECT
+  *
+FROM
+  abcde
+WHERE
+  b = 10
+  AND d = 1
+  AND c IN (6, 4)
+  AND a IS NULL
+  AND e IN (1, 2, 3, 4, 5, 6, 6, 7, 8)
+  AND start_time BETWEEN '2022-02-04 19:25:25.356+00:00' AND '2022-02-11 19:25:25.356+00:00'
+ORDER BY
+  start_time DESC
+LIMIT
+  1000
+----
+top-k
+ ├── columns: start_time:1(timestamptz!null) a:2(int) b:3(int!null) c:4(int2!null) d:5(decimal!null) e:6(int4!null) id:7(uuid!null)
+ ├── internal-ordering: -1 opt(2,3,5)
+ ├── k: 1000
+ ├── cardinality: [0 - 1000]
+ ├── immutable
+ ├── stats: [rows=0.07759788]
+ ├── key: (6,7)
+ ├── fd: ()-->(2,3,5), (6,7)-->(1,4)
+ ├── ordering: -1 opt(2,3,5) [actual: -1]
+ └── scan abcde@abcde_e_c_b_d_a_start_time
+      ├── columns: start_time:1(timestamptz!null) a:2(int) b:3(int!null) c:4(int2!null) d:5(decimal!null) e:6(int4!null) id:7(uuid!null)
+      ├── constraint: /6/4/3/5/2/1/7
+      │    ├── [/1/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /1/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/1/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /1/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/2/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /2/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/2/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /2/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/3/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /3/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/3/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /3/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/4/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /4/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/4/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /4/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/5/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /5/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/5/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /5/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/6/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /6/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/6/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /6/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/7/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /7/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/7/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /7/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    ├── [/8/4/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /8/4/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      │    └── [/8/6/10/1/NULL/'2022-02-04 19:25:25.356+00:00' - /8/6/10/1/NULL/'2022-02-11 19:25:25.356+00:00']
+      ├── immutable
+      ├── stats: [rows=0.07759788, distinct(1)=0.0775979, null(1)=0, avgsize(1)=4, distinct(2)=0.0775979, null(2)=0.0775979, avgsize(2)=4, distinct(3)=0.0775979, null(3)=0, avgsize(3)=4, distinct(4)=0.0775979, null(4)=0, avgsize(4)=4, distinct(5)=0.0775979, null(5)=0, avgsize(5)=4, distinct(6)=0.0775979, null(6)=0, avgsize(6)=4]
+      │   histogram(1)=  0                  0                   0.077598             1.283e-16
+      │                <--- '2022-02-04 19:25:25.355999+00:00' ---------- '2022-02-11 19:25:25.356+00:00'
+      │   histogram(3)=  0 0.077598
+      │                <----- 10 --
+      │   histogram(4)=  0 0.0016251 0 0.075973
+      │                <------ 4 -------- 6 ---
+      │   histogram(5)=  0 0.077598
+      │                <----- 1 ---
+      │   histogram(6)=  0 0.077581 0 1.6463e-05
+      │                <----- 3 --------- 5 ----
+      ├── key: (6,7)
+      └── fd: ()-->(2,3,5), (6,7)-->(1,4)

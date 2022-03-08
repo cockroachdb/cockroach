@@ -426,7 +426,7 @@ project
       │    ├── prefix key columns: [14 15] = [18 19]
       │    ├── inverted-expr
       │    │    └── t1.j:17 @> t2.j:10 [type=bool]
-      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, avgsize(14)=4, distinct(15)=0.3, null(15)=0, avgsize(15)=4, distinct(16)=0.299957, null(16)=0, avgsize(16)=4, distinct(18)=0.3, null(18)=0, avgsize(18)=12, distinct(19)=0.3, null(19)=0, avgsize(19)=2, distinct(18,19)=0.3, null(18,19)=0, avgsize(18,19)=14]
+      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, avgsize(14)=4, distinct(15)=0.3, null(15)=0, avgsize(15)=4, distinct(16)=0.299957, null(16)=0, avgsize(16)=4, distinct(18)=0.3, null(18)=0, avgsize(18)=12, distinct(19)=0.3, null(19)=0, avgsize(19)=2]
       │    ├── fd: ()-->(19), (16)-->(18)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":15(int!null) t2.j:10(jsonb) "inverted_join_const_col_@3":14(string!null)
