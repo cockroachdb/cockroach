@@ -837,6 +837,12 @@ func makeScheduledBackupEval(
 			// All backups are full cluster backups for free users.
 			eval.fullBackupRecurrence = eval.recurrence
 			eval.recurrence = nil
+			if schedule.FullBackup == nil {
+				p.BufferClientNotice(ctx,
+					pgnotice.Newf("Without an enterprise license,"+
+						" this schedule will only run full backups. To mute this notice, "+
+						"add the 'FULL BACKUP ALWAYS' clause to your CREATE SCHEDULE command."))
+			}
 		} else {
 			// Cannot use incremental backup w/out enterprise license.
 			return nil, enterpriseCheckErr
