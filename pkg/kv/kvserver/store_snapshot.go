@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -598,6 +598,27 @@ func (s *Store) checkSnapshotOverlapLocked(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
+	// Draining nodes will generally not be rebalanced to (see the filtering that
+	// happens in getStoreListFromIDsLocked()), but in case they are, they should
+	// reject the incoming rebalancing snapshots.
+	if s.IsDraining() {
+		switch t := header.Priority; t {
+		case kvserverpb.SnapshotRequest_RECOVERY:
+			// We can not reject Raft snapshots because draining nodes may have
+			// replicas in `StateSnapshot` that need to catch up.
+			//
+			// TODO(aayush): We also do not reject snapshots sent to replace dead
+			// replicas here, but draining stores are still filtered out in
+			// getStoreListFromIDsLocked(). Is that sound? Don't we want to
+			// upreplicate to draining nodes if there are no other candidates?
+		case kvserverpb.SnapshotRequest_REBALANCE:
+			return sendSnapshotError(stream, errors.New(storeDrainingMsg))
+		default:
+			// If this a new snapshot type that this cockroach version does not know
+			// about, we let it through.
+		}
+	}
+
 	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
 		if err := fn(header); err != nil {
 			return sendSnapshotError(stream, err)

@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,7 +72,7 @@ func TestWaitForShowTransferState(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		sendSequence []pgproto3.BackendMessage
-		postValidate func(*testing.T, *interceptor.FrontendInterceptor)
+		postValidate func(*testing.T, <-chan pgproto3.BackendMessage)
 		err          string
 		transferErr  string
 	}{
@@ -107,12 +108,12 @@ func TestWaitForShowTransferState(t *testing.T) {
 				&pgproto3.ErrorResponse{},
 			},
 			err: "ambiguous ErrorResponse",
-			postValidate: func(t *testing.T, fi *interceptor.FrontendInterceptor) {
+			postValidate: func(t *testing.T, msgCh <-chan pgproto3.BackendMessage) {
 				t.Helper()
-				expectMsg(t, fi, `"Type":"BackendKeyData"`)
-				expectMsg(t, fi, `"Type":"RowDescription".*"Name":"foo1"`)
-				expectMsg(t, fi, `"Type":"RowDescription".*"Name":"foo2"`)
-				expectMsg(t, fi, `"Type":"RowDescription".*session_state_foo.*session_revival_token_bar`)
+				expectMsg(t, msgCh, `"Type":"BackendKeyData"`)
+				expectMsg(t, msgCh, `"Type":"RowDescription".*"Name":"foo1"`)
+				expectMsg(t, msgCh, `"Type":"RowDescription".*"Name":"foo2"`)
+				expectMsg(t, msgCh, `"Type":"RowDescription".*session_state_foo.*session_revival_token_bar`)
 			},
 		},
 		{
@@ -287,25 +288,47 @@ func TestWaitForShowTransferState(t *testing.T) {
 				&pgproto3.CommandComplete{CommandTag: []byte("SHOW TRANSFER STATE 1")},
 				&pgproto3.ReadyForQuery{},
 			},
-			postValidate: func(t *testing.T, fi *interceptor.FrontendInterceptor) {
+			postValidate: func(t *testing.T, msgCh <-chan pgproto3.BackendMessage) {
 				t.Helper()
-				expectMsg(t, fi, `"Type":"BackendKeyData"`)
-				expectMsg(t, fi, `"Type":"RowDescription"`)
-				expectMsg(t, fi, `"Type":"CommandComplete"`)
+				expectMsg(t, msgCh, `"Type":"BackendKeyData"`)
+				expectMsg(t, msgCh, `"Type":"RowDescription"`)
+				expectMsg(t, msgCh, `"Type":"CommandComplete"`)
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			buf := new(bytes.Buffer)
-			for _, m := range tc.sendSequence {
-				writeServerMsg(buf, m)
-			}
-			toClient := new(bytes.Buffer)
+			serverProxy, server := net.Pipe()
+			defer serverProxy.Close()
+			defer server.Close()
+
+			clientProxy, client := net.Pipe()
+			defer clientProxy.Close()
+			defer client.Close()
+
+			doneCh := make(chan struct{})
+			go func() {
+				for _, m := range tc.sendSequence {
+					writeServerMsg(server, m)
+				}
+				close(doneCh)
+			}()
+
+			msgCh := make(chan pgproto3.BackendMessage, 10)
+			go func() {
+				fi := interceptor.NewFrontendConn(client)
+				for {
+					msg, err := fi.ReadMsg()
+					if err != nil {
+						return
+					}
+					msgCh <- msg
+				}
+			}()
 
 			transferErr, state, token, err := waitForShowTransferState(
 				ctx,
-				interceptor.NewFrontendInterceptor(buf),
-				toClient,
+				interceptor.NewFrontendConn(serverProxy),
+				clientProxy,
 				"foo-transfer-key",
 			)
 			if tc.err == "" {
@@ -326,19 +349,22 @@ func TestWaitForShowTransferState(t *testing.T) {
 					require.Equal(t, "foo-state", state)
 					require.Equal(t, "foo-token", token)
 				}
-				require.Equal(t, 0, buf.Len())
+				require.Eventually(t, func() bool {
+					select {
+					case <-doneCh:
+						return true
+					default:
+						return false
+					}
+				}, 5*time.Second, 100*time.Millisecond, "require doneCh to be closed")
 			} else {
 				require.Regexp(t, tc.err, err)
 			}
 
 			// Verify that forwarding was correct.
 			if tc.postValidate != nil {
-				frontend := interceptor.NewFrontendInterceptor(toClient)
-				tc.postValidate(t, frontend)
-				_, _, err := frontend.PeekMsg()
-				require.Regexp(t, "EOF", err)
+				tc.postValidate(t, msgCh)
 			}
-			require.Equal(t, 0, toClient.Len())
 		})
 	}
 }
@@ -348,8 +374,12 @@ func TestRunAndWaitForDeserializeSession(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("write_failed", func(t *testing.T) {
-		err := runAndWaitForDeserializeSession(ctx, &errWriter{}, nil, "foo")
-		require.Regexp(t, "unexpected Write call", err)
+		r, w := net.Pipe()
+		r.Close()
+		w.Close()
+		err := runAndWaitForDeserializeSession(ctx,
+			interceptor.NewFrontendConn(r), "foo")
+		require.Regexp(t, "closed pipe", err)
 	})
 
 	for _, tc := range []struct {
@@ -471,23 +501,42 @@ func TestRunAndWaitForDeserializeSession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			readBuf := new(bytes.Buffer)
-			for _, m := range tc.sendSequence {
-				writeServerMsg(readBuf, m)
-			}
-			writeBuf := new(bytes.Buffer)
+			serverProxy, server := net.Pipe()
+			defer serverProxy.Close()
+			defer server.Close()
+			doneCh := make(chan struct{})
+			go func() {
+				for _, m := range tc.sendSequence {
+					writeServerMsg(server, m)
+				}
+				close(doneCh)
+			}()
 
-			err := runAndWaitForDeserializeSession(ctx, writeBuf,
-				interceptor.NewFrontendInterceptor(readBuf), "foo-transfer-key")
+			msgCh := make(chan pgproto3.FrontendMessage, 1)
+			go func() {
+				backend := interceptor.NewBackendConn(server)
+				msg, _ := backend.ReadMsg()
+				msgCh <- msg
+			}()
+
+			err := runAndWaitForDeserializeSession(ctx,
+				interceptor.NewFrontendConn(serverProxy), "foo-transfer-key")
 			if tc.err == "" {
 				require.NoError(t, err)
 			} else {
 				require.Regexp(t, tc.err, err)
 			}
 
-			backend := interceptor.NewBackendInterceptor(writeBuf)
-			msg, err := backend.ReadMsg()
-			require.NoError(t, err)
+			require.Eventually(t, func() bool {
+				select {
+				case <-doneCh:
+					return true
+				default:
+					return false
+				}
+			}, 5*time.Second, 100*time.Millisecond, "require doneCh to be closed")
+
+			msg := <-msgCh
 			m, ok := msg.(*pgproto3.Query)
 			require.True(t, ok)
 			const queryStr = "SELECT crdb_internal.deserialize_session(decode('foo-transfer-key', 'base64'))"
@@ -513,7 +562,7 @@ func TestWaitForSmallRowDescription(t *testing.T) {
 		r.Close()
 		w.Close()
 
-		err := waitForSmallRowDescription(ctx, interceptor.NewFrontendInterceptor(r), nil, nil)
+		err := waitForSmallRowDescription(ctx, interceptor.NewFrontendConn(r), nil, nil)
 		require.Regexp(t, "peeking message", err)
 	})
 
@@ -526,46 +575,60 @@ func TestWaitForSmallRowDescription(t *testing.T) {
 			writeServerMsg(w, &pgproto3.ErrorResponse{})
 		}()
 
-		err := waitForSmallRowDescription(ctx, interceptor.NewFrontendInterceptor(r), nil, nil)
+		err := waitForSmallRowDescription(ctx, interceptor.NewFrontendConn(r), nil, nil)
 		require.Regexp(t, "ambiguous ErrorResponse.*ErrorResponse", err)
 	})
 
 	t.Run("successful", func(t *testing.T) {
-		r, w := net.Pipe()
-		defer r.Close()
-		defer w.Close()
+		serverProxy, server := net.Pipe()
+		defer serverProxy.Close()
+		defer server.Close()
 
-		toClient := new(bytes.Buffer)
+		clientProxy, client := net.Pipe()
+		defer clientProxy.Close()
+		defer client.Close()
 
 		go func() {
 			// Not RowDescription.
-			writeServerMsg(w, &pgproto3.BackendKeyData{ProcessID: 42})
+			writeServerMsg(server, &pgproto3.BackendKeyData{ProcessID: 42})
 			// Too large (> 4k bytes).
-			writeServerMsg(w, &pgproto3.RowDescription{
+			writeServerMsg(server, &pgproto3.RowDescription{
 				Fields: []pgproto3.FieldDescription{
 					{Name: []byte("foo1")},
 					{Name: make([]byte, 1<<13 /* 8K */)},
 				},
 			})
 			// Mismatch.
-			writeServerMsg(w, &pgproto3.RowDescription{
+			writeServerMsg(server, &pgproto3.RowDescription{
 				Fields: []pgproto3.FieldDescription{
 					{Name: []byte("foo2")},
 					{Name: []byte("foo3")},
 				},
 			})
 			// Match.
-			writeServerMsg(w, &pgproto3.RowDescription{
+			writeServerMsg(server, &pgproto3.RowDescription{
 				Fields: []pgproto3.FieldDescription{
 					{Name: []byte("foo1")},
 				},
 			})
 		}()
 
+		msgCh := make(chan pgproto3.BackendMessage, 10)
+		go func() {
+			fi := interceptor.NewFrontendConn(client)
+			for {
+				msg, err := fi.ReadMsg()
+				if err != nil {
+					return
+				}
+				msgCh <- msg
+			}
+		}()
+
 		err := waitForSmallRowDescription(
 			ctx,
-			interceptor.NewFrontendInterceptor(r),
-			toClient,
+			interceptor.NewFrontendConn(serverProxy),
+			clientProxy,
 			func(m *pgproto3.RowDescription) bool {
 				return len(m.Fields) == 1 && string(m.Fields[0].Name) == "foo1"
 			},
@@ -573,13 +636,9 @@ func TestWaitForSmallRowDescription(t *testing.T) {
 		require.Nil(t, err)
 
 		// Verify that forwarding was correct.
-		fi := interceptor.NewFrontendInterceptor(toClient)
-		expectMsg(t, fi, `"Type":"BackendKeyData".*"ProcessID":42`)
-		expectMsg(t, fi, `"Type":"RowDescription".*"Name":"foo1"`)
-		expectMsg(t, fi, `"Type":"RowDescription".*"Name":"foo2".*"Name":"foo3"`)
-		_, _, err = fi.PeekMsg()
-		require.Regexp(t, "EOF", err)
-		require.Equal(t, 0, toClient.Len())
+		expectMsg(t, msgCh, `"Type":"BackendKeyData".*"ProcessID":42`)
+		expectMsg(t, msgCh, `"Type":"RowDescription".*"Name":"foo1"`)
+		expectMsg(t, msgCh, `"Type":"RowDescription".*"Name":"foo2".*"Name":"foo3"`)
 	})
 }
 
@@ -602,7 +661,7 @@ func TestExpectDataRow(t *testing.T) {
 		r.Close()
 		w.Close()
 
-		err := expectDataRow(ctx, interceptor.NewFrontendInterceptor(r), falseValidateFn)
+		err := expectDataRow(ctx, interceptor.NewFrontendConn(r), falseValidateFn)
 		require.Regexp(t, "reading message", err)
 	})
 
@@ -615,7 +674,7 @@ func TestExpectDataRow(t *testing.T) {
 			writeServerMsg(w, &pgproto3.ReadyForQuery{})
 		}()
 
-		err := expectDataRow(ctx, interceptor.NewFrontendInterceptor(r), falseValidateFn)
+		err := expectDataRow(ctx, interceptor.NewFrontendConn(r), falseValidateFn)
 		require.Regexp(t, "unexpected message.*ReadyForQuery", err)
 	})
 
@@ -628,7 +687,7 @@ func TestExpectDataRow(t *testing.T) {
 			writeServerMsg(w, &pgproto3.DataRow{})
 		}()
 
-		err := expectDataRow(ctx, interceptor.NewFrontendInterceptor(r), falseValidateFn)
+		err := expectDataRow(ctx, interceptor.NewFrontendConn(r), falseValidateFn)
 		require.Regexp(t, "validation failed for message.*DataRow", err)
 	})
 
@@ -643,7 +702,7 @@ func TestExpectDataRow(t *testing.T) {
 
 		err := expectDataRow(
 			ctx,
-			interceptor.NewFrontendInterceptor(r),
+			interceptor.NewFrontendConn(r),
 			func(m *pgproto3.DataRow) bool {
 				return len(m.Values) == 1 && string(m.Values[0]) == "foo"
 			},
@@ -669,7 +728,7 @@ func TestExpectCommandComplete(t *testing.T) {
 		r.Close()
 		w.Close()
 
-		err := expectCommandComplete(ctx, interceptor.NewFrontendInterceptor(r), "")
+		err := expectCommandComplete(ctx, interceptor.NewFrontendConn(r), "")
 		require.Regexp(t, "reading message", err)
 	})
 
@@ -682,7 +741,7 @@ func TestExpectCommandComplete(t *testing.T) {
 			writeServerMsg(w, &pgproto3.ReadyForQuery{})
 		}()
 
-		err := expectCommandComplete(ctx, interceptor.NewFrontendInterceptor(r), "")
+		err := expectCommandComplete(ctx, interceptor.NewFrontendConn(r), "")
 		require.Regexp(t, "unexpected message.*ReadyForQuery", err)
 	})
 
@@ -695,7 +754,7 @@ func TestExpectCommandComplete(t *testing.T) {
 			writeServerMsg(w, &pgproto3.CommandComplete{CommandTag: []byte("foo")})
 		}()
 
-		err := expectCommandComplete(ctx, interceptor.NewFrontendInterceptor(r), "bar")
+		err := expectCommandComplete(ctx, interceptor.NewFrontendConn(r), "bar")
 		require.Regexp(t, "unexpected message.*CommandComplete.*CommandTag.*foo", err)
 	})
 
@@ -708,7 +767,7 @@ func TestExpectCommandComplete(t *testing.T) {
 			writeServerMsg(w, &pgproto3.CommandComplete{CommandTag: []byte("SELECT 1")})
 		}()
 
-		err := expectCommandComplete(ctx, interceptor.NewFrontendInterceptor(r), "SELECT 1")
+		err := expectCommandComplete(ctx, interceptor.NewFrontendConn(r), "SELECT 1")
 		require.Nil(t, err)
 	})
 }
@@ -730,7 +789,7 @@ func TestExpectReadyForQuery(t *testing.T) {
 		r.Close()
 		w.Close()
 
-		err := expectReadyForQuery(ctx, interceptor.NewFrontendInterceptor(r))
+		err := expectReadyForQuery(ctx, interceptor.NewFrontendConn(r))
 		require.Regexp(t, "reading message", err)
 	})
 
@@ -743,7 +802,7 @@ func TestExpectReadyForQuery(t *testing.T) {
 			writeServerMsg(w, &pgproto3.ErrorResponse{})
 		}()
 
-		err := expectReadyForQuery(ctx, interceptor.NewFrontendInterceptor(r))
+		err := expectReadyForQuery(ctx, interceptor.NewFrontendConn(r))
 		require.Regexp(t, "unexpected message.*ErrorResponse", err)
 	})
 
@@ -756,7 +815,7 @@ func TestExpectReadyForQuery(t *testing.T) {
 			writeServerMsg(w, &pgproto3.ReadyForQuery{TxStatus: 'I'})
 		}()
 
-		err := expectReadyForQuery(ctx, interceptor.NewFrontendInterceptor(r))
+		err := expectReadyForQuery(ctx, interceptor.NewFrontendConn(r))
 		require.Nil(t, err)
 	})
 }
@@ -765,9 +824,8 @@ func writeServerMsg(w io.Writer, msg pgproto3.BackendMessage) {
 	_, _ = w.Write(msg.Encode(nil))
 }
 
-func expectMsg(t *testing.T, fi *interceptor.FrontendInterceptor, match string) {
+func expectMsg(t *testing.T, msgCh <-chan pgproto3.BackendMessage, match string) {
 	t.Helper()
-	msg, err := fi.ReadMsg()
-	require.NoError(t, err)
+	msg := <-msgCh
 	require.Regexp(t, match, jsonOrRaw(msg))
 }

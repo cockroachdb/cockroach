@@ -31,31 +31,23 @@ type forwarder struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
+	// clientConn and serverConn provide a convenient way to read and forward
+	// Postgres messages, while minimizing IO reads and memory allocations.
+	//
+	// clientConn is set once during initialization, and stays the same
+	// throughout the lifetime of the forwarder.
+	//
 	// serverConn is only set after the authentication phase for the initial
 	// connection. In the context of a connection migration, serverConn is only
-	// replaced once the session has successfully been deserialized, and the
-	// old connection will be closed.
+	// replaced once the session has successfully been deserialized, and the old
+	// connection will be closed. Whenever serverConn gets updated, both
+	// clientMessageTypeSent and isServerMsgReadyReceived fields have to reset
+	// to their initial values.
 	//
 	// All reads from these connections must go through the interceptors. It is
-	// not safe to read from these directly as the interceptors may have
-	// buffered data.
-	clientConn net.Conn // client <-> proxy
-	serverConn net.Conn // proxy <-> server
-
-	// clientInterceptor and serverInterceptor provides a convenient way to
-	// read and forward Postgres messages, while minimizing IO reads and memory
-	// allocations.
-	//
-	// These interceptors have to match clientConn and serverConn. See comment
-	// above on when those fields will be updated.
-	//
-	// TODO(jaylim-crl): Add updater functions that sets both conn and
-	// interceptor fields at the same time. At the moment, there's no use case
-	// besides the forward function. When connection migration happens, we
-	// will need to create a new serverInterceptor. We should remember to close
-	// old serverConn as well.
-	clientInterceptor *interceptor.BackendInterceptor  // clientConn -> serverConn
-	serverInterceptor *interceptor.FrontendInterceptor // serverConn -> clientConn
+	// not safe to call Read directly as the interceptors may have buffered data.
+	clientConn *interceptor.BackendConn  // client <-> proxy
+	serverConn *interceptor.FrontendConn // proxy <-> server
 
 	// errChan is a buffered channel that contains the first forwarder error.
 	// This channel may receive nil errors.
@@ -90,9 +82,8 @@ func forward(ctx context.Context, clientConn, serverConn net.Conn) *forwarder {
 		// TODO(jaylim-crl): Check for transfer state here.
 		return nil
 	})
-
-	f.setClientConn(clientConn)
-	f.setServerConn(serverConn)
+	f.clientConn = interceptor.NewBackendConn(clientConn)
+	f.serverConn = interceptor.NewFrontendConn(serverConn)
 
 	// Start request (client to server) and response (server to client)
 	// processors. We will copy all pgwire messages/ from client to server
@@ -137,7 +128,7 @@ func (f *forwarder) Close() {
 // gets triggered when context is cancelled.
 func (f *forwarder) handleClientToServer() error {
 	for f.ctx.Err() == nil {
-		if _, err := f.clientInterceptor.ForwardMsg(f.serverConn); err != nil {
+		if _, err := f.clientConn.ForwardMsg(f.serverConn); err != nil {
 			return err
 		}
 	}
@@ -150,29 +141,11 @@ func (f *forwarder) handleClientToServer() error {
 // Read, we will unblock that by closing serverConn through f.Close().
 func (f *forwarder) handleServerToClient() error {
 	for f.ctx.Err() == nil {
-		if _, err := f.serverInterceptor.ForwardMsg(f.clientConn); err != nil {
+		if _, err := f.serverConn.ForwardMsg(f.clientConn); err != nil {
 			return err
 		}
 	}
 	return f.ctx.Err()
-}
-
-// setClientConn is a convenient helper to update clientConn, and will also
-// create a matching interceptor for the given connection. It is the caller's
-// responsibility to close the old connection before calling this, or there
-// may be a leak.
-func (f *forwarder) setClientConn(clientConn net.Conn) {
-	f.clientConn = clientConn
-	f.clientInterceptor = interceptor.NewBackendInterceptor(f.clientConn)
-}
-
-// setServerConn is a convenient helper to update serverConn, and will also
-// create a matching interceptor for the given connection. It is the caller's
-// responsibility to close the old connection before calling this, or there
-// may be a leak.
-func (f *forwarder) setServerConn(serverConn net.Conn) {
-	f.serverConn = serverConn
-	f.serverInterceptor = interceptor.NewFrontendInterceptor(f.serverConn)
 }
 
 // wrapClientToServerError overrides client to server errors for external
