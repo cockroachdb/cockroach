@@ -38,11 +38,11 @@
 /pkg/sql/show_create*.go     @cockroachdb/sql-syntax-prs
 /pkg/sql/types/              @cockroachdb/sql-syntax-prs
 
-/pkg/sql/crdb_internal.go    @cockroachdb/sql-api-prs
-/pkg/sql/pg_catalog.go       @cockroachdb/sql-api-prs
-/pkg/sql/pgwire/             @cockroachdb/sql-api-prs
-/pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
-/pkg/sql/vtable/             @cockroachdb/sql-api-prs
+/pkg/sql/crdb_internal.go    @cockroachdb/sql-experience
+/pkg/sql/pg_catalog.go       @cockroachdb/sql-experience
+/pkg/sql/pgwire/             @cockroachdb/sql-experience
+/pkg/sql/sem/builtins/       @cockroachdb/sql-experience
+/pkg/sql/vtable/             @cockroachdb/sql-experience
 
 /pkg/sql/sessiondata/        @cockroachdb/sql-experience
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
@@ -251,7 +251,7 @@
 /pkg/roachpb/tenant*         @cockroachdb/kv-prs
 /pkg/roachpb/testdata/ambi*  @cockroachdb/kv-prs
 /pkg/roachpb/testdata/repl*  @cockroachdb/kv-prs
-/pkg/roachpb/version*        @cockroachdb/server
+/pkg/roachpb/version*        @cockroachdb/unowned
 /pkg/roachprod/              @cockroachdb/dev-inf
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
