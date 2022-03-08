@@ -243,11 +243,11 @@ func newNonSQLKeysMap() *nonSQLKeysMap {
 }
 
 // NewRegistry creates a new Registry.
-func NewRegistry(st *cluster.Settings, endpoint ResolverEndpoint) *Registry {
+func NewRegistry(st *cluster.Settings, endpoint ResolverEndpoint, metrics *Metrics) *Registry {
 	return &Registry{
 		indexMap:      newIndexMap(),
 		nonSQLKeysMap: newNonSQLKeysMap(),
-		eventStore:    newEventStore(st, endpoint, timeutil.Now),
+		eventStore:    newEventStore(st, endpoint, timeutil.Now, metrics),
 	}
 }
 

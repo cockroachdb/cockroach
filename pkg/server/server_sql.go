@@ -663,7 +663,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if hasNodeLiveness {
 		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Tracer)
 	}
-	contentionRegistry := contention.NewRegistry(cfg.Settings, cfg.sqlStatusServer.TxnIDResolution)
+	contentionMetrics := contention.NewMetrics()
+	cfg.registry.AddMetricStruct(contentionMetrics)
+
+	contentionRegistry := contention.NewRegistry(
+		cfg.Settings,
+		cfg.sqlStatusServer.TxnIDResolution,
+		&contentionMetrics,
+	)
 	contentionRegistry.Start(ctx, cfg.stopper)
 
 	*execCfg = sql.ExecutorConfig{

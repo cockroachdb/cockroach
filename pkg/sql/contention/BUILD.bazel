@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cluster_settings.go",
         "event_store.go",
+        "metrics.go",
         "registry.go",
         "resolver.go",
         "test_utils.go",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/sql/contentionpb",
         "//pkg/util/cache",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
