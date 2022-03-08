@@ -72,13 +72,6 @@ func (s *Store) HandleSnapshot(
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
 		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
-		if s.IsDraining() {
-			return stream.Send(&SnapshotResponse{
-				Status:  SnapshotResponse_DECLINED,
-				Message: storeDrainingMsg,
-			})
-		}
-
 		return s.receiveSnapshot(ctx, header, stream)
 	})
 }
