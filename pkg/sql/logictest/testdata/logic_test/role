@@ -181,17 +181,40 @@ user root
 statement ok
 GRANT testrole TO testuser WITH ADMIN OPTION
 
+statement ok
+CREATE ROLE child_role;
+GRANT testrole to child_role;
+GRANT testuser TO child_role;
+
 query TTB colnames
 SELECT * FROM system.role_members
 ----
-role      member    isAdmin
-admin     root      true
-testrole  testuser  true
-
-user testuser
+role      member      isAdmin
+admin     root        true
+testrole  child_role  false
+testrole  testuser    true
+testuser  child_role  false
 
 statement ok
+SET ROLE child_role
+
+# ADMIN OPTION should be inherited, so this should succeed.
+statement ok
 GRANT testrole TO testuser2 WITH ADMIN OPTION
+
+# And we should be able to introspect for ADMIN option. The grantee is
+# the parent role that was given ADMIN OPTION.
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee   role_name  is_grantable
+testuser  testrole   YES
+
+statement ok
+RESET ROLE;
+DROP ROLE child_role
+
+user testuser
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
@@ -353,6 +376,10 @@ CREATE ROLE rolee
 statement ok
 GRANT roled TO testuser
 
+# Make sure role hierarchy doesn't end up with duplicate rows.
+statement ok
+GRANT rolec TO testuser
+
 statement ok
 GRANT rolea TO roleb WITH ADMIN OPTION
 
@@ -361,17 +388,18 @@ user testuser
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
-grantee   role_name  is_grantable
-testuser  rolea      YES
+grantee  role_name  is_grantable
+roleb    rolea      YES
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  roled      NO
+roleb     rolea      YES
+rolec     roleb      NO
+roled     rolec      NO
 testuser  rolec      NO
-testuser  roleb      NO
-testuser  rolea      YES
+testuser  roled      NO
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -398,16 +426,17 @@ GRANT rolea TO rolee
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
-grantee   role_name  is_grantable
-testuser  rolea      YES
+grantee  role_name  is_grantable
+roleb    rolea      YES
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
+roleb     rolea      YES
+rolec     roleb      NO
+roled     rolec      NO
 testuser  rolec      NO
-testuser  roleb      NO
-testuser  rolea      YES
 testuser  roled      NO
 
 query T colnames,rowsort
@@ -431,6 +460,7 @@ rolea  roleb     true
 rolea  rolee     false
 roleb  rolec     false
 rolec  roled     false
+rolec  testuser  false
 roled  testuser  false
 
 statement ok
