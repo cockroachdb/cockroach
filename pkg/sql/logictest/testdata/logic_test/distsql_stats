@@ -1246,3 +1246,16 @@ CREATE STATISTICS s ON b FROM t71080;
 
 statement error cannot create statistics on virtual column \"b\"
 CREATE STATISTICS s ON a, b FROM t71080;
+
+# Regression test for #76867. Do not attempt to collect empty multi-column stats
+# when there are indexes on columns that are all virtual.
+statement ok
+CREATE TABLE t76867 (
+  a INT,
+  b INT AS (a + 1) VIRTUAL,
+  c INT AS (a + 2) VIRTUAL,
+  INDEX (b, c)
+)
+
+statement ok
+ANALYZE t76867
