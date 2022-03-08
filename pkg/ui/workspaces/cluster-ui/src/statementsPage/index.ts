@@ -12,3 +12,4 @@ export * from "./statementsPage";
 export * from "./statementsPageConnected";
 export * from "./statementsPageRoot";
 export * from "./activeStatementsView";
+export * from "./activeStatementsPageCC";
