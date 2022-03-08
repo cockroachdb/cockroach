@@ -21,8 +21,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 )
+
+// Client is an interface allowing queries against Prometheus.
+type Client interface {
+	Query(ctx context.Context, query string, ts time.Time) (model.Value, promv1.Warnings, error)
+}
 
 // ScrapeNode are nodes to scrape from.
 type ScrapeNode struct {
