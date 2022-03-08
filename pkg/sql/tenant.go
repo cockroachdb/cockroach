@@ -462,15 +462,23 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		}
 
 		// Clear out all span config records left over by the tenant.
-		tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+		tenID := roachpb.MakeTenantID(info.ID)
+		tenantPrefix := keys.MakeTenantPrefix(tenID)
 		tenantSpan := roachpb.Span{
 			Key:    tenantPrefix,
 			EndKey: tenantPrefix.PrefixEnd(),
 		}
 
+		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(tenID, tenID)
+		if err != nil {
+			return err
+		}
 		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
 		records, err := scKVAccessor.GetSpanConfigRecords(
-			ctx, []spanconfig.Target{spanconfig.MakeTargetFromSpan(tenantSpan)},
+			ctx, []spanconfig.Target{
+				spanconfig.MakeTargetFromSpan(tenantSpan),
+				spanconfig.MakeTargetFromSystemTarget(systemTarget),
+			},
 		)
 		if err != nil {
 			return err
@@ -571,4 +579,12 @@ func (p *planner) UpdateTenantResourceLimits(
 		ctx, p.Txn(), roachpb.MakeTenantID(tenantID),
 		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
 	)
+}
+
+// TestingUpdateTenantRecord is a public wrapper around updateTenantRecord
+// intended for testing purposes.
+func TestingUpdateTenantRecord(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
+) error {
+	return updateTenantRecord(ctx, execCfg, txn, info)
 }
