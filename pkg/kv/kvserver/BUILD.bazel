@@ -317,6 +317,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/apply",
         "//pkg/kv/kvserver/batcheval",
