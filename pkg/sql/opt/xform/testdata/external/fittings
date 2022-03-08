@@ -2623,13 +2623,13 @@ project
            ├── internal-ordering: -1
            ├── k: 100
            ├── cardinality: [0 - 100]
-           ├── stats: [rows=0.002355641]
+           ├── stats: [rows=0.004711281]
            ├── key: (1)
            ├── ordering: -1
            └── scan fits@fits_items_idx
                 ├── columns: killmail:1!null
                 ├── inverted constraint: /13/1
                 │    └── spans: ["7\x00\x03\x00\x01,\v_>\x00", "7\x00\x03\x00\x01,\v_>\x00"]
-                ├── stats: [rows=0.002355641, distinct(13)=0.00235564, null(13)=0, avgsize(13)=4]
+                ├── stats: [rows=0.004711281, distinct(13)=0.00471128, null(13)=0, avgsize(13)=4]
                 │   histogram(13)=
                 └── key: (1)

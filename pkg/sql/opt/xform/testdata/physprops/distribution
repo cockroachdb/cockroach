@@ -179,6 +179,20 @@ CREATE TABLE abc_part (
 )
 ----
 
+# Make the stats "available" so we'll automatically determine the stats for
+# the columns with check constraints.
+exec-ddl
+ALTER TABLE abc_part INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2020-01-01 0:00:00.00000+00:00"
+  }
+]'
+----
+
 exec-ddl
 ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
   num_voters = 5,
