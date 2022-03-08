@@ -10,6 +10,7 @@ go_library(
         "refresh_statuses.go",
         "table_garbage_collection.go",
         "tenant_garbage_collection.go",
+        "testutils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/gcjob",
     visibility = ["//visibility:public"],
@@ -44,12 +45,11 @@ go_test(
     name = "gcjob_test",
     size = "small",
     srcs = [
-        "helpers_test.go",
         "main_test.go",
         "tenant_garbage_collection_test.go",
     ],
-    embed = [":gcjob"],
     deps = [
+        ":gcjob",
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
