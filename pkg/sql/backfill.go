@@ -2652,6 +2652,26 @@ func (sc *SchemaChanger) distIndexMerge(
 	addedIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
 ) error {
+	// We note the time at the start of the merge in order to limit the set of
+	// keys merged from the temporary index to what's already there as of
+	// mergeTimestamp. To identify the keys that should be merged, we perform a
+	// historical read on the temporary index as of mergeTimestamp. We then
+	// perform an additional read for the latest value for each key in order to
+	// get correct merged value.
+	//
+	// We do this because the temporary index is still accepting writes during the
+	// merge as we rely on it having the latest value or delete for every key. If
+	// we don't limit number of keys merged, then it is possible for the rate of
+	// new keys written to the temporary index to be faster than the rate at which
+	// merge.
+	//
+	// The mergeTimestamp is currently not persisted because if this job is ran as
+	// part of a restore, then timestamp will be too old and the job will fail. On
+	// the next resume, a mergeTimestamp newer than the GC time will be picked and
+	// the job can continue.
+	mergeTimestamp := sc.clock.Now()
+	log.Infof(ctx, "merging all keys in temporary index before time %v...", mergeTimestamp)
+
 	// Gather the initial resume spans for the merge process.
 	progress, err := extractMergeProgress(sc.job, tableDesc, addedIndexes, temporaryIndexes)
 	if err != nil {
@@ -2693,7 +2713,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	defer func() { _ = stop() }()
 
 	run, err := planner.plan(ctx, tableDesc, progress.TodoSpans, progress.AddedIndexes,
-		progress.TemporaryIndexes, metaFn)
+		progress.TemporaryIndexes, metaFn, mergeTimestamp)
 	if err != nil {
 		return err
 	}
