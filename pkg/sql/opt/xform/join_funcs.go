@@ -1215,21 +1215,27 @@ func (c *CustomFuncs) mapInvertedJoin(
 		newIndexCols.Add(prefixCol)
 	}
 
-	// Get the source and destination ColSets, including the inverted source
-	// columns, which will be used in the invertedExpr.
-	srcCols := indexCols.Copy()
-	dstCols := newIndexCols.Copy()
+	// Create a map from the source columns to the destination columns,
+	// including the inverted source columns which will be used in the
+	// invertedExpr.
+	var srcColsToDstCols opt.ColMap
+	for srcCol, ok := indexCols.Next(0); ok; srcCol, ok = indexCols.Next(srcCol + 1) {
+		ord := tabID.ColumnOrdinal(srcCol)
+		dstCol := newTabID.ColumnID(ord)
+		srcColsToDstCols.Set(int(srcCol), int(dstCol))
+	}
 	ord := index.InvertedColumn().InvertedSourceColumnOrdinal()
 	invertedSourceCol := tabID.ColumnID(ord)
 	newInvertedSourceCol := newTabID.ColumnID(ord)
-	srcCols.Add(invertedSourceCol)
-	dstCols.Add(newInvertedSourceCol)
+	srcColsToDstCols.Set(int(invertedSourceCol), int(newInvertedSourceCol))
 
 	invertedJoin.Table = newTabID
-	invertedJoin.InvertedExpr = c.mapScalarExprCols(invertedJoin.InvertedExpr, srcCols, dstCols)
+	invertedJoin.InvertedExpr = c.RemapCols(invertedJoin.InvertedExpr, srcColsToDstCols)
 	invertedJoin.Cols = invertedJoin.Cols.Difference(indexCols).Union(newIndexCols)
-	invertedJoin.ConstFilters = c.MapFilterCols(invertedJoin.ConstFilters, srcCols, dstCols)
-	invertedJoin.On = c.MapFilterCols(invertedJoin.On, srcCols, dstCols)
+	constFilters := c.RemapCols(&invertedJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
+	invertedJoin.ConstFilters = *constFilters
+	on := c.RemapCols(&invertedJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
+	invertedJoin.On = *on
 }
 
 // findComputedColJoinEquality returns the computed column expression of col and
