@@ -589,6 +589,13 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-non-voter",
 				},
 			},
+			{
+				Title: "Snapshot Delays",
+				Metrics: []string{
+					"range.snapshots.delay-total",
+					"range.snapshots.delay-enginebackpressure",
+				},
+			},
 		},
 	},
 	{

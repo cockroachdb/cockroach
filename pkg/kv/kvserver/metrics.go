@@ -496,6 +496,18 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapshotsTotalDelay = metric.Metadata{
+		Name:        "range.snapshots.delay-total",
+		Help:        "Amount by which evaluation of snapshot requests was delayed",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRangeSnapshotsEngineDelay = metric.Metadata{
+		Name:        "range.snapshots.delay-enginebackpressure",
+		Help:        "Amount by which evaluation of snapshot requests was delayed by storage-engine backpressure",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -1392,6 +1404,8 @@ type StoreMetrics struct {
 	RangeSnapshotsAppliedByVoters                *metric.Counter
 	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
+	RangeSnapshotsProposalTotalDelay             *metric.Counter
+	RangeSnapshotsProposalEngineDelay            *metric.Counter
 	RangeRaftLeaderTransfers                     *metric.Counter
 	RangeLossOfQuorumRecoveries                  *metric.Counter
 
@@ -1828,6 +1842,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedByVoters: metric.NewCounter(metaRangeSnapshotsAppliedByVoters),
 		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
+		RangeSnapshotsProposalTotalDelay:             metric.NewCounter(metaRangeSnapshotsTotalDelay),
+		RangeSnapshotsProposalEngineDelay:            metric.NewCounter(metaRangeSnapshotsEngineDelay),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
