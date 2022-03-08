@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -3936,18 +3937,20 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
 		ptsInterval := 50 * time.Millisecond
 		changefeedbase.ProtectTimestampInterval.Override(
 			context.Background(), &f.Server().ClusterSettings().SV, ptsInterval)
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
 		defer closeFeed(t, foo)
 
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 		ptsProvider := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 
 		var tableID int
@@ -3955,23 +3958,17 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			`WHERE name = 'foo' AND database_name = current_database()`).
 			Scan(&tableID)
 
-		getTablePtsRecord := func() *ptpb.Record {
-			var r *ptpb.Record
-			require.NoError(t, ptsProvider.Refresh(context.Background(), f.Server().Clock().Now()))
-			ptsProvider.Iterate(context.Background(), tableSpan.Key, tableSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
-				r = record
-				return false
-			})
-
-			expectedKeys := map[string]struct{}{
-				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
-				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
-			}
-			require.Equal(t, len(r.DeprecatedSpans), len(expectedKeys))
-			for _, s := range r.DeprecatedSpans {
-				require.Contains(t, expectedKeys, string(s.Key))
-			}
-			return r
+		// Get the protection policies that will be written on the span configs
+		// emitted by the tenant's reconciliation job.
+		getProtectionPolicies := func(ctx context.Context, txn *kv.Txn) []roachpb.ProtectionPolicy {
+			ptsState, err := ptsProvider.GetState(ctx, txn)
+			require.NoError(t, err)
+			ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+			protections := ptsStateReader.GetProtectionPoliciesForSchemaObject(fooDesc.GetID())
+			require.Len(t, protections, 1)
+			descProtection := ptsStateReader.GetProtectionPoliciesForSchemaObject(keys.DescriptorTableID)
+			require.Len(t, protections, 1)
+			return append(protections, descProtection...)
 		}
 
 		// Wait and return the next resolved timestamp after the wait time
@@ -3990,8 +3987,27 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			// Progress the changefeed and allow time for a pts record to be laid down
 			nextResolved := waitAndDrainResolved(100 * time.Millisecond)
 			time.Sleep(2 * ptsInterval)
-			rec := getTablePtsRecord()
-			require.LessOrEqual(t, nextResolved.GoTime().UnixNano(), rec.Timestamp.GoTime().UnixNano())
+
+			var pp []roachpb.ProtectionPolicy
+			// Get the protection policies that have been written by the changefeed job.
+			require.NoError(t, f.Server().DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				pp = getProtectionPolicies(ctx, txn)
+				return nil
+			}))
+			// We expect to see two protection policies corresponding to the record
+			// protecting the user table and the descriptor table.
+			require.Len(t, pp, 2)
+			for i := range pp {
+				require.LessOrEqual(t, nextResolved.GoTime().UnixNano(),
+					pp[i].ProtectedTimestamp.GoTime().UnixNano())
+			}
+
+			// TODO(CDC): Given the frequency with which the test is writing pts
+			// records it is hard to enforce a strict equality check on the records
+			// written and the state reconciled in KV. Maybe there is a way to "pause"
+			// the resolved timestamp so that we can allow KV state to be reconciled
+			// upto a point, and then match the protection policies persisted in KV with
+			// the policies in `pp` above.
 		}
 	}
 

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
@@ -66,9 +65,6 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
-				ProtectedTS: &protectedts.TestingKnobs{
-					EnableProtectedTimestampForMultiTenant: true,
-				},
 			},
 		},
 	})
