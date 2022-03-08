@@ -43,7 +43,9 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
 	require.NoError(t, err)
-	_, err = tenantDB.Exec("SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	// TODO(rafi): use ALTER TENANT ALL when available.
+	_, err = mainDB.Exec(`INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b')`)
 	require.NoError(t, err)
 
 	var token string

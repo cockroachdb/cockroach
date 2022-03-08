@@ -3136,8 +3136,10 @@ SELECT hmac('dog', 'key', 'made up alg')
 
 subtest session_revival_token
 
+# TODO(rafi): use ALTER TENANT ALL when available.
 statement ok
-SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true;
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b');
 CREATE USER parentuser;
 GRANT parentuser TO testuser
 
@@ -3198,5 +3200,7 @@ Ed25519  testuser  true  true  true  true
 
 user root
 
+# TODO(rafi): use ALTER TENANT ALL when available.
 statement ok
-SET CLUSTER SETTING server.user_login.session_revival_token.enabled = false
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'false', 'b')

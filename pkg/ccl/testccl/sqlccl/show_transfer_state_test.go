@@ -28,15 +28,17 @@ func TestShowTransferState(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	tenant, mainDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))
+	tenant, tenantDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))
 	defer tenant.Stopper().Stop(ctx)
-	defer mainDB.Close()
+	defer tenantDB.Close()
 
-	_, err := mainDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
 	require.NoError(t, err)
-	_, err = mainDB.Exec("SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	// TODO(rafi): use ALTER TENANT ALL when available.
+	_, err = mainDB.Exec(`INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b')`)
 	require.NoError(t, err)
 
 	t.Run("without_transfer_key", func(t *testing.T) {
@@ -170,7 +172,7 @@ func TestShowTransferState(t *testing.T) {
 		t.Run("root_user", func(t *testing.T) {
 			var key string
 			var errVal, sessionState, sessionRevivalToken gosql.NullString
-			err := mainDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
+			err := tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
 			require.NoError(t, err)
 
 			require.True(t, errVal.Valid)
