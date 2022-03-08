@@ -3156,9 +3156,10 @@ CREATE TABLE t.test (
 		fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
 		fmt.Sprintf("Put /Table/%d/1/1/3/1 -> /INT/5", tableID),
 		fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
-
-		// TODO(ssd): double-check that this trace makes
-		// sense.
+		// The temporary index sees a Put in all families even though
+		// only some are changing. This is expected.
+		fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
+		fmt.Sprintf("Put /Table/%d/3/3/1/1 -> /BYTES/0x0a020106", tableID),
 		fmt.Sprintf("Put /Table/%d/3/3/3/1 -> /BYTES/0x0a02010a", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
@@ -7979,85 +7980,186 @@ INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
 	}
 }
 
-func TestTruncateWithIndexAdditionAtEveryStateTransition(t *testing.T) {
+func TestOperationAtRandomStateTransition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	var (
-		s     serverutils.TestTenantInterface
-		sqlDB *gosql.DB
-		kvDB  *kv.DB
 
-		jobID jobspb.JobID
-		count int32
-	)
-	rowCount := 10
-	writeSomeRows := func() error {
-		for i := 0; i < rowCount; i++ {
-			_, err := sqlDB.Exec("INSERT INTO t.test VALUES ($1, $1)", i)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
+	type testCase struct {
+		name            string
+		setupSQL        string
+		schemaChangeSQL string
+		operation       func(sqlDB *gosql.DB, kvDB *kv.DB) error
+		verify          func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB)
 	}
-	rng, _ := randutil.NewPseudoRand()
-	truncateAtLim := 14
-	truncateAt := rng.Intn(truncateAtLim) + 1
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeResume: func(id jobspb.JobID) error {
-				if jobID == 0 {
-					jobID = id
-				}
-				return nil
-			},
-			RunBeforeDescTxn: func(id jobspb.JobID) error {
-				if jobID == id {
-					current := int(atomic.AddInt32(&count, 1))
-					if current == truncateAt {
-						t.Logf("running TRUNCATE at txn %d", current)
-						if err := writeSomeRows(); err != nil {
-							return err
-						}
 
-						_, err := sqlDB.Exec("TRUNCATE t.test")
+	getTxnCount := func(t *testing.T, tc testCase) int {
+		var (
+			count       int32 // accessed atomically
+			shouldCount int32 // accessed atomically
+		)
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeDescTxn: func(_ jobspb.JobID) error {
+					if atomic.LoadInt32(&shouldCount) == 1 {
+						atomic.AddInt32(&count, 1)
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(ctx)
+
+		sqlRunner.Exec(t, tc.setupSQL)
+		atomic.StoreInt32(&shouldCount, 1)
+		sqlRunner.Exec(t, tc.schemaChangeSQL)
+		return int(atomic.LoadInt32(&count))
+	}
+
+	runOpAtTxn := func(t *testing.T, tc testCase, txnNum int) {
+		var (
+			count     int32 // accessed atomically
+			shouldRun int32 // accessed atomically
+
+			s     serverutils.TestTenantInterface
+			sqlDB *gosql.DB
+			kvDB  *kv.DB
+		)
+
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeDescTxn: func(_ jobspb.JobID) error {
+					if atomic.LoadInt32(&shouldRun) == 0 {
+						return nil
+					}
+					current := int(atomic.AddInt32(&count, 1))
+					if current == txnNum {
+						atomic.StoreInt32(&shouldRun, 0)
+						return tc.operation(sqlDB, kvDB)
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, kvDB = serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+		_, err := sqlDB.Exec(tc.setupSQL)
+		require.NoError(t, err)
+		atomic.StoreInt32(&shouldRun, 1)
+		_, err = sqlDB.Exec(tc.schemaChangeSQL)
+		require.NoError(t, err)
+		tc.verify(t, sqlDB, kvDB)
+	}
+
+	for _, tc := range []testCase{
+		{
+			name: "update during alter table with multiple column families",
+			setupSQL: `CREATE DATABASE t;
+CREATE TABLE t.test (pk INT PRIMARY KEY, a INT NOT NULL, b INT, FAMILY (pk, a), FAMILY (b));
+INSERT INTO t.test (pk, a, b) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+`,
+			schemaChangeSQL: `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
+			operation: func(sqlDB *gosql.DB, kvDB *kv.DB) error {
+				_, err := sqlDB.Exec("UPDATE t.test SET b = 22 WHERE pk = 1")
+				return err
+			},
+			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB) {
+				row := sqlDB.QueryRow("SELECT * from t.test WHERE pk = 1")
+				var pk, a, b int
+				err := row.Scan(&pk, &a, &b)
+				require.NoError(t, err)
+				require.Equal(t, b, 22)
+			},
+		},
+		{
+			name: "update during add index with multiple column families",
+			setupSQL: `CREATE DATABASE t;
+CREATE TABLE t.test (
+    pk INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c INT NOT NULL,
+    FAMILY (pk, a),
+    FAMILY (b),
+    FAMILY (c));
+INSERT INTO t.test (pk, a, b, c) VALUES (1, 1, 1, 1), (2, 2, 2, 2);
+`,
+			schemaChangeSQL: `CREATE INDEX tidx ON t.test (a) STORING (b, c)`,
+			operation: func(sqlDB *gosql.DB, kvDB *kv.DB) error {
+				_, err := sqlDB.Exec("UPDATE t.test SET b = 42 WHERE pk = 1")
+				return err
+			},
+			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB) {
+				row := sqlDB.QueryRow("SELECT c from t.test@tidx WHERE a = 1")
+				var c int
+				err := row.Scan(&c)
+				require.NoError(t, err)
+				require.Equal(t, c, 1)
+			},
+		},
+		{
+			name: "truncate",
+			setupSQL: `CREATE DATABASE t;
+CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
+`,
+			schemaChangeSQL: `CREATE INDEX ON t.test(v)`,
+			operation: func(sqlDB *gosql.DB, kvDB *kv.DB) error {
+				rowCount := 10
+				writeSomeRows := func() error {
+					for i := 0; i < rowCount; i++ {
+						_, err := sqlDB.Exec("INSERT INTO t.test VALUES ($1, $1)", i)
 						if err != nil {
 							return err
 						}
-						truncateAt = -1
-						// Write more rows so that there is something to truncate the next time.
-						return writeSomeRows()
 					}
+					return nil
 				}
-				return nil
+				if err := writeSomeRows(); err != nil {
+					return err
+				}
+				_, err := sqlDB.Exec("TRUNCATE t.test")
+				if err != nil {
+					return err
+				}
+				// Write more rows so that there is something to truncate the next time.
+				return writeSomeRows()
+			},
+			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB) {
+				rowCount := 10
+				tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+				defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+				if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+					t.Fatal(err)
+				}
+				testutils.SucceedsSoon(t, func() error {
+					return sqltestutils.CheckTableKeyCountExact(ctx, kvDB, 2*rowCount)
+				})
+				indexes := tableDesc.ActiveIndexes()
+				require.Equal(t, 2, len(indexes))
+				require.Equal(t, descpb.IndexID(4), indexes[0].GetID())
+				require.Equal(t, descpb.IndexID(5), indexes[1].GetID())
 			},
 		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const runAll = false
+			txnCount := getTxnCount(t, tc)
+			if runAll {
+				for i := 1; i <= txnCount; i++ {
+					t.Run(fmt.Sprintf("%d", i), func(t *testing.T) { runOpAtTxn(t, tc, i) })
+				}
+			} else {
+				rng, _ := randutil.NewPseudoRand()
+				i := rng.Intn(txnCount) + 1
+				t.Run(fmt.Sprintf("%d", i), func(t *testing.T) { runOpAtTxn(t, tc, i) })
+			}
+		})
 	}
-	s, sqlDB, kvDB = serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	_, err := sqlDB.Exec("CREATE DATABASE t; CREATE TABLE t.test (pk INT PRIMARY KEY, v INT)")
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec("CREATE INDEX ON t.test(v)")
-	require.NoError(t, err)
-
-	txnCount := int(atomic.LoadInt32(&count))
-	require.True(t, txnCount <= truncateAtLim, "schema change ran %d which is larger than the hardcoded limit %d", txnCount, truncateAtLim)
-
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		return sqltestutils.CheckTableKeyCountExact(ctx, kvDB, 2*rowCount)
-	})
-	indexes := tableDesc.ActiveIndexes()
-	require.Equal(t, 2, len(indexes))
-	require.Equal(t, descpb.IndexID(4), indexes[0].GetID())
-	require.Equal(t, descpb.IndexID(5), indexes[1].GetID())
 }
