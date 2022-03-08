@@ -29,9 +29,13 @@ const cx = classNames.bind(styles);
 interface HotRangesTableProps {
   hotRangesList: cockroach.server.serverpb.HotRangesResponseV2.IHotRange[];
   lastUpdate?: string;
+  nodeIdToLocalityMap: Map<number, string>;
 }
 
-const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
+const HotRangesTable = ({
+  hotRangesList,
+  nodeIdToLocalityMap,
+}: HotRangesTableProps) => {
   const [pagination, setPagination] = useState({
     pageSize: PAGE_SIZE,
     current: 1,
@@ -146,6 +150,16 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       ),
       cell: val => <>{val.index_name}</>,
       sort: val => val.index_name,
+    },
+    {
+      name: "locality",
+      title: (
+        <Tooltip placement="bottom" title="Locality">
+          Locality
+        </Tooltip>
+      ),
+      cell: val => <>{nodeIdToLocalityMap.get(val.node_id)}</>,
+      sort: val => nodeIdToLocalityMap.get(val.node_id),
     },
   ];
 

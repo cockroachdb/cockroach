@@ -66,3 +66,19 @@ export interface LocalityTree {
   };
   nodes: INodeStatus[];
 }
+
+// selectNodeLocalities returns a map of node ID to stringified version
+// of locality values (i.e. "region=us-east1, az=2").
+export const selectNodeLocalities = createSelector(
+  selectCommissionedNodeStatuses,
+  nodes => {
+    return new Map(
+      nodes.map(n => {
+        const locality = (n.desc?.locality?.tiers || [])
+          .map(t => `${t.key}=${t.value}`)
+          .join(", ");
+        return [n.desc.node_id, locality];
+      }),
+    );
+  },
+);
