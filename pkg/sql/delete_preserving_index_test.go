@@ -480,6 +480,22 @@ func compareVersionedValueWrappers(
 	return nil
 }
 
+type fakeReceiver struct {
+	err error
+}
+
+func (f *fakeReceiver) ProducerDone() {
+}
+
+func (f *fakeReceiver) Push(
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if meta.Err != nil {
+		f.err = meta.Err
+	}
+	return 0
+}
+
 // This test tests that the schema changer is able to merge entries from a
 // delete-preserving index into a regular index.
 func TestMergeProcessor(t *testing.T) {
@@ -517,7 +533,7 @@ func TestMergeProcessor(t *testing.T) {
 			// with 3000/3, 4000/4 entries, and a delete for the 2000/2 entry.
 			dstDataSQL: `INSERT INTO d.t (k, a, b) VALUES (1, 100, 1000), (2, 200, 2000)`,
 			srcDataSQL: `INSERT INTO d.t (k, a, b) VALUES (3, 300, 3000), (4, 400, 4000);
-   								 DELETE FROM d.t WHERE k = 2`,
+  								 DELETE FROM d.t WHERE k = 2`,
 			// Insert another row for the 2000/2 entry just so that there's a primary
 			// index row for the index to return when we read it.
 			dstDataSQL2: `INSERT INTO d.t (k, a, b) VALUES (2, 201, 2000)`,
@@ -540,14 +556,14 @@ func TestMergeProcessor(t *testing.T) {
 				CREATE TABLE d.t (k INT PRIMARY KEY, a INT, b INT,
 					UNIQUE INDEX idx (b),
 					UNIQUE INDEX idx_temp (b)
-  			);`,
+ 			);`,
 			srcIndex: "idx_temp",
 			dstIndex: "idx",
 			// Populate dstIndex with some 1000/1, 2000/2 entries. Populate srcIndex
 			// with 3000/3, 4000/4 entries, and a delete for a nonexistent key.
 			dstDataSQL: `INSERT INTO d.t (k, a, b) VALUES (1, 100, 1000), (2, 200, 2000)`,
 			srcDataSQL: `INSERT INTO d.t (k, a, b) VALUES (3, 300, 3000), (4, 400, 4000);
-   								 DELETE FROM d.t WHERE k = 5`,
+  								 DELETE FROM d.t WHERE k = 5`,
 			dstContentsBeforeMerge: [][]string{
 				{"1", "1000"},
 				{"2", "2000"},
@@ -564,7 +580,7 @@ func TestMergeProcessor(t *testing.T) {
 			name: "index with overriding values",
 			setupSQL: `
 				CREATE DATABASE d;
-   			CREATE TABLE d.t (k INT PRIMARY KEY, a INT, b INT,
+  			CREATE TABLE d.t (k INT PRIMARY KEY, a INT, b INT,
 					UNIQUE INDEX idx (b),
 					UNIQUE INDEX idx_temp (b)
 				);`,
@@ -597,19 +613,17 @@ func TestMergeProcessor(t *testing.T) {
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
-		evalCtx := tree.EvalContext{Settings: settings}
+		evalCtx := tree.EvalContext{Settings: settings, Codec: codec}
 		//mm := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, settings)
 		mm := mon.NewUnlimitedMonitor(ctx, "MemoryMonitor", mon.MemoryResource, nil, nil, math.MaxInt64, settings)
-		flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
-			Settings:          settings,
-			Codec:             codec,
-			BackfillerMonitor: mm,
-		},
-			EvalCtx: &evalCtx}
-
-		im, err := backfill.NewIndexBackfillMerger(ctx, &flowCtx, execinfrapb.IndexBackfillMergerSpec{}, nil)
-		if err != nil {
-			t.Fatal(err)
+		flowCtx := execinfra.FlowCtx{
+			Cfg: &execinfra.ServerConfig{
+				DB:                kvDB,
+				Settings:          settings,
+				Codec:             codec,
+				BackfillerMonitor: mm,
+			},
+			EvalCtx: &evalCtx,
 		}
 
 		// Here want to have different entries for the two indices, so we manipulate
@@ -622,7 +636,7 @@ func TestMergeProcessor(t *testing.T) {
 			}
 		}
 
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
 		require.NoError(t, err)
 		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, setUseDeletePreservingEncoding(true), descpb.DescriptorMutation_DELETE_ONLY)
 		require.NoError(t, err)
@@ -675,8 +689,22 @@ func TestMergeProcessor(t *testing.T) {
 		}))
 
 		sp := tableDesc.IndexSpan(codec, srcIndex.GetID())
-		_, err = im.Merge(context.Background(), codec, tableDesc, srcIndex.GetID(), dstIndex.GetID(), sp.Key, sp.EndKey)
+
+		output := fakeReceiver{}
+		im, err := backfill.NewIndexBackfillMerger(ctx, &flowCtx, execinfrapb.IndexBackfillMergerSpec{
+			Table:            tableDesc.TableDescriptor,
+			TemporaryIndexes: []descpb.IndexID{srcIndex.GetID()},
+			AddedIndexes:     []descpb.IndexID{dstIndex.GetID()},
+			Spans:            []roachpb.Span{sp},
+			SpanIdx:          []int32{0},
+			MergeTimestamp:   kvDB.Clock().Now(),
+		}, &output)
 		if err != nil {
+			t.Fatal(err)
+		}
+
+		im.Run(ctx)
+		if output.err != nil {
 			t.Fatal(err)
 		}
 

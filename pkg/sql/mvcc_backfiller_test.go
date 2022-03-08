@@ -111,6 +111,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
 				PushesProgressEveryChunk: true,
 				RunBeforeMergeChunk:      checkStartingKey,
+				SerializeMerge:           make(chan struct{}, 1),
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.

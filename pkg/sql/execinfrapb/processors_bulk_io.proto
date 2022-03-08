@@ -321,5 +321,7 @@ message IndexBackfillMergerSpec {
   repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
   repeated int32 span_idx = 5;
 
-  // NEXT ID: 8.
+  optional util.hlc.Timestamp mergeTimestamp = 8 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 9.
 }

@@ -652,7 +652,12 @@ message SchemaChangeDetails {
   // a time that has been identified via a scan as safe for writing.
   util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 11.
+  // MergeTimestamp is the timestamp after the new index has been backfilled and
+  // merging can start. This provides an upper bound for the timestamp of keys
+  // that must be merged from the temporary index to the new index.
+  util.hlc.Timestamp merge_timestamp = 11 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 12.
 }
 
 message SchemaChangeProgress {
