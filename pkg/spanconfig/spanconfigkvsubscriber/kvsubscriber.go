@@ -90,7 +90,7 @@ type KVSubscriber struct {
 		// populated while the exposed spanconfig.StoreReader appears static.
 		// Once sufficiently caught up, the fresh spanconfig.Store is swapped in
 		// and the old discarded. See type-level comment for more details.
-		internal *spanconfigstore.Store
+		internal spanconfig.Store
 		handlers []handler
 	}
 }
@@ -218,6 +218,13 @@ func (s *KVSubscriber) GetProtectionTimestamps(
 	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
 		func(_ roachpb.Span, config roachpb.SpanConfig) error {
 			for _, protection := range config.GCPolicy.ProtectionPolicies {
+				// If the SpanConfig that applies to this span indicates that the span
+				// is going to be excluded from backup, and the protection policy was
+				// written by a backup, then ignore it. This prevents the
+				// ProtectionPolicy from holding up GC over the span.
+				if config.ExcludeDataFromBackup && protection.IgnoreIfExcludedFromBackup {
+					continue
+				}
 				protectionTimestamps = append(protectionTimestamps, protection.ProtectedTimestamp)
 			}
 			return nil
