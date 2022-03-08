@@ -17,11 +17,9 @@ package server
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -188,75 +186,53 @@ func (t *tenantStatusServer) ListLocalSessions(
 }
 
 func (t *tenantStatusServer) CancelQuery(
-	ctx context.Context, request *serverpb.CancelQueryRequest,
+	ctx context.Context, req *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	// Check permissions early to avoid fan-out to all nodes.
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
-	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(req.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(req.QueryID)); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
-	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
-	}
 
-	response := serverpb.CancelQueryResponse{}
-	distinctErrorMessages := map[string]struct{}{}
-
-	if err := t.iteratePods(
-		ctx,
-		fmt.Sprintf("cancel query ID %s", request.QueryID),
-		t.dialCallback,
-		func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
-			return client.(serverpb.StatusClient).CancelLocalQuery(ctx, request)
-		},
-		func(_ base.SQLInstanceID, nodeResp interface{}) {
-			nodeCancelQueryResponse := nodeResp.(*serverpb.CancelQueryResponse)
-			if nodeCancelQueryResponse.Canceled {
-				response.Canceled = true
-			}
-			distinctErrorMessages[nodeCancelQueryResponse.Error] = struct{}{}
-		},
-		func(_ base.SQLInstanceID, err error) {
-			distinctErrorMessages[err.Error()] = struct{}{}
-		},
-	); err != nil {
-		return nil, serverError(ctx, err)
-	}
-
-	if !response.Canceled {
-		var errorMessages []string
-		for errorMessage := range distinctErrorMessages {
-			errorMessages = append(errorMessages, errorMessage)
-		}
-		response.Error = strings.Join(errorMessages, ", ")
-	}
-
-	return &response, nil
-}
-
-func (t *tenantStatusServer) CancelLocalQuery(
-	ctx context.Context, request *serverpb.CancelQueryRequest,
-) (*serverpb.CancelQueryResponse, error) {
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
-	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
-		return nil, err
-	}
-	var (
-		output = &serverpb.CancelQueryResponse{}
-		err    error
-	)
-	output.Canceled, err = t.sessionRegistry.CancelQuery(request.QueryID)
+	queryID, err := sql.StringToClusterWideID(req.QueryID)
 	if err != nil {
-		output.Error = err.Error()
+		return &serverpb.CancelQueryResponse{
+			Canceled: false,
+			Error:    errors.Wrapf(err, "query ID %s malformed", queryID).Error(),
+		}, nil
 	}
-	return output, nil
+	instanceID := base.SQLInstanceID(queryID.GetNodeID())
+
+	// This request needs to be forwarded to another instance.
+	if instanceID != t.sqlServer.SQLInstanceID() {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
+				return &serverpb.CancelQueryResponse{
+					Canceled: false,
+					Error:    fmt.Sprintf("query ID %s not found", queryID),
+				}, nil
+			}
+			return nil, serverError(ctx, err)
+		}
+		statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.CancelQuery(ctx, req)
+	}
+
+	resp := &serverpb.CancelQueryResponse{}
+	resp.Canceled, err = t.sessionRegistry.CancelQuery(req.QueryID)
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	return resp, nil
+
 }
 
 // CancelQueryByKey responds to a pgwire query cancellation request, and cancels
@@ -318,68 +294,41 @@ func (t *tenantStatusServer) CancelQueryByKey(
 }
 
 func (t *tenantStatusServer) CancelSession(
-	ctx context.Context, request *serverpb.CancelSessionRequest,
+	ctx context.Context, req *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	// Check permissions early to avoid fan-out to all nodes.
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
-	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(req.Username)
+	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(req.SessionID)); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
-	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
-	}
+	sessionID := sql.BytesToClusterWideID(req.SessionID)
+	instanceID := base.SQLInstanceID(sessionID.GetNodeID())
 
-	response := serverpb.CancelSessionResponse{}
-	distinctErrorMessages := map[string]struct{}{}
-
-	if err := t.iteratePods(
-		ctx,
-		fmt.Sprintf("cancel session ID %s", hex.EncodeToString(request.SessionID)),
-		t.dialCallback,
-		func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
-			return client.(serverpb.StatusClient).CancelLocalSession(ctx, request)
-		},
-		func(_ base.SQLInstanceID, nodeResp interface{}) {
-			nodeCancelSessionResp := nodeResp.(*serverpb.CancelSessionResponse)
-			if nodeCancelSessionResp.Canceled {
-				response.Canceled = true
+	// This request needs to be forwarded to another instance.
+	if instanceID != t.sqlServer.SQLInstanceID() {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
+				return &serverpb.CancelSessionResponse{
+					Canceled: false,
+					Error:    fmt.Sprintf("session ID %s not found", sessionID),
+				}, nil
 			}
-			distinctErrorMessages[nodeCancelSessionResp.Error] = struct{}{}
-		},
-		func(_ base.SQLInstanceID, err error) {
-			distinctErrorMessages[err.Error()] = struct{}{}
-		},
-	); err != nil {
-		return nil, serverError(ctx, err)
-	}
-
-	if !response.Canceled {
-		var errorMessages []string
-		for errorMessage := range distinctErrorMessages {
-			errorMessages = append(errorMessages, errorMessage)
+			return nil, serverError(ctx, err)
 		}
-		response.Error = strings.Join(errorMessages, ", ")
+		statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.CancelSession(ctx, req)
 	}
 
-	return &response, nil
-}
-
-func (t *tenantStatusServer) CancelLocalSession(
-	ctx context.Context, request *serverpb.CancelSessionRequest,
-) (*serverpb.CancelSessionResponse, error) {
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
-	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
-		return nil, err
-	}
-	return t.sessionRegistry.CancelSession(request.SessionID)
+	return t.sessionRegistry.CancelSession(req.SessionID)
 }
 
 func (t *tenantStatusServer) ListContentionEvents(
