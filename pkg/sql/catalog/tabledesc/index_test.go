@@ -618,7 +618,7 @@ func TestSecKeyPrimaryIndexWithStoredColumnsVersion(t *testing.T) {
 	}
 
 	b := tabledesc.NewBuilder(&oldDesc)
-	b.RunPostDeserializationChanges()
+	require.NoError(t, b.RunPostDeserializationChanges())
 	newDesc := b.BuildExistingMutable().(*tabledesc.Mutable)
 
 	require.Equal(t, descpb.PrimaryIndexWithStoredColumnsVersion, newDesc.PrimaryIndex.Version)

@@ -307,7 +307,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	}
 	for i, test := range tests {
 		b := NewBuilder(&test.desc)
-		b.RunPostDeserializationChanges()
+		require.NoError(t, b.RunPostDeserializationChanges())
 		desc := b.BuildImmutableTable()
 		changes, err := GetPostDeserializationChanges(desc)
 		require.NoError(t, err)
@@ -571,7 +571,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("#%d", i+1), func(t *testing.T) {
 			b := NewBuilder(&test.desc)
-			b.RunPostDeserializationChanges()
+			require.NoError(t, b.RunPostDeserializationChanges())
 			desc := b.BuildImmutableTable()
 			changes, err := GetPostDeserializationChanges(desc)
 			require.NoError(t, err)
@@ -595,7 +595,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 
 			// Run post-deserialization changes again, descriptor should not change.
 			b2 := NewBuilder(desc.TableDesc())
-			b2.RunPostDeserializationChanges()
+			require.NoError(t, b2.RunPostDeserializationChanges())
 			desc2 := b2.BuildImmutableTable()
 			changes2, err := GetPostDeserializationChanges(desc2)
 			require.NoError(t, err)
@@ -874,7 +874,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	// expression.
 	{
 		b := NewBuilder(desc)
-		b.RunPostDeserializationChanges()
+		require.NoError(t, b.RunPostDeserializationChanges())
 		fixed := b.BuildImmutableTable()
 		require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, fixed))
 		changes, err := GetPostDeserializationChanges(fixed)

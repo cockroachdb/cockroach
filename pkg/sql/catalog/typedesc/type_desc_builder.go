@@ -64,7 +64,7 @@ func (tdb *typeDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() {
+func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() error {
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	fixedPrivileges := catprivilege.MaybeFixPrivileges(
 		&tdb.maybeModified.Privileges,
@@ -77,6 +77,7 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() {
 	if fixedPrivileges || addedGrantOptions {
 		tdb.changes.Add(catalog.UpgradedPrivileges)
 	}
+	return nil
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
