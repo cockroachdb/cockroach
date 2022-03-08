@@ -10,9 +10,12 @@ SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
+----
+
+exec-sql expect-pausepoint
 DROP DATABASE d CASCADE;
 ----
-paused before it completed with reason: pause point "schemachanger.before.exec" hit
+pause point "schemachanger.before.exec" hit
 
 # At this point, we have a descriptor entry for `d` in a DROP state.
 query-sql
@@ -118,16 +121,19 @@ SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 ----
 
-exec-sql
+exec-sql expect-pausepoint
 DROP SCHEMA d2.s CASCADE;
 ----
-paused before it completed with reason: pause point "schemachanger.before.exec" hit
+pause point "schemachanger.before.exec" hit
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'typeschemachanger.before.exec';
+----
+
+exec-sql expect-pausepoint
 DROP TYPE d2.typ;
 ----
-paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
+pause point "typeschemachanger.before.exec" hit
 
 query-sql
 WITH tbls AS (
