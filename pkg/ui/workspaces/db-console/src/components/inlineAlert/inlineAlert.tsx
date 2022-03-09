@@ -25,6 +25,7 @@ export interface InlineAlertProps {
   message?: React.ReactNode;
   intent?: InlineAlertIntent;
   className?: string;
+  fullWidth?: boolean;
 }
 
 export const InlineAlert: React.FC<InlineAlertProps> = ({
@@ -32,6 +33,7 @@ export const InlineAlert: React.FC<InlineAlertProps> = ({
   message,
   intent = "info",
   className,
+  fullWidth,
 }) => {
   const Icon = useMemo(() => {
     switch (intent) {
@@ -46,7 +48,14 @@ export const InlineAlert: React.FC<InlineAlertProps> = ({
   }, [intent]);
 
   return (
-    <div className={cn("root", `intent-${intent}`, className)}>
+    <div
+      className={cn(
+        "root",
+        `intent-${intent}`,
+        { "full-width": fullWidth },
+        className,
+      )}
+    >
       <div className={cn("icon-container")}>
         <img src={Icon} className={cn("icon")} />
       </div>
