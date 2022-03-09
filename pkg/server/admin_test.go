@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -2601,4 +2602,156 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stubTime := stubUnusedIndexTime{}
+	stubDropUnusedDuration := time.Hour
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			UnusedIndexRecommendKnobs: &idxusage.UnusedIndexRecommendationTestingKnobs{
+				GetCreatedAt:   stubTime.getCreatedAt,
+				GetLastRead:    stubTime.getLastRead,
+				GetCurrentTime: stubTime.getCurrent,
+			},
+		},
+	})
+	idxusage.DropUnusedIndexDuration.Override(context.Background(), &s.ClusterSettings().SV, stubDropUnusedDuration)
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE DATABASE test")
+	db.Exec(t, "USE test")
+	// Create a table, the statistics on its primary index will be fetched.
+	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
+
+	// Test when last read does not exist and there is no creation time. Expect
+	// an index recommendation (index never used).
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	var dbDetails serverpb.DatabaseDetailsResponse
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	var tableDetails serverpb.TableDetailsResponse
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read does not exist and there is a creation time, and the
+	// unused index duration has been exceeded. Expect an index recommendation.
+	currentTime := timeutil.Now()
+	createdTime := currentTime.Add(-stubDropUnusedDuration)
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(&createdTime)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read does not exist and there is a creation time, and the
+	// unused index duration has not been exceeded. Expect no index
+	// recommendation.
+	currentTime = timeutil.Now()
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(&currentTime)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, tableDetails.HasIndexRecommendations)
+
+	// Test when last read exists and the unused index duration has been
+	// exceeded. Expect an index recommendation.
+	currentTime = timeutil.Now()
+	lastRead := currentTime.Add(-stubDropUnusedDuration)
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(lastRead)
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read exists and the unused index duration has not been
+	// exceeded. Expect no index recommendation.
+	currentTime = timeutil.Now()
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(currentTime)
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, tableDetails.HasIndexRecommendations)
 }
