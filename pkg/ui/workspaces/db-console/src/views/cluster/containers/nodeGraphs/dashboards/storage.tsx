@@ -218,6 +218,24 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Ingestions"
+      sources={storeSources}
+      tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.ingested-bytes"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Write Stalls"
       sources={storeSources}
       tooltip={`The number of intentional write stalls per second ${tooltipSelection}. Write stalls
