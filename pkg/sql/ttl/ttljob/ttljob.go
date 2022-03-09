@@ -109,7 +109,8 @@ type RowLevelTTLAggMetrics struct {
 	TotalRows          *aggmetric.AggGauge
 	TotalExpiredRows   *aggmetric.AggGauge
 
-	mu struct {
+	defaultRowLevelMetrics rowLevelTTLMetrics
+	mu                     struct {
 		syncutil.Mutex
 		m map[string]rowLevelTTLMetrics
 	}
@@ -129,9 +130,25 @@ type rowLevelTTLMetrics struct {
 // MetricStruct implements the metric.Struct interface.
 func (m *RowLevelTTLAggMetrics) MetricStruct() {}
 
+func (m *RowLevelTTLAggMetrics) metricsWithChildren(children ...string) rowLevelTTLMetrics {
+	return rowLevelTTLMetrics{
+		RangeTotalDuration: m.RangeTotalDuration.AddChild(children...),
+		SelectDuration:     m.SelectDuration.AddChild(children...),
+		DeleteDuration:     m.DeleteDuration.AddChild(children...),
+		RowSelections:      m.RowSelections.AddChild(children...),
+		RowDeletions:       m.RowDeletions.AddChild(children...),
+		NumActiveRanges:    m.NumActiveRanges.AddChild(children...),
+		TotalRows:          m.TotalRows.AddChild(children...),
+		TotalExpiredRows:   m.TotalExpiredRows.AddChild(children...),
+	}
+}
+
 var invalidPrometheusRe = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
-func (m *RowLevelTTLAggMetrics) loadMetrics(relation string) rowLevelTTLMetrics {
+func (m *RowLevelTTLAggMetrics) loadMetrics(labelMetrics bool, relation string) rowLevelTTLMetrics {
+	if !labelMetrics {
+		return m.defaultRowLevelMetrics
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -139,16 +156,7 @@ func (m *RowLevelTTLAggMetrics) loadMetrics(relation string) rowLevelTTLMetrics 
 	if ret, ok := m.mu.m[relation]; ok {
 		return ret
 	}
-	ret := rowLevelTTLMetrics{
-		RangeTotalDuration: m.RangeTotalDuration.AddChild(relation),
-		SelectDuration:     m.SelectDuration.AddChild(relation),
-		DeleteDuration:     m.DeleteDuration.AddChild(relation),
-		RowSelections:      m.RowSelections.AddChild(relation),
-		RowDeletions:       m.RowDeletions.AddChild(relation),
-		NumActiveRanges:    m.NumActiveRanges.AddChild(relation),
-		TotalRows:          m.TotalRows.AddChild(relation),
-		TotalExpiredRows:   m.TotalExpiredRows.AddChild(relation),
-	}
+	ret := m.metricsWithChildren(relation)
 	m.mu.m[relation] = ret
 	return ret
 }
@@ -236,6 +244,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 			},
 		),
 	}
+	ret.defaultRowLevelMetrics = ret.metricsWithChildren("default")
 	ret.mu.m = make(map[string]rowLevelTTLMetrics)
 	return ret
 }
@@ -356,8 +365,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
-	metrics := p.ExecCfg().JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(name)
-
+	var metrics = p.ExecCfg().JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
+		ttlSettings.LabelMetrics,
+		name,
+	)
 	var rangeDesc roachpb.RangeDescriptor
 	var alloc tree.DatumAlloc
 	type rangeToProcess struct {
