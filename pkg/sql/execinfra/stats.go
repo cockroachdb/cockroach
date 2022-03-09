@@ -56,6 +56,8 @@ func GetCumulativeContentionTime(ctx context.Context) time.Duration {
 // ScanStats contains statistics on the internal MVCC operators used to satisfy
 // a scan. See storage/engine.go for a more thorough discussion of the meaning
 // of each stat.
+// TODO(sql-observability): include other fields that are in roachpb.ScanStats,
+// here and in execinfrapb.KVStats.
 type ScanStats struct {
 	// NumInterfaceSteps is the number of times the MVCC step function was called
 	// to satisfy a scan.

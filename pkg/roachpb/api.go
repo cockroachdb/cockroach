@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 //go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient
@@ -1703,10 +1705,22 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 	}
 }
 
+func humanizePointCount(n uint64) redact.SafeString {
+	return redact.SafeString(humanize.SI(float64(n), ""))
+}
+
 // SafeFormat implements redact.SafeFormatter.
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal)",
-		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks)
+	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
+		"block-bytes: (total %s, cached %s); "+
+		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s)",
+		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
+		humanizeutil.IBytes(int64(s.BlockBytes)),
+		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
+		humanizePointCount(s.PointCount),
+		humanizeutil.IBytes(int64(s.KeyBytes)),
+		humanizeutil.IBytes(int64(s.ValueBytes)),
+		humanizePointCount(s.PointsCoveredByRangeTombstones))
 }
 
 // String implements fmt.Stringer.
