@@ -188,10 +188,11 @@ var _ spanEncoder = &spanEncoderBoolAsc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Bool()
@@ -201,11 +202,11 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -217,11 +218,11 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -233,7 +234,7 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -242,10 +243,11 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
@@ -258,11 +260,12 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
@@ -275,7 +278,7 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -294,10 +297,11 @@ var _ spanEncoder = &spanEncoderBytesAsc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderBytesAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Bytes()
@@ -307,25 +311,25 @@ func (op *spanEncoderBytesAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -334,24 +338,26 @@ func (op *spanEncoderBytesAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -370,10 +376,11 @@ var _ spanEncoder = &spanEncoderDecimalAsc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Decimal()
@@ -383,25 +390,25 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -410,26 +417,28 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -448,10 +457,11 @@ var _ spanEncoder = &spanEncoderInt16Asc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderInt16Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Int16()
@@ -461,25 +471,25 @@ func (op *spanEncoderInt16Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -488,26 +498,28 @@ func (op *spanEncoderInt16Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -526,10 +538,11 @@ var _ spanEncoder = &spanEncoderInt32Asc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderInt32Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Int32()
@@ -539,25 +552,25 @@ func (op *spanEncoderInt32Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -566,26 +579,28 @@ func (op *spanEncoderInt32Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -604,10 +619,11 @@ var _ spanEncoder = &spanEncoderInt64Asc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderInt64Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Int64()
@@ -617,25 +633,25 @@ func (op *spanEncoderInt64Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -644,26 +660,28 @@ func (op *spanEncoderInt64Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -682,10 +700,11 @@ var _ spanEncoder = &spanEncoderFloat64Asc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderFloat64Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Float64()
@@ -695,25 +714,25 @@ func (op *spanEncoderFloat64Asc) next(batch coldata.Batch, startIdx, endIdx int)
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -722,26 +741,28 @@ func (op *spanEncoderFloat64Asc) next(batch coldata.Batch, startIdx, endIdx int)
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -760,10 +781,11 @@ var _ spanEncoder = &spanEncoderTimestampAsc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderTimestampAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Timestamp()
@@ -773,25 +795,25 @@ func (op *spanEncoderTimestampAsc) next(batch coldata.Batch, startIdx, endIdx in
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -800,26 +822,28 @@ func (op *spanEncoderTimestampAsc) next(batch coldata.Batch, startIdx, endIdx in
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeAscending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -838,10 +862,11 @@ var _ spanEncoder = &spanEncoderIntervalAsc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Interval()
@@ -851,11 +876,11 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -866,11 +891,11 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -881,7 +906,7 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -890,10 +915,11 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					//gcassert:bce
@@ -905,11 +931,12 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
@@ -921,7 +948,7 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -940,10 +967,11 @@ var _ spanEncoder = &spanEncoderDatumAsc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Datum()
@@ -953,11 +981,11 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -968,11 +996,11 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -983,7 +1011,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -992,10 +1020,11 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -1006,11 +1035,12 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -1021,7 +1051,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1040,10 +1070,11 @@ var _ spanEncoder = &spanEncoderBoolDesc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Bool()
@@ -1053,11 +1084,11 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -1069,11 +1100,11 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -1085,7 +1116,7 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1094,10 +1125,11 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
@@ -1110,11 +1142,12 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
@@ -1127,7 +1160,7 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 						x = 0
 					}
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, x)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1146,10 +1179,11 @@ var _ spanEncoder = &spanEncoderBytesDesc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderBytesDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Bytes()
@@ -1159,25 +1193,25 @@ func (op *spanEncoderBytesDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1186,24 +1220,26 @@ func (op *spanEncoderBytesDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeBytesDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1222,10 +1258,11 @@ var _ spanEncoder = &spanEncoderDecimalDesc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Decimal()
@@ -1235,25 +1272,25 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1262,26 +1299,28 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1300,10 +1339,11 @@ var _ spanEncoder = &spanEncoderInt16Desc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderInt16Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Int16()
@@ -1313,25 +1353,25 @@ func (op *spanEncoderInt16Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1340,26 +1380,28 @@ func (op *spanEncoderInt16Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1378,10 +1420,11 @@ var _ spanEncoder = &spanEncoderInt32Desc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderInt32Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Int32()
@@ -1391,25 +1434,25 @@ func (op *spanEncoderInt32Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1418,26 +1461,28 @@ func (op *spanEncoderInt32Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, int64(val))
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1456,10 +1501,11 @@ var _ spanEncoder = &spanEncoderInt64Desc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderInt64Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Int64()
@@ -1469,25 +1515,25 @@ func (op *spanEncoderInt64Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1496,26 +1542,28 @@ func (op *spanEncoderInt64Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeVarintDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1534,10 +1582,11 @@ var _ spanEncoder = &spanEncoderFloat64Desc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderFloat64Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Float64()
@@ -1547,25 +1596,25 @@ func (op *spanEncoderFloat64Desc) next(batch coldata.Batch, startIdx, endIdx int
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1574,26 +1623,28 @@ func (op *spanEncoderFloat64Desc) next(batch coldata.Batch, startIdx, endIdx int
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeFloatDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1612,10 +1663,11 @@ var _ spanEncoder = &spanEncoderTimestampDesc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderTimestampDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Timestamp()
@@ -1625,25 +1677,25 @@ func (op *spanEncoderTimestampDesc) next(batch coldata.Batch, startIdx, endIdx i
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1652,26 +1704,28 @@ func (op *spanEncoderTimestampDesc) next(batch coldata.Batch, startIdx, endIdx i
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
 					op.scratch = encoding.EncodeTimeDescending(op.scratch, val)
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1690,10 +1744,11 @@ var _ spanEncoder = &spanEncoderIntervalDesc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Interval()
@@ -1703,11 +1758,11 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -1718,11 +1773,11 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -1733,7 +1788,7 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1742,10 +1797,11 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					//gcassert:bce
@@ -1757,11 +1813,12 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
@@ -1773,7 +1830,7 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1792,10 +1849,11 @@ var _ spanEncoder = &spanEncoderDatumDesc{}
 // next implements the spanEncoder interface.
 func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.Datum()
@@ -1805,11 +1863,11 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -1820,11 +1878,11 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -1835,7 +1893,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}
@@ -1844,10 +1902,11 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					if nulls.NullAt(i) {
-						op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 						continue
 					}
 					val := col.Get(i)
@@ -1858,11 +1917,12 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
@@ -1873,7 +1933,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 						colexecerror.ExpectedError(err)
 					}
 
-					op.outputBytes.AppendVal(op.scratch)
+					op.outputBytes.Set(outIdx, op.scratch)
 				}
 			}
 		}

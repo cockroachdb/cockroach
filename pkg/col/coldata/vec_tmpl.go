@@ -156,17 +156,15 @@ func (m *memColumn) Append(args SliceArgs) {
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				// {{if .IsBytesLike }}
-				// We need to truncate toCol before appending to it, so in case of
-				// bytes-like columns, we append an empty slice.
-				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
+				toCol.appendSliceWithSel(fromCol, args.DestIdx, sel)
 				// {{else}}
 				// {{/* Here Window means slicing which allows us to use APPENDVAL below. */}}
 				toCol = toCol.Window(0, args.DestIdx)
-				// {{end}}
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					execgen.APPENDVAL(toCol, val)
 				}
+				// {{end}}
 			}
 			m.nulls.set(args)
 			m.col = toCol
@@ -211,6 +209,9 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
+							// {{if .IsBytesLike}}
+							toCol.copy(fromCol, i+args.DestIdx, selIdx)
+							// {{else}}
 							v := fromCol.Get(selIdx)
 							// {{if .Sliceable}}
 							// {{/*
@@ -227,6 +228,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 							// */}}
 							toCol.Set(i+args.DestIdx, v)
 							// {{end}}
+							// {{end}}
 						}
 					}
 					return
@@ -235,6 +237,9 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
+					// {{if .IsBytesLike}}
+					toCol.copy(fromCol, i+args.DestIdx, selIdx)
+					// {{else}}
 					v := fromCol.Get(selIdx)
 					// {{if .Sliceable}}
 					// {{/*
@@ -250,6 +255,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 					//     set the element at the correct index.
 					// */}}
 					toCol.Set(i+args.DestIdx, v)
+					// {{end}}
 					// {{end}}
 				}
 				return
@@ -278,8 +284,12 @@ func _COPY_WITH_REORDERED_SOURCE(_SRC_HAS_NULLS bool) { // */}}
 		} else
 		// {{end}}
 		{
+			// {{if .IsBytesLike}}
+			toCol.copy(fromCol, destIdx, srcIdx)
+			// {{else}}
 			v := fromCol.Get(srcIdx)
 			toCol.Set(destIdx, v)
+			// {{end}}
 		}
 	}
 	// {{end}}

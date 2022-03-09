@@ -212,8 +212,8 @@ func (c *caseOp) Next() coldata.Batch {
 
 	if c.scratch.output == nil || c.scratch.output.Capacity() < origLen {
 		c.scratch.output = c.allocator.NewMemColumn(c.typ, origLen)
-	} else if c.scratch.output.IsBytesLike() {
-		coldata.Reset(c.scratch.output)
+	} else {
+		coldata.ResetIfBytesLike(c.scratch.output)
 	}
 	orderCapacity := origLen
 	if origHasSel {

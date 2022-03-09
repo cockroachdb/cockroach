@@ -142,9 +142,6 @@ func (p _OP_NAME) Next() coldata.Batch {
 		} else {
 			_SET_PROJECTION(false)
 		}
-		// Although we didn't change the length of the batch, it is necessary to set
-		// the length anyway (this helps maintaining the invariant of flat bytes).
-		batch.SetLength(n)
 	})
 	return batch
 }
