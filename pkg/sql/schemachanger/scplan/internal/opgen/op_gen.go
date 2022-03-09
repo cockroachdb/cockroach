@@ -42,6 +42,7 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
 		t *scpb.Target
 	}
 	var edgesToAdd []toAdd
+	md := makeTargetsWithElementMap(cs)
 	for _, t := range r.targets {
 		edgesToAdd = edgesToAdd[:0]
 		if err := t.iterateFunc(g.Database(), func(tt *scpb.Target) error {
@@ -64,7 +65,7 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
 		for _, e := range edgesToAdd {
 			var ops []scop.Op
 			if e.ops != nil {
-				ops = e.ops(e.n.Element(), cs.TargetState)
+				ops = e.ops(e.t.Element(), md)
 			}
 			if err := g.AddOpEdges(
 				e.t, e.from, e.to, e.revertible, e.minPhase, ops...,
