@@ -4670,6 +4670,7 @@ Response object returned by TableIndexStatsResponse.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | statistics | [TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.server.serverpb.TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics) | repeated |  | [reserved](#support-status) |
+| index_recommendations | [cockroach.sql.IndexRecommendation](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.sql.IndexRecommendation) | repeated |  | [reserved](#support-status) |
 | last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | Timestamp of the last index usage stats reset. | [reserved](#support-status) |
 
 
@@ -5095,6 +5096,7 @@ zone configuration, and size statistics for a database.
 | range_count | [int64](#cockroach.server.serverpb.DatabaseDetailsResponse-int64) |  | The number of ranges, as determined from a query of range meta keys, across all tables. | [reserved](#support-status) |
 | approximate_disk_bytes | [uint64](#cockroach.server.serverpb.DatabaseDetailsResponse-uint64) |  | An approximation of the disk space (in bytes) used for all replicas of all tables across the cluster. | [reserved](#support-status) |
 | node_ids | [int32](#cockroach.server.serverpb.DatabaseDetailsResponse-int32) | repeated | node_ids is the ordered list of node ids on which data is stored. | [reserved](#support-status) |
+| num_index_recommendations | [int32](#cockroach.server.serverpb.DatabaseDetailsResponse-int32) |  |  | [reserved](#support-status) |
 
 
 
@@ -5164,6 +5166,7 @@ a table.
 | descriptor_id | [int64](#cockroach.server.serverpb.TableDetailsResponse-int64) |  | descriptor_id is an identifier used to uniquely identify this table. It can be used to find events pertaining to this table by filtering on the 'target_id' field of events. | [reserved](#support-status) |
 | configure_zone_statement | [string](#cockroach.server.serverpb.TableDetailsResponse-string) |  | configure_zone_statement is the output of "SHOW ZONE CONFIGURATION FOR TABLE" for this table. It is a SQL statement that would re-configure the table's current zone if executed. | [reserved](#support-status) |
 | stats_last_created_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableDetailsResponse-google.protobuf.Timestamp) |  | stats_last_created_at is the time at which statistics were last created. | [reserved](#support-status) |
+| has_index_recommendations | [bool](#cockroach.server.serverpb.TableDetailsResponse-bool) |  | has_index_recommendations notifies if the there are index recommendations on this table. | [reserved](#support-status) |
 
 
 

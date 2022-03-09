@@ -18,6 +18,7 @@ import "jobs/jobspb/jobs.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "roachpb/index_usage_stats.proto";
+import "roachpb/index_recommendations.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
@@ -1661,8 +1662,9 @@ message TableIndexStatsResponse {
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
+  repeated cockroach.sql.IndexRecommendation index_recommendations = 2;
   // Timestamp of the last index usage stats reset.
-  google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp last_reset = 3 [(gogoproto.stdtime) = true];
 }
 
 // Request object for issuing a index usage stats reset request.
