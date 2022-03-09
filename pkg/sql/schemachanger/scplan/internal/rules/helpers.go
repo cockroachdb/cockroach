@@ -93,9 +93,8 @@ func (d depRuleSpec) register() {
 	}
 	c := rel.Clauses{
 		from.Type(d.from.types[0], d.from.types[1:]...),
-		to.Type(d.to.types[0], d.to.types[1:]...),
-
 		fromTarget.AttrEq(screl.TargetStatus, d.targetStatus),
+		to.Type(d.to.types[0], d.to.types[1:]...),
 		toTarget.AttrEq(screl.TargetStatus, d.targetStatus),
 
 		fromNode.AttrEq(screl.CurrentStatus, d.from.status),
