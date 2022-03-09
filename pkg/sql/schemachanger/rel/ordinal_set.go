@@ -16,22 +16,6 @@ import "math/bits"
 // It enables use of the ordinalSet.
 type ordinal uint64
 
-// attributesToOrdinals constructs a slice of ordinals and the corresponding
-// ordinalSet from a slice of Attr.
-func (sc *Schema) attributesToOrdinals(attrs []Attr) ([]ordinal, ordinalSet, error) {
-	var set ordinalSet
-	ret := make([]ordinal, len(attrs))
-	for i, a := range attrs {
-		ord, err := sc.getOrdinal(a)
-		if err != nil {
-			return nil, 0, err
-		}
-		set = set.add(ord)
-		ret[i] = ord
-	}
-	return ret, set, nil
-}
-
 // ordinalSet represents A bitmask over ordinals.
 // Note that it cannot contain attributes with ordinals greater than 64.
 type ordinalSet uint64
