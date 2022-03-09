@@ -3823,8 +3823,8 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "protect_on_pause", func(t *testing.T, shouldPause bool) {
-		// t.Run(`enterprise`, enterpriseTest(testFn(shouldPause), feedTestNoTenants))
-		// t.Run(`cloudstorage`, cloudStorageTest(testFn(shouldPause), feedTestNoTenants))
+		t.Run(`enterprise`, enterpriseTest(testFn(shouldPause), feedTestNoTenants))
+		t.Run(`cloudstorage`, cloudStorageTest(testFn(shouldPause), feedTestNoTenants))
 		t.Run(`kafka`, kafkaTest(testFn(shouldPause), feedTestNoTenants))
 		t.Run(`webhook`, webhookTest(testFn(shouldPause), feedTestNoTenants))
 	})

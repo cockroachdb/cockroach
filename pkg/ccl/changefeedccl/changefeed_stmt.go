@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -408,9 +407,11 @@ func changefeedPlanHook(
 			var ptr *ptpb.Record
 			var protectedTimestampID uuid.UUID
 			codec := p.ExecCfg().Codec
-			if shouldProtectTimestamps(codec) {
+			activeTimestampProtection := changefeedbase.ActiveProtectedTimestamps.Get(&p.ExecCfg().Settings.SV)
+			shouldProtectTimestamp := (activeTimestampProtection || initialScanFromOptions(details.Opts)) && shouldProtectTimestamps(codec)
+			if shouldProtectTimestamp {
 				ptr = createProtectedTimestampRecord(ctx, codec, jobID, details.Targets, statementTime, progress.GetChangefeed())
-				protectedTimestampID = ptr.ID.GetUUID()
+				protectedTimestampID = ptr.ID
 			}
 
 			jr := jobs.Record{
@@ -857,7 +858,20 @@ func (b *changefeedResumer) OnPauseRequest(
 				cp.ProtectedTimestampRecord = uuid.Nil
 			}
 		}
+		return nil
 	}
+
+	if cp.ProtectedTimestampRecord == uuid.Nil {
+		// This case shouldn't occur when ActiveProtectedTimestamps is enabled
+		resolved := progress.GetHighWater()
+		if resolved == nil {
+			return nil
+		}
+		pts := execCfg.ProtectedTimestampProvider
+		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
+		return pts.Protect(ctx, txn, ptr)
+	}
+
 	return nil
 }
 
