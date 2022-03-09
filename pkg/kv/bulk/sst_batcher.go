@@ -43,7 +43,7 @@ var (
 		settings.TenantWritable,
 		"bulkio.ingest.scatter_after_size",
 		"amount of data added to any one range after which a new range should be split off and scattered",
-		48<<20,
+		448<<20,
 	)
 
 	ingestDelay = settings.RegisterDurationSetting(
