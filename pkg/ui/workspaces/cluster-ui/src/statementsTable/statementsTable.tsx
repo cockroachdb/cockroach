@@ -42,7 +42,6 @@ import {
   statisticsTableTitles,
   NodeNames,
   StatisticType,
-  formatAggregationIntervalColumn,
 } from "../statsTableUtil/statsTableUtil";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -214,7 +213,10 @@ export interface AggregateStatistics {
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-export function shortStatement(summary: StatementSummary, original: string) {
+export function shortStatement(
+  summary: StatementSummary,
+  original: string,
+): string {
   switch (summary.statement) {
     case "update":
       return "UPDATE " + summary.table;
@@ -235,7 +237,7 @@ export function shortStatement(summary: StatementSummary, original: string) {
 
 export function makeStatementFingerprintColumn(
   statType: StatisticType,
-  selectedApp: string,
+  selectedApps: string[],
   search?: string,
   onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics> {
@@ -243,7 +245,7 @@ export function makeStatementFingerprintColumn(
     name: "statements",
     title: statisticsTableTitles.statements(statType),
     className: cx("cl-table__col-query-text"),
-    cell: StatementTableCell.statements(search, selectedApp, onStatementClick),
+    cell: StatementTableCell.statements(search, selectedApps, onStatementClick),
     sort: stmt => stmt.label,
     alwaysShow: true,
   };
@@ -251,7 +253,7 @@ export function makeStatementFingerprintColumn(
 
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
-  selectedApp: string,
+  selectedApps: string[],
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload: number,
   nodeRegions: { [nodeId: string]: string },
@@ -268,7 +270,7 @@ export function makeStatementsColumns(
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     makeStatementFingerprintColumn(
       statType,
-      selectedApp,
+      selectedApps,
       search,
       onStatementClick,
     ),

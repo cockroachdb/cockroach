@@ -27,19 +27,10 @@ import {
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import {
-  formatAggregationIntervalColumn,
-  statisticsTableTitles,
-} from "../statsTableUtil/statsTableUtil";
+import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
-import {
-  FixLong,
-  longToInt,
-  TimestampToNumber,
-  DurationToNumber,
-  TimestampToString,
-} from "src/util";
+import { FixLong, longToInt, TimestampToString } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
   getStatementsByFingerprintIdAndTime,

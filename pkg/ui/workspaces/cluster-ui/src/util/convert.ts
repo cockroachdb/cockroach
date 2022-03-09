@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import moment from "moment";
-
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { fromNumber } from "long";
+
+type Timestamp = protos.google.protobuf.ITimestamp;
 
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.
@@ -138,3 +139,9 @@ export const durationFromISO8601String = (value: string): moment.Duration => {
   }
   return moment.duration(value);
 };
+
+export function makeTimestamp(unixTs: number): Timestamp {
+  return new protos.google.protobuf.Timestamp({
+    seconds: fromNumber(unixTs),
+  });
+}

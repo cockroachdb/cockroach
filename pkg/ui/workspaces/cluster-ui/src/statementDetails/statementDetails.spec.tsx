@@ -29,7 +29,7 @@ describe("StatementDetails page", () => {
   });
 
   it("shows loading indicator when data is not ready yet", () => {
-    statementDetailsProps.statement = null;
+    statementDetailsProps.statementDetails = null;
     statementDetailsProps.statementsError = null;
 
     const wrapper = mount(
@@ -108,7 +108,7 @@ describe("StatementDetails page", () => {
         .simulate("click");
 
       onDiagnosticsActivateClickSpy.calledOnceWith(
-        statementDetailsProps.statement.statement,
+        statementDetailsProps.statementDetails.statement.key_data.query,
       );
     });
   });
