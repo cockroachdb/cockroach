@@ -1996,6 +1996,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colfetcher",
 			"../../sql/row",
 			"../../kv/kvclient/rangecache",
+			"../../storage",
 		); err != nil {
 			t.Fatal(err)
 		}
