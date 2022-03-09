@@ -73,6 +73,24 @@ var admissionControlEnabledSettings = [numWorkKinds]*settings.BoolSetting{
 	SQLSQLResponseWork: SQLSQLResponseAdmissionControlEnabled,
 }
 
+// KVTenantWeightsEnabled controls whether tenant weights are enabled for KV
+// admission control. This setting has no effect if admission.kv.enabled is
+// false.
+var KVTenantWeightsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"admission.kv.tenant_weights.enabled",
+	"when true, tenant weights are enabled for KV admission control",
+	false).WithPublic()
+
+// KVStoresTenantWeightsEnabled controls whether tenant weights are enabled
+// for KV-stores admission control. This setting has no effect if
+// admission.kv.enabled is false.
+var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"admission.kv.stores.tenant_weights.enabled",
+	"when true, tenant weights are enabled for KV-stores admission control",
+	false).WithPublic()
+
 // EpochLIFOEnabled controls whether the adaptive epoch-LIFO scheme is enabled
 // for admission control. Is only relevant when the above admission control
 // settings are also set to true. Unlike those settings, which are granular
@@ -834,7 +852,7 @@ func (q *WorkQueue) getTenantWeightLocked(tenantID uint64) uint32 {
 }
 
 // SetTenantWeights sets the weight of tenants, using the provided tenant ID
-// => weight map.
+// => weight map. A nil map will result in all tenants having the same weight.
 func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 	q.mu.tenantWeights.mu.Lock()
 	defer q.mu.tenantWeights.mu.Unlock()

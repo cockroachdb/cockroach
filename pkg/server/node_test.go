@@ -680,3 +680,49 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Get].Count(), getCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Put].Count(), putCurr)
 }
+
+func TestGetTenantWeights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	specs := []base.StoreSpec{
+		{InMemory: true},
+		{InMemory: true},
+	}
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: specs,
+	})
+	defer s.Stopper().Stop(ctx)
+	// Wait until both stores are started properly.
+	testutils.SucceedsSoon(t, func() error {
+		var n int
+		err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			if !s.IsStarted() {
+				return fmt.Errorf("not started: %s", s)
+			}
+			n++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if exp := len(specs); exp != n {
+			return fmt.Errorf("found only %d of %d stores", n, exp)
+		}
+		return nil
+	})
+	// Get weights and check.
+	// TODO(sumeer): enhance test to have multiple tenants.
+	weights := s.Node().(*Node).GetTenantWeights()
+	checkSystemTenantWeight := func(m map[uint64]uint32) {
+		w, ok := m[roachpb.SystemTenantID.ToUint64()]
+		require.True(t, ok)
+		require.Less(t, uint32(0), w)
+	}
+	checkSystemTenantWeight(weights.Node)
+	require.Equal(t, 2, len(weights.Stores))
+	for _, v := range weights.Stores {
+		checkSystemTenantWeight(v.Weights)
+	}
+}
