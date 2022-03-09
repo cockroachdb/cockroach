@@ -1,0 +1,34 @@
+name: pr-epic-issue-ref-lint
+
+on:
+  push:
+    branches:
+      - 'ci/jlinder/jhl/lint-epic-issue-refs'
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Bazel cache
+        id: bazel-cache
+        uses: actions/cache@v2
+        env:
+          version: "22.1"
+        with:
+          path: | 
+            ~/.cache/bazel
+          key: ${{ runner.os }}-{{ env.version }}-bazel-cache
+
+      - name: Install bazelisk
+        run: |
+          curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64"
+          mkdir -p "${GITHUB_WORKSPACE}/bin/"
+          mv bazelisk-linux-amd64 "${GITHUB_WORKSPACE}/bin/bazel"
+          chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
+      - name: Run tests
+        run: build/github/pr-epic-issue-ref-lint.sh
