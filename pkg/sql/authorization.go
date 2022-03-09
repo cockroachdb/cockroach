@@ -437,10 +437,12 @@ func MemberOfWithAdminOption(
 			return userMapping, nil
 		}
 
-		// Lookup memberships outside the lock, with at most one request in-flight
-		// for each user The role_memberships table versions is also part
-		// of the request key so that we don't read data from an old version
-		// of the table.
+		// Lookup memberships outside the lock and in a new transaction. A separate
+		// transaction is used here in case the table has been modified by a
+		// different transaction during this loop. There will be at most one request
+		// in-flight for each user. The role_memberships table version is also part
+		// of the request key so that we don't read data from an old version of the
+		// table.
 		ch, _ := roleMembersCache.populateCacheGroup.DoChan(
 			fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
 			func() (interface{}, error) {
@@ -450,7 +452,10 @@ func MemberOfWithAdminOption(
 				ctx, cancel := roleMembersCache.stopper.WithCancelOnQuiesce(
 					logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
 				defer cancel()
-				return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+				return resolveMemberOfWithAdminOption(
+					ctx, member, ie, nil, /* txn */
+					useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
+				)
 			},
 		)
 		var memberships map[security.SQLUsername]bool
