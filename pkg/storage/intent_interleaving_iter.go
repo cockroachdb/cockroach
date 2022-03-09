@@ -737,12 +737,24 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 		return
 	}
 	if i.constraint != notConstrained {
-		i.checkConstraint(key.Key, true)
-		if i.constraint == constrainedToLocal && bytes.Equal(key.Key, keys.LocalMax) {
+		// If the seek key of SeekLT is the boundary between the local and global
+		// keyspaces, iterators constrained in either direction are permitted.
+		// Iterators constrained to the local keyspace may be scanning from their
+		// upper bound. Iterators constrained to the global keyspace may have found
+		// a key on the boundary and may now be scanning before the key, using the
+		// boundary as an exclusive upper bound.
+		// NB: an iterator with bounds [L, U) is allowed to SeekLT over any key in
+		// [L, U]. For local keyspace iterators, U can be LocalMax and for global
+		// keyspace iterators L can be LocalMax.
+		localMax := bytes.Equal(key.Key, keys.LocalMax)
+		if !localMax {
+			i.checkConstraint(key.Key, true)
+		}
+		if localMax && i.constraint == constrainedToLocal {
 			// Move it down to below the lock table so can iterate down cleanly into
 			// the local key space. Note that we disallow anyone using a seek key
-			// that is a local key above the lock table, and there should no keys in
-			// the engine there either (at least not keys that we need to see using
+			// that is a local key above the lock table, and there should be no keys
+			// in the engine there either (at least not keys that we need to see using
 			// an MVCCIterator).
 			key.Key = keys.LocalRangeLockTablePrefix
 		}

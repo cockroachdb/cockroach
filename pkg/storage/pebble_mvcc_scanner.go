@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	maxItersBeforeSeek = 10
+	maxItersBeforeSeek = 0
 
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	kvLenSize = 8
@@ -356,7 +356,7 @@ type pebbleMVCCScanner struct {
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
-	// [1, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
+	// [0, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
 	itersBeforeSeek int
 }
 
@@ -483,8 +483,8 @@ func (p *pebbleMVCCScanner) incrementItersBeforeSeek() {
 // Decrements itersBeforeSeek while ensuring it stays positive.
 func (p *pebbleMVCCScanner) decrementItersBeforeSeek() {
 	p.itersBeforeSeek--
-	if p.itersBeforeSeek < 1 {
-		p.itersBeforeSeek = 1
+	if p.itersBeforeSeek < 0 {
+		p.itersBeforeSeek = 0
 	}
 }
 
@@ -971,6 +971,13 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 func (p *pebbleMVCCScanner) seekVersion(
 	ctx context.Context, seekTS hlc.Timestamp, uncertaintyCheck bool,
 ) bool {
+	if seekTS.IsEmpty() {
+		// If the seek timestamp is empty, we've already seen all versions of this
+		// key, so seek to the next key. Seeking to version zero of the current key
+		// would be incorrect, as version zero is stored before all other versions.
+		return p.advanceKey()
+	}
+
 	seekKey := MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
 	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], seekKey)
 	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
