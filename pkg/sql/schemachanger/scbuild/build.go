@@ -122,6 +122,16 @@ type cachedDesc struct {
 	ers          *elementResultSet
 	privileges   map[privilege.Kind]error
 	hasOwnership bool
+
+	// elementIndexMap maps from the string serialization of the element
+	// to the index of the element in the builder state. Note that this
+	// works as a key because the string is derived from the same set of
+	// attributes used to define equality. If we were to change that, we'd
+	// need to derive a new cache key.
+	//
+	// This map ends up being very important to make sure that Ensure does
+	// not become O(N) where N is the number of elements in the descriptor.
+	elementIndexMap map[string]int
 }
 
 // newBuilderState constructs a builderState.
