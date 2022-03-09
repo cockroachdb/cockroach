@@ -903,16 +903,22 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 // tokens when required (based on looking one token ahead).
 // Reference: pkg/sql/parser/lexer.go
 //
-// NOT_LA exists so that productions such as NOT LIKE can be given the same
+// - NOT_LA exists so that productions such as NOT LIKE can be given the same
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
-// NOT, at least with respect to their left-hand subexpression. WITH_LA is
-// needed to make the grammar LALR(1). GENERATED_ALWAYS is needed to support
-// the Postgres syntax for computed columns along with our family related
-// extensions (CREATE FAMILY/CREATE FAMILY family_name). RESET_ALL is used
-// to differentiate `RESET var` from `RESET ALL`. ROLE_ALL and USER_ALL are
-// used in ALTER ROLE statements that affect all roles.
+// NOT, at least with respect to their left-hand subexpression.
+// - WITH_LA is needed to make the grammar LALR(1).
+// - GENERATED_ALWAYS is needed to support the Postgres syntax for computed
+// columns along with our family related extensions (CREATE FAMILY/CREATE FAMILY
+// family_name).
+// - RESET_ALL is used to differentiate `RESET var` from `RESET ALL`.
+// - ROLE_ALL and USER_ALL are used in ALTER ROLE statements that affect all
+// roles.
+// - ON_LA is needed for ON UPDATE and ON DELETE expressions for foreign key
+// references.
+// - TENANT_ALL is used to differentiate `ALTER TENANT <id>` from
+// `ALTER TENANT ALL`.
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
-%token USER_ALL ON_LA
+%token USER_ALL ON_LA TENANT_ALL
 
 %union {
   id    int32
@@ -4954,8 +4960,8 @@ set_csetting_stmt:
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Cfg
 // %Text:
-// ALTER { TENANT <tenant_id> | ALL TENANTS } SET CLUSTER SETTING <var> { TO | = } <value>
-// ALTER { TENANT <tenant_id> | ALL TENANTS } RESET CLUSTER SETTING <var>
+// ALTER TENANT { <tenant_id> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
+// ALTER TENANT { <tenant_id> | ALL } RESET CLUSTER SETTING <var>
 // %SeeAlso: SET CLUSTER SETTING
 alter_tenant_csetting_stmt:
   ALTER TENANT d_expr set_or_reset_csetting_stmt
@@ -4966,7 +4972,7 @@ alter_tenant_csetting_stmt:
       TenantID: $3.expr(),
     }
   }
-| ALTER ALL TENANTS set_or_reset_csetting_stmt
+| ALTER TENANT_ALL ALL set_or_reset_csetting_stmt
   {
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
@@ -4975,7 +4981,6 @@ alter_tenant_csetting_stmt:
     }
   }
 | ALTER TENANT error // SHOW HELP: ALTER TENANT
-| ALTER ALL TENANTS error // SHOW HELP: ALTER TENANT
 
 set_or_reset_csetting_stmt:
   reset_csetting_stmt
@@ -14183,7 +14188,6 @@ unreserved_keyword:
 | TEMPLATE
 | TEMPORARY
 | TENANT
-| TENANTS
 | TESTING_RELOCATE
 | TEXT
 | TIES
