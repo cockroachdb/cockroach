@@ -13,9 +13,11 @@ package admission
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -253,6 +255,26 @@ func TestWorkQueueBasic(t *testing.T) {
 				q.AdmittedWorkDone(work.tenantID)
 				wrkMap.delete(id)
 				return buf.stringAndReset()
+
+			case "set-tenant-weights":
+				var weights string
+				d.ScanArgs(t, "weights", &weights)
+				fields := strings.FieldsFunc(weights, func(r rune) bool {
+					return r == ':' || r == ',' || unicode.IsSpace(r)
+				})
+				if len(fields)%2 != 0 {
+					return "tenant and weight are not paired"
+				}
+				weightMap := make(map[uint64]uint32)
+				for i := 0; i < len(fields); i += 2 {
+					tenantID, err := strconv.Atoi(fields[i])
+					require.NoError(t, err)
+					weight, err := strconv.Atoi(fields[i+1])
+					require.NoError(t, err)
+					weightMap[uint64(tenantID)] = uint32(weight)
+				}
+				q.SetTenantWeights(weightMap)
+				return q.String()
 
 			case "print":
 				return q.String()

@@ -2985,9 +2985,9 @@ func (sc *SchemaChanger) shouldSplitAndScatter(
 		return false
 	}
 
-	if m.Adding() && idx.IsSharded() && !idx.IsTemporaryIndexForBackfill() {
+	if m.Adding() && idx.IsSharded() {
 		if sc.mvccCompliantAddIndex {
-			return m.Backfilling()
+			return m.Backfilling() || (idx.IsTemporaryIndexForBackfill() && m.DeleteOnly())
 		}
 		return m.DeleteOnly()
 	}
