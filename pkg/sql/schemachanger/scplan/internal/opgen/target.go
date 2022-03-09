@@ -23,7 +23,7 @@ type target struct {
 	e           scpb.Element
 	status      scpb.Status
 	transitions []transition
-	iterateFunc func(*rel.Database, func(*screl.Node) error) error
+	iterateFunc func(*rel.Database, func(*scpb.Target) error) error
 }
 
 // transition represents a transition from one status to the next towards a
@@ -49,19 +49,19 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 	}
 
 	// Make iterator function for traversing graph nodes with this target.
-	var element, target, node, targetStatus rel.Var = "element", "target", "node", "target-status"
+	var element, target, targetStatus rel.Var = "element", "target", "target-status"
 	q, err := rel.NewQuery(screl.Schema,
 		element.Type(e),
-		targetStatus.Eq(spec.to),
-		screl.JoinTargetNode(element, target, node),
 		target.AttrEqVar(screl.TargetStatus, targetStatus),
+		targetStatus.Eq(spec.to),
+		screl.JoinTarget(element, target),
 	)
 	if err != nil {
 		return t, errors.Wrap(err, "failed to construct query")
 	}
-	t.iterateFunc = func(database *rel.Database, f func(*screl.Node) error) error {
+	t.iterateFunc = func(database *rel.Database, f func(target *scpb.Target) error) error {
 		return q.Iterate(database, func(r rel.Result) error {
-			return f(r.Var(node).(*screl.Node))
+			return f(r.Var(target).(*scpb.Target))
 		})
 	}
 

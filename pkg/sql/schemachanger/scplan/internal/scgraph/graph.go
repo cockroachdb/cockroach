@@ -131,6 +131,18 @@ func (g *Graph) GetNode(t *scpb.Target, s scpb.Status) (*screl.Node, bool) {
 // Suppress the linter.
 var _ = (*Graph)(nil).GetNode
 
+// IterateTargetNodes iterates the set of nodes with the given target.
+func (g *Graph) IterateTargetNodes(t *scpb.Target, iterator NodeIterator) error {
+	return scpb.IterateStatuses(func(s scpb.Status) error {
+		if n, ok := g.GetNode(t, s); ok {
+			if err := iterator(n); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*screl.Node, error) {
 	targetStatuses := g.getTargetStatusMap(t)
 	if ts, ok := targetStatuses[s]; ok {

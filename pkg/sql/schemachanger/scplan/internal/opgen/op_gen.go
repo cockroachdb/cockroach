@@ -39,23 +39,25 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
 	// to not mutate the database in place.
 	type toAdd struct {
 		transition
-		n *screl.Node
+		t *scpb.Target
 	}
 	var edgesToAdd []toAdd
 	for _, t := range r.targets {
 		edgesToAdd = edgesToAdd[:0]
-		if err := t.iterateFunc(g.Database(), func(n *screl.Node) error {
-			status := n.CurrentStatus
-			for _, op := range t.transitions {
-				if op.from == status {
-					edgesToAdd = append(edgesToAdd, toAdd{
-						transition: op,
-						n:          n,
-					})
-					status = op.to
+		if err := t.iterateFunc(g.Database(), func(tt *scpb.Target) error {
+			return g.IterateTargetNodes(tt, func(n *screl.Node) error {
+				status := n.CurrentStatus
+				for _, op := range t.transitions {
+					if op.from == status {
+						edgesToAdd = append(edgesToAdd, toAdd{
+							transition: op,
+							t:          n.Target,
+						})
+						status = op.to
+					}
 				}
-			}
-			return nil
+				return nil
+			})
 		}); err != nil {
 			return nil, err
 		}
@@ -65,7 +67,7 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
 				ops = e.ops(e.n.Element(), cs.TargetState)
 			}
 			if err := g.AddOpEdges(
-				e.n.Target, e.from, e.to, e.revertible, e.minPhase, ops...,
+				e.t, e.from, e.to, e.revertible, e.minPhase, ops...,
 			); err != nil {
 				return nil, err
 			}
