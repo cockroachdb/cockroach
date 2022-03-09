@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -28,11 +29,14 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-const (
-	maxItersBeforeSeek = 0
+// Key value lengths take up 8 bytes (2 x Uint32).
+const kvLenSize = 8
 
-	// Key value lengths take up 8 bytes (2 x Uint32).
-	kvLenSize = 8
+var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
+	"mvcc-max-iters-before-seek",
+	10, /* defaultValue */
+	0,  /* min */
+	3,  /* max */
 )
 
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
