@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -153,8 +154,6 @@ func ingestionPlanHook(
 		}
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-
-		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.Tenant)
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if ingestionStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
@@ -164,11 +163,23 @@ func ingestionPlanHook(
 			startTime = asOf.Timestamp
 		}
 
+		//TODO(casper): make target to be tenant only and add validation check, e.g., both
+		// target tenant and new tenant cannot be system tenant.
+		newTenantID := ingestionStmt.Targets.Tenant
+		if ingestionStmt.AsTenant != nil {
+			tenantIDInt, err := strconv.Atoi(ingestionStmt.AsTenant.String())
+			if err != nil {
+				return err
+			}
+			newTenantID = roachpb.TenantID{InternalValue: uint64(tenantIDInt)}
+		}
+		prefix := keys.MakeTenantPrefix(newTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
 			TenantID:      ingestionStmt.Targets.Tenant,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
+			NewTenantID:   newTenantID,
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)

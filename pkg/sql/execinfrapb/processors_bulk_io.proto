@@ -189,6 +189,8 @@ message StreamIngestionDataSpec {
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 
+  // The processor will rekey the tenant's keyspace to a new tenant based on 'tenant_rekey'.
+  optional TenantRekey tenant_rekey = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantRekey"];
 }
 
 message StreamIngestionFrontierSpec {

@@ -74,7 +74,8 @@ func TestKeyRewriter(t *testing.T) {
 		},
 	}
 
-	kr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys, nil /* tenantRekeys */)
+	kr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys,
+		nil /* tenantRekeys */, false /* restoreTenantFromStream */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,10 +122,10 @@ func TestKeyRewriter(t *testing.T) {
 		desc.ID = oldID + 10
 		desc2 := tabledesc.NewBuilder(&desc.TableDescriptor).BuildCreatedMutableTable()
 		desc2.ID += 10
-		newKr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, []execinfrapb.TableRekey{
+		newKr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, []execinfrapb.TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
 			{OldID: uint32(desc.ID), NewDesc: mustMarshalDesc(t, desc2.TableDesc())},
-		}, nil)
+		}, nil /* tenantRekeys */, false /* restoreTenantFromStream */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,9 +152,9 @@ func TestKeyRewriter(t *testing.T) {
 			desc.ID = oldID + 10
 			srcCodec := keys.MakeSQLCodec(srcTenant)
 			destCodec := keys.MakeSQLCodec(destTenant)
-			newKr, err := makeKeyRewriterFromRekeys(destCodec, []execinfrapb.TableRekey{
+			newKr, err := MakeKeyRewriterFromRekeys(destCodec, []execinfrapb.TableRekey{
 				{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
-			}, nil)
+			}, nil /* tenantRekeys */, false /* restoreTenantFromStream */)
 			require.NoError(t, err)
 
 			key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())

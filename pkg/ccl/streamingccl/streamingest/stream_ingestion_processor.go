@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -73,6 +74,7 @@ type streamIngestionProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionDataSpec
 	output  execinfra.RowReceiver
+	rekeyer *backupccl.KeyRewriter
 
 	// curBatch temporarily batches MVCC Keys so they can be
 	// sorted before ingestion.
@@ -172,6 +174,16 @@ func newStreamIngestionDataProcessor(
 		maxFlushRateTimer:   timeutil.NewTimer(),
 		cutoverCh:           make(chan struct{}),
 		closePoller:         make(chan struct{}),
+	}
+
+	if spec.TenantRekey.NewID != spec.TenantRekey.OldID {
+		rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
+			nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
+			true /* restoreTenantFromStream */)
+		if err != nil {
+			return nil, err
+		}
+		sip.rekeyer = rekeyer
 	}
 
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
@@ -541,6 +553,19 @@ func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
 	if kv == nil {
 		return errors.New("kv event expected to have kv")
 	}
+	if sip.rekeyer != nil {
+		rekey, ok, err := sip.rekeyer.RewriteKey(kv.Key)
+		if !ok {
+			return errors.New("every key is expected to match tenant prefix")
+		}
+		if err != nil {
+			return err
+		}
+		kv.Key = rekey
+		kv.Value.ClearChecksum()
+		kv.Value.InitChecksum(kv.Key)
+	}
+
 	mvccKey := storage.MVCCKey{
 		Key:       kv.Key,
 		Timestamp: kv.Value.Timestamp,
@@ -572,7 +597,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 
 	totalSize := 0
 	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
+		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil { // problem is here
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
 		}
 		totalSize += len(kv.Key.Key) + len(kv.Value)

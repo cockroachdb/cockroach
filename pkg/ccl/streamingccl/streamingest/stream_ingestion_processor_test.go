@@ -405,7 +405,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	// Cancel the flow after emitting 1000 checkpoint events from the client.
 	mu := syncutil.Mutex{}
 	cancelAfterCheckpoints := makeCheckpointEventCounter(&mu, 1000, cancel)
-	streamValidator := newStreamClientValidator()
+	streamValidator := newStreamClientValidator(nil /* rekeyer */)
 	validator := registerValidatorWithClient(streamValidator)
 	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr, topo,
 		startTime, []streamclient.InterceptFn{cancelAfterCheckpoints, validator}, nil /* mockClient */)
@@ -575,6 +575,15 @@ func registerValidatorWithClient(
 		case streamingccl.KVEvent:
 			kv := *event.GetKV()
 
+			if validator.rekeyer != nil {
+				rekey, _, err := validator.rekeyer.RewriteKey(kv.Key)
+				if err != nil {
+					panic(err.Error())
+				}
+				kv.Key = rekey
+				kv.Value.ClearChecksum()
+				kv.Value.InitChecksum(kv.Key)
+			}
 			err := validator.noteRow(string(spec), string(kv.Key), string(kv.Value.RawBytes),
 				kv.Value.Timestamp)
 			if err != nil {

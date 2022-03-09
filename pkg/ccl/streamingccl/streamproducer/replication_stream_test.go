@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -204,7 +205,7 @@ func startReplication(
 func TestReplicationStreamTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, serverutils.TestTenantID())
 	defer cleanup()
 
 	h.Tenant.SQL.Exec(t, `
@@ -284,7 +285,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		},
 	}
 
-	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
+	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs, serverutils.TestTenantID())
 	defer cleanup()
 
 	checkStreamStatus := func(t *testing.T, streamID string, expectedStreamStatus streampb.StreamReplicationStatus_StreamStatus) {
@@ -353,7 +354,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 func TestStreamPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, serverutils.TestTenantID())
 	defer cleanup()
 
 	h.Tenant.SQL.Exec(t, `

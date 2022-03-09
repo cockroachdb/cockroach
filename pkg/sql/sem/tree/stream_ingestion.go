@@ -12,9 +12,10 @@ package tree
 
 // StreamIngestion represents a RESTORE FROM REPLICATION STREAM statement.
 type StreamIngestion struct {
-	Targets TargetList
-	From    StringOrPlaceholderOptList
-	AsOf    AsOfClause
+	Targets  TargetList
+	From     StringOrPlaceholderOptList
+	AsOf     AsOfClause
+	AsTenant Expr
 }
 
 var _ Statement = &StreamIngestion{}
@@ -29,5 +30,9 @@ func (node *StreamIngestion) Format(ctx *FmtCtx) {
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
+	}
+	if node.AsTenant != nil {
+		ctx.WriteString("AS TENANT ")
+		ctx.FormatNode(node.AsTenant)
 	}
 }
