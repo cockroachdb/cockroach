@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -1393,4 +1395,118 @@ func TestDropPhysicalTableGC(t *testing.T) {
 			require.Zerof(t, actualZoneConfigs, "Zone config for '%s' was not deleted as expected.", table.name)
 		}
 	}
+}
+
+func TestDropLargeDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Creates a complex schema with a view based graph that nests within
+	// each other, which can lead to long DROP times specially if there
+	// is anything takes quadratic time.
+	TestDropLargeDatabaseWithSchemaChanger := func(useDeclarative bool) {
+		ctx := context.Background()
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+		defer s.Stopper().Stop(ctx)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `
+CREATE DATABASE largedb;
+SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled=no;
+BEGIN;
+`)
+		// Create the base tables for our complex database.
+		const BaseTableName = "table%d"
+		const MaxBaseTables = 30
+		const MaxBaseTableColumns = 4
+		tblColumnCache := make(map[string]string)
+		for i := 0; i < MaxBaseTables; i++ {
+			tableName := fmt.Sprintf(BaseTableName, i)
+			columnRefStmt := fmt.Sprintf("%s_%%d", tableName)
+			createStatement := strings.Builder{}
+			columns := strings.Builder{}
+			createStatement.WriteString("CREATE TABLE largedb.")
+			createStatement.WriteString(tableName)
+			createStatement.WriteString("(")
+			for col := 0; col < MaxBaseTableColumns; col++ {
+				columnRef := fmt.Sprintf(columnRefStmt, col)
+				if col != 0 {
+					createStatement.WriteString(", ")
+					columns.WriteString(",")
+				}
+				createStatement.WriteString(columnRef)
+				createStatement.WriteString(" int")
+				columns.WriteString(columnRef)
+				columns.WriteString("")
+			}
+			tblColumnCache[tableName] = columns.String()
+			createStatement.WriteString(")")
+			sqlDB.Exec(t, "use largedb;")
+			sqlDB.Exec(t, createStatement.String())
+		}
+		// Next create the views at each nesting level, where each view at the current
+		// level will refer to base tables or the previous level.
+		const BaseViewName = "view%d_%d"
+		const MaxNestDepth = 2
+		for nest := 0; nest < MaxNestDepth; nest++ {
+			for viewIdx := 0; viewIdx < MaxBaseTables; viewIdx++ {
+				viewName := fmt.Sprintf(BaseViewName, nest, viewIdx)
+				// Refer to the last set of tables or views.
+				createStatement := strings.Builder{}
+				createStatement.WriteString("CREATE VIEW largedb.")
+				createStatement.WriteString(viewName)
+				createStatement.WriteString("( ")
+				viewDefColumn := fmt.Sprintf("%s_%%d", viewName)
+				viewDef := strings.Builder{}
+				selectColumns := strings.Builder{}
+				fromTables := strings.Builder{}
+				// Next setup the column references.
+				refBase := fmt.Sprintf("view%d_%%d", nest-1)
+				colIdx := 0
+				if nest == 0 {
+					refBase = BaseTableName
+				}
+				// Loop over the views / tables in the previous nesting level.
+				for baseIdx := 0; baseIdx < MaxBaseTables; baseIdx++ {
+					baseTblName := fmt.Sprintf(refBase, baseIdx)
+					// Next add the columns into the definition.
+					if colIdx != 0 {
+						selectColumns.WriteString(", ")
+					}
+					for col := 0; col < int(math.Pow(MaxBaseTables, float64(nest))*MaxBaseTableColumns); col++ {
+						// First add this column into the column definitions.
+						if colIdx != 0 {
+							viewDef.WriteString(", ")
+						}
+						viewDef.WriteString(fmt.Sprintf(viewDefColumn, colIdx))
+						colIdx++
+					}
+					selectColumns.WriteString(tblColumnCache[baseTblName])
+					if baseIdx != 0 {
+						fromTables.WriteString(", ")
+					}
+					fromTables.WriteString(baseTblName)
+				}
+				tblColumnCache[viewName] = viewDef.String()
+				createStatement.WriteString(viewDef.String())
+				createStatement.WriteString(") AS SELECT ")
+				createStatement.WriteString(selectColumns.String())
+				createStatement.WriteString(" FROM ")
+				createStatement.WriteString(fromTables.String())
+				sqlDB.Exec(t, createStatement.String())
+			}
+		}
+		sqlDB.Exec(t,
+			`COMMIT;`)
+		if !useDeclarative {
+			sqlDB.Exec(t, `SET use_declarative_schema_changer=off;`)
+		}
+		startTime := timeutil.Now()
+		sqlDB.Exec(t, `DROP DATABASE largedb;`)
+		t.Logf("Total time for drop (declarative: %t) %f",
+			useDeclarative,
+			timeutil.Since(startTime).Seconds())
+	}
+	// Test without declarative.
+	TestDropLargeDatabaseWithSchemaChanger(false)
+	// TODO: Enable once rebased on declarative changes.
+	//	TestDropLargeDatabaseWithSchemaChanger(true)
 }
