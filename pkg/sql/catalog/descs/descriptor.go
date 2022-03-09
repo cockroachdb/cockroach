@@ -139,7 +139,7 @@ func (tc *Collection) getDescriptorsByID(
 		return descs, nil
 	}
 	kvDescs, err := tc.withReadFromStore(flags.RequireMutable, func() ([]catalog.MutableDescriptor, error) {
-		return tc.kv.getByIDs(ctx, txn, tc.version, kvIDs)
+		return tc.kv.getByIDs(ctx, txn, tc.version, !flags.SkipValidation, kvIDs)
 	})
 	if err != nil {
 		return nil, err

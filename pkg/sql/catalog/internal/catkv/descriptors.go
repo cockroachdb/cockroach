@@ -141,6 +141,25 @@ func MaybeGetDescriptorByID(
 	return descs[0], nil
 }
 
+// MustGetDescriptorsByIDWithoutValidation looks up the descriptors given their
+// IDs, returning an error if any descriptor is not found. The returned
+// descriptor is not validated.
+func MustGetDescriptorsByIDWithoutValidation(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	_ clusterversion.ClusterVersion,
+	ids []descpb.ID,
+	expectedType catalog.DescriptorType,
+) ([]catalog.Descriptor, error) {
+	cq := catalogQuerier{
+		codec:        codec,
+		isRequired:   true,
+		expectedType: expectedType,
+	}
+	return lookupDescriptorsUnvalidated(ctx, txn, cq, ids)
+}
+
 // MustGetDescriptorsByID looks up the descriptors given their IDs,
 // returning an error if any descriptor is not found.
 func MustGetDescriptorsByID(
@@ -170,6 +189,24 @@ func MustGetDescriptorByID(
 	expectedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
 	descs, err := MustGetDescriptorsByID(ctx, txn, codec, version, []descpb.ID{id}, expectedType)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], err
+}
+
+// MustGetDescriptorByIDWithoutValidation looks up the descriptor given its ID,
+// returning an error if the descriptor is not found. The returned descriptor
+// is never validated.
+func MustGetDescriptorByIDWithoutValidation(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	id descpb.ID,
+	expectedType catalog.DescriptorType,
+) (catalog.Descriptor, error) {
+	descs, err := MustGetDescriptorsByIDWithoutValidation(ctx, txn, codec, version, []descpb.ID{id}, expectedType)
 	if err != nil {
 		return nil, err
 	}

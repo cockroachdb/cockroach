@@ -235,6 +235,10 @@ type CommonLookupFlags struct {
 	IncludeDropped bool
 	// AvoidSynthetic specifies if the any synthetic descriptors will be ignored.
 	AvoidSynthetic bool
+	// SkipValidation returns a descriptor without validating its contents. This
+	// should only be used by callers that do not care about the validity of the
+	// descriptor contents.
+	SkipValidation bool
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().

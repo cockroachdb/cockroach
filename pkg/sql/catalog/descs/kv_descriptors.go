@@ -188,7 +188,7 @@ func (kd *kvDescriptors) getByName(
 	if err != nil || descID == descpb.InvalidID {
 		return nil, err
 	}
-	descs, err := kd.getByIDs(ctx, txn, version, []descpb.ID{descID})
+	descs, err := kd.getByIDs(ctx, txn, version, true /* validate descriptor */, []descpb.ID{descID})
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// Having done the namespace lookup, the descriptor must exist.
@@ -212,7 +212,11 @@ func (kd *kvDescriptors) getByName(
 
 // getByIDs actually reads a batch of descriptors from the storage layer.
 func (kd *kvDescriptors) getByIDs(
-	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion, ids []descpb.ID,
+	ctx context.Context,
+	txn *kv.Txn,
+	version clusterversion.ClusterVersion,
+	validateDescriptor bool,
+	ids []descpb.ID,
 ) ([]catalog.MutableDescriptor, error) {
 	ret := make([]catalog.MutableDescriptor, len(ids))
 	kvIDs := make([]descpb.ID, 0, len(ids))
@@ -237,7 +241,13 @@ func (kd *kvDescriptors) getByIDs(
 	if len(kvIDs) == 0 {
 		return ret, nil
 	}
-	kvDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, version, kvIDs, catalog.Any)
+	var kvDescs []catalog.Descriptor
+	var err error
+	if validateDescriptor {
+		kvDescs, err = catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, version, kvIDs, catalog.Any)
+	} else {
+		kvDescs, err = catkv.MustGetDescriptorsByIDWithoutValidation(ctx, txn, kd.codec, version, kvIDs, catalog.Any)
+	}
 	if err != nil {
 		return nil, err
 	}

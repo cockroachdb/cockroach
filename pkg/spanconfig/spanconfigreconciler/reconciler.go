@@ -555,6 +555,7 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 					IncludeDropped: true,
 					IncludeOffline: true,
 					AvoidLeased:    true, // we want consistent reads
+					SkipValidation: true, // we only care about existence, so don't validate.
 				})
 
 				considerAsMissing := false

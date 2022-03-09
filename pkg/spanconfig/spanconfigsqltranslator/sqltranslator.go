@@ -150,6 +150,8 @@ var descLookupFlags = tree.CommonLookupFlags{
 	IncludeOffline: true,
 	// We want consistent reads.
 	AvoidLeased: true,
+	// Skip validation due to the overhead in complex schemas.
+	SkipValidation: true,
 }
 
 // generateSystemSpanConfigRecords is responsible for generating all the SpanConfigs

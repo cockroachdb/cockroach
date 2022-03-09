@@ -124,7 +124,7 @@ func (m *Manager) WaitForOneVersion(
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			version := m.storage.settings.Version.ActiveVersion(ctx)
-			desc, err = catkv.MustGetDescriptorByID(ctx, txn, m.Codec(), version, id, catalog.Any)
+			desc, err = catkv.MustGetDescriptorByIDWithoutValidation(ctx, txn, m.Codec(), version, id, catalog.Any)
 			return err
 		}); err != nil {
 			return nil, err
@@ -443,7 +443,7 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	attemptsMade := 0
 	for {
 		// Acquire a fresh lease.
-		didAcquire, err := acquireNodeLease(ctx, m, id)
+		didAcquire, err := acquireNodeLease(ctx, m, id, true /*validate descriptor */)
 		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
 			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(AcquireFreshestBlock, id)
 		}
@@ -469,7 +469,9 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 // being dropped or offline, the error will be of type inactiveTableError.
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
-func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, error) {
+func acquireNodeLease(
+	ctx context.Context, m *Manager, id descpb.ID, validateDesc bool,
+) (bool, error) {
 	var toRelease *storedLease
 	resultChan, didAcquire := m.storage.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
 		// Note that we use a new `context` here to avoid a situation where a cancellation
@@ -487,7 +489,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		if newest != nil {
 			minExpiration = newest.getExpiration()
 		}
-		desc, expiration, err := m.storage.acquire(ctx, minExpiration, id)
+		desc, expiration, err := m.storage.acquire(ctx, minExpiration, id, validateDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -950,7 +952,7 @@ func (m *Manager) Acquire(
 				t.markAcquisitionStart(ctx)
 				defer t.markAcquisitionDone(ctx)
 				// Renew lease and retry. This will block until the lease is acquired.
-				_, errLease := acquireNodeLease(ctx, m, id)
+				_, errLease := acquireNodeLease(ctx, m, id, true /* validate descriptor */)
 				return errLease
 			}(); err != nil {
 				return nil, err
@@ -1198,7 +1200,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 			},
 			func(ctx context.Context) {
 				defer wg.Done()
-				if _, err := acquireNodeLease(ctx, m, id); err != nil {
+				if _, err := acquireNodeLease(ctx, m, id, false /* validate descriptor */); err != nil {
 					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 				}
 			}); err != nil {

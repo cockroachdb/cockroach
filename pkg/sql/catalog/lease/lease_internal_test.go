@@ -550,7 +550,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	tracker := removalTracker.TrackRemoval(lease.Descriptor)
 
 	// Acquire another lease.
-	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.GetID()); err != nil {
+	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.GetID(), true /*validate desc*/); err != nil {
 		t.Fatal(err)
 	}
 

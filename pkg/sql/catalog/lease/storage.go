@@ -85,7 +85,7 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 // or offline (currently only applicable to tables), the error will be of type
 // inactiveTableError. The expiration time set for the lease > minExpiration.
 func (s storage) acquire(
-	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
+	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID, validateDesc bool,
 ) (desc catalog.Descriptor, expiration hlc.Timestamp, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -106,7 +106,11 @@ func (s storage) acquire(
 		}
 
 		version := s.settings.Version.ActiveVersion(ctx)
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, version, id, catalog.Any)
+		if !validateDesc {
+			desc, err = catkv.MustGetDescriptorByIDWithoutValidation(ctx, txn, s.codec, version, id, catalog.Any)
+		} else {
+			desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, version, id, catalog.Any)
+		}
 		if err != nil {
 			return err
 		}
@@ -219,7 +223,7 @@ func (s storage) getForExpiration(
 			return err
 		}
 		version := s.settings.Version.ActiveVersion(ctx)
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, version, id, catalog.Any)
+		desc, err = catkv.MustGetDescriptorByIDWithoutValidation(ctx, txn, s.codec, version, id, catalog.Any)
 		if err != nil {
 			return err
 		}
