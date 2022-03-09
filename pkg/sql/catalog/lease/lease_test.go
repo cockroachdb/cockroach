@@ -3143,70 +3143,56 @@ INSERT INTO t1 select a from generate_series(1, 100) g(a);
 	})
 }
 
-// Issue #67364
+// TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
+// periodical refresh, if the descriptor, whose lease we intend to refresh, does not exist anymore, we delete
+// this descriptor from "cache" (i.e. in-memory objects managed by a lease.Manager).
 func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
 	params := createTestServerParams()
+	ctx := context.Background()
+
+	// Set lease duration to something very small such that `DROP TYPE typ` does not need to wait for too long.
+	// (recall: we first acquire a lease on `typ` so `DROP TYPE typ` will block until that lease expires)
+	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
+	// The overall testing strategy is
+	// Set up: create a TYPE object, acquire a lease on it, drop this TYPE object, and
+	//
+	// Act: invoke `refreshSomeLeases` to trigger the logic we intend to test.
+	//
+	// Assert: descriptor for this TYPE object is removed from "cache".
 	sql := `
 CREATE DATABASE test;
-CREATE TABLE test.t ();
+USE test;
+CREATE TYPE typ as enum ('a', 'b');
 `
 	_, err := t.db.Exec(sql)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
+	typeDesc := desctestutils.TestingGetTypeDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "public", "typ")
+	t.mustAcquire(1, typeDesc.GetID())
+	t.expectLeases(typeDesc.GetID(), "/1/1")
 
-	leaseManager1 := t.node(1)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
-	t.mustAcquire(1, tableDesc.GetID())
-
-	t.expectLeases(tableDesc.GetID(), "/1/1")
-	fmt.Printf("Xiang: tableDesc = %v\n", tableDesc.TableDesc().String())
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// goroutine 1 frequently invokes `PeriodicallyRefreshSomeLeases` while goroutine 2 deletes
-	// the descriptor for table `d.foo`. This should result in goroutine 1 entering the block
-	// that catches an error while attempting to renew the lease for this descriptor, and hence
-	// delete this descriptor from cache subsequently.
-	goroutine1 := func() {
-		fmt.Printf("Xiang: goroutine 1 started.\n")
-		defer wg.Done()
-
-		for {
-			leaseManager1.TestingFrequentlyRefreshLeases(ctx)
-			// Break out of this infinite loop only when descriptor does not exist.
-			if !leaseManager1.TestingIfADescriptorExists(tableDesc.GetID()) {
-				break
-			}
-		}
-		fmt.Printf("Xiang: goroutine 1 is finished.\n")
-	}
-
-	goroutine2 := func() {
-		defer wg.Done()
-
-		fmt.Printf("Xiang: goroutine 2 started.\n")
-
+	{
 		sql := `
-DROP TABLE test.t;
-`
+		DROP TYPE typ;
+		`
 		_, err := t.db.Exec(sql)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		fmt.Sprintf("Xiang: goroutine 2 is finished\n")
 	}
 
-	go goroutine1()
-	go goroutine2()
-	wg.Wait()
+	lm := t.node(1)
+	lm.TestingFrequentlyRefreshLeases(ctx)
+
+	if lm.TestingIfADescriptorExists(typeDesc.GetID()) {
+		t.Fatalf("descriptor %v(#%v) is still there. Expected: removed from cache.", typeDesc.GetName(), typeDesc.GetID())
+	}
 }
