@@ -460,7 +460,7 @@ alter_role_stmt ::=
 
 alter_tenant_csetting_stmt ::=
 	'ALTER' 'TENANT' d_expr set_or_reset_csetting_stmt
-	| 'ALTER' 'ALL' 'TENANTS' set_or_reset_csetting_stmt
+	| 'ALTER' 'TENANT_ALL' 'ALL' set_or_reset_csetting_stmt
 
 opt_backup_targets ::=
 	targets
@@ -1245,7 +1245,6 @@ unreserved_keyword ::=
 	| 'TEMPLATE'
 	| 'TEMPORARY'
 	| 'TENANT'
-	| 'TENANTS'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
 	| 'TIES'

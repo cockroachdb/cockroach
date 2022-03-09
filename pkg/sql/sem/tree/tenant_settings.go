@@ -20,11 +20,10 @@ type AlterTenantSetClusterSetting struct {
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER ")
+	ctx.WriteString("ALTER TENANT ")
 	if n.TenantAll {
-		ctx.WriteString("ALL TENANTS")
+		ctx.WriteString("ALL")
 	} else {
-		ctx.WriteString("TENANT ")
 		ctx.FormatNode(n.TenantID)
 	}
 	ctx.WriteByte(' ')
