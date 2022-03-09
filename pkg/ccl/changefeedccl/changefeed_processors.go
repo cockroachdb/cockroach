@@ -1483,21 +1483,32 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	return nil
 }
 
-// Potentially log the most behind span in the frontier for debugging. The
-// returned boolean will be true if the resolved timestamp lags far behind the
-// present as defined by the current configuration.
-func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind bool) {
+func (cf *changeFrontier) isBehind() bool {
 	frontier := cf.frontier.Frontier()
 	if frontier.IsEmpty() {
-		// Do not log potentially confusing "behind" messages when backfilling, but
-		// consider span(s) behind so that we do not inadvertently release protected timestamp.
+		// During backfills we consider ourselves "behind" for the purposes of
+		// maintaining protected timestamps
 		return true
 	}
+
+	return timeutil.Since(frontier.GoTime()) <= cf.slownessThreshold()
+}
+
+// Potentially log the most behind span in the frontier for debugging if the
+// frontier is behind
+func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
+	if !cf.isBehind() {
+		return
+	}
+
+	// Do not log when we're "behind" due to a backfill
+	frontier := cf.frontier.Frontier()
+	if frontier.IsEmpty() {
+		return
+	}
+
 	now := timeutil.Now()
 	resolvedBehind := now.Sub(frontier.GoTime())
-	if resolvedBehind <= cf.slownessThreshold() {
-		return false
-	}
 
 	description := "sinkless feed"
 	if !cf.isSinkless() {
@@ -1512,7 +1523,6 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 		s := cf.frontier.PeekFrontierSpan()
 		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
-	return true
 }
 
 func (cf *changeFrontier) slownessThreshold() time.Duration {
