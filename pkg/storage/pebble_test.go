@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"path/filepath"
@@ -602,26 +601,42 @@ func TestPebbleIterConsistency(t *testing.T) {
 }
 
 func BenchmarkMVCCKeyCompare(b *testing.B) {
+	keys := makeRandEncodedKeys()
+	b.ResetTimer()
+	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
+		_ = EngineKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
+	}
+}
+
+func BenchmarkMVCCKeyEqual(b *testing.B) {
+	keys := makeRandEncodedKeys()
+	b.ResetTimer()
+	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
+		_ = EngineKeyEqual(keys[i%len(keys)], keys[j%len(keys)])
+	}
+}
+
+func makeRandEncodedKeys() [][]byte {
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	keys := make([][]byte, 1000)
 	for i := range keys {
 		k := MVCCKey{
-			Key: randutil.RandBytes(rng, 8),
+			Key: []byte("shared" + [...]string{"a", "b", "c"}[rng.Intn(3)]),
 			Timestamp: hlc.Timestamp{
-				WallTime: int64(rng.Intn(5)),
+				WallTime: rng.Int63n(5),
 			},
+		}
+		if rng.Int31n(5) == 0 {
+			// 20% of keys have a logical component.
+			k.Timestamp.Logical = rng.Int31n(4) + 1
+		}
+		if rng.Int31n(1000) == 0 && !k.Timestamp.IsEmpty() {
+			// 0.1% of keys have a synthetic component.
+			k.Timestamp.Synthetic = true
 		}
 		keys[i] = EncodeMVCCKey(k)
 	}
-
-	b.ResetTimer()
-	var c int
-	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
-		c = EngineKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
-	}
-	if testing.Verbose() {
-		fmt.Fprint(ioutil.Discard, c)
-	}
+	return keys
 }
 
 type testValue struct {
