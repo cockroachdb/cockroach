@@ -29,6 +29,12 @@ check_workspace_clean "Run \`./dev generate bazel\` to automatically regenerate 
 # Run go mod tidy and ensure nothing changes.
 # NB: If files are missing from any packages then `go mod tidy` will
 # fail. So we need to make sure that `.pb.go` sources are populated.
-bazel run //pkg/gen:go_proto
-bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
+bazel run //pkg/gen:go_proto \
+  --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
+  --google_default_credentials \
+  --cache_test_results=no
+bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy \
+  --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
+  --google_default_credentials \
+  --cache_test_results=no
 check_workspace_clean "Run \`go mod tidy\` to automatically regenerate these."

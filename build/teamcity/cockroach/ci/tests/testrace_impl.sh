@@ -5,7 +5,10 @@ set -xeuo pipefail
 # Usage: testrace_impl.sh PKG1 [PKG2 PKG3 PKG4...]
 # packages are expected to be formatted as go-style, e.g. ./pkg/cmd/bazci.
 
-bazel build //pkg/cmd/bazci --config=ci
+bazel build //pkg/cmd/bazci --config=ci \
+  --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
+  --google_default_credentials \
+  --cache_test_results=no
 for pkg in "$@"
 do
     # Query to list all affected tests.
@@ -26,7 +29,10 @@ do
         fi
         $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci --config=ci --config=race test "$test" -- \
                                --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
-                               --test_env=GOMAXPROCS=8
+                               --test_env=GOMAXPROCS=8 \
+                               --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
+                               --google_default_credentials \
+                               --cache_test_results=no
     done
 done
 
