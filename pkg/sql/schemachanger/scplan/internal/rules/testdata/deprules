@@ -6,8 +6,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.View'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.View', '*scpb.Table']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.View', '*scpb.Table']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = DROPPED
     - $to-node[CurrentStatus] = DROPPED
@@ -26,8 +26,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.AliasType'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = DROPPED
     - $to-node[CurrentStatus] = DROPPED
@@ -46,8 +46,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.AliasType'
-    - $to[Type] = '*scpb.EnumType'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.EnumType'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = DROPPED
     - $to-node[CurrentStatus] = DROPPED
@@ -66,8 +66,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.SchemaParent'
-    - $to[Type] = '*scpb.Database'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Database'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -87,8 +87,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ObjectParent'
-    - $to[Type] = '*scpb.Schema'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Schema'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -108,8 +108,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.TableLocalitySecondaryRegion'
-    - $to[Type] = '*scpb.EnumType'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.EnumType'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -129,8 +129,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.CheckConstraint'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -149,8 +149,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ForeignKeyConstraint'
-    - $to[Type] = '*scpb.Table'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Table'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -170,8 +170,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.SecondaryIndexPartial'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -190,8 +190,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ColumnType'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -210,8 +210,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ColumnDefaultExpression'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -230,8 +230,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ColumnOnUpdateExpression'
-    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -250,8 +250,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.SequenceOwner'
-    - $to[Type] = '*scpb.Sequence'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Sequence'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -271,8 +271,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.DatabaseRegionConfig'
-    - $to[Type] = '*scpb.EnumType'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.EnumType'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -292,8 +292,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment', '*scpb.SequenceOwner', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
-    - $to[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = DROPPED
@@ -313,8 +313,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.Table', '*scpb.View']
-    - $to[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.RowLevelTTL']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.RowLevelTTL']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = ABSENT
@@ -356,8 +356,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment']
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
@@ -379,8 +379,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.SecondaryIndex'
-    - $to[Type] = '*scpb.SecondaryIndexPartial'
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] = '*scpb.SecondaryIndexPartial'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
@@ -402,8 +402,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.IndexPartitioning', '*scpb.IndexComment']
-    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
     - $to-node[CurrentStatus] = WRITE_ONLY
@@ -425,8 +425,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.IndexName'
-    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
     - $to-node[CurrentStatus] = PUBLIC
@@ -448,8 +448,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = VALIDATED
     - $to-node[CurrentStatus] = ABSENT
@@ -471,8 +471,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
-    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = ABSENT
@@ -494,8 +494,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.Column'
-    - $to[Type] = '*scpb.ColumnType'
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] = '*scpb.ColumnType'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
@@ -517,8 +517,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.Column'
-    - $to[Type] IN ['*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment']
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] IN ['*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
@@ -540,8 +540,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
-    - $to[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] = '*scpb.Column'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
     - $to-node[CurrentStatus] = WRITE_ONLY
@@ -563,8 +563,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ColumnName'
-    - $to[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] = '*scpb.Column'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
     - $to-node[CurrentStatus] = PUBLIC
@@ -586,8 +586,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ColumnComment'
-    - $to[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] = '*scpb.Column'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
     - $to-node[CurrentStatus] = PUBLIC
@@ -609,8 +609,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.Column'
-    - $to[Type] IN ['*scpb.ColumnType', '*scpb.ColumnName', '*scpb.ColumnComment']
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] IN ['*scpb.ColumnType', '*scpb.ColumnName', '*scpb.ColumnComment']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = WRITE_ONLY
     - $to-node[CurrentStatus] = ABSENT
@@ -632,8 +632,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.SequenceOwner', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
-    - $to[Type] = '*scpb.ColumnType'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.ColumnType'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = ABSENT
@@ -655,8 +655,8 @@ deprules
   to: to-node
   query:
     - $from[Type] IN ['*scpb.ColumnName', '*scpb.ColumnComment', '*scpb.ColumnType']
-    - $to[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Column'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = ABSENT
@@ -678,8 +678,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.ColumnType'
-    - $to[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Column'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = ABSENT
@@ -702,8 +702,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.SecondaryIndexPartial'
-    - $to[Type] = '*scpb.SecondaryIndex'
     - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.SecondaryIndex'
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = ABSENT
     - $to-node[CurrentStatus] = ABSENT
@@ -750,8 +750,8 @@ deprules
   to: to-node
   query:
     - $from[Type] = '*scpb.Column'
-    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = DELETE_ONLY
