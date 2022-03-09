@@ -7484,8 +7484,8 @@ func TestHashShardedIndexRangePreSplit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	getShardedIndexRanges := func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) ([]kv.KeyValue, error) {
-		indexSpan := tableDesc.IndexSpan(codec, descpb.IndexID(2))
+	getShardedIndexRanges := func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec, indexID descpb.IndexID) ([]kv.KeyValue, error) {
+		indexSpan := tableDesc.IndexSpan(codec, indexID)
 		ranges, err := kvDB.Scan(
 			ctx,
 			keys.RangeMetaKey(keys.MustAddr(indexSpan.Key)),
@@ -7524,23 +7524,29 @@ CREATE TABLE t.test_split(a INT PRIMARY KEY, b INT NOT NULL);
 	)
 
 	runBeforePreSplitting = func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
-		ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec)
-		if err != nil {
-			return err
-		}
-		if len(ranges) != 0 {
-			return errors.Newf("expected 0 ranges but found %d", len(ranges))
+		// 2 is the id for the new index
+		// 3 is the id for temp index for backfilling
+		for id := range []int{2, 3} {
+			ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec, descpb.IndexID(id))
+			if err != nil {
+				return err
+			}
+			if len(ranges) != 0 {
+				return errors.Newf("expected 0 ranges but found %d", len(ranges))
+			}
 		}
 		return nil
 	}
 
 	runAfterPreSplitting = func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
-		ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec)
-		if err != nil {
-			return err
-		}
-		if len(ranges) != 8 {
-			return errors.Newf("expected 8 ranges but found %d", len(ranges))
+		for _, id := range []int{2, 3} {
+			ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec, descpb.IndexID(id))
+			if err != nil {
+				return err
+			}
+			if len(ranges) != 8 {
+				return errors.Newf("expected 8 ranges but found %d", len(ranges))
+			}
 		}
 		return nil
 	}
