@@ -51,13 +51,12 @@ const sqlDetailsStatsSlice = createSlice({
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
-      if (action.payload.key) {
-        delete state[action.payload.key];
-      } else {
-        const keys = Object.keys(state);
-        for (const key in keys) {
-          delete state[key];
-        }
+      delete state[action.payload.key];
+    },
+    invalidateAll: state => {
+      const keys = Object.keys(state);
+      for (const key in keys) {
+        delete state[key];
       }
     },
     refresh: (_, action: PayloadAction<StatementDetailsRequest>) => {},
