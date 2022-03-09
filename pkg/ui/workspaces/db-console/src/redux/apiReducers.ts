@@ -314,6 +314,51 @@ const queriesReducerObj = new CachedDataReducer(
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
+// TODO (maryliag) add period selected to generate ID
+export const statementDetailsRequestToID = (
+  req: api.StatementDetailsRequestMessage,
+): string =>
+  generateStmtDetailsToID(
+    req.fingerprint_id.toString(),
+    req.app_names.toString(),
+  );
+
+export const generateStmtDetailsToID = (
+  fingerprintID: string,
+  appNames: string,
+): string => {
+  if (
+    appNames &&
+    (appNames.includes("$ internal") || appNames.includes("unset"))
+  ) {
+    const apps = appNames.split(",");
+    for (let i = 0; i < apps.length; i++) {
+      if (apps[i].includes("$ internal")) {
+        apps[i] = "$ internal";
+      }
+      if (apps[i].includes("unset")) {
+        apps[i] = "";
+      }
+    }
+    appNames = apps.toString();
+  }
+  if (appNames) {
+    return fingerprintID + appNames;
+  }
+  return fingerprintID;
+};
+
+const queryReducerObj = new KeyedCachedDataReducer(
+  api.getStatementDetails,
+  "statementDetails",
+  statementDetailsRequestToID,
+  moment.duration(5, "m"),
+);
+
+export const invalidateStatementDetails =
+  queryReducerObj.cachedDataReducer.invalidateData;
+export const refreshStatementDetails = queryReducerObj.refresh;
+
 const userSQLRolesReducerObj = new CachedDataReducer(
   api.getUserSQLRoles,
   "userSQLRoles",
@@ -379,6 +424,9 @@ export interface APIReducersState {
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
+  statementDetails: KeyedCachedDataReducerState<
+    api.StatementDetailsResponseMessage
+  >;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<
@@ -417,6 +465,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [sessionsReducerObj.actionNamespace]: sessionsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
+  [queryReducerObj.actionNamespace]: queryReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]:
     dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
