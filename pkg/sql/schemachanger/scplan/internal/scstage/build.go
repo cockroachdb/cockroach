@@ -151,16 +151,20 @@ func (bc buildContext) makeStageBuilder(bs buildState) (sb stageBuilder) {
 // makeStageBuilderForType creates and populates a stage builder for the given
 // op type.
 func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) stageBuilder {
+	numTargets := len(bc.targetState.Targets)
 	sb := stageBuilder{
 		bc:         bc,
 		bs:         bs,
 		opType:     opType,
-		current:    make([]currentTargetState, len(bc.targetState.Targets)),
+		current:    make([]currentTargetState, numTargets),
 		fulfilling: map[*screl.Node]struct{}{},
+		lut:        make(map[*scpb.Target]*currentTargetState, numTargets),
+		visited:    make(map[*screl.Node]uint64, numTargets),
 	}
 	for i, n := range bc.nodes(bs.incumbent) {
 		t := sb.makeCurrentTargetState(n)
 		sb.current[i] = t
+		sb.lut[t.n.Target] = &sb.current[i]
 	}
 	// Greedily try to make progress by going down op edges when possible.
 	for isDone := false; !isDone; {
@@ -172,6 +176,7 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 			if sb.hasUnmetInboundDeps(t.e.To()) {
 				continue
 			}
+			sb.visitEpoch++
 			if sb.hasUnmeetableOutboundDeps(t.e.To()) {
 				continue
 			}
@@ -192,6 +197,12 @@ type stageBuilder struct {
 	current    []currentTargetState
 	fulfilling map[*screl.Node]struct{}
 	opEdges    []*scgraph.OpEdge
+
+	// Helper data structures used to improve performance.
+
+	lut        map[*scpb.Target]*currentTargetState
+	visited    map[*screl.Node]uint64
+	visitEpoch uint64
 }
 
 type currentTargetState struct {
@@ -301,65 +312,61 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 		de.String(), de.Name()))
 }
 
+// hasUnmeetableOutboundDeps returns true iff the candidate node has outbound
+// dependencies which cannot possibly be met.
+// This is the case when, among all the nodes transitively connected to or from
+// it via same-stage dependency edges, there is at least one which cannot (for
+// whatever reason) be scheduled in this stage.
+// This function recursively visits this set of connected nodes.
 func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
-	candidates := make(map[*screl.Node]int, len(sb.current))
-	for i, t := range sb.current {
-		if t.e != nil {
-			candidates[t.e.To()] = i
-		}
+	if sb.visited[n] == sb.visitEpoch {
+		return false
 	}
-	visited := make(map[*screl.Node]bool)
-	var visit func(n *screl.Node)
-	visit = func(n *screl.Node) {
-		if ret || visited[n] {
-			return
+	sb.visited[n] = sb.visitEpoch
+	if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
+		// This should never happen.
+		panic(errors.AssertionFailedf("%s should not yet be fulfilled",
+			screl.NodeString(n)))
+	}
+	if _, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
+		// This should never happen.
+		panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
+			screl.NodeString(n)))
+	}
+	if t := sb.lut[n.Target]; t == nil {
+		// This should never happen.
+		panic(errors.AssertionFailedf("%s target not found in look-up table",
+			screl.NodeString(n)))
+	} else if t.e == nil || t.e.To() != n {
+		// The visited node is not a candidate for scheduling in this stage.
+		return true
+	}
+	_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
+		if sb.visited[de.From()] == sb.visitEpoch {
+			return nil
 		}
-		visited[n] = true
-		if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
-			// This should never happen.
-			panic(errors.AssertionFailedf("%s should not yet be fulfilled",
-				screl.NodeString(n)))
+		if !sb.isUnmetInboundDep(de) {
+			return nil
 		}
-		if _, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
-			// This should never happen.
-			panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
-				screl.NodeString(n)))
-		}
-		if _, isCandidate := candidates[n]; !isCandidate {
+		if de.Kind() != scgraph.SameStagePrecedence || sb.hasUnmeetableOutboundDeps(de.From()) {
 			ret = true
-			return
+			return iterutil.StopIteration()
 		}
-		_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
-			if ret {
-				return iterutil.StopIteration()
-			}
-			if visited[de.From()] {
-				return nil
-			}
-			if !sb.isUnmetInboundDep(de) {
-				return nil
-			}
-			if de.Kind() == scgraph.SameStagePrecedence {
-				visit(de.From())
-			} else {
-				ret = true
-			}
-			return nil
-		})
-		_ = sb.bc.g.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
-			if ret {
-				return iterutil.StopIteration()
-			}
-			if visited[de.To()] {
-				return nil
-			}
-			if de.Kind() == scgraph.SameStagePrecedence {
-				visit(de.To())
-			}
-			return nil
-		})
+		return nil
+	})
+	if ret {
+		return true
 	}
-	visit(n)
+	_ = sb.bc.g.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
+		if sb.visited[de.To()] == sb.visitEpoch {
+			return nil
+		}
+		if de.Kind() == scgraph.SameStagePrecedence && sb.hasUnmeetableOutboundDeps(de.To()) {
+			ret = true
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
 	return ret
 }
 
