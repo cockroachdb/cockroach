@@ -49,4 +49,5 @@ type TestingKnobs struct {
 	ProtectedTS                  ModuleTestingKnobs
 	CapturedIndexUsageStatsKnobs ModuleTestingKnobs
 	AdmissionControl             ModuleTestingKnobs
+	UnusedIndexRecommendKnobs    ModuleTestingKnobs
 }
