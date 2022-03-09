@@ -1252,10 +1252,10 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
-        sha256 = "65cad26bfd3df564cfcbdc99f14b72b1a62d53d71956f60499a51801518e1fc3",
-        strip_prefix = "github.com/cockroachdb/errors@v1.8.9",
+        sha256 = "ff3814544271799c80da14dadfe408efc4f66e02cbdf17b73e81614ed9f7ae43",
+        strip_prefix = "github.com/cockroachdb/errors@v1.9.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.8.9.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.9.0.zip",
         ],
     )
     go_repository(
