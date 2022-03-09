@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -1393,4 +1395,38 @@ func TestDropPhysicalTableGC(t *testing.T) {
 			require.Zerof(t, actualZoneConfigs, "Zone config for '%s' was not deleted as expected.", table.name)
 		}
 	}
+}
+
+func TestDropLargeDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "drop can be longer than timeout under race testing")
+	// Creates a complex schema with a view based graph that nests within
+	// each other, which can lead to long DROP times specially if there
+	// is anything takes quadratic time.
+	TestDropLargeDatabaseWithSchemaChanger := func(useDeclarative bool) {
+		ctx := context.Background()
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+		defer s.Stopper().Stop(ctx)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `
+CREATE DATABASE largedb;
+SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled=no;
+`)
+		sqltestutils.GenerateViewBasedGraphSchema(
+			t, sqlDB, "largedb", 5, 6, 4)
+		if !useDeclarative {
+			sqlDB.Exec(t, `SET use_declarative_schema_changer=off;`)
+		}
+		startTime := timeutil.Now()
+		sqlDB.Exec(t, `DROP DATABASE largedb;`)
+		t.Logf("Total time for drop (declarative: %t) %f",
+			useDeclarative,
+			timeutil.Since(startTime).Seconds())
+	}
+	// Test complex schema without declarative.
+	TestDropLargeDatabaseWithSchemaChanger(false)
+	// TODO(fqazi): Currently this takes more than 5 minutes, so disabled for now.
+	// Test complex schema with declarative.
+	//TestDropLargeDatabaseWithSchemaChanger(true)
 }
