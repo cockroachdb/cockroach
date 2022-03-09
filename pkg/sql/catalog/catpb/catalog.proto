@@ -213,4 +213,7 @@ message RowLevelTTL {
   // RowStatsPollInterval is the interval to report row statistics (number of rows on table, number of expired
   // rows on table) during row level TTL. If zero, no statistics are reported.
   optional int64 row_stats_poll_interval = 9 [(gogoproto.nullable)=false, (gogoproto.casttype)="time.Duration"];
+  // LabelMetrics is true if metrics for the TTL job should add a label containing
+  // the relation name.
+  optional bool label_metrics = 10 [(gogoproto.nullable) = false];
 }

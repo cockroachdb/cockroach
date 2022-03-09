@@ -311,6 +311,15 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numNonExpiredRows: 5,
 		},
 		{
+			desc: "one column pk with child labels & statistics",
+			createTable: `CREATE TABLE tbl (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	text TEXT
+) WITH (ttl_expire_after = '30 days', ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)`,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
+		},
+		{
 			desc: "one column pk, concurrentSchemaChange",
 			createTable: `CREATE TABLE tbl (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
