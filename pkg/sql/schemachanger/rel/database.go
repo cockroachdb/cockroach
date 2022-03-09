@@ -55,7 +55,7 @@ func NewDatabase(sc *Schema, indexes [][]Attr) (*Database, error) {
 	{
 		var primaryIndex index
 		primaryIndex.s = sc
-		primaryIndex.tree = btree.NewWithFreeList(8, fl)
+		primaryIndex.tree = btree.NewWithFreeList(degree, fl)
 		t.indexes[0] = primaryIndex
 	}
 	secondaryIndexes := t.indexes[1:]
