@@ -90,7 +90,7 @@ type storeMetrics interface {
 var childMetricsEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
-	false)
+	false).WithPublic()
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
