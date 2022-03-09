@@ -365,15 +365,16 @@ func NewNode(
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:              cfg,
-		stopper:               stopper,
-		recorder:              recorder,
-		metrics:               makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:                stores,
-		txnMetrics:            txnMetrics,
-		sqlExec:               sqlExec,
-		clusterID:             clusterID,
-		admissionController:   kvserver.MakeKVAdmissionController(kvAdmissionQ, storeGrantCoords),
+		storeCfg:   cfg,
+		stopper:    stopper,
+		recorder:   recorder,
+		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:     stores,
+		txnMetrics: txnMetrics,
+		sqlExec:    sqlExec,
+		clusterID:  clusterID,
+		admissionController: kvserver.MakeKVAdmissionController(
+			kvAdmissionQ, storeGrantCoords, cfg.Settings),
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
@@ -529,6 +530,8 @@ func (n *Node) start(
 	}
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
+	// Stores have been created, so can start providing tenant weights.
+	n.admissionController.SetTenantWeightProvider(n, n.stopper)
 
 	// Be careful about moving this line above where we start stores; store
 	// migrations rely on the fact that the cluster version has not been updated
@@ -774,6 +777,30 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 		return nil
 	})
 	return metrics
+}
+
+// GetTenantWeights implements kvserver.TenantWeightProvider.
+func (n *Node) GetTenantWeights() kvserver.TenantWeights {
+	weights := kvserver.TenantWeights{
+		Node: make(map[uint64]uint32),
+	}
+	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+		sw := make(map[uint64]uint32)
+		weights.Stores = append(weights.Stores, kvserver.TenantWeightsForStore{
+			StoreID: store.StoreID(),
+			Weights: sw,
+		})
+		store.VisitReplicas(func(r *kvserver.Replica) bool {
+			tid, valid := r.TenantID()
+			if valid {
+				weights.Node[tid.ToUint64()]++
+				sw[tid.ToUint64()]++
+			}
+			return true
+		})
+		return nil
+	})
+	return weights
 }
 
 func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {

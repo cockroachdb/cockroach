@@ -73,6 +73,24 @@ var admissionControlEnabledSettings = [numWorkKinds]*settings.BoolSetting{
 	SQLSQLResponseWork: SQLSQLResponseAdmissionControlEnabled,
 }
 
+// KVTenantWeightsEnabled controls whether tenant weights are enabled for KV
+// admission control. This setting has no effect if admission.kv.enabled is
+// false.
+var KVTenantWeightsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"admission.kv.tenant_weights.enabled",
+	"when true, tenant weights are enabled for KV admission control",
+	false).WithPublic()
+
+// KVStoresTenantWeightsEnabled controls whether tenant weights are enabled
+// for KV-stores admission control. This setting has no effect if
+// admission.kv.enabled is false.
+var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"admission.kv.stores.tenant_weights.enabled",
+	"when true, tenant weights are enabled for KV-stores admission control",
+	false).WithPublic()
+
 // EpochLIFOEnabled controls whether the adaptive epoch-LIFO scheme is enabled
 // for admission control. Is only relevant when the above admission control
 // settings are also set to true. Unlike those settings, which are granular
@@ -192,17 +210,14 @@ type WorkInfo struct {
 
 // WorkQueue maintains a queue of work waiting to be admitted. Ordering of
 // work is achieved via 2 heaps: a tenant heap orders the tenants with waiting
-// work in increasing order of used slots or tokens. Within each tenant, the
-// waiting work is ordered based on priority and create time. Tenants with
-// non-zero values of used slots or tokens are tracked even if they have no
-// more waiting work. Token usage is reset to zero every second. The choice of
-// 1 second of memory for token distribution fairness is somewhat arbitrary.
-// The same 1 second interval is also used to garbage collect tenants who have
-// no waiting requests and no used slots or tokens.
-//
-// Note that currently there are no weights associated with tenants -- one
-// could imagine using weights and comparing used/weight values for
-// inter-tenant fairness.
+// work in increasing order of used slots or tokens, optionally adjusted by
+// tenant weights. Within each tenant, the waiting work is ordered based on
+// priority and create time. Tenants with non-zero values of used slots or
+// tokens are tracked even if they have no more waiting work. Token usage is
+// reset to zero every second. The choice of 1 second of memory for token
+// distribution fairness is somewhat arbitrary. The same 1 second interval is
+// also used to garbage collect tenants who have no waiting requests and no
+// used slots or tokens.
 //
 // Usage example:
 //  var grantCoord *GrantCoordinator
@@ -834,7 +849,7 @@ func (q *WorkQueue) getTenantWeightLocked(tenantID uint64) uint32 {
 }
 
 // SetTenantWeights sets the weight of tenants, using the provided tenant ID
-// => weight map.
+// => weight map. A nil map will result in all tenants having the same weight.
 func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 	q.mu.tenantWeights.mu.Lock()
 	defer q.mu.tenantWeights.mu.Unlock()
@@ -1103,7 +1118,8 @@ type tenantInfo struct {
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
-// order of tenantInfo.used. That is, we prefer tenants that are using less.
+// order of tenantInfo.used/tenantInfo.weight (weights are an optional
+// feature, and default to 1). That is, we prefer tenants that are using less.
 type tenantHeap []*tenantInfo
 
 var _ heap.Interface = (*tenantHeap)(nil)

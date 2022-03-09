@@ -3607,6 +3607,31 @@ type KVAdmissionController interface {
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
 	AdmittedKVWorkDone(handle interface{})
+	// SetTenantWeightProvider is used to set the provider that will be
+	// periodically polled for weights. The stopper should be used to terminate
+	// the periodic polling.
+	SetTenantWeightProvider(provider TenantWeightProvider, stopper *stop.Stopper)
+}
+
+// TenantWeightProvider can be periodically asked to provide the tenant
+// weights.
+type TenantWeightProvider interface {
+	GetTenantWeights() TenantWeights
+}
+
+// TenantWeights contains the various tenant weights.
+type TenantWeights struct {
+	// Node is the node level tenant ID => weight.
+	Node map[uint64]uint32
+	// Stores contains the per-store tenant weights.
+	Stores []TenantWeightsForStore
+}
+
+// TenantWeightsForStore contains the tenant weights for a store.
+type TenantWeightsForStore struct {
+	roachpb.StoreID
+	// Weights is tenant ID => weight.
+	Weights map[uint64]uint32
 }
 
 // KVAdmissionControllerImpl implements KVAdmissionController interface.
@@ -3614,6 +3639,7 @@ type KVAdmissionControllerImpl struct {
 	// Admission control queues and coordinators. Both should be nil or non-nil.
 	kvAdmissionQ     *admission.WorkQueue
 	storeGrantCoords *admission.StoreGrantCoordinators
+	settings         *cluster.Settings
 }
 
 var _ KVAdmissionController = KVAdmissionControllerImpl{}
@@ -3635,11 +3661,14 @@ func isSingleHeartbeatTxnRequest(b *roachpb.BatchRequest) bool {
 // MakeKVAdmissionController returns a KVAdmissionController. Both parameters
 // must together either be nil or non-nil.
 func MakeKVAdmissionController(
-	kvAdmissionQ *admission.WorkQueue, storeGrantCoords *admission.StoreGrantCoordinators,
+	kvAdmissionQ *admission.WorkQueue,
+	storeGrantCoords *admission.StoreGrantCoordinators,
+	settings *cluster.Settings,
 ) KVAdmissionController {
 	return KVAdmissionControllerImpl{
 		kvAdmissionQ:     kvAdmissionQ,
 		storeGrantCoords: storeGrantCoords,
+		settings:         settings,
 	}
 }
 
@@ -3704,7 +3733,7 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 	return ah, nil
 }
 
-// AdmittedKVWorkDone implement the KVAdmissionController interface.
+// AdmittedKVWorkDone implements the KVAdmissionController interface.
 func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
 	ah := handle.(admissionHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
@@ -3713,4 +3742,46 @@ func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
 	if ah.storeAdmissionQ != nil {
 		ah.storeAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
+}
+
+// SetTenantWeightProvider implements the KVAdmissionController interface.
+func (n KVAdmissionControllerImpl) SetTenantWeightProvider(
+	provider TenantWeightProvider, stopper *stop.Stopper,
+) {
+	go func() {
+		const weightCalculationPeriod = 10 * time.Minute
+		ticker := time.NewTicker(weightCalculationPeriod)
+		// Used for short-circuiting the weights calculation if all weights are
+		// disabled.
+		allWeightsDisabled := false
+		for {
+			select {
+			case <-ticker.C:
+				kvDisabled := !admission.KVTenantWeightsEnabled.Get(&n.settings.SV)
+				kvStoresDisabled := !admission.KVStoresTenantWeightsEnabled.Get(&n.settings.SV)
+				if allWeightsDisabled && kvDisabled && kvStoresDisabled {
+					// Have already transitioned to disabled, so noop.
+					continue
+				}
+				weights := provider.GetTenantWeights()
+				if kvDisabled {
+					weights.Node = nil
+				}
+				n.kvAdmissionQ.SetTenantWeights(weights.Node)
+				for _, storeWeights := range weights.Stores {
+					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
+					if q != nil {
+						if kvStoresDisabled {
+							storeWeights.Weights = nil
+						}
+						q.SetTenantWeights(storeWeights.Weights)
+					}
+				}
+				allWeightsDisabled = kvDisabled && kvStoresDisabled
+			case <-stopper.ShouldQuiesce():
+				ticker.Stop()
+				return
+			}
+		}
+	}()
 }
