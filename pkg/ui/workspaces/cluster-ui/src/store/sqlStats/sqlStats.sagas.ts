@@ -84,7 +84,7 @@ export function* resetSQLStatsSaga() {
     yield call(resetSQLStats);
     yield put(sqlStatsActions.invalidated());
     yield put(sqlStatsActions.refresh());
-    yield put(sqlDetailsStatsActions.invalidated());
+    yield put(sqlDetailsStatsActions.invalidateAll());
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }
