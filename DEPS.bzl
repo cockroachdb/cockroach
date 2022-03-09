@@ -705,8 +705,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
-        sum = "h1:eqUxTOUOduHP4D3f3wJ0kiyoNjDf6wLCso/4n7rBA4U=",
-        version = "v1.8.9",
+        sum = "h1:B48dYem5SlAY7iU8AKsgedb4gH6mo+bDkbtLIvM/a88=",
+        version = "v1.9.0",
     )
     go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",

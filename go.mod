@@ -44,7 +44,7 @@ require (
 	github.com/cockroachdb/cockroach-go/v2 v2.1.1
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
 	github.com/cockroachdb/datadriven v1.0.1
-	github.com/cockroachdb/errors v1.8.9
+	github.com/cockroachdb/errors v1.9.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
