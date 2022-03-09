@@ -64,11 +64,10 @@ func (g *Graph) Database() *rel.Database {
 // targets. If they do not, an error will be returned.
 func New(cs scpb.CurrentState) (*Graph, error) {
 	db, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
-		{rel.Type, screl.DescID},
-		{screl.DescID, rel.Type},
-		{screl.Element},
-		{screl.Target},
-		// TODO(ajwerner): Decide what more predicates are needed
+		{screl.DescID, rel.Type, screl.ColumnID},
+		{screl.ReferencedDescID, rel.Type},
+		{rel.Type, screl.Element, screl.CurrentStatus},
+		{rel.Type, screl.Target, screl.TargetStatus},
 	})
 	if err != nil {
 		return nil, err
