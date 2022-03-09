@@ -460,12 +460,6 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, false)
 				}
 			}
-			// {{/*
-			// Although we didn't change the length of the batch, it is
-			// necessary to set the length anyway (this helps maintaining the
-			// invariant of flat bytes).
-			// */}}
-			batch.SetLength(n)
 		},
 	)
 	return batch
