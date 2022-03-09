@@ -54,9 +54,10 @@ export const TransactionsPageConnected = withRouter(
       sortSetting: selectSortSetting(state),
     }),
     (dispatch: Dispatch) => ({
-      refreshData: (req?: StatementsRequest) =>
+      refreshData: (req: StatementsRequest) =>
         dispatch(sqlStatsActions.refresh(req)),
-      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
+      resetSQLStats: (req: StatementsRequest) =>
+        dispatch(sqlStatsActions.reset(req)),
       onTimeScaleChange: (ts: TimeScale) => {
         dispatch(
           sqlStatsActions.updateTimeScale({
