@@ -1921,7 +1921,7 @@ func (s *adminServer) jobsHelper(
 	q.Append(`
       SELECT job_id, job_type, description, statement, user_name, descriptor_ids,
             case
-              when ` + retryRunningCondition + `then 'retry-running' 
+              when ` + retryRunningCondition + ` then 'retry-running' 
               when ` + retryRevertingCondition + ` then 'retry-reverting' 
               else status
             end as status, running_status, created, started, finished, modified, fraction_completed,
@@ -1937,8 +1937,15 @@ func (s *adminServer) jobsHelper(
 	if req.Type != jobspb.TypeUnspecified {
 		q.Append(" AND job_type = $", req.Type.String())
 	} else {
-		// Don't show auto stats jobs in the overview page.
-		q.Append(" AND (job_type != $ OR job_type IS NULL)", jobspb.TypeAutoCreateStats.String())
+		// Don't show automatic jobs in the overview page.
+		q.Append(" AND (")
+		for idx, jobType := range jobspb.AutomaticJobTypes {
+			q.Append("job_type != $", jobType.String())
+			if idx < len(jobspb.AutomaticJobTypes)-1 {
+				q.Append(" AND ")
+			}
+		}
+		q.Append(" OR job_type IS NULL)")
 	}
 	q.Append("ORDER BY created DESC")
 	if req.Limit > 0 {
