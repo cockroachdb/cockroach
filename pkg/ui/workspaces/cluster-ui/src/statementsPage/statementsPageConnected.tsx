@@ -77,7 +77,7 @@ export const ConnectedStatementsPage = withRouter(
       totalFingerprints: selectTotalFingerprints(state),
     }),
     (dispatch: Dispatch) => ({
-      refreshStatements: (req?: StatementsRequest) =>
+      refreshStatements: (req: StatementsRequest) =>
         dispatch(sqlStatsActions.refresh(req)),
       onTimeScaleChange: (ts: TimeScale) => {
         dispatch(
@@ -90,7 +90,8 @@ export const ConnectedStatementsPage = withRouter(
         dispatch(statementDiagnosticsActions.refresh()),
       refreshUserSQLRoles: () =>
         dispatch(uiConfigActions.refreshUserSQLRoles()),
-      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
+      resetSQLStats: (req: StatementsRequest) =>
+        dispatch(sqlStatsActions.reset(req)),
       dismissAlertMessage: () =>
         dispatch(
           localStorageActions.update({
