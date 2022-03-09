@@ -26,6 +26,8 @@ import {
   lastErrorSelector,
   lastSetAtSelector,
 } from "src/redux/hotRanges";
+import { InlineAlert } from "src/components";
+import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { selectNodeLocalities } from "src/redux/localities";
 
 const cx = classNames.bind(styles);
@@ -68,18 +70,21 @@ const HotRangesPage = () => {
   return (
     <div className="section">
       <Helmet title="Hot Ranges" />
-      <h1 className="base-heading">Hot ranges</h1>
-      <Text className={cx("hotranges-description")}>
-        The hot ranges table shows ranges receiving a high number of reads or
-        writes. By default the table is sorted by
-        <br />
-        ranges with the highest QPS (Queries Per Second). Use this information
-        to...
-        <Anchor href="" target="_blank">
-          {" "}
-          Learn more
-        </Anchor>
-      </Text>
+      <h1 className="base-heading">Hot Ranges</h1>
+      <InlineAlert
+        title=""
+        message={
+          <Text className={cx("hotranges-description")}>
+            The Hot Ranges table shows ranges receiving a high number of reads
+            or writes. By default, the table is sorted by ranges with the
+            highest QPS (queries per second). <br /> Use this information to{" "}
+            <Anchor href={performanceBestPracticesHotSpots}>
+              find and reduce hot spots.
+            </Anchor>
+          </Text>
+        }
+        fullWidth
+      />
       <ErrorBoundary>
         <Loading
           loading={isLoading}
