@@ -14,23 +14,36 @@
 package rules
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // ApplyDepRules adds dependency edges to the graph according to the
 // registered dependency rules.
 func ApplyDepRules(g *scgraph.Graph) error {
 	for _, dr := range registry.depRules {
+		start := timeutil.Now()
+		var added int
 		if err := dr.q.Iterate(g.Database(), func(r rel.Result) error {
 			from := r.Var(dr.from).(*screl.Node)
 			to := r.Var(dr.to).(*screl.Node)
+			added++
 			return g.AddDepEdge(
 				dr.name, dr.kind, from.Target, from.CurrentStatus, to.Target, to.CurrentStatus,
 			)
 		}); err != nil {
 			return err
+		}
+		if log.V(2) {
+			log.Infof(
+				context.TODO(), "applying dep rule %s %d took %v",
+				dr.name, added, timeutil.Since(start),
+			)
 		}
 	}
 	return nil
@@ -42,12 +55,21 @@ func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
 	db := g.Database()
 	m := make(map[*screl.Node]struct{})
 	for _, rule := range registry.opRules {
+		var added int
+		start := timeutil.Now()
 		err := rule.q.Iterate(db, func(r rel.Result) error {
+			added++
 			m[r.Var(rule.from).(*screl.Node)] = struct{}{}
 			return nil
 		})
 		if err != nil {
 			return nil, err
+		}
+		if log.V(2) {
+			log.Infof(
+				context.TODO(), "applying op rule %s %d took %v",
+				rule.name, added, timeutil.Since(start),
+			)
 		}
 	}
 	// Mark any op edges from these nodes as no-op.

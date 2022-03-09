@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +33,13 @@ import (
 func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
 ) (_ scpb.CurrentState, err error) {
+	start := timeutil.Now()
+	defer func() {
+		if err != nil || !log.ExpensiveLogEnabled(ctx, 2) {
+			return
+		}
+		log.Infof(ctx, "build for %s took %v", n.StatementTag(), timeutil.Since(start))
+	}()
 	initial = initial.DeepCopy()
 	bs := newBuilderState(ctx, dependencies, initial)
 	els := newEventLogState(dependencies, initial, n)
