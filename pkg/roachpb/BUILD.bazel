@@ -148,6 +148,7 @@ proto_library(
         "app_stats.proto",
         "data.proto",
         "errors.proto",
+        "index_recommendations.proto",
         "index_usage_stats.proto",
         "internal.proto",
         "internal_raft.proto",

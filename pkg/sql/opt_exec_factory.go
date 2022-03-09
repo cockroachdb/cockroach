@@ -123,7 +123,7 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	scan.localityOptimized = params.LocalityOptimized
-	if !ef.isExplain {
+	if !ef.isExplain && !isVerifyIndexCountQuery(ef.planner.stmt.SQL, int(tabDesc.GetID()), int(idx.GetID())) {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -132,6 +132,17 @@ func (ef *execFactory) ConstructScan(
 	}
 
 	return scan, nil
+}
+
+// isVerifyIndexCountQuery determines whether the given statement is an index
+// count validation statement. This occurs as part of the validation process
+// for a new index (see ValidateForwardIndexes &
+// countIndexRowsAndMaybeCheckUniqueness). This function is used to avoid
+// recording a read on the new index due to the count verification query.
+func isVerifyIndexCountQuery(stmt string, tableID int, idxID int) bool {
+	const verifyIndexCountFormat = "SELECT count(1) FROM [%d AS t]@[%d]"
+	verifyIndexCountString := fmt.Sprintf(verifyIndexCountFormat, tableID, idxID)
+	return strings.HasPrefix(stmt, verifyIndexCountString)
 }
 
 func generateScanSpans(

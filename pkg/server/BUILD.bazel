@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "addjoin.go",
         "admin.go",
+        "admin_test_utils.go",
         "api_v2.go",
         "api_v2_auth.go",
         "api_v2_error.go",
@@ -385,6 +386,7 @@ go_test(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/idxusage",
         "//pkg/sql/roleoption",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
