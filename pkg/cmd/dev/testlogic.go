@@ -187,7 +187,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			subtests)
 		args = append(args, testTarget)
 		args = append(args, "--test_filter", selector)
-		args = append(args, d.getTestOutputArgs(stress, verbose, showLogs)...)
+		args = append(args, d.getTestOutputArgs(stress /* streamLogs */, verbose, showLogs)...)
 		args = append(args, additionalBazelArgs...)
 		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {

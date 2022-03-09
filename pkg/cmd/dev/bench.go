@@ -142,7 +142,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, goTestArgs...)
 	}
-	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs)...)
+	args = append(args, d.getTestOutputArgs(false /* streamLogs */, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
