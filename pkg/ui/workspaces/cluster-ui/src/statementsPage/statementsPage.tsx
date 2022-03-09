@@ -87,10 +87,10 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 // provide convenient definitions for `mapDispatchToProps`, `mapStateToProps` and props that
 // have to be provided by parent component.
 export interface StatementsPageDispatchProps {
-  refreshStatements: (req?: StatementsRequest) => void;
+  refreshStatements: (req: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
   refreshUserSQLRoles: () => void;
-  resetSQLStats: () => void;
+  resetSQLStats: (req: StatementsRequest) => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
     statement: string,
@@ -266,6 +266,10 @@ export class StatementsPage extends React.Component<
   refreshStatements = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshStatements(req);
+  };
+  resetSQLStats = (): void => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.resetSQLStats(req);
   };
 
   componentDidMount(): void {
@@ -596,7 +600,6 @@ export class StatementsPage extends React.Component<
       search,
       isTenant,
       nodeRegions,
-      resetSQLStats,
     } = this.props;
 
     const nodes = isTenant
@@ -649,7 +652,10 @@ export class StatementsPage extends React.Component<
             />
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
-            <ClearStats resetSQLStats={resetSQLStats} tooltipType="statement" />
+            <ClearStats
+              resetSQLStats={this.resetSQLStats}
+              tooltipType="statement"
+            />
           </PageConfigItem>
         </PageConfig>
         <Loading

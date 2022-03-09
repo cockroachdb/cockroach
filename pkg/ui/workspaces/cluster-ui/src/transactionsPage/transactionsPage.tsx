@@ -91,8 +91,8 @@ export interface TransactionsPageStateProps {
 }
 
 export interface TransactionsPageDispatchProps {
-  refreshData: (req?: StatementsRequest) => void;
-  resetSQLStats: () => void;
+  refreshData: (req: StatementsRequest) => void;
+  resetSQLStats: (req: StatementsRequest) => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
@@ -175,6 +175,10 @@ export class TransactionsPage extends React.Component<
   refreshData = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
+  };
+  resetSQLStats = (): void => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.resetSQLStats(req);
   };
 
   componentDidMount(): void {
@@ -328,7 +332,6 @@ export class TransactionsPage extends React.Component<
   render(): React.ReactElement {
     const {
       data,
-      resetSQLStats,
       nodeRegions,
       isTenant,
       onColumnsChange,
@@ -409,7 +412,7 @@ export class TransactionsPage extends React.Component<
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
             <ClearStats
-              resetSQLStats={resetSQLStats}
+              resetSQLStats={this.resetSQLStats}
               tooltipType="transaction"
             />
           </PageConfigItem>

@@ -17,7 +17,7 @@ import {
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-import { getStatements, getCombinedStatements } from "src/api/statementsApi";
+import { getCombinedStatements } from "src/api/statementsApi";
 import { resetSQLStats } from "src/api/sqlStatsApi";
 import {
   receivedSQLStatsSaga,
@@ -26,88 +26,48 @@ import {
   resetSQLStatsSaga,
 } from "./sqlStats.sagas";
 import { actions, reducer, SQLStatsState } from "./sqlStats.reducer";
+import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 import Long from "long";
 
 describe("SQLStats sagas", () => {
-  const combinedSQLStatsResponse = new cockroach.server.serverpb.StatementsResponse(
-    {
-      statements: [
-        {
-          id: new Long(1),
-        },
-        {
-          id: new Long(2),
-        },
-      ],
-      last_reset: null,
-    },
-  );
-  const nonCombinedSQLStatsResponse = new cockroach.server.serverpb.StatementsResponse(
-    {
-      statements: [
-        {
-          id: new Long(1),
-        },
-      ],
-      last_reset: null,
-    },
-  );
+  const payload = new cockroach.server.serverpb.StatementsRequest({
+    start: Long.fromNumber(1596816675),
+    end: Long.fromNumber(1596820675),
+    combined: true,
+  });
+  const sqlStatsResponse = new cockroach.server.serverpb.StatementsResponse({
+    statements: [
+      {
+        id: new Long(1),
+      },
+      {
+        id: new Long(2),
+      },
+    ],
+    last_reset: null,
+  });
 
   const stmtStatsAPIProvider: (EffectProviders | StaticProvider)[] = [
-    [matchers.call.fn(getCombinedStatements), combinedSQLStatsResponse],
-    [matchers.call.fn(getStatements), nonCombinedSQLStatsResponse],
+    [matchers.call.fn(getCombinedStatements), sqlStatsResponse],
   ];
 
   describe("refreshSQLStatsSaga", () => {
     it("dispatches request SQLStats action", () => {
-      return expectSaga(refreshSQLStatsSaga)
-        .put(actions.request())
+      return expectSaga(refreshSQLStatsSaga, actions.request(payload))
+        .provide(stmtStatsAPIProvider)
+        .put(actions.request(payload))
         .run();
     });
   });
 
   describe("requestSQLStatsSaga", () => {
     it("successfully requests statements list", () => {
-      return expectSaga(requestSQLStatsSaga)
+      return expectSaga(requestSQLStatsSaga, actions.request(payload))
         .provide(stmtStatsAPIProvider)
-        .put(actions.received(nonCombinedSQLStatsResponse))
+        .put(actions.received(sqlStatsResponse))
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
-          data: nonCombinedSQLStatsResponse,
-          lastError: null,
-          valid: true,
-        })
-        .run();
-    });
-
-    it("requests combined SQL Stats if combined=true in the request message", () => {
-      return expectSaga(requestSQLStatsSaga, {
-        payload: new cockroach.server.serverpb.StatementsRequest({
-          combined: true,
-        }),
-      })
-        .provide(stmtStatsAPIProvider)
-        .put(actions.received(combinedSQLStatsResponse))
-        .withReducer(reducer)
-        .hasFinalState<SQLStatsState>({
-          data: combinedSQLStatsResponse,
-          lastError: null,
-          valid: true,
-        })
-        .run();
-    });
-
-    it("requests combined SQL Stats if combined=false in the request message", () => {
-      return expectSaga(requestSQLStatsSaga, {
-        payload: new cockroach.server.serverpb.StatementsRequest({
-          combined: false,
-        }),
-      })
-        .provide(stmtStatsAPIProvider)
-        .put(actions.received(nonCombinedSQLStatsResponse))
-        .withReducer(reducer)
-        .hasFinalState<SQLStatsState>({
-          data: nonCombinedSQLStatsResponse,
+          data: sqlStatsResponse,
           lastError: null,
           valid: true,
         })
@@ -116,8 +76,8 @@ describe("SQLStats sagas", () => {
 
     it("returns error on failed request", () => {
       const error = new Error("Failed request");
-      return expectSaga(requestSQLStatsSaga)
-        .provide([[matchers.call.fn(getStatements), throwError(error)]])
+      return expectSaga(requestSQLStatsSaga, actions.request(payload))
+        .provide([[matchers.call.fn(getCombinedStatements), throwError(error)]])
         .put(actions.failed(error))
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
@@ -136,12 +96,12 @@ describe("SQLStats sagas", () => {
         .delay(timeout)
         .put(actions.invalidated())
         .withReducer(reducer, {
-          data: combinedSQLStatsResponse,
+          data: sqlStatsResponse,
           lastError: null,
           valid: true,
         })
         .hasFinalState<SQLStatsState>({
-          data: combinedSQLStatsResponse,
+          data: sqlStatsResponse,
           lastError: null,
           valid: false,
         })
@@ -153,9 +113,10 @@ describe("SQLStats sagas", () => {
     const resetSQLStatsResponse = new cockroach.server.serverpb.ResetSQLStatsResponse();
 
     it("successfully resets SQL stats", () => {
-      return expectSaga(resetSQLStatsSaga)
+      return expectSaga(resetSQLStatsSaga, payload)
         .provide([[matchers.call.fn(resetSQLStats), resetSQLStatsResponse]])
         .put(actions.invalidated())
+        .put(sqlDetailsStatsActions.invalidateAll())
         .put(actions.refresh())
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
@@ -168,7 +129,7 @@ describe("SQLStats sagas", () => {
 
     it("returns error on failed reset", () => {
       const err = new Error("failed to reset");
-      return expectSaga(resetSQLStatsSaga)
+      return expectSaga(resetSQLStatsSaga, payload)
         .provide([[matchers.call.fn(resetSQLStats), throwError(err)]])
         .put(actions.failed(err))
         .withReducer(reducer)
