@@ -297,11 +297,12 @@ type Tracer struct {
 	// for all spans that the parent Tracer creates.
 	otelTracer unsafe.Pointer
 
-	// activeSpansRegistryEnabled controls whether spans are created and
+	// _activeSpansRegistryEnabled controls whether spans are created and
 	// registered with activeSpansRegistry until they're Finish()ed. If not
 	// enabled, span creation is generally a no-op unless a recording span is
 	// explicitly requested.
-	activeSpansRegistryEnabled bool
+	_activeSpansRegistryEnabled int32 // accessed atomically
+
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithParent(<non-nil>) option was supplied.
 	activeSpansRegistry *SpanRegistry
@@ -529,6 +530,22 @@ func (t *Tracer) SetRedactable(to bool) {
 	atomic.StoreInt32(&t._redactable, n)
 }
 
+// SetActiveSpansRegistryEnabled controls whether spans are created and
+// registered with activeSpansRegistry.
+func (t *Tracer) SetActiveSpansRegistryEnabled(to bool) {
+	var n int32
+	if to {
+		n = 1
+	}
+	atomic.StoreInt32(&t._activeSpansRegistryEnabled, n)
+}
+
+// ActiveSpansRegistryEnabled returns true if this tracer is configured
+// to register spans with the activeSpansRegistry
+func (t *Tracer) ActiveSpansRegistryEnabled() bool {
+	return atomic.LoadInt32(&t._activeSpansRegistryEnabled) != 0
+}
+
 // NewTracer creates a Tracer with default options.
 //
 // See NewTracerWithOpt() for controlling various configuration options.
@@ -541,14 +558,14 @@ func NewTracer() *Tracer {
 	}
 
 	t := &Tracer{
-		stack:                      string(debug.Stack()),
-		activeSpansRegistryEnabled: true,
-		activeSpansRegistry:        makeSpanRegistry(),
+		stack:               string(debug.Stack()),
+		activeSpansRegistry: makeSpanRegistry(),
 		// These might be overridden in NewTracerWithOpt.
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
 		debugUseAfterFinish:   debugUseAfterFinish,
 		spanReusePercent:      defaultSpanReusePercent,
 	}
+	t.SetActiveSpansRegistryEnabled(true)
 
 	t.spanPool = sync.Pool{
 		New: func() interface{} {
@@ -591,7 +608,7 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 		t.spanReusePercent = *o.spanReusePercent
 	}
 	t.testing = o.knobs
-	t.activeSpansRegistryEnabled = o.tracingDefault != TracingModeOnDemand
+	t.SetActiveSpansRegistryEnabled(o.tracingDefault != TracingModeOnDemand)
 	if o.sv != nil {
 		t.configure(ctx, o.sv, o.tracingDefault)
 	}
@@ -708,11 +725,11 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 
 		switch tracingDefault {
 		case TracingModeFromEnv:
-			t.activeSpansRegistryEnabled = EnableActiveSpansRegistry.Get(sv)
+			t.SetActiveSpansRegistryEnabled(EnableActiveSpansRegistry.Get(sv))
 		case TracingModeOnDemand:
-			t.activeSpansRegistryEnabled = false
+			t.SetActiveSpansRegistryEnabled(false)
 		case TracingModeActiveSpansRegistry:
-			t.activeSpansRegistryEnabled = true
+			t.SetActiveSpansRegistryEnabled(true)
 		default:
 			panic(fmt.Sprintf("unrecognized tracing option: %v", tracingDefault))
 		}
@@ -1014,7 +1031,7 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
-	if t.activeSpansRegistryEnabled {
+	if t.ActiveSpansRegistryEnabled() {
 		return true
 	}
 	otelTracer := t.getOtelTracer()
