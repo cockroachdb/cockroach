@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -119,11 +118,11 @@ func (a *Cache) GetAuthInfo(
 	if !CacheEnabled.Get(&settings.SV) {
 		return readFromSystemTables(ctx, nil /* txn */, ie, username)
 	}
+	var usersTableVersion, roleOptionsTableVersion descpb.DescriptorVersion
 	err = f.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-	) (err error) {
-		var usersTableDesc, roleOptionsTableDesc catalog.TableDescriptor
-		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
+	) error {
+		_, usersTableDesc, err := descriptors.GetImmutableTableByName(
 			ctx,
 			txn,
 			UsersTableName,
@@ -132,7 +131,7 @@ func (a *Cache) GetAuthInfo(
 		if err != nil {
 			return err
 		}
-		_, roleOptionsTableDesc, err = descriptors.GetImmutableTableByName(
+		_, roleOptionsTableDesc, err := descriptors.GetImmutableTableByName(
 			ctx,
 			txn,
 			RoleOptionsTableName,
@@ -146,55 +145,55 @@ func (a *Cache) GetAuthInfo(
 		// trying to cache anything.
 		if usersTableDesc.IsUncommittedVersion() ||
 			roleOptionsTableDesc.IsUncommittedVersion() {
-			aInfo, err = readFromSystemTables(
-				ctx,
-				txn,
-				ie,
-				username,
-			)
+			aInfo, err = readFromSystemTables(ctx, txn, ie, username)
 			return err
 		}
-		usersTableVersion := usersTableDesc.GetVersion()
-		roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
-
-		// We loop in case the table version changes while looking up
-		// password or role options.
-		for {
-			// Check version and maybe clear cache while holding the mutex.
-			var found bool
-			aInfo, found = a.readAuthInfoFromCache(ctx, usersTableVersion, roleOptionsTableVersion, username)
-
-			if found {
-				return nil
-			}
-
-			// Lookup the data outside the lock, with at most one request in-flight
-			// for each user. The user and role_options table versions are also part
-			// of the request key so that we don't read data from an old version
-			// of either table.
-			val, err := a.loadCacheValue(
-				ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
-				func(loadCtx context.Context) (interface{}, error) {
-					return readFromSystemTables(loadCtx, txn, ie, username)
-				})
-			if err != nil {
-				return err
-			}
-			aInfo = val.(AuthInfo)
-
-			finishedLoop := a.writeAuthInfoBackToCache(
-				ctx,
-				&usersTableVersion,
-				&roleOptionsTableVersion,
-				aInfo,
-				username,
-			)
-			if finishedLoop {
-				return nil
-			}
-		}
+		usersTableVersion = usersTableDesc.GetVersion()
+		roleOptionsTableVersion = roleOptionsTableDesc.GetVersion()
+		return nil
 	})
-	return aInfo, err
+	if err != nil || aInfo != (AuthInfo{}) {
+		return aInfo, err
+	}
+
+	// We loop in case the table version changes while looking up
+	// password or role options.
+	for {
+		// Check version and maybe clear cache while holding the mutex.
+		var found bool
+		aInfo, found = a.readAuthInfoFromCache(ctx, usersTableVersion, roleOptionsTableVersion, username)
+
+		if found {
+			return aInfo, nil
+		}
+
+		// Lookup the data outside the lock and in a new transaction. A separate
+		// transaction is used here in case the table has been modified by a
+		// different transaction during this loop. There will be at most one
+		// request in-flight for each user. The user and role_options table
+		// versions are also part of the request key so that we don't read data
+		// from an old version of either table.
+		val, err := a.loadCacheValue(
+			ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
+			func(loadCtx context.Context) (interface{}, error) {
+				return readFromSystemTables(loadCtx, nil /* txn */, ie, username)
+			})
+		if err != nil {
+			return AuthInfo{}, err
+		}
+		aInfo = val.(AuthInfo)
+
+		finishedLoop := a.writeAuthInfoBackToCache(
+			ctx,
+			&usersTableVersion,
+			&roleOptionsTableVersion,
+			aInfo,
+			username,
+		)
+		if finishedLoop {
+			return aInfo, nil
+		}
+	}
 }
 
 func (a *Cache) readAuthInfoFromCache(
@@ -303,11 +302,12 @@ func (a *Cache) GetDefaultSettings(
 		databaseID descpb.ID,
 	) ([]SettingsCacheEntry, error),
 ) (settingsEntries []SettingsCacheEntry, err error) {
+	var dbRoleSettingsTableVersion descpb.DescriptorVersion
+	databaseID := descpb.ID(0)
 	err = f.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-	) (err error) {
-		var dbRoleSettingsTableDesc catalog.TableDescriptor
-		_, dbRoleSettingsTableDesc, err = descriptors.GetImmutableTableByName(
+	) error {
+		_, dbRoleSettingsTableDesc, err := descriptors.GetImmutableTableByName(
 			ctx,
 			txn,
 			DatabaseRoleSettingsTableName,
@@ -316,7 +316,6 @@ func (a *Cache) GetDefaultSettings(
 		if err != nil {
 			return err
 		}
-		databaseID := descpb.ID(0)
 		if databaseName != "" {
 			dbDesc, err := descriptors.GetImmutableDatabaseByName(ctx, txn, databaseName, tree.DatabaseLookupFlags{})
 			if err != nil {
@@ -344,45 +343,48 @@ func (a *Cache) GetDefaultSettings(
 			)
 			return err
 		}
-		dbRoleSettingsTableVersion := dbRoleSettingsTableDesc.GetVersion()
-
-		// We loop in case the table version changes while looking up
-		// password or role options.
-		for {
-			// Check version and maybe clear cache while holding the mutex.
-			var found bool
-			settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, username, databaseID)
-
-			if found {
-				return nil
-			}
-
-			// Lookup the data outside the lock, with at most one request in-flight
-			// for each user+database. The db_role_settings table version is also part
-			// of the request key so that we don't read data from an old version
-			// of the table.
-			val, err := a.loadCacheValue(
-				ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", username.Normalized(), databaseID, dbRoleSettingsTableVersion),
-				func(loadCtx context.Context) (interface{}, error) {
-					return readFromSystemTables(loadCtx, txn, ie, username, databaseID)
-				},
-			)
-			if err != nil {
-				return err
-			}
-			settingsEntries = val.([]SettingsCacheEntry)
-
-			finishedLoop := a.writeDefaultSettingsBackToCache(
-				ctx,
-				&dbRoleSettingsTableVersion,
-				settingsEntries,
-			)
-			if finishedLoop {
-				return nil
-			}
-		}
+		dbRoleSettingsTableVersion = dbRoleSettingsTableDesc.GetVersion()
+		return nil
 	})
-	return settingsEntries, err
+	if err != nil || settingsEntries != nil {
+		return settingsEntries, err
+	}
+
+	// We loop in case the table version changes while looking up
+	// password or role options.
+	for {
+		// Check version and maybe clear cache while holding the mutex.
+		var found bool
+		settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, username, databaseID)
+
+		if found {
+			return settingsEntries, nil
+		}
+
+		// Lookup the data outside the lock and in a new txn. There will be at
+		// most one request in-flight for each user+database. The db_role_settings
+		// table version is also part of the request key so that we don't read
+		// data from an old version of the table.
+		val, err := a.loadCacheValue(
+			ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", username.Normalized(), databaseID, dbRoleSettingsTableVersion),
+			func(loadCtx context.Context) (interface{}, error) {
+				return readFromSystemTables(loadCtx, nil /* txn */, ie, username, databaseID)
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		settingsEntries = val.([]SettingsCacheEntry)
+
+		finishedLoop := a.writeDefaultSettingsBackToCache(
+			ctx,
+			&dbRoleSettingsTableVersion,
+			settingsEntries,
+		)
+		if finishedLoop {
+			return settingsEntries, nil
+		}
+	}
 }
 
 func (a *Cache) readDefaultSettingsFromCache(
