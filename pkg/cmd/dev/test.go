@@ -199,7 +199,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, goTestArgs...)
 	}
 
-	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs)...)
+	args = append(args, d.getTestOutputArgs(stress /* streamLogs */, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
@@ -244,9 +244,9 @@ func (d *dev) getGoTestArgs(ctx context.Context, testArgs string) ([]string, err
 	return goTestArgs, nil
 }
 
-func (d *dev) getTestOutputArgs(stress, verbose, showLogs bool) []string {
+func (d *dev) getTestOutputArgs(streamLogs, verbose, showLogs bool) []string {
 	testOutputArgs := []string{"--test_output", "errors"}
-	if stress {
+	if streamLogs {
 		// Stream the output to continually observe the number of successful
 		// test iterations.
 		testOutputArgs = []string{"--test_output", "streamed"}
