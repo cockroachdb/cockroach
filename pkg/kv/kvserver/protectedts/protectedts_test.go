@@ -17,7 +17,6 @@ func TestProtectedTimestamps(t *testing.T) {
 	var (
 		_ Provider
 		_ Cache
-		_ Verifier
 		_ Storage
 		_ = EmptyCache(nil)
 		_ = ErrNotExists
