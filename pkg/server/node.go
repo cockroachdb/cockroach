@@ -970,8 +970,13 @@ func (n *Node) batchInternal(
 		}
 
 		tStart := timeutil.Now()
+		handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
+		if err != nil {
+			return err
+		}
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(ctx, *args)
+		n.admissionController.AdmittedKVWorkDone(handle)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
 			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
@@ -1024,12 +1029,7 @@ func (n *Node) Batch(
 		args.GatewayNodeID = n.Descriptor.NodeID
 	}
 
-	handle, err := n.admissionController.AdmitKVWork(ctx, tenantID, args)
-	var br *roachpb.BatchResponse
-	if err == nil {
-		br, err = n.batchInternal(ctx, tenantID, args)
-		n.admissionController.AdmittedKVWorkDone(handle)
-	}
+	br, err := n.batchInternal(ctx, tenantID, args)
 
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC
