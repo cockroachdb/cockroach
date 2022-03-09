@@ -27,13 +27,6 @@ export type ErrorWithKey = {
   key: string;
 };
 
-export const getStatements = (): Promise<cockroach.server.serverpb.StatementsResponse> => {
-  return fetchData(
-    cockroach.server.serverpb.StatementsResponse,
-    STATEMENTS_PATH,
-  );
-};
-
 export const getCombinedStatements = (
   req: StatementsRequest,
 ): Promise<cockroach.server.serverpb.StatementsResponse> => {

@@ -20,7 +20,6 @@ import {
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
-  getStatements,
   getCombinedStatements,
   StatementsRequest,
 } from "src/api/statementsApi";
@@ -35,19 +34,15 @@ import { rootActions } from "../reducers";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 import { toDateRange } from "../../timeScaleDropdown";
 
-export function* refreshSQLStatsSaga(
-  action?: PayloadAction<StatementsRequest>,
-) {
-  yield put(sqlStatsActions.request(action?.payload));
+export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
+  yield put(sqlStatsActions.request(action.payload));
 }
 
 export function* requestSQLStatsSaga(
-  action?: PayloadAction<StatementsRequest>,
+  action: PayloadAction<StatementsRequest>,
 ): any {
   try {
-    const result = yield action?.payload?.combined
-      ? call(getCombinedStatements, action.payload)
-      : call(getStatements);
+    const result = yield call(getCombinedStatements, action.payload);
     yield put(sqlStatsActions.received(result));
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
@@ -79,12 +74,12 @@ export function* updateSQLStatsTimeScaleSaga(
   yield put(sqlStatsActions.refresh(req));
 }
 
-export function* resetSQLStatsSaga() {
+export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   try {
     yield call(resetSQLStats);
     yield put(sqlStatsActions.invalidated());
-    yield put(sqlStatsActions.refresh());
     yield put(sqlDetailsStatsActions.invalidateAll());
+    yield put(sqlStatsActions.refresh(action.payload));
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }
