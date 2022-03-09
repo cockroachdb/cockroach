@@ -132,27 +132,35 @@
 (DistinctOn
     (UnionAll
         (Select
-            $leftScan:(Scan (DuplicateScanPrivate $scanPrivate))
-            (MapFilterCols
+            $leftScan:(Scan
+                $leftScanPrivate:(DuplicateScanPrivate
+                    $scanPrivate
+                )
+            )
+            (RemapScanColsInFilter
                 (ReplaceFiltersItem
                     $filters
                     $itemToReplace
                     $leftFilter
                 )
-                (OutputCols $input)
-                (OutputCols $leftScan)
+                $scanPrivate
+                $leftScanPrivate
             )
         )
         (Select
-            $rightScan:(Scan (DuplicateScanPrivate $scanPrivate))
-            (MapFilterCols
+            $rightScan:(Scan
+                $rightScanPrivate:(DuplicateScanPrivate
+                    $scanPrivate
+                )
+            )
+            (RemapScanColsInFilter
                 (ReplaceFiltersItem
                     $filters
                     $itemToReplace
                     $rightFilter
                 )
-                (OutputCols $input)
-                (OutputCols $rightScan)
+                $scanPrivate
+                $rightScanPrivate
             )
         )
         (MakeSetPrivate
@@ -218,44 +226,48 @@
         (Select
             $leftScan:(Scan
                 (AddPrimaryKeyColsToScanPrivate
-                    (DuplicateScanPrivate $scanPrivate)
+                    $leftScanPrivate:(DuplicateScanPrivate
+                        $scanPrivate
+                    )
                 )
             )
-            (MapFilterCols
+            (RemapScanColsInFilter
                 (ReplaceFiltersItem
                     $filters
                     $itemToReplace
                     $leftFilter
                 )
-                $outCols:(UnionCols
-                    (OutputCols $input)
-                    (PrimaryKeyCols
-                        (TableIDFromScanPrivate $scanPrivate)
-                    )
-                )
-                (OutputCols $leftScan)
+                $scanPrivate
+                $leftScanPrivate
             )
         )
         (Select
             $rightScan:(Scan
                 (AddPrimaryKeyColsToScanPrivate
-                    (DuplicateScanPrivate $scanPrivate)
+                    $rightScanPrivate:(DuplicateScanPrivate
+                        $scanPrivate
+                    )
                 )
             )
-            (MapFilterCols
+            (RemapScanColsInFilter
                 (ReplaceFiltersItem
                     $filters
                     $itemToReplace
                     $rightFilter
                 )
-                $outCols
-                (OutputCols $rightScan)
+                $scanPrivate
+                $rightScanPrivate
             )
         )
         (MakeSetPrivate
             (OutputCols $leftScan)
             (OutputCols $rightScan)
-            $outCols
+            (UnionCols
+                (OutputCols $input)
+                (PrimaryKeyCols
+                    (TableIDFromScanPrivate $scanPrivate)
+                )
+            )
         )
     )
     []
