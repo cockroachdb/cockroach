@@ -82,6 +82,8 @@ interface SortedTableProps<T> {
   onChangeSortSetting?: { (ss: SortSetting): void };
   // className to be applied to the table element.
   className?: string;
+  // tableWrapperClassName is a class name applied to table wrapper.
+  tableWrapperClassName?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (obj: T) => string;
 
@@ -339,6 +341,7 @@ export class SortedTable<T> extends React.Component<
       empty,
       emptyProps,
       className,
+      tableWrapperClassName,
     } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
@@ -352,7 +355,7 @@ export class SortedTable<T> extends React.Component<
     const count = data ? this.paginatedData().length : 0;
     const columns = this.columns(this.props);
     const rowClass = this.rowClass(this.props);
-    const tableWrapperClass = cx("cl-table-wrapper");
+    const tableWrapperClass = cx("cl-table-wrapper", tableWrapperClassName);
     const tableStyleClass = cx("sort-table", className);
     const noResultsClass = cx("table__no-results");
 
