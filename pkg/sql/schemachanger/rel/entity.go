@@ -33,10 +33,6 @@ func (sc *Schema) EqualOn(attrs []Attr, a, b interface{}) (eq bool) {
 // CompareOn compares two entities. Note that it will panic if either variable
 // is malformed.
 func (sc *Schema) CompareOn(attrs []Attr, a, b interface{}) (less, eq bool) {
-	ords, _, err := sc.attributesToOrdinals(attrs)
-	if err != nil {
-		panic(err)
-	}
 	ae, err := toEntity(sc, a)
 	if err != nil {
 		panic(err)
@@ -47,8 +43,12 @@ func (sc *Schema) CompareOn(attrs []Attr, a, b interface{}) (less, eq bool) {
 	}
 	defer putValues((*valuesMap)(ae))
 	defer putValues((*valuesMap)(be))
-	for _, a := range ords {
-		if less, eq = compareOn(a, (*valuesMap)(ae), (*valuesMap)(be)); !eq {
+	for _, a := range attrs {
+		ord, err := sc.getOrdinal(a)
+		if err != nil {
+			panic(err)
+		}
+		if less, eq = compareOn(ord, (*valuesMap)(ae), (*valuesMap)(be)); !eq {
 			return less, eq
 		}
 	}
