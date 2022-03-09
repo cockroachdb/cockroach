@@ -507,6 +507,10 @@ func (s *adminServer) databaseDetailsHelper(
 		if err != nil {
 			return nil, err
 		}
+		resp.Stats.NumIndexRecommendations, err = s.getNumDatabaseIndexRecommendations(ctx, req.Database, resp.TableNames)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &resp, nil
@@ -602,6 +606,27 @@ func (s *adminServer) getDatabaseStats(
 	})
 
 	return &stats, nil
+}
+
+func (s *adminServer) getNumDatabaseIndexRecommendations(
+	ctx context.Context, databaseName string, tableNames []string,
+) (int32, error) {
+	var numDatabaseIndexRecommendations int
+	idxUsageStatsProvider := s.server.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+	for _, tableName := range tableNames {
+		tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
+			Database: databaseName,
+			Table:    tableName,
+		}
+		tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.server.st)
+		if err != nil {
+			return int32(numDatabaseIndexRecommendations), err
+		}
+		for _, indexStat := range tableIndexStatsResponse.Statistics {
+			numDatabaseIndexRecommendations += len(indexStat.Statistics.Recommendations)
+		}
+	}
+	return int32(numDatabaseIndexRecommendations), nil
 }
 
 // getFullyQualifiedTableName, given a database name and a tableName that either
@@ -957,6 +982,21 @@ func (s *adminServer) tableDetailsHelper(
 		resp.RangeCount = rangeCount
 	}
 
+	idxUsageStatsProvider := s.server.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+	tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
+		Database: req.Database,
+		Table:    req.Table,
+	}
+	tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.server.st)
+	if err != nil {
+		return nil, err
+	}
+	for _, indexStat := range tableIndexStatsResponse.Statistics {
+		if len(indexStat.Statistics.Recommendations) > 0 {
+			resp.HasIndexRecommendations = true
+			break
+		}
+	}
 	return &resp, nil
 }
 

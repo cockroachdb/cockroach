@@ -53,9 +53,20 @@ message IndexUsageKey {
   optional uint32 index_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID" ];
 }
 
+message ExistingIndexRecommendation {
+  enum RecommendationType {
+    DROP_UNUSED = 0;
+  }
+  // Type of recommendation for the index.
+  optional RecommendationType type = 1 [(gogoproto.nullable) = false];
+  // Reason for our recommendation type.
+  optional string reason = 2 [(gogoproto.nullable) = false];
+}
+
 // CollectedIndexUsageStatistics wraps collected index key and its usage
 // statistics.
 message CollectedIndexUsageStatistics {
   optional IndexUsageKey key = 1 [(gogoproto.nullable) = false];
   optional IndexUsageStatistics stats = 2 [(gogoproto.nullable) = false];
+  repeated ExistingIndexRecommendation recommendations = 3 [(gogoproto.nullable) = false];
 }

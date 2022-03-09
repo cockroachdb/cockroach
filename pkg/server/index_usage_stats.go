@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -197,7 +198,7 @@ func (s *statusServer) TableIndexStats(
 		return nil, err
 	}
 	return getTableIndexUsageStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
-		s.sqlServer.internalExecutor)
+		s.sqlServer.internalExecutor, s.st)
 }
 
 // getTableIndexUsageStats is a helper function that reads the indexes
@@ -208,6 +209,7 @@ func getTableIndexUsageStats(
 	req *serverpb.TableIndexStatsRequest,
 	idxUsageStatsProvider *idxusage.LocalIndexUsageStats,
 	ie *sql.InternalExecutor,
+	st *cluster.Settings,
 ) (*serverpb.TableIndexStatsResponse, error) {
 	userName, err := userFromContext(ctx)
 	if err != nil {
@@ -306,6 +308,7 @@ func getTableIndexUsageStats(
 			CreatedAt:       createdAt,
 		}
 
+		idxusage.IndexStatsRow(*idxStatsRow).AddRecommendationsForIndex(st)
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
 	}
 

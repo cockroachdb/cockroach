@@ -2511,3 +2511,63 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE DATABASE test")
+	db.Exec(t, "USE test")
+	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
+	db.Exec(t, "CREATE INDEX ON test.test_table (letter)")
+	db.Exec(t, "INSERT INTO test.test_table (num, letter) VALUES (1, 'A')")
+
+	// Select all query not expected to use created index on test_table. Expect
+	// number of index recommendations for the database to be 1, to drop the
+	// index due to non-use.
+	db.Exec(t, "SELECT * FROM test.test_table")
+
+	// Test database details endpoint.
+	var dbDetails serverpb.DatabaseDetailsResponse
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	var tableDetails serverpb.TableDetailsResponse
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Select all query with WHERE clause on the 'letter' column. Expect
+	// number of index recommendations for the database to be 0, as we've
+	// used the newly created index recently.
+	db.Exec(t, "SELECT * FROM test.test_table WHERE letter = 'A'")
+
+	// Test database details endpoint.
+	var newDetails serverpb.DatabaseDetailsResponse
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&newDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), newDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	var newTableDetails serverpb.TableDetailsResponse
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &newTableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, newTableDetails.HasIndexRecommendations)
+}
