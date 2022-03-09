@@ -11,10 +11,14 @@
 package opgen
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type registry struct {
@@ -29,7 +33,14 @@ func BuildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
 	return opRegistry.buildGraph(cs)
 }
 
-func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
+func (r *registry) buildGraph(cs scpb.CurrentState) (_ *scgraph.Graph, err error) {
+	start := timeutil.Now()
+	defer func() {
+		if err != nil || !log.V(2) {
+			return
+		}
+		log.Infof(context.TODO(), "operation graph generation took %v", timeutil.Since(start))
+	}()
 	g, err := scgraph.New(cs)
 	if err != nil {
 		return nil, err
