@@ -60,9 +60,15 @@ func NewDatabase(sc *Schema, indexes [][]Attr) (*Database, error) {
 	}
 	secondaryIndexes := t.indexes[1:]
 	for i, attrs := range indexes {
-		ords, set, err := sc.attributesToOrdinals(attrs)
-		if err != nil {
-			return nil, err
+		var set ordinalSet
+		ords := make([]ordinal, len(attrs))
+		for i, a := range attrs {
+			ord, err := sc.getOrdinal(a)
+			if err != nil {
+				return nil, err
+			}
+			set = set.add(ord)
+			ords[i] = ord
 		}
 		spec := indexSpec{mask: set, attrs: ords, s: sc}
 		secondaryIndexes[i] = index{
