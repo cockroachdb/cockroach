@@ -1200,7 +1200,17 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 				defer wg.Done()
 				if _, err := acquireNodeLease(ctx, m, id); err != nil {
 					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
+
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+						// Lease renewal failed due to removed descriptor; Remove this descriptor from cache.
+						if err := purgeOldVersions(ctx, m.DB(), id, true /* dropped */, 0 /* version */, m); err != nil {
+							log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
+								id, m.mu.descriptors[id].mu.active.findNewest().GetName(), err)
+						}
+						delete(m.mu.descriptors, id)
+					}
 				}
+			}
 			}); err != nil {
 			log.Infof(ctx, "didnt refresh descriptor: %d lease: %s", id, err)
 			wg.Done()

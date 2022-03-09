@@ -12,6 +12,7 @@ package lease
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -165,6 +166,8 @@ func (m *Manager) PublishMultiple(
 			expectedVersions[id] = expected.GetVersion()
 		}
 
+		fmt.Printf("to-be-published descriptor ids = %v, expectedVersions = %v", ids, expectedVersions)
+
 		descs := make(map[descpb.ID]catalog.MutableDescriptor)
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
@@ -193,6 +196,8 @@ func (m *Manager) PublishMultiple(
 
 				versions[id] = descsToUpdate[id].GetVersion()
 			}
+
+			fmt.Printf("descsToUpdate = %v\n", descsToUpdate)
 
 			// Run the update closure.
 			if err := update(txn, descsToUpdate); err != nil {
