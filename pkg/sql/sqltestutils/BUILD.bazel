@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "sqltestutils",
     srcs = [
+        "large_schema.go",
         "show_create_table.go",
         "sql_test_utils.go",
         "telemetry.go",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/tests",
