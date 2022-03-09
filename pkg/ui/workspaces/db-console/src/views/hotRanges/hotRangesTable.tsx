@@ -18,10 +18,12 @@ import {
   Pagination,
   ResultsPerPageLabel,
   SortSetting,
+  Anchor,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import styles from "./hotRanges.module.styl";
 import { cockroach } from "src/js/protos";
+import { readsAndWritesOverviewPage, uiDebugPages } from "src/util/docs";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
@@ -63,7 +65,18 @@ const HotRangesTable = ({
     {
       name: "rangeId",
       title: (
-        <Tooltip placement="bottom" title="Range ID">
+        <Tooltip
+          placement="bottom"
+          title={
+            <span>
+              The internal ID of the hot range. Click the range ID to view the{" "}
+              <Anchor href={uiDebugPages} className={cx("light-anchor")}>
+                range report
+              </Anchor>{" "}
+              for this range.
+            </span>
+          }
+        >
           Range ID
         </Tooltip>
       ),
@@ -75,7 +88,11 @@ const HotRangesTable = ({
     {
       name: "qps",
       title: (
-        <Tooltip placement="bottom" title="QPS">
+        <Tooltip
+          placement="bottom"
+          title="The total number of `SELECT`, `UPDATE`, `INSERT`, and `DELETE` queries
+          executed per second on this range."
+        >
           QPS
         </Tooltip>
       ),
@@ -85,7 +102,10 @@ const HotRangesTable = ({
     {
       name: "nodes",
       title: (
-        <Tooltip placement="bottom" title="Nodes">
+        <Tooltip
+          placement="bottom"
+          title="The internal ID of the node where the range data is found."
+        >
           Nodes
         </Tooltip>
       ),
@@ -100,7 +120,10 @@ const HotRangesTable = ({
     {
       name: "storeId",
       title: (
-        <Tooltip placement="bottom" title="Store ID">
+        <Tooltip
+          placement="bottom"
+          title="The internal ID of the store where the range data is found."
+        >
           Store ID
         </Tooltip>
       ),
@@ -110,7 +133,21 @@ const HotRangesTable = ({
     {
       name: "leasholder",
       title: (
-        <Tooltip placement="bottom" title="Leaseholder">
+        <Tooltip
+          placement="bottom"
+          title={
+            <span>
+              The internal ID of the node that has the{" "}
+              <Anchor
+                href={readsAndWritesOverviewPage}
+                className={cx("light-anchor")}
+              >
+                range lease
+              </Anchor>
+              .
+            </span>
+          }
+        >
           Leaseholder
         </Tooltip>
       ),
@@ -120,7 +157,10 @@ const HotRangesTable = ({
     {
       name: "database",
       title: (
-        <Tooltip placement="bottom" title="Database">
+        <Tooltip
+          placement="bottom"
+          title="Name of the database where the range data is found."
+        >
           Database
         </Tooltip>
       ),
@@ -130,7 +170,10 @@ const HotRangesTable = ({
     {
       name: "table",
       title: (
-        <Tooltip placement="bottom" title="Table">
+        <Tooltip
+          placement="bottom"
+          title="Name of the table where the range data is found."
+        >
           Table
         </Tooltip>
       ),
@@ -144,7 +187,10 @@ const HotRangesTable = ({
     {
       name: "index",
       title: (
-        <Tooltip placement="bottom" title="Index">
+        <Tooltip
+          placement="bottom"
+          title="Name of the index where the range data is indexed, if applicable."
+        >
           Index
         </Tooltip>
       ),
@@ -154,7 +200,10 @@ const HotRangesTable = ({
     {
       name: "locality",
       title: (
-        <Tooltip placement="bottom" title="Locality">
+        <Tooltip
+          placement="bottom"
+          title="The locality of the node where the range data is found."
+        >
           Locality
         </Tooltip>
       ),
@@ -166,7 +215,7 @@ const HotRangesTable = ({
   return (
     <div>
       <div className={cx("hotranges-heading-container")}>
-        <h4>
+        <h4 className="cl-count-title">
           <ResultsPerPageLabel
             pagination={{
               ...pagination,
@@ -175,12 +224,12 @@ const HotRangesTable = ({
             pageName="hot ranges"
           />
         </h4>
-        <div>Last update: {getCurrentDateTime()}</div>
+        <h4 className="cl-count-title">Last update: {getCurrentDateTime()}</h4>
       </div>
       <SortedTable
         data={hotRangesList}
         columns={columns}
-        className={cx("hotranges-table")}
+        tableWrapperClassName={cx("hotranges-table")}
         sortSetting={sortSetting}
         onChangeSortSetting={(ss: SortSetting) =>
           setSortSetting({
