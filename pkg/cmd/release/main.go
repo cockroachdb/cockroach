@@ -14,6 +14,19 @@ import "github.com/spf13/cobra"
 
 var rootCmd = &cobra.Command{Use: "release"}
 
+const (
+	envSMTPUser     = "SMTP_USER"
+	envSMTPPassword = "SMTP_PASSWORD"
+	envGithubToken  = "GITHUB_TOKEN"
+	releaseSeries   = "release-series"
+	templatesDir    = "template-dir"
+	smtpUser        = "smtp-user"
+	smtpHost        = "smtp-host"
+	smtpPort        = "smtp-port"
+	emailAddresses  = "to"
+	dryRun          = "dry-run"
+)
+
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		panic(err)
