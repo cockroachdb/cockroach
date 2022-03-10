@@ -1,0 +1,33 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "backuprand_test",
+    srcs = [
+        "backup_rand_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/backupccl/backuputils",
+        "//pkg/ccl/storageccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/internal/sqlsmith",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/randgen",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+get_x_data(name = "get_x_data")

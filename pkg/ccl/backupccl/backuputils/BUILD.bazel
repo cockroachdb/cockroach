@@ -18,7 +18,10 @@ go_library(
         "//pkg/testutils/testcluster",
         "//pkg/workload/bank",
         "//pkg/workload/workloadsql",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
