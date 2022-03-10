@@ -82,6 +82,7 @@ func (t sorted) SafeValue() {}
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
+	name     string
 	db       *kv.DB
 	rc       *rangecache.RangeCache
 	settings *cluster.Settings
@@ -155,12 +156,14 @@ type SSTBatcher struct {
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
 	ctx context.Context,
+	name string,
 	db *kv.DB,
 	settings *cluster.Settings,
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
+		name:                   name,
 		db:                     db,
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
@@ -290,9 +293,9 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 			r := b.rc.GetCached(ctx, k, false /* inverted */)
 			if r != nil {
 				b.flushKey = r.Desc().EndKey.AsRawKey()
-				log.VEventf(ctx, 3, "building sstable that will flush before %v", b.flushKey)
+				log.VEventf(ctx, 3, "%s building sstable that will flush before %v", b.name, b.flushKey)
 			} else {
-				log.VEventf(ctx, 3, "no cached range desc available to determine sst flush key")
+				log.VEventf(ctx, 2, "%s no cached range desc available to determine sst flush key", b.name)
 			}
 		}
 	}
@@ -319,7 +322,7 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 		return err
 	}
 	if !b.maxWriteTS.IsEmpty() {
-		log.VEventf(ctx, 1, "waiting until max write time %s", b.maxWriteTS)
+		log.VEventf(ctx, 1, "%s waiting until max write time %s", b.name, b.maxWriteTS)
 		return b.db.Clock().SleepUntil(ctx, b.maxWriteTS)
 	}
 	return nil
@@ -335,7 +338,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
 		if delay > time.Second || log.V(1) {
-			log.Infof(ctx, "delaying %s before flushing ingestion buffer...", delay)
+			log.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
 		}
 		select {
 		case <-ctx.Done():
@@ -353,7 +356,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	size := b.sstWriter.DataSize
 	if reason == sizeFlush {
-		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(ingestFileSize(b.settings)))
+		log.VEventf(ctx, 3, "%s flushing %s SST due to size > %s", b.name, sz(size), sz(ingestFileSize(b.settings)))
 		b.flushCounts.sstSize++
 
 		// On first flush, if it is due to size, we introduce one split at the start
@@ -366,17 +369,17 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// split and scatter the data as it ingests it i.e. splitAfter > 0.
 		if !b.initialSplitDone && b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
-				log.Warningf(ctx, "failed to generate split key to separate ingestion span: %v", err)
+				log.Warningf(ctx, "%s failed to generate split key to separate ingestion span: %v", b.name, err)
 			} else {
 				if log.V(1) {
-					log.Infof(ctx, "splitting on first flush to separate ingestion span using key %v", start)
+					log.Infof(ctx, "%s splitting on first flush to separate ingestion span using key %v", b.name, start)
 				}
 				// NB: Passing 'hour' here is technically illegal until 19.2 is
 				// active, but the value will be ignored before that, and we don't
 				// have access to the cluster version here.
 				reply, err := b.db.SplitAndScatter(ctx, splitAt, hour)
 				if err != nil {
-					log.Warningf(ctx, "failed ot split at first key to separate ingestion span: %v", err)
+					log.Warningf(ctx, "%s failed to split at first key to separate ingestion span: %v", b.name, err)
 				} else {
 					b.flushCounts.splitWait += reply.Timing.Split
 					b.flushCounts.scatterWait += reply.Timing.Scatter
@@ -384,14 +387,14 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 						moved := sz(reply.ScatteredStats.Total())
 						b.flushCounts.scatterMoved += moved
 						if moved > 0 {
-							log.VEventf(ctx, 1, "starting split scattered %s in non-empty range %s", moved, reply.ScatteredSpan)
+							log.VEventf(ctx, 1, "%s starting split scattered %s in non-empty range %s", b.name, moved, reply.ScatteredSpan)
 						}
 					}
 				}
 			}
 		}
 	} else if reason == rangeFlush {
-		log.VEventf(ctx, 3, "flushing %s SST due to range boundary %s", sz(size), b.flushKey)
+		log.VEventf(ctx, 3, "%s flushing %s SST due to range boundary %s", b.name, sz(size), b.flushKey)
 		b.flushCounts.split++
 	}
 
@@ -524,7 +527,7 @@ func AddSSTable(
 		if err := func() error {
 			var err error
 			for i := 0; i < maxAddSSTableRetries; i++ {
-				log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), item.start, item.end)
+				log.VEventf(ctx, 4, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), item.start, item.end)
 				before := timeutil.Now()
 				// If this SST is "too small", the fixed costs associated with adding an
 				// SST – in terms of triggering flushes, extra compactions, etc – would
@@ -538,7 +541,7 @@ func AddSSTable(
 				// and just switch how it writes its result.
 				ingestAsWriteBatch := false
 				if settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&settings.SV) {
-					log.VEventf(ctx, 2, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
+					log.VEventf(ctx, 3, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
 				}
 

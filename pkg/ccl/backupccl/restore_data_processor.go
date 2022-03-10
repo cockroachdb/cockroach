@@ -425,6 +425,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// non-overlapping ingestion into empty spans, that is just one seek.
 	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
 	batcher, err := bulk.MakeSSTBatcher(ctx,
+		"restore",
 		db,
 		evalCtx.Settings,
 		disallowShadowingBelow,
