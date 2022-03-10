@@ -65,8 +65,8 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.View, ts scpb.TargetState) scop.Op {
-					return newLogEventOp(this, ts)
+				emit(func(this *scpb.View, md targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.CreateGcJobForTable{

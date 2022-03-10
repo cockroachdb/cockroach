@@ -36,6 +36,7 @@ func TestEventStore(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+	metrics := NewMetrics()
 
 	st := cluster.MakeTestingClusterSettings()
 	// Disable automatic txn id resolution to prevent interference.
@@ -45,7 +46,7 @@ func TestEventStore(t *testing.T) {
 	now := timeutil.Now()
 	store := newEventStore(st, statusServer.txnIDResolution, func() time.Time {
 		return now
-	} /* timeSrc */)
+	}, /* timeSrc */ &metrics)
 	store.start(ctx, stopper)
 
 	// Minimum generate 10 contention events, up to 310 events.
@@ -129,6 +130,7 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 
 	st := cluster.MakeTestingClusterSettings()
 	statusServer := newFakeStatusServerCluster()
+	metrics := NewMetrics()
 
 	e := roachpb.ContentionEvent{}
 	b.SetBytes(int64(e.Size()))
@@ -174,7 +176,7 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 
 	for _, numOfConcurrentWriter := range []int{1, 24, 48} {
 		b.Run(fmt.Sprintf("concurrentWriter=%d", numOfConcurrentWriter), func(b *testing.B) {
-			store := newEventStore(st, statusServer.txnIDResolution, timeutil.Now)
+			store := newEventStore(st, statusServer.txnIDResolution, timeutil.Now, &metrics)
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 

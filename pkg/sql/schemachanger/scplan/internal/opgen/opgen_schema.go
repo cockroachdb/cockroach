@@ -46,8 +46,8 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.Schema, ts scpb.TargetState) scop.Op {
-					return newLogEventOp(this, ts)
+				emit(func(this *scpb.Schema, md targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 				emit(func(this *scpb.Schema) scop.Op {
 					return &scop.DeleteDescriptor{

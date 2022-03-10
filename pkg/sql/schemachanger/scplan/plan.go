@@ -11,6 +11,8 @@
 package scplan
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -19,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,8 +107,22 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 		}
 	}()
 
-	p.Graph = buildGraph(p.CurrentState)
-	p.Stages = scstage.BuildStages(initial, params.ExecutionPhase, p.Graph, params.SchemaChangerJobIDSupplier)
+	{
+		start := timeutil.Now()
+		p.Graph = buildGraph(p.CurrentState)
+		if log.V(2) {
+			log.Infof(context.TODO(), "graph generation took %v", timeutil.Since(start))
+		}
+	}
+	{
+		start := timeutil.Now()
+		p.Stages = scstage.BuildStages(
+			initial, params.ExecutionPhase, p.Graph, params.SchemaChangerJobIDSupplier,
+		)
+		if log.V(2) {
+			log.Infof(context.TODO(), "stage generation took %v", timeutil.Since(start))
+		}
+	}
 	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
 		// Only get the job ID if it's actually been assigned already.
 		p.JobID = params.SchemaChangerJobIDSupplier()
