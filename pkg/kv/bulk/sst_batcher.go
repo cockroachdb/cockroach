@@ -125,6 +125,7 @@ type SSTBatcher struct {
 		sendWait    time.Duration
 		splitWait   time.Duration
 		scatterWait time.Duration
+		commitWait  time.Duration
 	}
 
 	maxWriteTS hlc.Timestamp
@@ -350,8 +351,15 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 		return err
 	}
 	if !b.maxWriteTS.IsEmpty() {
-		log.VEventf(ctx, 1, "%s waiting until max write time %s", b.name, b.maxWriteTS)
-		return b.db.Clock().SleepUntil(ctx, b.maxWriteTS)
+		if now := b.db.Clock().Now(); now.Less(b.maxWriteTS) {
+			guess := timing(b.maxWriteTS.WallTime - now.WallTime)
+			log.VEventf(ctx, 1, "%s batcher waiting %s until max write time %s", b.name, guess, b.maxWriteTS)
+			if err := b.db.Clock().SleepUntil(ctx, b.maxWriteTS); err != nil {
+				return err
+			}
+			b.flushCounts.commitWait += timeutil.Since(now.GoTime())
+		}
+		b.maxWriteTS.Reset()
 	}
 	return nil
 }
