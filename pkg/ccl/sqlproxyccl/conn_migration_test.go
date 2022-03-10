@@ -23,6 +23,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIsSafeTransferPoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(jaylim-crl): Tests.
+}
+
 func TestRunShowTransferState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -66,7 +66,10 @@ func TestForward(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, f.ctx.Err())
 
-		requestProc := f.request
+		f.mu.Lock()
+		requestProc := f.mu.request
+		f.mu.Unlock()
+
 		initialClock := requestProc.logicalClockFn()
 		barrier := make(chan struct{})
 		requestProc.testingKnobs.beforeForwardMsg = func() {
@@ -162,7 +165,10 @@ func TestForward(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, f.ctx.Err())
 
-		responseProc := f.response
+		f.mu.Lock()
+		responseProc := f.mu.response
+		f.mu.Unlock()
+
 		initialClock := responseProc.logicalClockFn()
 		barrier := make(chan struct{})
 		responseProc.testingKnobs.beforeForwardMsg = func() {

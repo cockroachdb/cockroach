@@ -70,3 +70,13 @@ func TestPGConn(t *testing.T) {
 		require.Nil(t, err)
 	})
 }
+
+func TestPGConn_ToFrontendConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(jaylim-crl): Tests.
+}
+
+func TestPGConn_ToBackendConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(jaylim-crl): Tests.
+}
