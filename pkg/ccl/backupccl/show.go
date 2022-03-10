@@ -217,6 +217,7 @@ func showBackupPlanHook(
 		backupOptIncStorage:       sql.KVStringOptRequireValue,
 		backupOptDebugMetadataSST: sql.KVStringOptRequireNoValue,
 		backupOptEncDir:           sql.KVStringOptRequireValue,
+		backupOptCheckFiles:       sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -448,10 +449,79 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						len(dest)))
 			}
 		}
+
+		if _, ok := opts[backupOptCheckFiles]; ok {
+			if err := checkBackupFiles(ctx, info, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+				p.User()); err != nil {
+				return err
+			}
+		}
 		return infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), resultsCh)
 	}
 
 	return fn, infoReader.header(), nil, false, nil
+}
+
+// checkBackupFiles validates that each SST is in its expected storage location
+func checkBackupFiles(
+	ctx context.Context,
+	info backupInfo,
+	storeFactory cloud.ExternalStorageFromURIFactory,
+	user security.SQLUsername,
+) error {
+
+	checkLayer := func(layer int) error {
+		// TODO (msbutler): Right now, checkLayer opens stores for each backup layer. In 22.2,
+		// once a backup chain cannot have mixed localities, only create stores for full backup
+		// and first incremental backup.
+		defaultStore, err := storeFactory(ctx, info.defaultURIs[layer], user)
+		if err != nil {
+			return err
+		}
+		localityStores := make(map[string]cloud.ExternalStorage)
+
+		defer func() {
+			if err := defaultStore.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed %v", err)
+			}
+			for _, store := range localityStores {
+				if err := store.Close(); err != nil {
+					log.Warningf(ctx, "close export storage failed %v", err)
+				}
+			}
+		}()
+
+		for locality, uri := range info.localityInfo[layer].URIsByOriginalLocalityKV {
+			store, err := storeFactory(ctx, uri, user)
+			if err != nil {
+				return err
+			}
+			localityStores[locality] = store
+		}
+
+		for _, f := range info.manifests[layer].Files {
+			store := defaultStore
+			uri := info.defaultURIs[layer]
+			if _, ok := localityStores[f.LocalityKV]; ok {
+				store = localityStores[f.LocalityKV]
+				uri = info.localityInfo[layer].URIsByOriginalLocalityKV[f.LocalityKV]
+			}
+			fd, err := store.ReadFile(ctx, f.Path)
+			if err != nil {
+				uriNoLocality := strings.Split(uri, "?")[0]
+				return errors.Wrapf(err, "Error checking file %s/%s", uriNoLocality, f.Path)
+			}
+			fd.Close(ctx)
+		}
+		return nil
+	}
+
+	for layer := range info.manifests {
+		if err := checkLayer(layer); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type backupInfo struct {
@@ -890,11 +960,6 @@ func getRootURI(defaultURI string, subdir string) (string, error) {
 // to the incremental backup manifest's directory
 // '/incrementals/fullSubdir/incrementalSubdir'.
 func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) {
-	fullCollectionRoot, err := getRootURI(defaultUris[0], fullSubdir)
-	if err != nil {
-		return nil, err
-	}
-
 	manifestDirs := make([]string, len(defaultUris))
 
 	// The full backup manifest path is always in the fullSubdir.
@@ -909,10 +974,10 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 	}
 
 	var incSubdir string
-	if path.Join(fullCollectionRoot, DefaultIncrementalsSubdir) == incRoot {
+	if strings.HasSuffix(incRoot, DefaultIncrementalsSubdir) {
 		// The incremental backup is stored in the default incremental
 		// directory (i.e. collectionURI/incrementals/fullSubdir)
-		incSubdir = path.Join(DefaultIncrementalsSubdir, fullSubdir)
+		incSubdir = path.Join("/"+DefaultIncrementalsSubdir, fullSubdir)
 	} else {
 		// Implies one of two scenarios:
 		// 1) the incremental chain is stored in the pre 22.1
@@ -930,8 +995,17 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 		if i == 0 {
 			continue
 		}
-		incDir := strings.Split(incURI, incSubdir)[1]
-		manifestDirs[i] = path.Join(incSubdir, incDir)
+		// the manifestDir for an incremental backup will have the following structure:
+		// 'incSubdir/incSubSubSubDir', where incSubdir is resolved above,
+		// and incSubSubDir corresponds to the path to the incremental backup within
+		// the subdirectory.
+
+		// remove locality info from URI
+		incURI = strings.Split(incURI, "?")[0]
+
+		// get the subdirectory within the incSubdir
+		incSubSubDir := strings.Split(incURI, incSubdir)[1]
+		manifestDirs[i] = path.Join(incSubdir, incSubSubDir)
 	}
 	return manifestDirs, nil
 }

@@ -71,6 +71,7 @@ const (
 	defaultLocalityValue      = "default"
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
 	backupOptEncDir           = "encryption_info_dir"
+	backupOptCheckFiles       = "check_files"
 )
 
 type tableAndIndex struct {
