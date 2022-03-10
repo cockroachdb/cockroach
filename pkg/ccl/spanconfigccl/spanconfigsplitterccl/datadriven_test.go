@@ -11,7 +11,6 @@ package spanconfigsplitterccl
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 
@@ -42,8 +41,9 @@ import (
 //   Executes the input SQL query and prints the results.
 //
 // - "splits" [database=<str> table=<str>] [id=<int>]
-//   Generates the splits for the referenced object (named database + table, or
-//   descriptor id).
+//   Prints the number splits generated the referenced object (named database +
+//   table, or descriptor id). Also logs the set of internal steps the Splitter
+//   takes to arrive at the number.
 //
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -51,6 +51,7 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 
+	var steps strings.Builder
 	scKnobs := &spanconfig.TestingKnobs{
 		// Instead of relying on the GC job to wait out TTLs and clear out descriptors,
 		// let's simply exclude dropped tables to simulate descriptors no longer existing.
@@ -59,6 +60,10 @@ func TestDataDriven(t *testing.T) {
 		// We run the reconciler manually in this test (through the span config
 		// test cluster).
 		ManagerDisableJobCreation: true,
+		// SplitterStepLogger captures splitter-internal steps for test output.
+		SplitterStepLogger: func(step string) {
+			steps.WriteString(fmt.Sprintf("%s\n", step))
+		},
 	}
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -116,17 +121,11 @@ func TestDataDriven(t *testing.T) {
 					d.Fatalf(t, "insufficient/improper args (%v) provided to split", d.CmdArgs)
 				}
 
+				steps.Reset()
 				splits, err := splitter.Splits(ctx, tenant.LookupTableDescriptorByID(ctx, objID))
 				require.NoError(t, err)
-
-				sort.Slice(splits, func(i, j int) bool {
-					return splits[i].Compare(splits[j]) < 0
-				})
-				var output strings.Builder
-				for _, split := range splits {
-					output.WriteString(fmt.Sprintf("%s\n", split))
-				}
-				return output.String()
+				steps.WriteString(fmt.Sprintf("= %d", splits))
+				return steps.String()
 
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
