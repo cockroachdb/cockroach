@@ -333,7 +333,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f := forward(ctx, conn, crdbConn)
+	f := forward(ctx, connector, handler.metrics, conn, crdbConn)
 	defer f.Close()
 
 	// Block until an error is received, or when the stopper starts quiescing,
