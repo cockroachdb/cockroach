@@ -12,6 +12,7 @@ ALL_TESTS = [
     "//pkg/ccl/backupccl/backupdest:backupdest_test",
     "//pkg/ccl/backupccl/backupinfo:backupinfo_disallowed_imports_test",
     "//pkg/ccl/backupccl/backupinfo:backupinfo_test",
+    "//pkg/ccl/backupccl/backuprand:backuprand_test",
     "//pkg/ccl/backupccl/backupresolver:backupresolver_test",
     "//pkg/ccl/backupccl:backupccl_test",
     "//pkg/ccl/baseccl:baseccl_test",
