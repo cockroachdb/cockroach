@@ -119,8 +119,8 @@ func (b *Builder) buildScalar(
 		return b.finishBuildScalarRef(t.col, inScope, outScope, outCol, colRefs)
 
 	case *tree.AndExpr:
-		left := b.buildScalar(tree.ReType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
-		right := b.buildScalar(tree.ReType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
+		left := b.buildScalar(reType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
+		right := b.buildScalar(reType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructAnd(left, right)
 
 	case *tree.Array:
@@ -216,8 +216,8 @@ func (b *Builder) buildScalar(
 		// select the right overload. The solution is to wrap any mismatched
 		// arguments with a CastExpr that preserves the static type.
 
-		left := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
-		right := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
+		left := reType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
+		right := reType(t.TypedRight(), t.ResolvedBinOp().RightType)
 		out = b.constructBinary(
 			treebin.MakeBinaryOperator(t.Operator.Symbol),
 			b.buildScalar(left, inScope, nil, nil, colRefs),
@@ -235,43 +235,32 @@ func (b *Builder) buildScalar(
 			input = memo.TrueSingleton
 		}
 
-		// validateCastToValType panics if tree.ReType with the given source
-		// type would create an invalid cast to valType.
-		validateCastToValType := func(src *types.T) {
-			if valType.Family() == types.AnyFamily || src.Identical(valType) {
-				// If valType's family is AnyFamily or src is identical to
-				// valType, then tree.Retype will not create a cast expression.
-				return
-			}
-			if tree.ValidCast(src, valType, tree.CastContextExplicit) {
-				// TODO(#75103): For legacy reasons, we check for a valid cast
-				// in the most permissive context, CastContextExplicit. To be
-				// consistent with Postgres, we should check for a valid cast in
-				// the most restrictive context, CastContextImplicit.
-				return
-			}
-			panic(pgerror.Newf(
-				pgcode.DatatypeMismatch,
-				"CASE types %s and %s cannot be matched", src, valType,
-			))
-		}
-
 		whens := make(memo.ScalarListExpr, 0, len(t.Whens)+1)
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr := t.Whens[i].Val.(tree.TypedExpr)
-			validateCastToValType(valExpr.ResolvedType())
-			valExpr = tree.ReType(valExpr, valType)
+			valExpr, ok := tree.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"CASE types %s and %s cannot be matched",
+					t.Whens[i].Val.(tree.TypedExpr).ResolvedType(), valType,
+				))
+			}
 			val := b.buildScalar(valExpr, inScope, nil, nil, colRefs)
 			whens = append(whens, b.factory.ConstructWhen(cond, val))
 		}
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr := t.Else.(tree.TypedExpr)
-			validateCastToValType(elseExpr.ResolvedType())
-			elseExpr = tree.ReType(elseExpr, valType)
+			elseExpr, ok := tree.ReType(t.Else.(tree.TypedExpr), valType)
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"CASE types %s and %s cannot be matched",
+					t.Else.(tree.TypedExpr).ResolvedType(), valType,
+				))
+			}
 			orElse = b.buildScalar(elseExpr, inScope, nil, nil, colRefs)
 		} else {
 			orElse = b.factory.ConstructNull(valType)
@@ -290,7 +279,14 @@ func (b *Builder) buildScalar(
 			// The type of the CoalesceExpr might be different than the inputs (e.g.
 			// when they are NULL). Force all inputs to be the same type, so that we
 			// build coalesce operator with the correct type.
-			expr := tree.ReType(t.TypedExprAt(i), typ)
+			expr, ok := tree.ReType(t.TypedExprAt(i), typ)
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"COALESCE types %s and %s cannot be matched",
+					t.TypedExprAt(i).ResolvedType(), typ,
+				))
+			}
 			args[i] = b.buildScalar(expr, inScope, nil, nil, colRefs)
 		}
 		out = b.factory.ConstructCoalesce(args)
@@ -328,10 +324,19 @@ func (b *Builder) buildScalar(
 	case *tree.IfExpr:
 		valType := t.ResolvedType()
 		input := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		ifTrueExpr := tree.ReType(t.True.(tree.TypedExpr), valType)
+		// Re-typing the True expression should always succeed because they
+		// are given the same type during type-checking.
+		ifTrueExpr := reType(t.True.(tree.TypedExpr), valType)
 		ifTrue := b.buildScalar(ifTrueExpr, inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{b.factory.ConstructWhen(memo.TrueSingleton, ifTrue)}
-		orElseExpr := tree.ReType(t.Else.(tree.TypedExpr), valType)
+		orElseExpr, ok := tree.ReType(t.Else.(tree.TypedExpr), valType)
+		if !ok {
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"IF types %s and %s cannot be matched",
+				t.Else.(tree.TypedExpr).ResolvedType(), valType,
+			))
+		}
 		orElse := b.buildScalar(orElseExpr, inScope, nil, nil, colRefs)
 		out = b.factory.ConstructCase(input, whens, orElse)
 
@@ -343,7 +348,7 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
 
 	case *tree.NotExpr:
-		input := b.buildScalar(tree.ReType(t.TypedInnerExpr(), types.Bool), inScope, nil, nil, colRefs)
+		input := b.buildScalar(reType(t.TypedInnerExpr(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructNot(input)
 
 	case *tree.IsNullExpr:
@@ -368,7 +373,7 @@ func (b *Builder) buildScalar(
 		// of the NULLIF expression so that type inference will be correct in the
 		// CASE expression constructed below. For example, the type of
 		// NULLIF(NULL, 0) should be int.
-		expr1 := tree.ReType(t.Expr1.(tree.TypedExpr), valType)
+		expr1 := reType(t.Expr1.(tree.TypedExpr), valType)
 		input := b.buildScalar(expr1, inScope, nil, nil, colRefs)
 		cond := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{
@@ -377,8 +382,8 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructCase(input, whens, input)
 
 	case *tree.OrExpr:
-		left := b.buildScalar(tree.ReType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
-		right := b.buildScalar(tree.ReType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
+		left := b.buildScalar(reType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
+		right := b.buildScalar(reType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructOr(left, right)
 
 	case *tree.ParenExpr:
@@ -874,4 +879,21 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)
 	sb.factory.Memo().SetScalarRoot(scalar)
 	return nil
+}
+
+// reType is similar to tree.ReType, except that it panics with an internal
+// error if the expression cannot be re-typed. This should only be used when
+// re-typing is expected to always be successful. For example, it is used to
+// re-type the left and right children of an OrExpr to booleans, which should
+// always succeed during the optbuild phase because type-checking has already
+// validated the types of the children.
+func reType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
+	retypedExpr, ok := tree.ReType(expr, typ)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"expected successful retype from %s to %s",
+			expr.ResolvedType(), typ,
+		))
+	}
+	return retypedExpr
 }
