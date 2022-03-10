@@ -42,34 +42,52 @@ type forwarder struct {
 	// the same as the metrics field in the proxyHandler instance.
 	metrics *metrics
 
-	// clientConn and serverConn provide a convenient way to read and forward
-	// Postgres messages, while minimizing IO reads and memory allocations.
-	//
-	// clientConn is set once during initialization, and stays the same
-	// throughout the lifetime of the forwarder.
-	//
-	// serverConn is set during initialization, which happens after the
-	// authentication phase, and will be replaced if a connection migration
-	// occurs. During a connection migration, serverConn is only replaced once
-	// the session has successfully been deserialized, and the old connection
-	// will be closed.
-	//
-	// All reads from these connections must go through the PG interceptors.
-	// It is not safe to call Read directly as the interceptors may have
-	// buffered data.
-	clientConn *interceptor.PGConn // client <-> proxy
-	serverConn *interceptor.PGConn // proxy <-> server
-
-	// request and response both represent the processors used to handle
-	// client-to-server and server-to-client messages.
-	request  *processor // client -> server
-	response *processor // server -> client
-
 	// errCh is a buffered channel that contains the first forwarder error.
 	// This channel may receive nil errors. When an error is written to this
 	// channel, it is guaranteed that the forwarder and all connections will
 	// be closed.
 	errCh chan error
+
+	// While not all of these fields may need to be guarded by a mutex, we do
+	// so for consistency. Fields like clientConn and serverConn need them
+	// because Close can be invoked anytime from a different goroutine while
+	// the connection migration is in progress. On the other hand, the processor
+	// fields will only be updated during connection migration, and we can
+	// guarantee that processors will be suspended, so we don't need mutexes
+	// for them.
+	mu struct {
+		syncutil.Mutex
+
+		// isTransferring indicates that a connection migration is in progress.
+		isTransferring bool
+
+		// clientConn and serverConn provide a convenient way to read and forward
+		// Postgres messages, while minimizing IO reads and memory allocations.
+		//
+		// clientConn is set once during initialization, and stays the same
+		// throughout the lifetime of the forwarder.
+		//
+		// serverConn is set during initialization, which happens after the
+		// authentication phase, and will be replaced if a connection migration
+		// occurs. During a connection migration, serverConn is only replaced once
+		// the session has successfully been deserialized, and the old connection
+		// will be closed.
+		//
+		// All reads from these connections must go through the PG interceptors.
+		// It is not safe to call Read directly as the interceptors may have
+		// buffered data.
+		clientConn *interceptor.PGConn // client <-> proxy
+		serverConn *interceptor.PGConn // proxy <-> server
+
+		// request and response both represent the processors used to handle
+		// client-to-server and server-to-client messages.
+		//
+		// WARNING: When acquiring locks on both of the processors, they should
+		// be acquired in the following order: request->response to avoid any
+		// potential deadlocks.
+		request  *processor // client -> server
+		response *processor // server -> client
+	}
 }
 
 // forward returns a new instance of forwarder, and starts forwarding messages
@@ -89,17 +107,18 @@ func forward(
 ) (*forwarder, error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	f := &forwarder{
-		ctx:        ctx,
-		ctxCancel:  cancelFn,
-		errCh:      make(chan error, 1),
-		connector:  connector,
-		metrics:    metrics,
-		clientConn: interceptor.NewPGConn(clientConn),
-		serverConn: interceptor.NewPGConn(serverConn),
+		ctx:       ctx,
+		ctxCancel: cancelFn,
+		errCh:     make(chan error, 1),
+		connector: connector,
+		metrics:   metrics,
 	}
+	f.mu.clientConn = interceptor.NewPGConn(clientConn)
+	f.mu.serverConn = interceptor.NewPGConn(serverConn)
+
 	clockFn := makeLogicalClockFn()
-	f.request = newProcessor(clockFn, f.clientConn, f.serverConn)  // client -> server
-	f.response = newProcessor(clockFn, f.serverConn, f.clientConn) // server -> client
+	f.mu.request = newProcessor(clockFn, f.mu.clientConn, f.mu.serverConn)  // client -> server
+	f.mu.response = newProcessor(clockFn, f.mu.serverConn, f.mu.clientConn) // server -> client
 	if err := f.resumeProcessors(); err != nil {
 		return nil, err
 	}
@@ -124,8 +143,18 @@ func (f *forwarder) Close() {
 
 	// Since Close is idempotent, we'll ignore the error from Close calls in
 	// case they have already been closed.
-	f.clientConn.Close()
-	f.serverConn.Close()
+	clientConn, serverConn := f.getConns()
+	clientConn.Close()
+	serverConn.Close()
+}
+
+// RequestTransfer requests that the forwarder performs a best-effort connection
+// migration whenever it can. It is best-effort because this will be a no-op if
+// the forwarder is not in a state that is eligible for a connection migration.
+// If a transfer is already in progress, or has been requested, this is a no-op.
+func (f *forwarder) RequestTransfer() {
+	// Ignore the error here. These errors will be logged accordingly.
+	go func() { _ = f.runTransfer() }()
 }
 
 // resumeProcessors starts both the request and response processors
@@ -133,20 +162,21 @@ func (f *forwarder) Close() {
 // return an error while resuming. This is idempotent as resume() will return
 // nil if the processor has already been started.
 func (f *forwarder) resumeProcessors() error {
+	requestProc, responseProc := f.getProcessors()
 	go func() {
-		if err := f.request.resume(f.ctx); err != nil {
+		if err := requestProc.resume(f.ctx); err != nil {
 			f.tryReportError(wrapClientToServerError(err))
 		}
 	}()
 	go func() {
-		if err := f.response.resume(f.ctx); err != nil {
+		if err := responseProc.resume(f.ctx); err != nil {
 			f.tryReportError(wrapServerToClientError(err))
 		}
 	}()
-	if err := f.request.waitResumed(f.ctx); err != nil {
+	if err := requestProc.waitResumed(f.ctx); err != nil {
 		return err
 	}
-	if err := f.response.waitResumed(f.ctx); err != nil {
+	if err := responseProc.waitResumed(f.ctx); err != nil {
 		return err
 	}
 	return nil
@@ -164,6 +194,35 @@ func (f *forwarder) tryReportError(err error) {
 		f.Close()
 	default: /* the channel already contains an error */
 	}
+}
+
+// getProcessors returns the processors associated with the forwarder.
+func (f *forwarder) getProcessors() (request, response *processor) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.request, f.mu.response
+}
+
+// getConns returns the connections associated with the forwarder.
+func (f *forwarder) getConns() (client, server *interceptor.PGConn) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.clientConn, f.mu.serverConn
+}
+
+// replaceServerConn replaces serverConn with newServerConn. When that happens,
+// serverConn will be closed, and new processors will be recreated.
+//
+// NOTE: It is important for the processors to be suspended before calling
+// this function.
+func (f *forwarder) replaceServerConn(newServerConn *interceptor.PGConn) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	clockFn := makeLogicalClockFn()
+	f.mu.serverConn.Close()
+	f.mu.serverConn = newServerConn
+	f.mu.request = newProcessor(clockFn, f.mu.clientConn, f.mu.serverConn)
+	f.mu.response = newProcessor(clockFn, f.mu.serverConn, f.mu.clientConn)
 }
 
 // wrapClientToServerError overrides client to server errors for external
@@ -200,7 +259,8 @@ func wrapServerToClientError(err error) error {
 // This implementation could overflow in theory, but it doesn't matter for the
 // forwarder since the worst that could happen is that we are unable to transfer
 // for an extremely short period of time until all the processors have wrapped
-// around. That said, this situation is rare since uint64 is a huge number.
+// around. That said, this situation is rare since uint64 is a huge number, and
+// we restart the clock on each transfer.
 func makeLogicalClockFn() func() uint64 {
 	var counter uint64
 	return func() uint64 {

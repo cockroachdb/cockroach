@@ -66,7 +66,10 @@ func TestForward(t *testing.T) {
 		defer f.Close()
 		require.Nil(t, f.ctx.Err())
 
-		requestProc := f.request
+		f.mu.Lock()
+		requestProc := f.mu.request
+		f.mu.Unlock()
+
 		initialClock := requestProc.logicalClockFn()
 		barrier := make(chan struct{})
 		requestProc.testingKnobs.beforeForwardMsg = func() {
@@ -162,7 +165,10 @@ func TestForward(t *testing.T) {
 		defer f.Close()
 		require.Nil(t, f.ctx.Err())
 
-		responseProc := f.response
+		f.mu.Lock()
+		responseProc := f.mu.response
+		f.mu.Unlock()
+
 		initialClock := responseProc.logicalClockFn()
 		barrier := make(chan struct{})
 		responseProc.testingKnobs.beforeForwardMsg = func() {
@@ -271,6 +277,46 @@ func TestForwarder_tryReportError(t *testing.T) {
 	_, err = p1.Write([]byte("foobarbaz"))
 	require.Regexp(t, "closed pipe", err)
 	require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+}
+
+func TestForwarder_replaceServerConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	clientProxy, client := net.Pipe()
+	serverProxy, server := net.Pipe()
+
+	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+	require.NoError(t, err)
+	defer f.Close()
+
+	c, s := f.getConns()
+	require.Equal(t, clientProxy, c.Conn)
+	require.Equal(t, serverProxy, s.Conn)
+
+	req, res := f.getProcessors()
+	require.NoError(t, req.suspend(ctx))
+	require.NoError(t, res.suspend(ctx))
+
+	newServerProxy, newServer := net.Pipe()
+	f.replaceServerConn(interceptor.NewPGConn(newServerProxy))
+	require.NoError(t, f.resumeProcessors())
+
+	// Check that we can receive messages from newServer.
+	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
+	go func() {
+		_, _ = newServer.Write(q)
+	}()
+	frontend := interceptor.NewFrontendConn(client)
+	msg, err := frontend.ReadMsg()
+	require.NoError(t, err)
+	rmsg, ok := msg.(*pgproto3.ReadyForQuery)
+	require.True(t, ok)
+	require.Equal(t, byte('I'), rmsg.TxStatus)
+
+	// Check that old connection was closed.
+	_, err = server.Write([]byte("foobarbaz"))
+	require.Regexp(t, "closed pipe", err)
 }
 
 func TestWrapClientToServerError(t *testing.T) {

@@ -15,16 +15,20 @@ import (
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
 type metrics struct {
-	BackendDisconnectCount *metric.Counter
-	IdleDisconnectCount    *metric.Counter
-	BackendDownCount       *metric.Counter
-	ClientDisconnectCount  *metric.Counter
-	CurConnCount           *metric.Gauge
-	RoutingErrCount        *metric.Counter
-	RefusedConnCount       *metric.Counter
-	SuccessfulConnCount    *metric.Counter
-	AuthFailedCount        *metric.Counter
-	ExpiredClientConnCount *metric.Counter
+	BackendDisconnectCount             *metric.Counter
+	IdleDisconnectCount                *metric.Counter
+	BackendDownCount                   *metric.Counter
+	ClientDisconnectCount              *metric.Counter
+	CurConnCount                       *metric.Gauge
+	RoutingErrCount                    *metric.Counter
+	RefusedConnCount                   *metric.Counter
+	SuccessfulConnCount                *metric.Counter
+	AuthFailedCount                    *metric.Counter
+	ExpiredClientConnCount             *metric.Counter
+	ConnMigrationSuccessCount          *metric.Counter
+	ConnMigrationErrorFatalCount       *metric.Counter
+	ConnMigrationErrorRecoverableCount *metric.Counter
+	ConnMigrationAttemptedCount        *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -93,6 +97,35 @@ var (
 		Measurement: "Expired Client Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	// Connection migration metrics.
+	//
+	// attempted = success + error_fatal + error_recoverable
+	metaConnMigrationAttemptedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.attempted",
+		Help:        "Number of attempted connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationSuccessCount = metric.Metadata{
+		Name:        "proxy.conn_migration.success",
+		Help:        "Number of successful connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationErrorFatalCount = metric.Metadata{
+		// When connection migrations errored out, connections will be closed.
+		Name:        "proxy.conn_migration.error_fatal",
+		Help:        "Number of failed connection migrations which resulted in terminations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationErrorRecoverableCount = metric.Metadata{
+		// Connections are recoverable, so they won't be closed.
+		Name:        "proxy.conn_migration.error_recoverable",
+		Help:        "Number of failed connection migrations that were recoverable",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -108,6 +141,11 @@ func makeProxyMetrics() metrics {
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
+		// Connection migration metrics.
+		ConnMigrationSuccessCount:          metric.NewCounter(metaConnMigrationSuccessCount),
+		ConnMigrationErrorFatalCount:       metric.NewCounter(metaConnMigrationErrorFatalCount),
+		ConnMigrationErrorRecoverableCount: metric.NewCounter(metaConnMigrationErrorRecoverableCount),
+		ConnMigrationAttemptedCount:        metric.NewCounter(metaConnMigrationAttemptedCount),
 	}
 }
 

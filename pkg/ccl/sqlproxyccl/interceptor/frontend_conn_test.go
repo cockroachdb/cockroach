@@ -10,7 +10,6 @@ package interceptor_test
 
 import (
 	"bytes"
-	"io"
 	"net"
 	"testing"
 
@@ -28,19 +27,9 @@ func TestFrontendConn(t *testing.T) {
 
 	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 
-	writeAsync := func(t *testing.T, w io.Writer) <-chan error {
-		t.Helper()
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := w.Write(q)
-			errCh <- err
-		}()
-		return errCh
-	}
-
 	t.Run("PeekMsg returns the right message type", func(t *testing.T) {
 		w, r := net.Pipe()
-		errCh := writeAsync(t, w)
+		errCh := writeAsync(t, w, q)
 
 		fi := interceptor.NewFrontendConn(r)
 		require.NotNil(t, fi)
@@ -56,7 +45,7 @@ func TestFrontendConn(t *testing.T) {
 
 	t.Run("ReadMsg decodes the message correctly", func(t *testing.T) {
 		w, r := net.Pipe()
-		errCh := writeAsync(t, w)
+		errCh := writeAsync(t, w, q)
 
 		fi := interceptor.NewFrontendConn(r)
 		require.NotNil(t, fi)
@@ -73,7 +62,7 @@ func TestFrontendConn(t *testing.T) {
 
 	t.Run("ForwardMsg forwards data to dst", func(t *testing.T) {
 		w, r := net.Pipe()
-		errCh := writeAsync(t, w)
+		errCh := writeAsync(t, w, q)
 		dst := new(bytes.Buffer)
 
 		fi := interceptor.NewFrontendConn(r)

@@ -24,3 +24,17 @@ func NewPGConn(conn net.Conn) *PGConn {
 		pgInterceptor: newPgInterceptor(conn, defaultBufferSize),
 	}
 }
+
+// ToFrontendConn converts a PGConn to a FrontendConn. Callers should be aware
+// of the underlying type of net.Conn before calling this, or else there will be
+// an error during parsing.
+func (c *PGConn) ToFrontendConn() *FrontendConn {
+	return &FrontendConn{Conn: c.Conn, interceptor: c.pgInterceptor}
+}
+
+// ToBackendConn converts a PGConn to a BackendConn. Callers should be aware
+// of the underlying type of net.Conn before calling this, or else there will be
+// an error during parsing.
+func (c *PGConn) ToBackendConn() *BackendConn {
+	return &BackendConn{Conn: c.Conn, interceptor: c.pgInterceptor}
+}
