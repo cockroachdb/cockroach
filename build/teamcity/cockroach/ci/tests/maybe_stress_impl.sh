@@ -12,7 +12,6 @@ TARGET="$1"
 
 bazel build //pkg/cmd/github-pull-request-make //pkg/cmd/bazci @com_github_cockroachdb_stress//:stress --config=ci \
   --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-  --google_default_credentials \
   --cache_test_results=no
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 PATH=$PATH:$BAZEL_BIN/pkg/cmd/bazci/bazci_:$BAZEL_BIN/external/com_github_cockroachdb_stress/stress_ TARGET=$TARGET \

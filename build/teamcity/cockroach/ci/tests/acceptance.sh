@@ -17,7 +17,6 @@ tc_start_block "Run acceptance tests"
 status=0
 
 bazel build //pkg/cmd/bazci --config=ci --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-                                                   --google_default_credentials \
                                                    --cache_test_results=no
 BAZCI=$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci
 
@@ -29,7 +28,6 @@ $BAZCI run --config=crosslinux --config=test --artifacts_dir=$PWD/artifacts \
   --test_env=GO_TEST_WRAP_TESTV=1 \
   --test_timeout=1800 \
   --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-  --google_default_credentials \
   --cache_test_results=no || status=$?
 
 # Some unit tests test automatic ballast creation. These ballasts can be

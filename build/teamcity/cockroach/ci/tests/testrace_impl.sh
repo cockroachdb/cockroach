@@ -7,7 +7,6 @@ set -xeuo pipefail
 
 bazel build //pkg/cmd/bazci --config=ci \
   --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-  --google_default_credentials \
   --cache_test_results=no
 for pkg in "$@"
 do
@@ -31,7 +30,6 @@ do
                                --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
                                --test_env=GOMAXPROCS=8 \
                                --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-                               --google_default_credentials \
                                --cache_test_results=no
     done
 done

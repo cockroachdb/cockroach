@@ -14,7 +14,6 @@ bazel run \
   --config=crosslinux --config=test \
   --test_timeout=3000 \
   --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-  --google_default_credentials \
   --cache_test_results=no
 
 tc_end_block "Run docker image tests"

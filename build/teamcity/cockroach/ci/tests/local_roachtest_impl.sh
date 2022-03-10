@@ -4,7 +4,6 @@ set -euo pipefail
 
 bazel build --config=crosslinux --config=ci //pkg/cmd/cockroach-short \
       --remote_cache='https://storage.googleapis.com/test-build-cache-cockroachlabs' \
-      --google_default_credentials \
       --cache_test_results=no \
       //pkg/cmd/roachtest \
       //pkg/cmd/workload
