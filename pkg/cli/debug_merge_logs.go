@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -570,7 +571,12 @@ func seekToFirstAfterFrom(
 	size := fi.Size()
 	defer func() {
 		if r := recover(); r != nil {
-			err = r.(error)
+			ok, e := errorutil.ShouldCatch(r)
+			if !ok {
+				// Not an error, nothing we can do.
+				panic(r)
+			}
+			err = e
 		}
 	}()
 	offset := sort.Search(int(size), func(i int) bool {

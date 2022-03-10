@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
 )
@@ -88,9 +89,9 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 func (p *queryBuilder) processClause(t Clause) {
 	defer func() {
 		if r := recover(); r != nil {
-			rErr, ok := r.(error)
+			ok, rErr := errorutil.ShouldCatch(r)
 			if !ok {
-				rErr = errors.AssertionFailedf("processClause: panic: %v", r)
+				panic(r)
 			}
 			encoded, err := yaml.Marshal(t)
 			if err != nil {

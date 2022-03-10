@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -388,12 +389,12 @@ func (r *Registry) batchJobInsertStmt(
 	}
 	appendValues := func(rec *Record, vals *[]interface{}) (err error) {
 		defer func() {
-			switch r := recover(); r.(type) {
-			case nil:
-			case error:
-				err = errors.CombineErrors(err, errors.Wrapf(r.(error), "encoding job %d", rec.JobID))
-			default:
-				panic(r)
+			if r := recover(); r != nil {
+				ok, e := errorutil.ShouldCatch(r)
+				if !ok {
+					panic(r)
+				}
+				err = errors.CombineErrors(err, errors.Wrapf(e, "encoding job %d", rec.JobID))
 			}
 		}()
 		for _, c := range columns {

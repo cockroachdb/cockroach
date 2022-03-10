@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -95,10 +96,11 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			rAsErr, ok := r.(error)
+			ok, rAsErr := errorutil.ShouldCatch(r)
 			if !ok {
-				rAsErr = errors.Errorf("panic during MakePlan: %v", r)
+				panic(r)
 			}
+			rAsErr = errors.Wrap(rAsErr, "panic during MakePlan")
 			err = p.DecorateErrorWithPlanDetails(rAsErr)
 		}
 	}()

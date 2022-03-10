@@ -172,6 +172,7 @@ go_library(
         "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
+        "//pkg/util/errorutil",
         "//pkg/util/flagutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

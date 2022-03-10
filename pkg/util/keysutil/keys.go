@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,11 +93,11 @@ func customizeKeyComprehension(
 func (s PrettyScanner) Scan(input string) (_ roachpb.Key, rErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if err, ok := r.(error); ok {
-				rErr = err
-				return
+			ok, e := errorutil.ShouldCatch(r)
+			if !ok {
+				panic(r)
 			}
-			rErr = errors.Errorf("%v", r)
+			rErr = e
 		}
 	}()
 

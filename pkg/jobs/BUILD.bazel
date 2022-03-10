@@ -50,6 +50,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
+        "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/json",
         "//pkg/util/log",

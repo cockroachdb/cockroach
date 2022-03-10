@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -148,9 +149,11 @@ func (c Catalog) ValidateWithRecover(
 ) (ve catalog.ValidationErrors) {
 	defer func() {
 		if r := recover(); r != nil {
-			err, ok := r.(error)
+			ok, err := errorutil.ShouldCatch(r)
 			if !ok {
-				err = errors.Newf("%v", r)
+				// Not an error object. Not safe to catch.
+				// (can be a go runtime error)
+				panic(r)
 			}
 			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
 			ve = append(ve, err)

@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -65,13 +66,12 @@ type ResultIterator func(r Result) error
 // evaluated against a database.
 func NewQuery(sc *Schema, clauses ...Clause) (_ *Query, err error) {
 	defer func() {
-		switch r := recover().(type) {
-		case nil:
-			return
-		case error:
-			err = errors.Wrap(r, "failed to construct query")
-		default:
-			err = errors.AssertionFailedf("failed to construct query: %v", r)
+		if r := recover(); r != nil {
+			ok, e := errorutil.ShouldCatch(r)
+			if !ok {
+				panic(r)
+			}
+			err = errors.Wrap(e, "failed to construct query")
 		}
 	}()
 	q := newQuery(sc, clauses)

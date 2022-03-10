@@ -21,7 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/pkg/errors"
 )
 
 // Build constructs a new state from an initial state and a statement.
@@ -51,11 +52,11 @@ func Build(
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
-			if errObj, ok := recErr.(error); ok {
-				err = errObj
-			} else {
-				err = errors.Errorf("unexpected error encountered while building schema change plan %s", recErr)
+			ok, e := errorutil.ShouldCatch(recErr)
+			if !ok {
+				panic(recErr)
 			}
+			err = errors.Wrap(e, "while building schema change plan")
 		}
 	}()
 	scbuildstmt.Process(b, an.GetStatement())
