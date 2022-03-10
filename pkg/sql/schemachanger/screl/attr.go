@@ -77,6 +77,18 @@ const (
 var t = reflect.TypeOf
 
 var elementSchemaOptions = []rel.SchemaOption{
+	// We need this `Element` attribute to be of type `protoulti.Message`
+	// interface and better have it as the first in the schema option list. This
+	// is because the schema needs to know a type of each attribute, and it
+	// creates a mapping between attribute and the type. If you're trying to add a
+	// same attribute of different type, it panics. In the context of schema
+	// changer, a target's element can be of any type listed in
+	// `scpb.ElementProto`, which means that we want this `Element` attribute to
+	// be mapped to a more general interface type which is implemented by the
+	// types listed in `scpb.ElementProto`, so that a Target can be represented
+	// correctly in the schema. This is legit because golang reflection considers
+	// concrete type underneath an interface value, so we won't have a problem
+	// evaluating field values within a concrete Element struct.
 	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
 	// Top-level elements.
 	rel.EntityMapping(t((*scpb.Database)(nil)),
@@ -254,7 +266,6 @@ var elementSchemaOptions = []rel.SchemaOption{
 // Schema is the schema exported by this package covering the elements of scpb.
 var Schema = rel.MustSchema("screl", append(
 	elementSchemaOptions,
-	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
 	rel.EntityMapping(t((*Node)(nil)),
 		rel.EntityAttr(CurrentStatus, "CurrentStatus"),
 		rel.EntityAttr(Target, "Target"),
