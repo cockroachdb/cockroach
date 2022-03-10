@@ -504,6 +504,32 @@ func ColVecToDatumAndDeselect(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.EncodedKeyFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.Bytes()
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v := typedCol.Get(srcIdx)
+						// Note that there is no need for a copy since DEncodedKey uses a string
+						// as underlying storage, which will perform the copy for us.
+						_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
 			case types.JsonFamily:
 				switch ct.Width() {
 				case -1:
@@ -870,6 +896,27 @@ func ColVecToDatumAndDeselect(
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						_converted := da.NewDBytes(tree.DBytes(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
+			case types.EncodedKeyFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.Bytes()
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						v := typedCol.Get(srcIdx)
+						// Note that there is no need for a copy since DEncodedKey uses a string
+						// as underlying storage, which will perform the copy for us.
+						_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -1265,6 +1312,31 @@ func ColVecToDatum(
 							// Note that there is no need for a copy since DBytes uses a string
 							// as underlying storage, which will perform the copy for us.
 							_converted := da.NewDBytes(tree.DBytes(v))
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							if nulls.NullAt(srcIdx) {
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 							converted[destIdx] = _converted
 						}
 					}
@@ -1685,6 +1757,31 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							if nulls.NullAt(srcIdx) {
+								//gcassert:bce
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
 				case types.JsonFamily:
 					switch ct.Width() {
 					case -1:
@@ -2056,6 +2153,27 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
+							converted[destIdx] = _converted
+						}
+					}
 				case types.JsonFamily:
 					switch ct.Width() {
 					case -1:
@@ -2395,6 +2513,26 @@ func ColVecToDatum(
 							// Note that there is no need for a copy since DBytes uses a string
 							// as underlying storage, which will perform the copy for us.
 							_converted := da.NewDBytes(tree.DBytes(v))
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
