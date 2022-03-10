@@ -52,6 +52,10 @@ type ManagerTestingKnobs struct {
 	// ignored.
 	TestingDescriptorUpdateEvent func(descriptor *descpb.Descriptor) error
 
+	// TestingImmediatelyBeforeAcquireLeaseDuringRefresh is a callback right before
+	// the lease manager attempts to acquire a lease for descriptor `id`.
+	TestingImmediatelyBeforeAcquireLeaseDuringRefresh func(id descpb.ID) error
+
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 
