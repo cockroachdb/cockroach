@@ -3228,3 +3228,57 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	// Ensure that the query completed successfully.
 	require.NoError(t, <-selectErr)
 }
+
+// TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
+// periodical refresh, if the descriptor, whose lease we intend to refresh, does not exist anymore, we delete
+// this descriptor from "cache" (i.e. in-memory objects managed by a lease.Manager).
+func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	params := createTestServerParams()
+	ctx := context.Background()
+
+	// Set lease duration to something very small such that `DROP TYPE typ` does not need to wait for too long.
+	// (recall: we first acquire a lease on `typ` so `DROP TYPE typ` will block until that lease expires)
+	lease.LeaseDuration.Override(ctx, &params.SV, 1*time.Second)
+
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	// The overall testing strategy is
+	// Set up: create a TYPE object, acquire a lease on it, drop this TYPE object, and
+	//
+	// Act: invoke `refreshSomeLeases` to trigger the logic we intend to test.
+	//
+	// Assert: descriptor for this TYPE object is removed from "cache".
+	sql := `
+CREATE DATABASE test;
+USE test;
+CREATE TYPE typ as enum ('a', 'b');
+`
+	_, err := t.db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	typeDesc := desctestutils.TestingGetTypeDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "public", "typ")
+	t.mustAcquire(1, typeDesc.GetID())
+	t.expectLeases(typeDesc.GetID(), "/1/1")
+
+	{
+		sql := `
+		DROP TYPE typ;
+		`
+		_, err := t.db.Exec(sql)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	lm := t.node(1)
+	lm.TestingRefreshSomeLeases(ctx)
+
+	if lm.TestingIfADescriptorExists(typeDesc.GetID()) {
+		t.Fatalf("descriptor %v(#%v) is still there. Expected: descriptor removed from cache.", typeDesc.GetName(), typeDesc.GetID())
+	}
+}
