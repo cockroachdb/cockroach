@@ -86,7 +86,7 @@ func forward(
 	metrics *metrics,
 	clientConn net.Conn,
 	serverConn net.Conn,
-) *forwarder {
+) (*forwarder, error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	f := &forwarder{
 		ctx:        ctx,
@@ -100,8 +100,10 @@ func forward(
 	clockFn := makeLogicalClockFn()
 	f.request = newProcessor(clockFn, f.clientConn, f.serverConn)  // client -> server
 	f.response = newProcessor(clockFn, f.serverConn, f.clientConn) // server -> client
-	f.resumeProcessors()
-	return f
+	if err := f.resumeProcessors(); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // Close closes the forwarder and all connections. This is idempotent.
@@ -130,7 +132,7 @@ func (f *forwarder) Close() {
 // asynchronously. The forwarder will be closed if any of the processors
 // return an error while resuming. This is idempotent as resume() will return
 // nil if the processor has already been started.
-func (f *forwarder) resumeProcessors() {
+func (f *forwarder) resumeProcessors() error {
 	go func() {
 		if err := f.request.resume(f.ctx); err != nil {
 			f.tryReportError(wrapClientToServerError(err))
@@ -141,6 +143,13 @@ func (f *forwarder) resumeProcessors() {
 			f.tryReportError(wrapServerToClientError(err))
 		}
 	}()
+	if err := f.request.waitResumed(f.ctx); err != nil {
+		return err
+	}
+	if err := f.response.waitResumed(f.ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // tryReportError tries to send err to errCh, and closes the forwarder if
@@ -252,6 +261,7 @@ func (p *processor) resume(ctx context.Context) error {
 			return errProcessorResumed
 		}
 		p.mu.resumed = true
+		p.mu.cond.Broadcast()
 		return nil
 	}
 	exitResume := func() {
@@ -326,6 +336,22 @@ func (p *processor) resume(ctx context.Context) error {
 		}
 	}
 	return ctx.Err()
+}
+
+// waitResumed waits until the processor has been resumed. This can be used to
+// ensure that suspend actually suspends the running processor, and there won't
+// be a race where the goroutines have not started running, and suspend returns.
+func (p *processor) waitResumed(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for !p.mu.resumed {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		p.mu.cond.Wait()
+	}
+	return nil
 }
 
 // suspend requests for the processor to be suspended if it is in a safe state,
