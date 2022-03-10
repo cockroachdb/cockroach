@@ -279,10 +279,10 @@ func makeIndexDescriptor(
 	// Increment telemetry once a descriptor has been successfully created.
 	if indexDesc.Type == descpb.IndexDescriptor_INVERTED {
 		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
-		if geoindex.IsGeometryConfig(&indexDesc.GeoConfig) {
+		if indexDesc.GeoConfig.IsGeometry() {
 			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 		}
-		if geoindex.IsGeographyConfig(&indexDesc.GeoConfig) {
+		if indexDesc.GeoConfig.IsGeography() {
 			telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
 		}
 		if indexDesc.IsPartial() {

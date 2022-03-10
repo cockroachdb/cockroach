@@ -1456,8 +1456,8 @@ func (oi *optIndex) ImplicitColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (oi *optIndex) GeoConfig() *geoindex.Config {
-	return &oi.idx.IndexDesc().GeoConfig
+func (oi *optIndex) GeoConfig() geoindex.Config {
+	return oi.idx.IndexDesc().GeoConfig
 }
 
 // Version is part of the cat.Index interface.
@@ -2228,8 +2228,8 @@ func (oi *optVirtualIndex) ImplicitColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (oi *optVirtualIndex) GeoConfig() *geoindex.Config {
-	return nil
+func (oi *optVirtualIndex) GeoConfig() geoindex.Config {
+	return geoindex.Config{}
 }
 
 // Version is part of the cat.Index interface.

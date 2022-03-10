@@ -202,8 +202,8 @@ func (hi *hypotheticalIndex) ImplicitColumnCount() int {
 
 // GeoConfig is part of the cat.Index interface.
 // TODO(nehageorge): Add support for spatial index recommendations.
-func (hi *hypotheticalIndex) GeoConfig() *geoindex.Config {
-	return nil
+func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
+	return geoindex.Config{}
 }
 
 // Version is part of the cat.Index interface.
