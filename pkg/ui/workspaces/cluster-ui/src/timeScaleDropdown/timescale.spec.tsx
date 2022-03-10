@@ -18,7 +18,11 @@ import {
   TimeScaleDropdownProps,
   TimeScaleDropdown,
 } from "./timeScaleDropdown";
-import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
+import {
+  defaultTimeScaleOptions,
+  findClosestTimeScale,
+  toRoundedDateRange,
+} from "./utils";
 import * as timescale from "./timeScaleTypes";
 import moment from "moment";
 import { MemoryRouter } from "react-router";
@@ -204,6 +208,32 @@ describe("<TimeScaleDropdown>", function() {
 });
 
 describe("timescale utils", (): void => {
+  describe("toRoundedDateRange", () => {
+    it("round values", () => {
+      const ts: TimeScale = {
+        windowSize: moment.duration(5, "day"),
+        sampleSize: moment.duration(5, "minutes"),
+        fixedWindowEnd: moment.utc("2022.01.10 13:42"),
+        key: "Custom",
+      };
+      const [start, end] = toRoundedDateRange(ts);
+      assert.equal(start.format("YYYY.MM.DD HH:mm:ss"), "2022.01.05 13:00:00");
+      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 14:00:00");
+    });
+
+    it("already rounded values", () => {
+      const ts: TimeScale = {
+        windowSize: moment.duration(5, "day"),
+        sampleSize: moment.duration(5, "minutes"),
+        fixedWindowEnd: moment.utc("2022.01.10 13:00"),
+        key: "Custom",
+      };
+      const [start, end] = toRoundedDateRange(ts);
+      assert.equal(start.format("YYYY.MM.DD HH:mm:ss"), "2022.01.05 13:00:00");
+      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 14:00:00");
+    });
+  });
+
   describe("findClosestTimeScale", () => {
     it("should find the correct time scale", () => {
       // `seconds` != window size of any of the default options, `startSeconds` not specified.

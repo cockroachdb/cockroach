@@ -34,6 +34,7 @@ func RegisterTests(r registry.Registry) {
 	registerDiskFull(r)
 	RegisterDiskStalledDetection(r)
 	registerDjango(r)
+	registerDrain(r)
 	registerDrop(r)
 	registerEncryption(r)
 	registerEngineSwitch(r)
