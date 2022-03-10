@@ -198,8 +198,8 @@ Please perform the following steps:
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(fileContents, "STABLE_BUILD_GIT_BUILD_TYPE") {
-			failedStampTestMsg = fmt.Sprintf("Could not find STABLE_BUILD_GIT_TYPE in %s\n", testStampingTxt)
+		if !strings.Contains(fileContents, "STABLE_BUILD_TYPE") {
+			failedStampTestMsg = fmt.Sprintf("Could not find STABLE_BUILD_TYPE in %s\n", testStampingTxt)
 		}
 	}
 	if failedStampTestMsg != "" {
