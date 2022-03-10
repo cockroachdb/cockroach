@@ -226,11 +226,11 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 			ifr.MoveToDraining(errors.New("no datum found"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
-		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.BytesFamily {
-			ifr.MoveToDraining(errors.New("inverted column should have type bytes"))
+		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.EncodedKeyFamily {
+			ifr.MoveToDraining(errors.New("inverted column should have type encodedkey"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
-		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
+		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DEncodedKey))
 	}
 	shouldAdd, err := ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */)
 	if err != nil {

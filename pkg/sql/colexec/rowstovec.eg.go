@@ -432,6 +432,33 @@ func EncDatumRowsToColVec(
 						}
 					}
 				}
+			case types.EncodedKeyFamily:
+				switch t.Width() {
+				case -1:
+				default:
+					col := vec.Bytes()
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
+							}
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
+
+								v = encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DEncodedKey)))
+								castV := v.([]byte)
+								col.Set(i, castV)
+							}
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 			default:
 				switch t.Width() {
