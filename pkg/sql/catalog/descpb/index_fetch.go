@@ -10,6 +10,8 @@
 
 package descpb
 
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
+
 // IndexFetchSpecVersionInitial is the initial IndexFetchSpec version.
 const IndexFetchSpecVersionInitial = 1
 
@@ -34,4 +36,13 @@ func (s *IndexFetchSpec) KeyFullColumns() []IndexFetchSpec_KeyColumn {
 // KeySuffixColumns returns the key suffix columns.
 func (s *IndexFetchSpec) KeySuffixColumns() []IndexFetchSpec_KeyColumn {
 	return s.KeyAndSuffixColumns[len(s.KeyAndSuffixColumns)-int(s.NumKeySuffixColumns):]
+}
+
+// FetchedColumnTypes returns the types of the fetched columns in a slice.
+func (s *IndexFetchSpec) FetchedColumnTypes() []*types.T {
+	res := make([]*types.T, len(s.FetchedColumns))
+	for i := range res {
+		res[i] = s.FetchedColumns[i].Type
+	}
+	return res
 }

@@ -326,7 +326,7 @@ func (ij *InvertedJoinerSpec) summary() (string, []string) {
 	if ij.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(ij.Type))
 	}
-	details = append(details, indexDetail(&ij.Table, ij.IndexIdx))
+	details = append(details, fmt.Sprintf("%s@%s", ij.FetchSpec.TableName, ij.FetchSpec.IndexName))
 	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
 	if !ij.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", ij.OnExpr))
@@ -334,6 +334,7 @@ func (ij *InvertedJoinerSpec) summary() (string, []string) {
 	if ij.OutputGroupContinuationForLeftRow {
 		details = append(details, "first join in paired-join")
 	}
+	details = appendColumns(details, ij.FetchSpec.FetchedColumns)
 	return "InvertedJoiner", details
 }
 
