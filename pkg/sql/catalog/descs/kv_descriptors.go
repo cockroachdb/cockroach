@@ -185,7 +185,7 @@ func (kd *kvDescriptors) getByName(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-) (catalog.MutableDescriptor, error) {
+) (catalog.Descriptor, error) {
 	descID, err := kd.lookupName(ctx, txn, maybeDB, parentID, parentSchemaID, name)
 	if err != nil || descID == descpb.InvalidID {
 		return nil, err
@@ -219,8 +219,8 @@ func (kd *kvDescriptors) getByIDs(
 	txn *kv.Txn,
 	vd validate.ValidationDereferencer,
 	ids []descpb.ID,
-) ([]catalog.MutableDescriptor, error) {
-	ret := make([]catalog.MutableDescriptor, len(ids))
+) ([]catalog.Descriptor, error) {
+	ret := make([]catalog.Descriptor, len(ids))
 	kvIDs := make([]descpb.ID, 0, len(ids))
 	indexes := make([]int, 0, len(ids))
 	for i, id := range ids {
@@ -248,11 +248,7 @@ func (kd *kvDescriptors) getByIDs(
 		return nil, err
 	}
 	for j, desc := range kvDescs {
-		b := desc.NewBuilder()
-		if err := b.RunPostDeserializationChanges(); err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
-		}
-		ret[indexes[j]] = b.BuildExistingMutable()
+		ret[indexes[j]] = desc
 	}
 	return ret, nil
 }

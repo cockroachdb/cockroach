@@ -96,9 +96,6 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 		}
 	}
 	if len(fallbackReqs) > 0 {
-		// TODO(postamar): actually use the Collection here instead,
-		// either by calling the Collection's methods or by caching the results
-		// of this call in the Collection.
 		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
 			ctx,
 			version,
@@ -110,6 +107,15 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 			return nil, err
 		}
 		for j, desc := range fallbackRet {
+			if desc == nil {
+				continue
+			}
+			if uc, _ := c.tc.uncommitted.getImmutableByID(desc.GetID()); uc == nil {
+				desc, err = c.tc.uncommitted.add(desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
+				if err != nil {
+					return nil, err
+				}
+			}
 			ret[fallbackRetIndexes[j]] = desc
 		}
 	}
@@ -119,7 +125,10 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if uc := c.tc.uncommitted.getByID(id); uc != nil {
+	if uc, status := c.tc.uncommitted.getImmutableByID(id); uc != nil {
+		if status == checkedOutAtLeastOnce {
+			return nil, nil
+		}
 		return uc, nil
 	}
 	if ld := c.tc.leased.cache.GetByID(id); ld != nil {
