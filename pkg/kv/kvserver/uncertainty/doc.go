@@ -144,7 +144,7 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //     enforce that when a Replica acquires a lease it bumps its node's clock to a
 //     time higher than the previous leaseholder's clock when it stopped serving
 //     writes. This is accomplished cooperatively for lease transfers and through
-//     a statis period before lease expiration for lease acquisitions. It then
+//     a stasis period before lease expiration for lease acquisitions. It then
 //     follows by induction that, in conjunction with the previous invariant, this
 //     invariant holds for all leaseholders, given that a Range's initial
 //     leaseholder assumes responsibility for an empty range with no writes.
