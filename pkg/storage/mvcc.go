@@ -3823,11 +3823,15 @@ func MVCCGarbageCollect(
 		// first garbage version.
 		prevNanos := timestamp.WallTime
 		{
-
+			// If true - forward iteration positioned iterator on first garbage
+			// (key.ts <= gc.ts).
 			var foundPrevNanos bool
 			{
 				// If reverse iteration is supported (supportsPrev), we'll step the
 				// iterator a few time before attempting to seek.
+
+				// True if we found next key while iterating. That means there's no
+				// garbage for the key (?).
 				var foundNextKey bool
 
 				// If there are a large number of versions which are not garbage,
@@ -3891,6 +3895,9 @@ func MVCCGarbageCollect(
 				}
 			}
 		}
+
+		// At this point iterator is positioned on first garbage version and forward
+		// iteration will give us all versions to delete up to the next key.
 
 		// Iterate through the garbage versions, accumulating their stats and
 		// issuing clear operations.

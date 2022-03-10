@@ -935,11 +935,19 @@ message HeartbeatTxnResponse {
 message GCRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
+  // Point keys
   message GCKey {
     bytes key = 1 [(gogoproto.casttype) = "Key"];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
+  // Range keys
+  message GCRangeKey {
+    bytes startKey = 1 [(gogoproto.casttype) = "Key"];
+    bytes endKey = 2 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  }
+  repeated GCRangeKey rangeKeys = 6 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
 

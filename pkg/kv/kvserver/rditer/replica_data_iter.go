@@ -240,6 +240,7 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 			storage.IterOptions{
 				LowerBound: ri.ranges[ri.curIndex].Start,
 				UpperBound: ri.ranges[ri.curIndex].End,
+				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			})
 		if ri.reverse {
 			ri.it.SeekLT(storage.MakeMVCCMetadataKey(ri.ranges[ri.curIndex].End))
@@ -331,6 +332,14 @@ func (ri *ReplicaMVCCDataIterator) UnsafeKey() storage.MVCCKey {
 // the next call to {Next,Prev,Close}.
 func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
+}
+
+func (ri *ReplicaMVCCDataIterator) RangeKeys() []storage.MVCCRangeKey {
+	return ri.it.RangeKeys()
+}
+
+func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
+	return ri.it.HasPointAndRange()
 }
 
 // NewReplicaEngineDataIterator creates a ReplicaEngineDataIterator for the given replica.

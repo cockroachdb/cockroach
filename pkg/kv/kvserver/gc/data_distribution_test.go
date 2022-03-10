@@ -33,7 +33,7 @@ import (
 // MVCCKeyValues. The stream may indicate that a value is an intent by returning
 // a non-nil transaction. If an intent is returned it must have a higher
 // timestamp than any other version written for the key.
-type dataDistribution func() (storage.MVCCKeyValue, *roachpb.Transaction, bool)
+type dataDistribution func() (storage.MVCCKeyValue, storage.MVCCRangeKey, *roachpb.Transaction, bool)
 
 // setupTest writes the data from this distribution into eng. All data should
 // be a part of the range represented by desc.
@@ -44,11 +44,17 @@ func (ds dataDistribution) setupTest(
 	var maxTs hlc.Timestamp
 	var ms enginepb.MVCCStats
 	for {
-		kv, txn, ok := ds()
+		kv, rangeTS, txn, ok := ds()
 		if !ok {
 			break
 		}
-		if txn == nil {
+		if !rangeTS.Timestamp.IsEmpty() {
+			require.Nil(t, txn, "invalid test data, range can't use transaction")
+			require.Zero(t, len(kv.Key.Key), "invalid test data, range can't be used together with value")
+			err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, eng, &ms, rangeTS.StartKey,
+				rangeTS.EndKey, rangeTS.Timestamp, roachpb.KeyMin, roachpb.KeyMax, 1)
+			require.NoError(t, err, "failed to put delete range")
+		} else if txn == nil {
 			if kv.Key.Timestamp.IsEmpty() {
 				require.NoError(t, eng.PutUnversioned(kv.Key.Key, kv.Value))
 			} else {
@@ -100,9 +106,9 @@ func newDataDistribution(
 		timestamps []hlc.Timestamp
 		haveIntent bool
 	)
-	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
+	return func() (storage.MVCCKeyValue, storage.MVCCRangeKey, *roachpb.Transaction, bool) {
 		if remaining == 0 {
-			return storage.MVCCKeyValue{}, nil, false
+			return storage.MVCCKeyValue{}, storage.MVCCRangeKey{}, nil, false
 		}
 		defer func() { remaining-- }()
 		for len(timestamps) == 0 {
@@ -147,7 +153,7 @@ func newDataDistribution(
 		return storage.MVCCKeyValue{
 			Key:   storage.MVCCKey{Key: key, Timestamp: ts},
 			Value: valueDist(),
-		}, txn, true
+		}, storage.MVCCRangeKey{}, txn, true
 	}
 }
 

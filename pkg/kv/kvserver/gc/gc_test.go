@@ -48,7 +48,9 @@ type collectingGCer struct {
 	keys [][]roachpb.GCRequest_GCKey
 }
 
-func (c *collectingGCer) GC(_ context.Context, keys []roachpb.GCRequest_GCKey) error {
+func (c *collectingGCer) GC(
+	_ context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) error {
 	c.keys = append(c.keys, keys)
 	return nil
 }
@@ -378,4 +380,29 @@ func TestGCIntentBatcherErrorHandling(t *testing.T) {
 	}, opts, &info)
 	cancel()
 	require.Error(t, batcher.maybeFlushPendingIntents(ctx))
+}
+
+func TestGC(t *testing.T) {
+	e := prepEngineWithRanges(t)
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("zzzzzzzzzzzzzzzzz"),
+	}
+	s := e.NewSnapshot()
+
+	now := hlc.Timestamp{WallTime: 10000}
+	gcThreshold := hlc.Timestamp{WallTime: 45}
+
+	gcer := makeFakeGCer()
+	_, err := Run(context.Background(), &desc, s, now, gcThreshold,
+		/* does not matter for our case */
+		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: 10000000},
+		time.Minute /* this is not used */, &gcer,
+		func(ctx context.Context, intents []roachpb.Intent) error {
+			return nil
+		}, func(ctx context.Context, transaction *roachpb.Transaction) error {
+			return nil
+		})
+	require.NoError(t, err)
+	fmt.Printf("Collected keys: %s\n", gcer.gcKeys)
 }
