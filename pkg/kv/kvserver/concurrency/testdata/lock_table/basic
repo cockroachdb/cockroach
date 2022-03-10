@@ -272,6 +272,14 @@ global: num=5
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, info: repl epoch: 0, seqs: [0]
 local: num=0
 
+query
+----
+num locks: 1, bytes returned: 81, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2s
+
 metrics
 ----
 locks: 5
@@ -698,6 +706,23 @@ topklocksbywaitduration:
   waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
+
+
+query
+----
+num locks: 3, bytes returned: 292, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.65s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
+  range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
+    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Exclusive wait_duration:250ms
+  range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:0s
 
 # 100ms passes between before releasing a
 time-tick ms=100
