@@ -658,6 +658,14 @@ func getLocalityInfo(
 		}
 		found := false
 		for i, store := range stores {
+			// Iterate through the available stores in case the user moved a locality
+			// partition, guarding against stale backup manifest info. In addition,
+			// two locality aware URIs may end up writing to the same location (e.g.
+			// in testing, 'nodelocal://0/foo?COCKROACH_LOCALITY=default' and
+			// 'nodelocal://1/foo?COCKROACH_LOCALITY=dc=d1' will write to the same
+			// tempdir), implying that it is possible for files that the manifest
+			// claims are stored in two different localities, are actually stored in
+			// the same place.
 			if desc, _, err := readBackupPartitionDescriptor(ctx, nil /*mem*/, store, filename, encryption); err == nil {
 				if desc.BackupID != mainBackupManifest.ID {
 					return info, errors.Errorf(
