@@ -22,6 +22,7 @@ import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
 import "./cluster.styl";
 import {
@@ -311,6 +312,7 @@ export default class ClusterOverview extends React.Component<any, any> {
       <div className="cluster-page">
         <Helmet title="Cluster Overview" />
         <EmailSubscription />
+        <OverviewListAlerts />
         <section className="section cluster-overview">
           <ClusterSummaryConnected />
         </section>
