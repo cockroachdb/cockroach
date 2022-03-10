@@ -204,7 +204,9 @@ func (f *fakeGCer) SetGCThreshold(ctx context.Context, t Threshold) error {
 	return nil
 }
 
-func (f *fakeGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) error {
+func (f *fakeGCer) GC(
+	ctx context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) error {
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
 	}
