@@ -331,7 +331,7 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 			argExprs = append(argExprs, tree.NewDInt(1))
 		}
 		if len(argExprs) < 3 {
-			null := tree.ReType(tree.DNull, argExprs[0].ResolvedType())
+			null := reType(tree.DNull, argExprs[0].ResolvedType())
 			argExprs = append(argExprs, null)
 		}
 	}
