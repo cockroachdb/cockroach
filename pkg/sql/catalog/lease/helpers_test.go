@@ -286,3 +286,11 @@ func (m *Manager) Publish(
 	}
 	return results[id], nil
 }
+
+func (m *Manager) TestingRefreshSomeLeases(ctx context.Context) {
+	m.refreshSomeLeases(ctx)
+}
+
+func (m *Manager) TestingDescriptorStateIsNil(id descpb.ID) bool {
+	return m.findDescriptorState(id, false /* create */) == nil
+}
