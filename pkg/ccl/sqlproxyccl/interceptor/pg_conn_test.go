@@ -10,7 +10,6 @@ package interceptor_test
 
 import (
 	"bytes"
-	"io"
 	"net"
 	"testing"
 
@@ -27,21 +26,11 @@ func TestPGConn(t *testing.T) {
 
 	q := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 
-	writeAsync := func(t *testing.T, w io.Writer) <-chan error {
-		t.Helper()
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := w.Write(q)
-			errCh <- err
-		}()
-		return errCh
-	}
-
 	t.Run("net.Conn/Write", func(t *testing.T) {
 		external, proxy := net.Pipe()
 
 		c := interceptor.NewPGConn(proxy)
-		errCh := writeAsync(t, c)
+		errCh := writeAsync(t, c, q)
 
 		bc := interceptor.NewBackendConn(external)
 		msg, err := bc.ReadMsg()
@@ -56,7 +45,7 @@ func TestPGConn(t *testing.T) {
 
 	t.Run("pgInterceptor/ForwardMsg", func(t *testing.T) {
 		external, proxy := net.Pipe()
-		errCh := writeAsync(t, external)
+		errCh := writeAsync(t, external, q)
 		dst := new(bytes.Buffer)
 
 		c := interceptor.NewPGConn(proxy)
@@ -69,4 +58,42 @@ func TestPGConn(t *testing.T) {
 		err = <-errCh
 		require.Nil(t, err)
 	})
+}
+
+func TestPGConn_ToFrontendConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
+
+	external, proxy := net.Pipe()
+	errCh := writeAsync(t, external, q)
+
+	fc := interceptor.NewPGConn(proxy).ToFrontendConn()
+	msg, err := fc.ReadMsg()
+	require.NoError(t, err)
+	rmsg, ok := msg.(*pgproto3.ReadyForQuery)
+	require.True(t, ok)
+	require.Equal(t, byte('I'), rmsg.TxStatus)
+
+	err = <-errCh
+	require.Nil(t, err)
+}
+
+func TestPGConn_ToBackendConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	q := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
+
+	external, proxy := net.Pipe()
+	errCh := writeAsync(t, external, q)
+
+	bc := interceptor.NewPGConn(proxy).ToBackendConn()
+	msg, err := bc.ReadMsg()
+	require.NoError(t, err)
+	rmsg, ok := msg.(*pgproto3.Query)
+	require.True(t, ok)
+	require.Equal(t, "SELECT 1", rmsg.String)
+
+	err = <-errCh
+	require.Nil(t, err)
 }
