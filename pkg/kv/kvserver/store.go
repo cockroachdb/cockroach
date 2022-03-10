@@ -2966,7 +2966,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.LogicalBytes = logicalBytes
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
-	capacity.ReadAmplification = s.metrics.RdbReadAmplification.Value()
+	capacity.L0Sublevels = s.metrics.RdbL0Sublevels.Value()
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)

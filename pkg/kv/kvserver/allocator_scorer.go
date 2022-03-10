@@ -70,6 +70,10 @@ const (
 	// consider a store full/empty if it's at least minRebalanceThreshold
 	// away from the mean.
 	minRangeRebalanceThreshold = 2
+
+	// l0SublevelThreshold: if the number of l0 sublevels of a store descriptor
+	// is greater than this value, it will never be used as a rebalance target.
+	maxL0SublevelThreshold = 20
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -86,6 +90,14 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	s.SetVisibility(settings.Public)
 	return s
 }()
+
+var l0SublevelThreshold = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.allocator.l0_sublevels_threshold",
+	"the maximum count of l0 sublevels within a store that may exist"+
+		"before it becomes inelligible as a rebalance target.",
+	maxL0SublevelThreshold,
+)
 
 // CockroachDB has two heuristics that trigger replica rebalancing: range count
 // convergence and QPS convergence. scorerOptions defines the interface that
@@ -179,6 +191,7 @@ func (o *scatterScorerOptions) maybeJitterStoreStats(
 // This means that the resulting rebalancing decisions will further the goal of
 // converging range counts across stores in the cluster.
 type rangeCountScorerOptions struct {
+	*diskHealthScorerOptions
 	deterministic           bool
 	rangeRebalanceThreshold float64
 }
@@ -766,7 +779,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !maxCapacityCheck(s) {
+		if !maxCapacityCheck(s) || !readAmpCheck(options.diskHealthScorerOptions, s) {
 			continue
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
@@ -1841,6 +1854,18 @@ func rebalanceConvergesRangeCountOnMean(
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
 	return math.Abs(newVal-mean) < math.Abs(oldVal-mean)
+}
+
+type diskHealthScorerOptions struct {
+	enabled             bool
+	l0SublevelThreshold int64
+}
+
+// readAmpCheck returns true if the store read amplification is considered low
+// enough for a new replica.
+func readAmpCheck(options *diskHealthScorerOptions, store roachpb.StoreDescriptor) bool {
+	// Using read amplifaction is version gated to 22.1 clusters.
+	return !options.enabled || store.Capacity.L0Sublevels < int64(options.l0SublevelThreshold)
 }
 
 // maxCapacityCheck returns true if the store has room for a new replica.

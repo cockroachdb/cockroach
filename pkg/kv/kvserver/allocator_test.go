@@ -729,7 +729,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			if e, a := tc.expectTargetRebalance, ok; e != a {
 				t.Errorf(
@@ -803,7 +803,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok {
 			// Update the descriptor.
@@ -844,7 +844,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.False(t, ok)
 	}
@@ -916,7 +916,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if !ok {
 			i-- // loop until we find 10 candidates
@@ -940,7 +940,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		eqClass.existing = desc
-		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, eqClass)
+		result := a.scorerOptions(ctx).shouldRebalanceBasedOnThresholds(ctx, eqClass)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -1074,7 +1074,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
@@ -1099,7 +1099,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", target.StoreID, details)
@@ -1118,7 +1118,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		expTo := stores[1].StoreID
 		expFrom := stores[0].StoreID
@@ -1197,7 +1197,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			if c.expected > 0 {
 				if !ok {
@@ -1344,7 +1344,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
 				eqClass.existing = desc
-				if a, e := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+				if a, e := a.scorerOptions(ctx).shouldRebalanceBasedOnThresholds(
 					context.Background(), eqClass,
 				), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf(
@@ -1638,7 +1638,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
@@ -1656,7 +1656,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			existing:    desc,
 			candidateSL: sl,
 		}
-		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, eqClass)
+		result := a.scorerOptions(ctx).shouldRebalanceBasedOnThresholds(ctx, eqClass)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -2209,7 +2209,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		var resultID roachpb.StoreID
 		if ok {
@@ -2281,7 +2281,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		var gotExpected bool
 		if !ok {
@@ -2813,7 +2813,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingVoters, /* voterCandidates */
 			c.existingVoters,
 			c.existingNonVoters,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.NoError(t, err)
 
@@ -2832,7 +2832,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingVoters,
 			c.existingVoters,
 			nil,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.NoError(t, err)
 		require.Truef(t, checkReplExists(targetVoter, c.expVoterRemovals),
@@ -2845,7 +2845,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingNonVoters, /* nonVoterCandidates */
 			c.existingVoters,
 			c.existingNonVoters,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.NoError(t, err)
 		require.True(t, checkReplExists(targetNonVoter, c.expNonVoterRemovals))
@@ -3121,7 +3121,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if !ok {
 			t.Fatalf("%d: RebalanceVoter(%v) returned no target store; details: %s", i, c.existing, details)
@@ -3353,7 +3353,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isStoreReadyForRoutineReplicaTransfer,
 				false, /* allowMultipleReplsPerNode */
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 
 			if !expectedStoreIDsMatch(tc.expected, candidates) {
@@ -3372,7 +3372,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				nil,
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isStoreReadyForRoutineReplicaTransfer,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			if len(tc.expected) > 0 {
 				require.Len(t, rebalanceOpts, 1)
@@ -3694,7 +3694,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
 			false, /* allowMultipleReplsPerNode */
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		best := candidates.best()
 		match := true
@@ -3919,7 +3919,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		candidates := candidateListForRemoval(sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
-			a.scorerOptions())
+			a.scorerOptions(ctx))
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d (with `constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
@@ -3932,7 +3932,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		candidates = candidateListForRemoval(sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
-			a.scorerOptions())
+			a.scorerOptions(ctx))
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d (with `voter_constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
@@ -4084,7 +4084,7 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 				test.existingNonVoters,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			if test.expectNoAction {
 				require.True(t, !ok)
@@ -4141,7 +4141,7 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 		existingNonVoters,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 	)
 
 	require.Truef(t, ok, "no action taken")
@@ -4200,7 +4200,7 @@ func TestNonVotersCannotRebalanceToVoterStores(t *testing.T) {
 		existingNonVoters,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 	)
 
 	require.Falsef(
@@ -5003,7 +5003,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			nil,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		match := true
 		if len(tc.expected) != len(results) {
@@ -5034,7 +5034,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			var found bool
 			if !ok && len(tc.validTargets) == 0 {
@@ -5423,7 +5423,7 @@ func TestAllocatorRemoveTargetBasedOnCapacity(t *testing.T) {
 			replicas,
 			replicas,
 			nil,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -7263,7 +7263,7 @@ func TestAllocatorRebalanceWithScatter(t *testing.T) {
 		nil,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 	)
 	require.False(t, ok)
 
@@ -7390,7 +7390,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 
 			if tc.expected == nil && ok {
@@ -7568,7 +7568,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						nil,
 						rangeUsageInfo,
 						storeFilterThrottled,
-						alloc.scorerOptions(),
+						alloc.scorerOptions(ctx),
 					)
 					if ok {
 						if log.V(1) {
@@ -7614,7 +7614,7 @@ func Example_rangeCountRebalancing() {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			alloc.scorerOptions(),
+			alloc.scorerOptions(ctx),
 		)
 		if ok {
 			log.Infof(ctx, "rebalancing to %v; details: %s", target, details)

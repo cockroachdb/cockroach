@@ -317,6 +317,10 @@ const (
 	// IncrementalBackupSubdir enables backing up new incremental backups to a
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
+	// GossipReadAmplification is the version where l0 sublevels are gossipped
+	// in a store descriptor's capacity and can be used for allocation
+	// decisions.
+	GossipReadAmplification
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -527,6 +531,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     IncrementalBackupSubdir,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
+	},
+	{
+		Key:     GossipReadAmplification,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

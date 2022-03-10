@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -756,7 +757,7 @@ func (a *Allocator) allocateTarget(
 		conf,
 		existingVoters,
 		existingNonVoters,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 		// When allocating a *new* replica, we explicitly disregard nodes with any
 		// existing replicas. This is important for multi-store scenarios as
 		// otherwise, stores on the nodes that have existing replicas are simply
@@ -1307,8 +1308,9 @@ func (a Allocator) RebalanceNonVoter(
 	)
 }
 
-func (a *Allocator) scorerOptions() *rangeCountScorerOptions {
+func (a *Allocator) scorerOptions(ctx context.Context) *rangeCountScorerOptions {
 	return &rangeCountScorerOptions{
+		diskHealthScorerOptions: a.scorerOptionsForDiskHealth(ctx),
 		deterministic:           a.storePool.deterministic,
 		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
@@ -1327,6 +1329,14 @@ func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
 		// words, we don't want stores that are too far away from the mean to be
 		// affected by the jitter.
 		jitter: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+	}
+}
+
+func (a *Allocator) scorerOptionsForDiskHealth(ctx context.Context) *diskHealthScorerOptions {
+	enabled := a.storePool.st.Version.IsActive(ctx, clusterversion.GossipReadAmplification)
+	return &diskHealthScorerOptions{
+		enabled:             enabled,
+		l0SublevelThreshold: l0SublevelThreshold.Get(&a.storePool.st.SV),
 	}
 }
 

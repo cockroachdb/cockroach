@@ -124,6 +124,14 @@ var minQPSDifferenceForTransfers = func() *settings.FloatSetting {
 	return s
 }()
 
+var l0SublevelTargetMax = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.allocator.max_l0_sublevels",
+	"the maximum count of l0 sublevels within an store that may exist"+
+		"before it becomes inelligible as a rebalance target.",
+	15,
+).WithPublic()
+
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
 type LBRebalancingMode int64
