@@ -30,8 +30,6 @@ type DatumAlloc struct {
 	datumAlloc        []Datum
 	dintAlloc         []DInt
 	dfloatAlloc       []DFloat
-	dstringAlloc      []DString
-	dbytesAlloc       []DBytes
 	dbitArrayAlloc    []DBitArray
 	ddecimalAlloc     []DDecimal
 	ddateAlloc        []DDate
@@ -50,7 +48,9 @@ type DatumAlloc struct {
 	dtupleAlloc       []DTuple
 	doidAlloc         []DOid
 	dvoidAlloc        []DVoid
-	env               CollationEnvironment
+	// stringAlloc is used by all datum types that are strings (DBytes, DString, DEncodedKey).
+	stringAlloc []string
+	env         CollationEnvironment
 
 	// Allocations for geopb.SpatialObject.EWKB
 	ewkbAlloc               []byte
@@ -111,18 +111,23 @@ func (a *DatumAlloc) NewDFloat(v DFloat) *DFloat {
 	return r
 }
 
-// NewDString allocates a DString.
-func (a *DatumAlloc) NewDString(v DString) *DString {
+func (a *DatumAlloc) newString() *string {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
-	buf := &a.dstringAlloc
+	buf := &a.stringAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DString, a.AllocSize)
+		*buf = make([]string, a.AllocSize)
 	}
 	r := &(*buf)[0]
-	*r = v
 	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDString allocates a DString.
+func (a *DatumAlloc) NewDString(v DString) *DString {
+	r := (*DString)(a.newString())
+	*r = v
 	return r
 }
 
@@ -138,16 +143,15 @@ func (a *DatumAlloc) NewDName(v DString) Datum {
 
 // NewDBytes allocates a DBytes.
 func (a *DatumAlloc) NewDBytes(v DBytes) *DBytes {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
-	buf := &a.dbytesAlloc
-	if len(*buf) == 0 {
-		*buf = make([]DBytes, a.AllocSize)
-	}
-	r := &(*buf)[0]
+	r := (*DBytes)(a.newString())
 	*r = v
-	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDEncodedKey allocates a DEncodedKey.
+func (a *DatumAlloc) NewDEncodedKey(v DEncodedKey) *DEncodedKey {
+	r := (*DEncodedKey)(a.newString())
+	*r = v
 	return r
 }
 
