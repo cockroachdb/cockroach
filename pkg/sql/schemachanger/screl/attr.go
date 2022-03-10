@@ -254,7 +254,6 @@ var elementSchemaOptions = []rel.SchemaOption{
 // Schema is the schema exported by this package covering the elements of scpb.
 var Schema = rel.MustSchema("screl", append(
 	elementSchemaOptions,
-	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
 	rel.EntityMapping(t((*Node)(nil)),
 		rel.EntityAttr(CurrentStatus, "CurrentStatus"),
 		rel.EntityAttr(Target, "Target"),
