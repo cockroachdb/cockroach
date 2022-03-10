@@ -837,3 +837,157 @@ func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 	sqlDB.ExpectErr(t, "The specified path is the root of a backup collection.",
 		"SHOW BACKUP $1", localFoo)
 }
+
+// TestShowBackupCheckFiles verifies the check_files option catches a corrupt backup file
+// in 3 scenarios: 1. SST from a full backup; 2. SST from a default incremental backup; 3.
+// SST from an incremental backup created with the incremental_location parameter.
+// The first two scenarios also get checked with locality aware backups.
+func TestShowBackupCheckFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numAccounts = 11
+
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts,
+		InitManualReplication)
+	defer cleanupFn()
+
+	collectionRoot := "full"
+	incLocRoot := "inc"
+	const c1, c2, c3 = `nodelocal://0/full`, `nodelocal://1/full`, `nodelocal://2/full`
+	const i1, i2, i3 = `nodelocal://0/inc`, `nodelocal://1/inc`, `nodelocal://2/inc`
+	localities := []string{"default", "dc=dc1", "dc=dc2"}
+
+	collections := []string{
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c1, url.QueryEscape(localities[0])),
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c2, url.QueryEscape(localities[1])),
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c3, url.QueryEscape(localities[2])),
+	}
+
+	incrementals := []string{
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i1, url.QueryEscape(localities[0])),
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i2, url.QueryEscape(localities[1])),
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i3, url.QueryEscape(localities[2])),
+	}
+	tests := []struct {
+		dest       []string
+		inc        []string
+		localities []string
+	}{
+		{dest: []string{collections[0]}, inc: []string{incrementals[0]}},
+		{dest: collections, inc: incrementals, localities: localities},
+	}
+
+	// create db
+	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
+	sqlDB.Exec(t, `CREATE TABLE fkdb.fk (ind INT)`)
+
+	for _, test := range tests {
+		dest := strings.Join(test.dest, ", ")
+		inc := strings.Join(test.inc, ", ")
+
+		if len(test.dest) > 1 {
+			dest = "(" + dest + ")"
+			inc = "(" + inc + ")"
+		}
+
+		for i := 0; i < 10; i++ {
+			sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
+		}
+		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
+		sqlDB.Exec(t, fb)
+
+		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
+
+		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", dest, inc)
+		sqlDB.Exec(t, sib)
+
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest))
+
+		breakCheckFiles := func(
+			rootDir string,
+			backupDest []string,
+			file string,
+			fileLocality string,
+			checkQuery string) {
+
+			// Ensure no errors first
+			sqlDB.Exec(t, checkQuery)
+
+			fullPath := filepath.Join(tempDir, rootDir, file)
+			badPath := fullPath + "t"
+			if err := os.Rename(fullPath, badPath); err != nil {
+				require.NoError(t, err, "failed to corrupt SST")
+			}
+
+			// To validate the checkFiles error message, resolve the full path of the missing file.
+			// For locality aware backups, it may not live at the default URI (e.g. backupDest[0]).
+			var fileDest string
+			if fileLocality == "NULL" {
+				fileDest = backupDest[0]
+			} else {
+				fileLocality = url.QueryEscape(fileLocality)
+				for _, destURI := range backupDest {
+					// Locality aware URIs have the following structure:
+					// `someURI?COCKROACH_LOCALITY='locality'`. Given the fileLocality, we
+					// match for the proper URI.
+					destLocality := strings.Split(destURI, "?")
+					if strings.Contains(destLocality[1], fileLocality) {
+						fileDest = destURI
+						break
+					}
+				}
+			}
+			require.NotEmpty(t, fileDest, "could not find file locality")
+
+			// Remove the "COCKROACH_LOCALITY_'locality'" portion of the
+			// URI, as it's not included in the error message.
+			fileDest = strings.Split(backupDest[0], "?")[0]
+
+			// Remove stray single quotes, an artifact of how the URIs are defined for this test
+			fileDest = strings.Replace(fileDest, "'", "", -1)
+
+			errorMsg := fmt.Sprintf("Error checking file %s", fileDest+file)
+			sqlDB.ExpectErr(t, errorMsg, checkQuery)
+
+			if err := os.Rename(badPath, fullPath); err != nil {
+				require.NoError(t, err, "failed to de-corrupt SST")
+			}
+		}
+
+		fileInfo := sqlDB.QueryStr(t,
+			fmt.Sprintf(`SELECT path, locality, file_bytes FROM [SHOW BACKUP FILES FROM LATEST IN %s with check_files]`, dest))
+
+		checkQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files`, dest)
+
+		// break on full backup
+		breakCheckFiles(collectionRoot, test.dest, fileInfo[0][0], fileInfo[0][1], checkQuery)
+
+		// break on default inc backup
+		breakCheckFiles(collectionRoot, test.dest, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], checkQuery)
+
+		// check that each file size is positive
+		for _, file := range fileInfo {
+			sz, err := strconv.Atoi(file[2])
+			require.NoError(t, err, "could not get file size")
+			require.Greater(t, sz, 0, "file size is not positive")
+		}
+
+		// check that returned file size is consistent across flavors of SHOW BACKUP
+		fileSum := sqlDB.QueryStr(t,
+			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FILES FROM LATEST IN %s with check_files]`, dest))
+
+		sqlDB.CheckQueryResults(t,
+			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FROM LATEST IN %s with check_files]`, dest),
+			fileSum)
+
+		if len(test.dest) == 1 {
+			// break on an incremental backup stored at incremental_location
+			fileInfo := sqlDB.QueryStr(t,
+				fmt.Sprintf(`SELECT path, locality FROM [SHOW BACKUP FILES FROM LATEST IN %s WITH incremental_location = %s]`,
+					dest, inc))
+
+			incCheckQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files, incremental_location = %s`, dest, inc)
+			breakCheckFiles(incLocRoot, test.inc, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], incCheckQuery)
+		}
+	}
+}

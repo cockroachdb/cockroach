@@ -217,6 +217,7 @@ func showBackupPlanHook(
 		backupOptIncStorage:       sql.KVStringOptRequireValue,
 		backupOptDebugMetadataSST: sql.KVStringOptRequireNoValue,
 		backupOptEncDir:           sql.KVStringOptRequireValue,
+		backupOptCheckFiles:       sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -400,6 +401,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			info        backupInfo
 			memReserved int64
 		)
+		info.collectionURI = dest[0]
 		info.subdir = computedSubdir
 
 		mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
@@ -448,18 +450,115 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						len(dest)))
 			}
 		}
+
+		if _, ok := opts[backupOptCheckFiles]; ok {
+			fileSizes, err := checkBackupFiles(ctx, info,
+				p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+				p.User())
+			if err != nil {
+				return err
+			}
+			info.fileSizes = fileSizes
+		}
 		return infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), resultsCh)
 	}
 
 	return fn, infoReader.header(), nil, false, nil
 }
 
+// checkBackupFiles validates that each SST is in its expected storage location
+func checkBackupFiles(
+	ctx context.Context,
+	info backupInfo,
+	storeFactory cloud.ExternalStorageFromURIFactory,
+	user security.SQLUsername,
+) ([][]int64, error) {
+
+	checkLayer := func(layer int) ([]int64, error) {
+		// TODO (msbutler): Right now, checkLayer opens stores for each backup layer. In 22.2,
+		// once a backup chain cannot have mixed localities, only create stores for full backup
+		// and first incremental backup.
+		defaultStore, err := storeFactory(ctx, info.defaultURIs[layer], user)
+		if err != nil {
+			return nil, err
+		}
+		localityStores := make(map[string]cloud.ExternalStorage)
+
+		defer func() {
+			if err := defaultStore.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed %v", err)
+			}
+			for _, store := range localityStores {
+				if err := store.Close(); err != nil {
+					log.Warningf(ctx, "close export storage failed %v", err)
+				}
+			}
+		}()
+		// Check metadata files. Note: we do not check locality aware backup
+		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
+		// they're validated in resolveBackupManifests.
+		for _, metaFile := range []string{
+			fileInfoPath,
+			metadataSSTName,
+			backupStatisticsFileName,
+			backupManifestName + backupManifestChecksumSuffix} {
+			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
+				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
+					info.defaultURIs[layer], metaFile)
+			}
+		}
+
+		for locality, uri := range info.localityInfo[layer].URIsByOriginalLocalityKV {
+			store, err := storeFactory(ctx, uri, user)
+			if err != nil {
+				return nil, err
+			}
+			localityStores[locality] = store
+		}
+
+		// Check all backup SSTs.
+		fileSizes := make([]int64, len(info.manifests[layer].Files))
+		for i, f := range info.manifests[layer].Files {
+			store := defaultStore
+			uri := info.defaultURIs[layer]
+			if _, ok := localityStores[f.LocalityKV]; ok {
+				store = localityStores[f.LocalityKV]
+				uri = info.localityInfo[layer].URIsByOriginalLocalityKV[f.LocalityKV]
+			}
+			sz, err := store.Size(ctx, f.Path)
+			if err != nil {
+				uriNoLocality := strings.Split(uri, "?")[0]
+				return nil, errors.Wrapf(err, "Error checking file %s/%s", uriNoLocality, f.Path)
+			}
+			fileSizes[i] = sz
+		}
+		return fileSizes, nil
+	}
+
+	// check LATEST file exists
+	if _, err := readLatestFile(ctx, info.collectionURI, storeFactory, user); err != nil {
+		return nil, errors.Wrap(err, "read LATEST path")
+	}
+
+	manifestFileSizes := make([][]int64, len(info.manifests))
+	for layer := range info.manifests {
+		layerFileSizes, err := checkLayer(layer)
+		if err != nil {
+			return nil, err
+		}
+		manifestFileSizes[layer] = layerFileSizes
+	}
+	return manifestFileSizes, nil
+}
+
 type backupInfo struct {
-	defaultURIs  []string
-	manifests    []BackupManifest
-	subdir       string
-	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
-	enc          *jobspb.BackupEncryptionOptions
+	collectionURI string
+	defaultURIs   []string
+	manifests     []BackupManifest
+	subdir        string
+	localityInfo  []jobspb.RestoreDetails_BackupLocalityInfo
+	enc           *jobspb.BackupEncryptionOptions
+	fileSizes     [][]int64
 }
 
 type backupShower struct {
@@ -492,7 +591,9 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "owner", Typ: types.String})
 	}
-
+	if _, checkFiles := opts[backupOptCheckFiles]; checkFiles {
+		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "file_bytes", Typ: types.Int})
+	}
 	if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
 		baseHeaders = append(
 			colinfo.ResultColumns{
@@ -516,7 +617,7 @@ func backupShowerDefault(
 		header: backupShowerHeaders(showSchemas, opts),
 		fn: func(info backupInfo) ([]tree.Datums, error) {
 			var rows []tree.Datums
-			for _, manifest := range info.manifests {
+			for layer, manifest := range info.manifests {
 				// Map database ID to descriptor name.
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
@@ -533,7 +634,11 @@ func backupShowerDefault(
 						}
 					}
 				}
-				tableSizes, err := getTableSizes(manifest.Files)
+				var fileSizes []int64
+				if len(info.fileSizes) > 0 {
+					fileSizes = info.fileSizes[layer]
+				}
+				tableSizes, err := getTableSizes(manifest.Files, fileSizes)
 				if err != nil {
 					return nil, err
 				}
@@ -566,6 +671,7 @@ func backupShowerDefault(
 					createStmtDatum := tree.DNull
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
+					fileSizeDatum := tree.DNull
 
 					desc := descbuilder.NewBuilder(descriptor).BuildExistingMutable()
 
@@ -590,8 +696,9 @@ func backupShowerDefault(
 						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
 						parentSchemaID = desc.GetParentSchemaID()
 						tableSize := tableSizes[desc.GetID()]
-						dataSizeDatum = tree.NewDInt(tree.DInt(tableSize.DataSize))
-						rowCountDatum = tree.NewDInt(tree.DInt(tableSize.Rows))
+						dataSizeDatum = tree.NewDInt(tree.DInt(tableSize.rowCount.DataSize))
+						rowCountDatum = tree.NewDInt(tree.DInt(tableSize.rowCount.Rows))
+						fileSizeDatum = tree.NewDInt(tree.DInt(tableSize.fileSize))
 
 						displayOptions := sql.ShowCreateDisplayOptions{
 							FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
@@ -629,6 +736,9 @@ func backupShowerDefault(
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
+					if _, checkFiles := opts[backupOptCheckFiles]; checkFiles {
+						row = append(row, fileSizeDatum)
+					}
 					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
 						// If showing debug IDs, interleave the IDs with the corresponding object names.
 						row = append(
@@ -664,6 +774,9 @@ func backupShowerDefault(
 					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
 						row = append(row, tree.DNull)
 					}
+					if _, checkFiles := opts[backupOptCheckFiles]; checkFiles {
+						row = append(row, tree.DNull)
+					}
 					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
 						// If showing debug IDs, interleave the IDs with the corresponding object names.
 						row = append(
@@ -686,9 +799,16 @@ func backupShowerDefault(
 	}
 }
 
+type descriptorSize struct {
+	rowCount roachpb.RowCount
+	fileSize int64
+}
+
 // getTableSizes gathers row and size count for each table in the manifest
-func getTableSizes(files []BackupManifest_File) (map[descpb.ID]roachpb.RowCount, error) {
-	tableSizes := make(map[descpb.ID]roachpb.RowCount)
+func getTableSizes(
+	files []BackupManifest_File, fileSizes []int64,
+) (map[descpb.ID]descriptorSize, error) {
+	tableSizes := make(map[descpb.ID]descriptorSize)
 	if len(files) == 0 {
 		return tableSizes, nil
 	}
@@ -698,7 +818,7 @@ func getTableSizes(files []BackupManifest_File) (map[descpb.ID]roachpb.RowCount,
 	}
 	showCodec := keys.MakeSQLCodec(tenantID)
 
-	for _, file := range files {
+	for i, file := range files {
 		// TODO(dan): This assumes each file in the backup only
 		// contains data from a single table, which is usually but
 		// not always correct. It does not account for a BACKUP that
@@ -713,7 +833,10 @@ func getTableSizes(files []BackupManifest_File) (map[descpb.ID]roachpb.RowCount,
 			continue
 		}
 		s := tableSizes[descpb.ID(tableID)]
-		s.Add(file.EntryCounts)
+		s.rowCount.Add(file.EntryCounts)
+		if len(fileSizes) > 0 {
+			s.fileSize += fileSizes[i]
+		}
 		tableSizes[descpb.ID(tableID)] = s
 	}
 	return tableSizes, nil
@@ -814,6 +937,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
 		{Name: "locality", Typ: types.String},
+		{Name: "file_bytes", Typ: types.Int},
 	},
 
 		fn: func(info backupInfo) (rows []tree.Datums, err error) {
@@ -835,7 +959,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 				if manifest.isIncremental() {
 					backupType = "incremental"
 				}
-				for _, file := range manifest.Files {
+				for j, file := range manifest.Files {
 					filePath := file.Path
 					if inCol != nil {
 						filePath = path.Join(manifestDirs[i], filePath)
@@ -850,6 +974,10 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 							locality = "default"
 						}
 					}
+					sz := int64(-1)
+					if len(info.fileSizes) > 0 {
+						sz = info.fileSizes[i][j]
+					}
 					rows = append(rows, tree.Datums{
 						tree.NewDString(filePath),
 						tree.NewDString(backupType),
@@ -860,6 +988,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 						tree.NewDInt(tree.DInt(file.EntryCounts.DataSize)),
 						tree.NewDInt(tree.DInt(file.EntryCounts.Rows)),
 						tree.NewDString(locality),
+						tree.NewDInt(tree.DInt(sz)),
 					})
 				}
 			}
@@ -890,11 +1019,6 @@ func getRootURI(defaultURI string, subdir string) (string, error) {
 // to the incremental backup manifest's directory
 // '/incrementals/fullSubdir/incrementalSubdir'.
 func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) {
-	fullCollectionRoot, err := getRootURI(defaultUris[0], fullSubdir)
-	if err != nil {
-		return nil, err
-	}
-
 	manifestDirs := make([]string, len(defaultUris))
 
 	// The full backup manifest path is always in the fullSubdir.
@@ -909,10 +1033,10 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 	}
 
 	var incSubdir string
-	if path.Join(fullCollectionRoot, DefaultIncrementalsSubdir) == incRoot {
+	if strings.HasSuffix(incRoot, DefaultIncrementalsSubdir) {
 		// The incremental backup is stored in the default incremental
 		// directory (i.e. collectionURI/incrementals/fullSubdir)
-		incSubdir = path.Join(DefaultIncrementalsSubdir, fullSubdir)
+		incSubdir = path.Join("/"+DefaultIncrementalsSubdir, fullSubdir)
 	} else {
 		// Implies one of two scenarios:
 		// 1) the incremental chain is stored in the pre 22.1
@@ -930,8 +1054,17 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 		if i == 0 {
 			continue
 		}
-		incDir := strings.Split(incURI, incSubdir)[1]
-		manifestDirs[i] = path.Join(incSubdir, incDir)
+		// the manifestDir for an incremental backup will have the following structure:
+		// 'incSubdir/incSubSubSubDir', where incSubdir is resolved above,
+		// and incSubSubDir corresponds to the path to the incremental backup within
+		// the subdirectory.
+
+		// remove locality info from URI
+		incURI = strings.Split(incURI, "?")[0]
+
+		// get the subdirectory within the incSubdir
+		incSubSubDir := strings.Split(incURI, incSubdir)[1]
+		manifestDirs[i] = path.Join(incSubdir, incSubSubDir)
 	}
 	return manifestDirs, nil
 }
