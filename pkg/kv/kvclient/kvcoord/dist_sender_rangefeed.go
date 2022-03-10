@@ -124,6 +124,7 @@ type PartialRangeFeed struct {
 	StartTS           hlc.Timestamp
 	NodeID            roachpb.NodeID
 	RangeID           roachpb.RangeID
+	CreatedTime       time.Time
 	LastValueReceived time.Time
 	Resolved          hlc.Timestamp
 }
@@ -262,8 +263,9 @@ func (ds *DistSender) partialRangeFeed(
 	// Register partial range feed with registry.
 	active := &activeRangeFeed{
 		PartialRangeFeed: PartialRangeFeed{
-			Span:    span,
-			StartTS: startFrom,
+			Span:        span,
+			StartTS:     startFrom,
+			CreatedTime: timeutil.Now(),
 		},
 	}
 	rr.ranges.Store(active, nil)

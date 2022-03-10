@@ -931,7 +931,7 @@ func (r *Replica) ExcludeDataFromBackup() bool {
 	return r.mu.conf.ExcludeDataFromBackup
 }
 
-func (r *Replica) exludeReplicaFromBackupRLocked() bool {
+func (r *Replica) excludeReplicaFromBackupRLocked() bool {
 	return r.mu.conf.ExcludeDataFromBackup
 }
 
@@ -1540,7 +1540,7 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 	return &roachpb.BatchTimestampBeforeGCError{
 		Timestamp:              ts,
 		Threshold:              threshold,
-		DataExcludedFromBackup: r.exludeReplicaFromBackupRLocked(),
+		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(),
 	}
 }
 
