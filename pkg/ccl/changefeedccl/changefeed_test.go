@@ -3506,13 +3506,15 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 		ptsInterval := 50 * time.Millisecond
 		changefeedbase.ProtectTimestampInterval.Override(
 			context.Background(), &f.Server().ClusterSettings().SV, ptsInterval)
+		changefeedbase.ActiveProtectedTimestampsEnabled.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, true)
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
 		defer closeFeed(t, foo)
 
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		fooDesc := catalogkv.TestingGetTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
 		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 		ptsProvider := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
@@ -3534,8 +3536,8 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
 				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
 			}
-			require.Equal(t, len(r.DeprecatedSpans), len(expectedKeys))
-			for _, s := range r.DeprecatedSpans {
+			require.Equal(t, len(r.Spans), len(expectedKeys))
+			for _, s := range r.Spans {
 				require.Contains(t, expectedKeys, string(s.Key))
 			}
 			return r
@@ -3545,7 +3547,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 		waitAndDrainResolved := func(ts time.Duration) hlc.Timestamp {
 			targetTs := timeutil.Now().Add(ts)
 			for {
-				resolvedTs, _ := expectResolvedTimestamp(t, foo)
+				resolvedTs := expectResolvedTimestamp(t, foo)
 				if resolvedTs.GoTime().UnixNano() > targetTs.UnixNano() {
 					return resolvedTs
 				}
@@ -3670,24 +3672,11 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				`WHERE name = 'foo' AND database_name = current_database()`).
 				Scan(&tableID)
 
-			changefeedbase.ProtectTimestampInterval.Override(
-				context.Background(), &f.Server().ClusterSettings().SV, 100*time.Millisecond)
-
 			ptp := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 			getPtsRec := mkGetPtsRec(t, ptp, f.Server().Clock())
 			waitForRecord := mkWaitForRecordCond(t, getPtsRec, mkCheckRecord(t, tableID))
 			waitForNoRecord := mkWaitForRecordCond(t, getPtsRec, checkNoRecord)
 			waitForBlocked := requestBlockedScan()
-			waitForRecordAdvanced := func(ts hlc.Timestamp) {
-				check := func(ptr *ptpb.Record) error {
-					if ptr != nil && !ptr.Timestamp.LessEq(ts) {
-						return nil
-					}
-					return errors.Errorf("expected protected timestamp to exceed %v, found %v", ts, ptr.Timestamp)
-				}
-
-				mkWaitForRecordCond(t, getPtsRec, check)()
-			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
 			defer closeFeed(t, foo)
@@ -3704,8 +3693,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 					`foo: [7]->{"after": {"a": 7, "b": "d"}}`,
 					`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
 				})
-				resolved, _ := expectResolvedTimestamp(t, foo)
-				waitForRecordAdvanced(resolved)
+				expectResolvedTimestamp(t, foo)
+				waitForNoRecord()
 			}
 
 			{
@@ -3723,8 +3712,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 					`foo: [7]->{"after": {"a": 7, "b": "d", "c": 1}}`,
 					`foo: [8]->{"after": {"a": 8, "b": "e", "c": 1}}`,
 				})
-				resolved, _ := expectResolvedTimestamp(t, foo)
-				waitForRecordAdvanced(resolved)
+				expectResolvedTimestamp(t, foo)
+				waitForNoRecord()
 			}
 
 			{
@@ -3795,7 +3784,7 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 						r, err = pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
 						return err
 					}))
-					require.True(t, r.Timestamp.LessEq(*progress.GetHighWater()))
+					require.Equal(t, r.Timestamp, *progress.GetHighWater())
 				} else {
 					require.Equal(t, uuid.Nil, details.ProtectedTimestampRecord)
 				}
@@ -3805,19 +3794,14 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 			// the changefeed has caught up.
 			require.NoError(t, feedJob.Resume())
 			testutils.SucceedsSoon(t, func() error {
-				resolvedTs, _ := expectResolvedTimestamp(t, foo)
+				expectResolvedTimestamp(t, foo)
 				j, err := jr.LoadJob(ctx, feedJob.JobID())
 				require.NoError(t, err)
 				details := j.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-
-				err = serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-					r, err := pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
-					if err != nil || r.Timestamp.Less(resolvedTs) {
-						return fmt.Errorf("expected protected timestamp record %v to have timestamp greater than %v", r, resolvedTs)
-					}
-					return nil
-				})
-				return err
+				if details.ProtectedTimestampRecord != uuid.Nil {
+					return fmt.Errorf("expected no protected timestamp record")
+				}
+				return nil
 			})
 		}
 	}

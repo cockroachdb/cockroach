@@ -1411,8 +1411,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 		if shouldProtectTimestamps(cf.flowCtx.Codec()) {
 			timestampManager := cf.manageProtectedTimestamps
 			// TODO(samiskin): Remove this conditional once we're confident in
-			// ActiveProtectedTimestamps
-			if !changefeedbase.ActiveProtectedTimestamps.Get(&cf.flowCtx.Cfg.Settings.SV) {
+			// ActiveProtectedTimestampsEnabled
+			if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
 				timestampManager = cf.deprecatedManageProtectedTimestamps
 			}
 			if err := timestampManager(cf.Ctx, txn, changefeedProgress); err != nil {

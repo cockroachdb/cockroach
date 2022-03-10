@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -62,12 +60,10 @@ func createProtectedTimestampRecord(
 ) *ptpb.Record {
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
-	targetToProtect := makeTargetToProtect(targets)
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", progress.ProtectedTimestampRecord, resolved)
 	return jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
-		jobsprotectedts.Jobs, targetToProtect)
+		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect, jobsprotectedts.Jobs)
 }
 
 func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) []roachpb.Span {
