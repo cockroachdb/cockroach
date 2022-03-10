@@ -3235,3 +3235,85 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	// Ensure that the query completed successfully.
 	require.NoError(t, <-selectErr)
 }
+
+// TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
+// periodical refresh, if the descriptor, whose lease we intend to refresh, does not exist anymore, we delete
+// this descriptor from "cache" (i.e. manager.mu.descriptor).
+func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// typeDescID will be set to id of the created type `typ` later.
+	mu := syncutil.Mutex{}
+	typeDescID := descpb.InvalidID
+	typeDescName := ""
+	var tdb *sqlutils.SQLRunner
+	dropCompleted := make(chan bool)
+
+	// The overall testing strategy is
+	// 1. Add a testing knob immediately before the acquire a node lease inside refreshSomeLeases;
+	// 2. Create a new type `typ` and acquire a lease of it;
+	// 3. When the lease manager attempts to refresh the lease on `typ`, the testing knob is trigger which removes
+	//    `typ` from storage;
+	// 4. This allows refreshSomeLeases fail with a DescriptorNotFound error and trigger the logic that removes this
+	//    descriptor entry from the lease manager's cache (namely, manager.mu.descriptor).
+	// 5. Finally, we assert that the entry for `typ` is no longer in the cache.
+	params := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
+			TestingBeforeAcquireLeaseDuringRefresh: func(id descpb.ID) error {
+				mu.Lock()
+				defer mu.Unlock()
+				if typeDescID != descpb.InvalidID && id == typeDescID {
+					// Drop this type to trigger the logic that remove unfound descriptor from lease manager cache.
+					tdb.Exec(t, fmt.Sprintf("DROP TYPE %v", typeDescName))
+					dropCompleted <- true
+				}
+				return nil
+			},
+		},
+	}
+
+	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
+	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
+	lease.LeaseDuration.Override(ctx, &params.SV, time.Second)
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb = sqlutils.MakeSQLRunner(sqlDB)
+
+	sql := `
+					CREATE DATABASE test;
+					USE test;
+					CREATE TYPE typ as enum ('a', 'b');
+					`
+	tdb.Exec(t, sql)
+
+	// Ensure `typ` is present in the lease manger by acquiring a lease on it.
+	typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec,
+		"test", "public", "typ")
+	lm := s.LeaseManager().(*lease.Manager)
+	_, err := lm.Acquire(ctx, s.Clock().Now(), typeDesc.GetID())
+	require.NoError(t, err)
+
+	// Set typeDescID such that the next periodical lease refresh will trigger the testing knob that drops `typ`.
+	mu.Lock()
+	typeDescID = typeDesc.GetID()
+	typeDescName = typeDesc.GetName()
+	mu.Unlock()
+
+	// Wait until the testing knob drops `typ`
+	<-dropCompleted
+
+	// Assert that soon (when the next periodical lease refresh happens) the testing knob will drop `typ`,
+	// and consequently trigger the logic to remove the descriptor from lease manager due to a failure
+	// to acquire a lease on this descriptor.
+	testutils.SucceedsSoon(t, func() error {
+		if lm.TestingDescriptorStateIsNil(typeDesc.GetID()) {
+			return nil
+		}
+
+		return errors.Errorf("descriptor %v(#%v) is still there. Expected: descriptor removed from cache.",
+			typeDesc.GetName(), typeDesc.GetID())
+	})
+}
