@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -136,6 +137,10 @@ func newRestoreDataProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	sv := &flowCtx.Cfg.Settings.SV
+
+	if spec.Validation != jobspb.RestoreValidation_DefaultRestore {
+		return nil, errors.New("Restore Data Processor does not support validation yet")
+	}
 
 	rd := &restoreDataProcessor{
 		flowCtx:    flowCtx,

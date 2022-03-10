@@ -17,7 +17,7 @@ import {
   resetSQLStatsFailedAction,
 } from "./sqlStatsActions";
 import {
-  invalidateStatementDetails,
+  invalidateAllStatementDetails,
   invalidateStatements,
   refreshStatements,
 } from "src/redux/apiReducers";
@@ -34,7 +34,7 @@ export function* resetSQLStatsSaga() {
     yield call(resetSQLStats, resetSQLStatsRequest);
     yield put(resetSQLStatsCompleteAction());
     yield put(invalidateStatements());
-    yield put(invalidateStatementDetails());
+    yield put(invalidateAllStatementDetails());
     yield put(refreshStatements() as any);
   } catch (e) {
     yield put(resetSQLStatsFailedAction());

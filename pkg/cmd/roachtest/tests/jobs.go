@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type jobStarter func(c cluster.Cluster, t test.Test) (string, error)
@@ -60,11 +61,12 @@ func jobSurvivesNodeShutdown(
 		// is in a healthy state before we start bringing any
 		// nodes down.
 		t.Status("waiting for cluster to be 3x replicated")
-		WaitFor3XReplication(t, watcherDB)
+		err := WaitFor3XReplication(ctx, t, watcherDB)
+		require.NoError(t, err)
 
 		t.Status("running job")
 		var jobID string
-		jobID, err := startJob(c, t)
+		jobID, err = startJob(c, t)
 		if err != nil {
 			return errors.Wrap(err, "starting the job")
 		}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/stretchr/testify/require"
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -30,7 +31,8 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	WaitFor3XReplication(t, db)
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	lastWords := func(s string) []string {
 		var result []string
