@@ -137,7 +137,7 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 1,
-		"%s adder ingested %s (%s); spent %s filling, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v)",
+		"%s adder ingested %s (%s); spent %s filling, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v, %v commit-wait)",
 		b.name,
 		sz(b.sink.totalRows.DataSize),
 		sorted(b.sorted),
@@ -149,6 +149,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 		timing(b.sink.flushCounts.splitWait),
 		timing(b.sink.flushCounts.scatterWait),
 		b.sink.flushCounts.scatterMoved,
+		timing(b.sink.flushCounts.commitWait),
 	)
 	log.VEventf(ctx, 2, "%s adder flushed %d times, %d due to buffer size (%s); flushing chunked into %d files (%d for ranges, %d for sst size, +%d after split-retries)",
 		b.name,
@@ -304,7 +305,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if log.V(4) {
 		log.Infof(ctx,
-			"%s adder has ingested %s (%s); spent %s filling, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v)",
+			"%s adder has ingested %s (%s); spent %s filling, %v sorting, %v flushing (%v sink, %v sending, %v splitting, %v scattering %v, %v commit-wait)",
 			b.name,
 			sz(b.sink.totalRows.DataSize),
 			sorted(b.sorted),
@@ -316,6 +317,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 			timing(b.sink.flushCounts.splitWait),
 			timing(b.sink.flushCounts.scatterWait),
 			b.sink.flushCounts.scatterMoved,
+			timing(b.sink.flushCounts.commitWait),
 		)
 	}
 
