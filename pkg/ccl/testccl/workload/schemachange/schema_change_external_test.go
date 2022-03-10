@@ -79,7 +79,7 @@ func TestWorkload(t *testing.T) {
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User("testuser"))
 	defer cleanup()
 
-	const concurrency = 2
+	const concurrency = 8
 	require.NoError(t, wl.Flags().Parse([]string{
 		"--concurrency", strconv.Itoa(concurrency),
 		"--verbose", "2",
@@ -88,7 +88,7 @@ func TestWorkload(t *testing.T) {
 	ql, err := wl.Ops(ctx, []string{pgURL.String()}, reg)
 	require.NoError(t, err)
 
-	const N = 100
+	const N = 600
 	workerFn := func(ctx context.Context, fn func(ctx context.Context) error) func() error {
 		return func() error {
 			for i := 0; i < N; i++ {
