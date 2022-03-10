@@ -17,11 +17,434 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTransferContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("new_context", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		require.True(t, ctx.isRecoverable())
+
+		ctx.markRecoverable(false)
+		require.False(t, ctx.isRecoverable())
+
+		ctx.markRecoverable(true)
+		require.True(t, ctx.isRecoverable())
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		defer testutils.TestingHook(&defaultTransferTimeout, 2*time.Second)()
+
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		require.Eventually(t, func() bool {
+			return ctx.Err() != nil
+		}, 5*time.Second, 100*time.Millisecond)
+		require.True(t, ctx.isRecoverable())
+	})
+}
+
+func TestForwarder_tryBeginTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("isTransferring=true", func(t *testing.T) {
+		f := &forwarder{}
+		f.mu.isTransferring = true
+
+		started, cleanupFn := f.tryBeginTransfer()
+		require.False(t, started)
+		require.Nil(t, cleanupFn)
+	})
+
+	t.Run("isSafeTransferPoint=false", func(t *testing.T) {
+		defer testutils.TestingHook(&isSafeTransferPoint,
+			func(req *processor, res *processor) bool {
+				return false
+			},
+		)()
+
+		f := &forwarder{}
+
+		started, cleanupFn := f.tryBeginTransfer()
+		require.False(t, started)
+		require.Nil(t, cleanupFn)
+	})
+
+	t.Run("successful", func(t *testing.T) {
+		defer testutils.TestingHook(&isSafeTransferPoint,
+			func(req *processor, res *processor) bool {
+				return true
+			},
+		)()
+
+		f := &forwarder{}
+
+		started, cleanupFn := f.tryBeginTransfer()
+		require.True(t, started)
+		require.NotNil(t, cleanupFn)
+
+		require.True(t, f.mu.isTransferring)
+		cleanupFn()
+		require.False(t, f.mu.isTransferring)
+	})
+}
+
+func TestTransferConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	p1, p2 := net.Pipe()
+	defer p1.Close()
+	defer p2.Close()
+
+	t.Run("context_cancelled", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		cancel()
+
+		conn, err := transferConnection(ctx, nil, nil, nil)
+		require.EqualError(t, err, context.Canceled.Error())
+		require.Nil(t, conn)
+		require.True(t, ctx.isRecoverable())
+	})
+
+	t.Run("transfer_request_failed", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		defer testutils.TestingHook(&runShowTransferState,
+			func(w io.Writer, transferKey string) error {
+				require.NotNil(t, w)
+				require.NotEqual(t, "", transferKey)
+				return errors.New("foo")
+			},
+		)()
+
+		conn, err := transferConnection(
+			ctx,
+			nil,
+			interceptor.NewPGConn(p1),
+			interceptor.NewPGConn(p2),
+		)
+		require.Regexp(t, "foo", err)
+		require.Nil(t, conn)
+		require.False(t, ctx.isRecoverable())
+	})
+
+	t.Run("wait_transfer_response_failed", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		defer testutils.TestingHook(&runShowTransferState,
+			func(w io.Writer, transferKey string) error {
+				require.NotNil(t, w)
+				require.NotEqual(t, "", transferKey)
+				return nil
+			},
+		)()
+
+		defer testutils.TestingHook(&waitForShowTransferState,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				clientConn io.Writer,
+				transferKey string,
+			) (string, string, string, error) {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.NotNil(t, clientConn)
+				require.NotEqual(t, "", transferKey)
+				return "", "", "", errors.New("foobar")
+			},
+		)()
+
+		conn, err := transferConnection(
+			ctx,
+			nil,
+			interceptor.NewPGConn(p1),
+			interceptor.NewPGConn(p2),
+		)
+		require.Regexp(t, "foobar", err)
+		require.Nil(t, conn)
+		require.False(t, ctx.isRecoverable())
+	})
+
+	t.Run("transfer_state_error", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		defer testutils.TestingHook(&runShowTransferState,
+			func(w io.Writer, transferKey string) error {
+				require.NotNil(t, w)
+				require.NotEqual(t, "", transferKey)
+				return nil
+			},
+		)()
+
+		defer testutils.TestingHook(&waitForShowTransferState,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				clientConn io.Writer,
+				transferKey string,
+			) (string, string, string, error) {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.NotNil(t, clientConn)
+				require.NotEqual(t, "", transferKey)
+				return "foobaz", "", "", nil
+			},
+		)()
+
+		conn, err := transferConnection(
+			ctx,
+			nil,
+			interceptor.NewPGConn(p1),
+			interceptor.NewPGConn(p2),
+		)
+		require.Regexp(t, "foobaz", err)
+		require.Nil(t, conn)
+		require.True(t, ctx.isRecoverable())
+	})
+
+	t.Run("connector_error", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		defer testutils.TestingHook(&runShowTransferState,
+			func(w io.Writer, transferKey string) error {
+				require.NotNil(t, w)
+				require.NotEqual(t, "", transferKey)
+				return nil
+			},
+		)()
+
+		defer testutils.TestingHook(&waitForShowTransferState,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				clientConn io.Writer,
+				transferKey string,
+			) (string, string, string, error) {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.NotNil(t, clientConn)
+				require.NotEqual(t, "", transferKey)
+				return "", "state", "token", nil
+			},
+		)()
+
+		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
+			func(
+				tCtx context.Context,
+				token string,
+			) (net.Conn, error) {
+				require.Equal(t, ctx, tCtx)
+				require.Equal(t, "token", token)
+				return nil, errors.New("foobarbaz")
+			},
+		)()
+
+		conn, err := transferConnection(
+			ctx,
+			&connector{},
+			interceptor.NewPGConn(p1),
+			interceptor.NewPGConn(p2),
+		)
+		require.Regexp(t, "foobarbaz", err)
+		require.Nil(t, conn)
+		require.True(t, ctx.isRecoverable())
+	})
+
+	t.Run("deserialization_error", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		defer testutils.TestingHook(&runShowTransferState,
+			func(w io.Writer, transferKey string) error {
+				require.NotNil(t, w)
+				require.NotEqual(t, "", transferKey)
+				return nil
+			},
+		)()
+
+		defer testutils.TestingHook(&waitForShowTransferState,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				clientConn io.Writer,
+				transferKey string,
+			) (string, string, string, error) {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.NotNil(t, clientConn)
+				require.NotEqual(t, "", transferKey)
+				return "", "state", "token", nil
+			},
+		)()
+
+		netConn, _ := net.Pipe()
+		defer netConn.Close()
+
+		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
+			func(
+				tCtx context.Context,
+				token string,
+			) (net.Conn, error) {
+				require.Equal(t, ctx, tCtx)
+				require.Equal(t, "token", token)
+				return netConn, nil
+			},
+		)()
+
+		defer testutils.TestingHook(&runAndWaitForDeserializeSession,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				state string,
+			) error {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.Equal(t, "state", state)
+				return errors.New("foobar")
+			},
+		)()
+
+		conn, err := transferConnection(
+			ctx,
+			&connector{},
+			interceptor.NewPGConn(p1),
+			interceptor.NewPGConn(p2),
+		)
+		require.Regexp(t, "foobar", err)
+		require.Nil(t, conn)
+		require.True(t, ctx.isRecoverable())
+
+		// netConn should be closed.
+		_, err = netConn.Write([]byte("foobarbaz"))
+		require.Regexp(t, "closed pipe", err)
+	})
+
+	t.Run("successful", func(t *testing.T) {
+		ctx, cancel := newTransferContext(context.Background())
+		defer cancel()
+
+		defer testutils.TestingHook(&runShowTransferState,
+			func(w io.Writer, transferKey string) error {
+				require.NotNil(t, w)
+				require.NotEqual(t, "", transferKey)
+				return nil
+			},
+		)()
+
+		defer testutils.TestingHook(&waitForShowTransferState,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				clientConn io.Writer,
+				transferKey string,
+			) (string, string, string, error) {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.NotNil(t, clientConn)
+				require.NotEqual(t, "", transferKey)
+				return "", "state", "token", nil
+			},
+		)()
+
+		netConn, _ := net.Pipe()
+		defer netConn.Close()
+
+		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
+			func(
+				tCtx context.Context,
+				token string,
+			) (net.Conn, error) {
+				require.Equal(t, ctx, tCtx)
+				require.Equal(t, "token", token)
+				return netConn, nil
+			},
+		)()
+
+		defer testutils.TestingHook(&runAndWaitForDeserializeSession,
+			func(
+				tCtx context.Context,
+				serverConn *interceptor.FrontendConn,
+				state string,
+			) error {
+				require.Equal(t, ctx, tCtx)
+				require.NotNil(t, serverConn)
+				require.Equal(t, "state", state)
+				return nil
+			},
+		)()
+
+		conn, err := transferConnection(
+			ctx,
+			&connector{},
+			interceptor.NewPGConn(p1),
+			interceptor.NewPGConn(p2),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, conn)
+		require.True(t, ctx.isRecoverable())
+	})
+}
+
+func TestIsSafeTransferPoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	makeProc := func(typ byte, transferredAt int) *processor {
+		p := &processor{}
+		p.mu.lastMessageType = typ
+		p.mu.lastMessageTransferredAt = uint64(transferredAt)
+		return p
+	}
+
+	for _, tc := range []struct {
+		name             string
+		reqType          pgwirebase.ClientMessageType
+		resType          pgwirebase.ServerMessageType
+		reqTransferredAt int
+		resTransferredAt int
+		expected         bool
+	}{
+		// Case 1.
+		{"sync_with_ready", pgwirebase.ClientMsgSync, pgwirebase.ServerMsgReady, 1, 2, true},
+		{"sync_without_ready", pgwirebase.ClientMsgSync, pgwirebase.ServerMsgReady, 2, 1, false},
+		{"query_with_ready", pgwirebase.ClientMsgSimpleQuery, pgwirebase.ServerMsgReady, 1, 2, true},
+		{"query_without_ready", pgwirebase.ClientMsgSimpleQuery, pgwirebase.ServerMsgReady, 2, 1, false},
+		// Case 2.
+		{"copy_done_with_ready", pgwirebase.ClientMsgCopyDone, pgwirebase.ServerMsgReady, 1, 2, true},
+		{"copy_done_without_ready", pgwirebase.ClientMsgCopyDone, pgwirebase.ServerMsgReady, 2, 1, false},
+		// Case 3.
+		{"copy_fail_with_ready", pgwirebase.ClientMsgCopyFail, pgwirebase.ServerMsgReady, 1, 2, true},
+		{"copy_fail_without_ready", pgwirebase.ClientMsgCopyFail, pgwirebase.ServerMsgReady, 2, 1, false},
+		// Other.
+		{"initial_state", pgwirebase.ClientMessageType(0), pgwirebase.ServerMessageType(0), 0, 0, true},
+		{"random_sent_with_ready", pgwirebase.ClientMsgExecute, pgwirebase.ServerMsgReady, 1, 2, false},
+		{"random_sent_without_ready", pgwirebase.ClientMsgExecute, pgwirebase.ServerMsgNoData, 1, 2, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := makeProc(byte(tc.reqType), tc.reqTransferredAt)
+			res := makeProc(byte(tc.resType), tc.resTransferredAt)
+			safe := isSafeTransferPoint(req, res)
+			if tc.expected {
+				require.True(t, safe)
+			} else {
+				require.False(t, safe)
+			}
+		})
+	}
+}
 
 func TestRunShowTransferState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
