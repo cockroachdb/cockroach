@@ -84,7 +84,6 @@ CREATE TABLE public.tbl (
 statement error cannot modify TTL settings while another schema change on the table is being processed
 ALTER TABLE tbl RESET (ttl), RESET (ttl_expire_after)
 
-
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN;
 ALTER TABLE tbl RESET (ttl);
@@ -104,6 +103,34 @@ ROLLBACK
 # Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
 statement ok
 ALTER TABLE tbl RESET (ttl)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+   id INT8 NOT NULL,
+   text STRING NULL,
+   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+   FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
+)
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+# Check the same thing with SET (ttl = off)
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
+statement ok
+ALTER TABLE tbl SET (ttl = 'off')
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
@@ -247,7 +274,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [122 as T] WITH (expire_after = ...)
+ALTER TABLE [123 as T] WITH (expire_after = ...)
 
 statement ok
 DROP TABLE tbl
