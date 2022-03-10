@@ -1775,6 +1775,7 @@ func doRestorePlan(
 			DebugPauseOn:       debugPauseOn,
 			RestoreSystemUsers: restoreStmt.SystemUsers,
 			PreRewriteTenantId: oldTenantID,
+			Validation:         jobspb.RestoreValidation_DefaultRestore,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
