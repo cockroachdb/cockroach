@@ -6,6 +6,9 @@ go_test(
         "main_test.go",
         "schema_change_external_test.go",
     ],
+    data = [
+        "@cockroach//c-deps:libgeos",
+    ],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
