@@ -75,6 +75,14 @@ func MinSelectivity(a, b Selectivity) Selectivity {
 	return b
 }
 
+// MaxSelectivity returns the larger value of two selectivities.
+func MaxSelectivity(a, b Selectivity) Selectivity {
+	if a.selectivity > b.selectivity {
+		return a
+	}
+	return b
+}
+
 // selectivityInRange performs the range check, if the selectivity falls
 // outside of the range, this method will return the appropriate min/max value.
 func selectivityInRange(sel float64) float64 {

@@ -22,7 +22,7 @@ offset
  ├── internal-ordering: +4,-1 opt(2)
  ├── cardinality: [0 - 20]
  ├── stats: [rows=1]
- ├── cost: 85.9929294
+ ├── cost: 85.9929301
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3,4)
  ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -30,7 +30,7 @@ offset
  │    ├── columns: x:1!null y:2!null z:3 s:4!null
  │    ├── cardinality: [0 - 1020]
  │    ├── stats: [rows=10, distinct(4)=9.56179, null(4)=0, avgsize(4)=4]
- │    ├── cost: 85.9729294
+ │    ├── cost: 85.9729301
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3,4)
  │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -39,14 +39,14 @@ offset
  │         ├── internal-ordering: +4,-1 opt(2)
  │         ├── cardinality: [0 - 1020]
  │         ├── stats: [rows=10, distinct(4)=9.56179, null(4)=0, avgsize(4)=4]
- │         ├── cost: 25.3629294
+ │         ├── cost: 25.3629295
  │         ├── key: (1)
  │         ├── fd: ()-->(2), (1)-->(4)
  │         ├── ordering: +4,-1 opt(2) [actual: +4,-1]
  │         ├── sort (segmented)
  │         │    ├── columns: x:1!null y:2!null s:4!null
  │         │    ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(4)=9.56179, null(4)=0, avgsize(4)=4]
- │         │    ├── cost: 25.2529294
+ │         │    ├── cost: 25.2529295
  │         │    ├── key: (1)
  │         │    ├── fd: ()-->(2), (1)-->(4)
  │         │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -55,7 +55,7 @@ offset
  │         │         ├── columns: x:1!null y:2!null s:4!null
  │         │         ├── constraint: /2/4/1: [/10 - /10]
  │         │         ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(4)=9.56179, null(4)=0, avgsize(4)=4]
- │         │         ├── cost: 24.62
+ │         │         ├── cost: 24.6200001
  │         │         ├── key: (1)
  │         │         ├── fd: ()-->(2), (1)-->(4)
  │         │         └── ordering: +4 opt(2) [actual: +4]

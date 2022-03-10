@@ -363,7 +363,7 @@ vectorized: true
 ·
 • filter
 │ columns: (x, y)
-│ estimated row count: 311 (missing stats)
+│ estimated row count: 111 (missing stats)
 │ filter: y < 30
 │
 └── • scan
@@ -871,7 +871,7 @@ vectorized: true
 ·
 • scan
   columns: (d decimal, v decimal)
-  estimated row count: 1 (missing stats)
+  estimated row count: 0 (missing stats)
   table: dec@dec_pkey
   spans: /NaN/NaN/0
 
@@ -888,7 +888,7 @@ vectorized: true
 ·
 • scan
   columns: (d decimal, v decimal)
-  estimated row count: 1 (missing stats)
+  estimated row count: 0 (missing stats)
   table: decfam@decfam_pkey
   spans: /NaN/NaN-/NaN/-Infinity
 
@@ -901,7 +901,7 @@ vectorized: true
 ·
 • scan
   columns: (d decimal, v decimal)
-  estimated row count: 1 (missing stats)
+  estimated row count: 0 (missing stats)
   table: dec@dec_pkey
   spans: /Infinity/Infinity/0
 
@@ -913,7 +913,7 @@ vectorized: true
 ·
 • scan
   columns: (d decimal, v decimal)
-  estimated row count: 1 (missing stats)
+  estimated row count: 0 (missing stats)
   table: dec@dec_pkey
   spans: /-Infinity/-Infinity/0
 

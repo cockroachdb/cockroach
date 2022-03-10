@@ -47,7 +47,7 @@ vectorized: true
 │
 └── • scan
       columns: (u, v)
-      estimated row count: 1 (12% of the table; stats collected <hidden> ago)
+      estimated row count: 1 (13% of the table; stats collected <hidden> ago)
       table: uv@uv_v_idx
       spans: /1-/2
 
@@ -76,7 +76,7 @@ vectorized: true
 ·
 • filter
 │ columns: (u, v)
-│ estimated row count: 1
+│ estimated row count: 0
 │ filter: v = 1
 │
 └── • scan
@@ -148,7 +148,7 @@ vectorized: true
 ·
 • filter
 │ columns: (u, v)
-│ estimated row count: 1
+│ estimated row count: 0
 │ filter: u = 1
 │
 └── • scan
@@ -317,7 +317,7 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 121.069999
+ ├── cost: 121.069998
  ├── key: ()
  ├── fd: ()-->(1)
  ├── distribution: test
@@ -325,14 +325,14 @@ limit
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=10, avgsize(1)=4]
- │    ├── cost: 121.049999
+ │    ├── cost: 121.049998
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── distribution: test
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
- │    │    ├── cost: 120.019999
+ │    │    ├── cost: 120.019998
  │    │    ├── limit hint: 100.00
  │    │    ├── distribution: test
  │    │    └── prune: (1)
