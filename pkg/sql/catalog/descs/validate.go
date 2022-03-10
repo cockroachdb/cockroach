@@ -34,15 +34,12 @@ func (tc *Collection) Validate(
 	targetLevel catalog.ValidationLevel,
 	descriptors ...catalog.Descriptor,
 ) (err error) {
-	cbd := &collectionBackedDereferencer{
-		tc:  tc,
-		txn: txn,
-	}
+	vd := tc.newValidationDereferencer(txn)
 	version := tc.settings.Version.ActiveVersion(ctx)
 	return validate.Validate(
 		ctx,
 		version,
-		cbd,
+		vd,
 		telemetry,
 		targetLevel,
 		descriptors...).CombinedError()
@@ -63,6 +60,10 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 		return nil
 	}
 	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, catalog.ValidationLevelAllPreTxnCommit, descs...)
+}
+
+func (tc *Collection) newValidationDereferencer(txn *kv.Txn) validate.ValidationDereferencer {
+	return &collectionBackedDereferencer{tc: tc, txn: txn}
 }
 
 // collectionBackedDereferencer wraps a Collection to implement the
@@ -100,10 +101,11 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 		// of this call in the Collection.
 		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
 			ctx,
-			c.txn,
-			c.tc.codec(),
 			version,
-			fallbackReqs)
+			c.tc.codec(),
+			c.txn,
+			fallbackReqs,
+		)
 		if err != nil {
 			return nil, err
 		}
