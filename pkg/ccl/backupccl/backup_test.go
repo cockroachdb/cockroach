@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
@@ -127,7 +128,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	if err := verifyBackupRestoreStatementResult(
+	if err := backuputils.VerifyBackupRestoreStatementResult(
 		t, sqlDB, "BACKUP DATABASE data TO $1", localFoo,
 	); err != nil {
 		t.Fatal(err)
@@ -146,7 +147,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
 
-	if err := verifyBackupRestoreStatementResult(
+	if err := backuputils.VerifyBackupRestoreStatementResult(
 		t, sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')", localFoo,
 	); err != nil {
 		t.Fatal(err)
