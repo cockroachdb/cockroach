@@ -161,7 +161,6 @@ var EventMemoryMultiplier = settings.RegisterFloatSetting(
 
 // ProtectTimestampInterval controls the frequency of protected timestamp record updates
 var ProtectTimestampInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
 	"changefeed.protect_timestamp_interval",
 	"controls how often the changefeed forwards its protected timestamp to the resolved timestamp",
 	10*time.Minute,
@@ -171,8 +170,7 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 // ActiveProtectedTimestamps enables always having protected timestamps laid
 // down that are periodically advanced to the highwater mark.
 var ActiveProtectedTimestamps = settings.RegisterBoolSetting(
-	settings.TenantWritable,
 	"changefeed.active_protected_timestamps",
 	"if set, rather than only protecting changefeed targets from garbage collection during backfills, data will always be protected up to the changefeed's frontier",
-	true,
+	false,
 )

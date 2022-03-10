@@ -868,7 +868,7 @@ func (b *changefeedResumer) OnPauseRequest(
 			return nil
 		}
 		pts := execCfg.ProtectedTimestampProvider
-		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
+		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), details.Targets, *resolved, cp)
 		return pts.Protect(ctx, txn, ptr)
 	}
 
