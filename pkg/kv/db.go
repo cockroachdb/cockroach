@@ -719,11 +719,24 @@ func (db *DB) AddSSTable(
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
-) error {
+) (roachpb.Span, int64, error) {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	if err != nil {
+		return roachpb.Span{}, 0, err
+	}
+	var span roachpb.Span
+	var available int64
+	for _, r := range b.response.Responses {
+		s := r.GetAddSstable()
+		if span.EndKey.Compare(s.RangeSpan.EndKey) < 0 {
+			span = s.RangeSpan
+			available = s.AvailableBytes
+		}
+	}
+	return span, available, nil
 }
 
 // AddSSTableAtBatchTimestamp links a file into the Pebble log-structured
@@ -742,15 +755,24 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
-) (hlc.Timestamp, error) {
+) (hlc.Timestamp, roachpb.Span, int64, error) {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
-		return hlc.Timestamp{}, err
+		return hlc.Timestamp{}, roachpb.Span{}, 0, err
 	}
-	return b.response.Timestamp, nil
+	var span roachpb.Span
+	var available int64
+	for _, r := range b.response.Responses {
+		s := r.GetAddSstable()
+		if span.EndKey.Compare(s.RangeSpan.EndKey) < 0 {
+			span = s.RangeSpan
+			available = s.AvailableBytes
+		}
+	}
+	return b.response.Timestamp, span, available, nil
 }
 
 // Migrate is used instruct all ranges overlapping with the provided keyspace to

@@ -1743,6 +1743,9 @@ message AddSSTableRequest {
 // AddSSTableResponse is the response to a AddSSTable() operation.
 message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  Span range_span = 2 [(gogoproto.nullable) = false];
+  int64 available_bytes = 3;
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no

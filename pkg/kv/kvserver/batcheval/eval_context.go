@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -134,6 +135,8 @@ type EvalContext interface {
 	// non-nil on those paths (a nil account is safe to use since it functions
 	// as an unlimited account).
 	GetResponseMemoryAccount() *mon.BoundAccount
+
+	GetMaxBytes() int64
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -153,6 +156,7 @@ type MockEvalCtx struct {
 	CurrentReadSummary rspb.ReadSummary
 	ClosedTimestamp    hlc.Timestamp
 	RevokedLeaseSeq    roachpb.LeaseSequence
+	MaxBytes           int64
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -269,4 +273,10 @@ func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 func (m *mockEvalCtxImpl) GetResponseMemoryAccount() *mon.BoundAccount {
 	// No limits.
 	return nil
+}
+func (m *mockEvalCtxImpl) GetMaxBytes() int64 {
+	if m.MaxBytes != 0 {
+		return m.MaxBytes
+	}
+	return math.MaxInt64
 }
