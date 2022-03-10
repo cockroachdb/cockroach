@@ -3624,14 +3624,6 @@ type admissionHandle struct {
 	storeAdmissionQ                    *admission.WorkQueue
 }
 
-func isSingleHeartbeatTxnRequest(b *roachpb.BatchRequest) bool {
-	if len(b.Requests) != 1 {
-		return false
-	}
-	_, ok := b.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
-	return ok
-}
-
 // MakeKVAdmissionController returns a KVAdmissionController. Both parameters
 // must together either be nil or non-nil.
 func MakeKVAdmissionController(
@@ -3678,7 +3670,7 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 		// all the slots, causing no useful work to happen. We do want useful work
 		// to continue even when throttling since there are often significant
 		// number of tokens available.
-		if ba.IsWrite() && !isSingleHeartbeatTxnRequest(ba) {
+		if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 			ah.storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
 		}
 		admissionEnabled := true
