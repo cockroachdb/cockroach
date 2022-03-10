@@ -2966,6 +2966,20 @@ value if you rely on the HLC for accuracy.`,
 				"week, day, hour, minute, second, millisecond, microsecond.",
 			Volatility: tree.VolatilityStable,
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Interval),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromInterval := args[1].(*tree.DInterval)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return truncateInterval(fromInterval, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
+				"week, day, hour, minute, second, millisecond, microsecond.",
+			Volatility: tree.VolatilityStable,
+		},
 	),
 
 	"row_to_json": makeBuiltin(defProps(),
@@ -8713,6 +8727,69 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 		}
 	}
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond)
+}
+
+func truncateInterval(fromInterval *tree.DInterval, timeSpan string) (*tree.DInterval, error) {
+
+	toInterval := tree.DInterval{}
+
+	switch timeSpan {
+	case "millennia", "millennium", "millenniums":
+		toInterval.Months = fromInterval.Months - fromInterval.Months%(12*1000)
+
+	case "centuries", "century":
+		toInterval.Months = fromInterval.Months - fromInterval.Months%(12*100)
+
+	case "decade", "decades":
+		toInterval.Months = fromInterval.Months - fromInterval.Months%(12*10)
+
+	case "year", "years":
+		toInterval.Months = fromInterval.Months - fromInterval.Months%12
+
+	case "quarter":
+		toInterval.Months = fromInterval.Months - fromInterval.Months%3
+
+	case "month", "months":
+		toInterval.Months = fromInterval.Months
+
+	case "week", "weeks":
+		// not supported by postgres 14 regardless of the fromInterval (error message is always the same)
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "interval units %q not supported because months usually have fractional weeks", timeSpan)
+
+	case "day", "days":
+		toInterval.Months = fromInterval.Months
+		toInterval.Days = fromInterval.Days
+
+	case "hour", "hours":
+		toInterval.Months = fromInterval.Months
+		toInterval.Days = fromInterval.Days
+		toInterval.SetNanos(fromInterval.Nanos() - fromInterval.Nanos()%time.Hour.Nanoseconds())
+
+	case "minute", "minutes":
+		toInterval.Months = fromInterval.Months
+		toInterval.Days = fromInterval.Days
+		toInterval.SetNanos(fromInterval.Nanos() - fromInterval.Nanos()%time.Minute.Nanoseconds())
+
+	case "second", "seconds":
+		toInterval.Months = fromInterval.Months
+		toInterval.Days = fromInterval.Days
+		toInterval.SetNanos(fromInterval.Nanos() - fromInterval.Nanos()%time.Second.Nanoseconds())
+
+	case "millisecond", "milliseconds":
+		toInterval.Months = fromInterval.Months
+		toInterval.Days = fromInterval.Days
+		toInterval.SetNanos(fromInterval.Nanos() - fromInterval.Nanos()%time.Millisecond.Nanoseconds())
+
+	case "microsecond", "microseconds":
+		toInterval.Months = fromInterval.Months
+		toInterval.Days = fromInterval.Days
+		toInterval.SetNanos(fromInterval.Nanos() - fromInterval.Nanos()%time.Microsecond.Nanoseconds())
+
+	default:
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "interval units %q not recognized", timeSpan)
+	}
+
+	return &toInterval, nil
 }
 
 // Converts a scalar Datum to its string representation
