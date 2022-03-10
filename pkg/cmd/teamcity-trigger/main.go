@@ -79,6 +79,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 		maxFails := 1
 
 		// By default, a single test times out after 40 minutes.
+		// NOTE: This is used only for the (now deprecated) non-Bazel
+		// stress job. Bazel test timeouts are handled at the test
+		// target level (i.e. in BUILD.bazel).
 		testTimeout := 40 * time.Minute
 
 		// The stress program by default runs as many instances in parallel as there
@@ -116,7 +119,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 		}
 
 		if bazel.BuiltWithBazel() {
-			opts["env.TESTTIMEOUTSECS"] = fmt.Sprintf("%.0f", testTimeout.Seconds())
+			// NB: This is what will eventually be passed to Bazel as the --test_timeout.
+			// `stress` will run for maxTime, so we give it an extra minute to clean up.
+			opts["env.TESTTIMEOUTSECS"] = fmt.Sprintf("%.0f", (maxTime + time.Minute).Seconds())
 		} else {
 			opts["env.TESTTIMEOUT"] = testTimeout.String()
 		}
