@@ -1214,6 +1214,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
+	if details.Validation != jobspb.RestoreValidation_DefaultRestore {
+		return errors.Errorf("No restore validation tools are supported")
+	}
+
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 

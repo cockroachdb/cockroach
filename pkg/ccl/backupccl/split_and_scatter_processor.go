@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -209,6 +210,11 @@ func newSplitAndScatterProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+
+	if spec.Validation != jobspb.RestoreValidation_DefaultRestore {
+		return nil, errors.New("Split and Scatter Processor does not support validation yet")
+	}
+
 	numEntries := 0
 	for _, chunk := range spec.Chunks {
 		numEntries += len(chunk.Entries)

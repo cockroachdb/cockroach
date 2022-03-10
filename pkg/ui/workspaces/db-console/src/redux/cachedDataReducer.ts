@@ -89,6 +89,7 @@ export class CachedDataReducer<
   RECEIVE: string; // receive new data
   ERROR: string; // request encountered an error
   INVALIDATE: string; // invalidate data
+  INVALIDATE_ALL: string; // invalidate all data on keyed cache
 
   /**
    * apiEndpoint - The API endpoint used to refresh data.
@@ -117,6 +118,7 @@ export class CachedDataReducer<
     this.RECEIVE = `cockroachui/CachedDataReducer/${actionNamespace}/RECEIVE`;
     this.ERROR = `cockroachui/CachedDataReducer/${actionNamespace}/ERROR`;
     this.INVALIDATE = `cockroachui/CachedDataReducer/${actionNamespace}/INVALIDATE`;
+    this.INVALIDATE_ALL = `cockroachui/CachedDataReducer/${actionNamespace}/INVALIDATE_ALL`;
   }
 
   /**
@@ -217,6 +219,16 @@ export class CachedDataReducer<
   ): PayloadAction<WithRequest<void, TRequest>> => {
     return {
       type: this.INVALIDATE,
+      payload: { request },
+    };
+  };
+
+  // invalidateAllData is the INVALIDATE_ALL action creator.
+  invalidateAllData = (
+    request?: TRequest,
+  ): PayloadAction<WithRequest<void, TRequest>> => {
+    return {
+      type: this.INVALIDATE_ALL,
       payload: { request },
     };
   };
@@ -385,6 +397,14 @@ export class KeyedCachedDataReducer<
         const id = this.requestToID(request);
         state = _.clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
+        return state;
+      }
+      case this.cachedDataReducer.INVALIDATE_ALL: {
+        state = _.clone(state);
+        const keys = Object.keys(state);
+        for (const key in keys) {
+          state[key] = this.cachedDataReducer.reducer(state[key], action);
+        }
         return state;
       }
       default:

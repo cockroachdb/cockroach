@@ -335,6 +335,8 @@ const queryReducerObj = new KeyedCachedDataReducer(
 
 export const invalidateStatementDetails =
   queryReducerObj.cachedDataReducer.invalidateData;
+export const invalidateAllStatementDetails =
+  queryReducerObj.cachedDataReducer.invalidateAllData;
 export const refreshStatementDetails = queryReducerObj.refresh;
 
 const userSQLRolesReducerObj = new CachedDataReducer(

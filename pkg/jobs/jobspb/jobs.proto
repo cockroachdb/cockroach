@@ -325,10 +325,22 @@ message RestoreDetails {
 
   // PreRewrittenTenantID is the ID of tenants[0] in the backup, aka its old ID;
   // it is only valid to set this if len(tenants) == 1.
-  roachpb.TenantID pre_rewrite_tenant_id = 23; 
+  roachpb.TenantID pre_rewrite_tenant_id = 23;
 
-  // NEXT ID: 24.
+  // RestoreValidation determines whether to skip certain parts of the restore
+  // job if its only purpose is to validate the user's restore command.
+  RestoreValidation validation = 24;
+
+  // NEXT ID: 25.
 }
+
+enum RestoreValidation {
+  DefaultRestore = 0;
+}
+
+
+
+
 
 message RestoreProgress {
   bytes high_water = 1;

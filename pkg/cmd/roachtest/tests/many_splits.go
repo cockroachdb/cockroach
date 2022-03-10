@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/stretchr/testify/require"
 )
 
 // runManySplits attempts to create 2000 tiny ranges on a 4-node cluster using
@@ -33,8 +34,9 @@ func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	// Wait for upreplication then create many ranges.
-	WaitFor3XReplication(t, db)
+	// Wait for up-replication then create many ranges.
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
