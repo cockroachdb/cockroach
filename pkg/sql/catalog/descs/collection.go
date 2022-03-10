@@ -294,7 +294,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-	return tc.kv.getAllDatabaseDescriptors(ctx, txn, tc.version)
+	return tc.kv.getAllDatabaseDescriptors(ctx, tc.version, txn, nil /* vd */)
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
