@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -3333,7 +3334,32 @@ func (s *statusServer) TxnIDResolution(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if local {
-		return s.localTxnIDResolution(req), nil
+		run := func(req *serverpb.TxnIDResolutionRequest) (*serverpb.TxnIDResolutionResponse, error) {
+			resp := s.localTxnIDResolution(req)
+			// 15% probability of random server errors.
+			// 15% probability of long hang.
+			// 5% missing result.
+			dice := rand.Int31n(100)
+			if dice < 15 {
+				return nil, errors.New("Random injected errors")
+			} else if dice >= 15 && dice < 30 {
+				// Sleep from 5 seconds to 90 seconds
+				sleep := time.Duration(int64(rand.Intn(85) + 5))
+				time.Sleep(time.Second * sleep)
+				return resp, nil
+			} else if dice >= 30 && dice < 35 {
+				// truncate the last 10% of the resp.
+				remainingSize := int(float64(len(resp.ResolvedTxnIDs)) * 0.9)
+				if remainingSize > 0 && remainingSize < len(resp.ResolvedTxnIDs) {
+					resp.ResolvedTxnIDs = resp.ResolvedTxnIDs[:remainingSize]
+				}
+
+				return resp, nil
+			} else {
+				return resp, nil
+			}
+		}
+		return run(req)
 	}
 
 	statusClient, err := s.dialNode(ctx, requestedNodeID)
