@@ -24,7 +24,6 @@ import {
   contentionTime,
   readsAndWrites,
 } from "src/util";
-import { AggregateStatistics } from "src/statementsTable";
 
 export type NodeNames = { [nodeId: string]: string };
 
