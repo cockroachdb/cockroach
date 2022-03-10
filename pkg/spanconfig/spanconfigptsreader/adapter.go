@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // adapter implements the spanconfig.ProtectedTSReader interface and is intended
@@ -87,6 +88,7 @@ func TestingRefreshPTSState(
 	if !ok {
 		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
+	require.NoError(t, a.cache.Refresh(ctx, asOf))
 	testutils.SucceedsSoon(t, func() error {
 		_, fresh, err := a.GetProtectionTimestamps(ctx, roachpb.Span{})
 		if err != nil {
@@ -97,5 +99,5 @@ func TestingRefreshPTSState(
 		}
 		return nil
 	})
-	return a.cache.Refresh(ctx, asOf)
+	return nil
 }

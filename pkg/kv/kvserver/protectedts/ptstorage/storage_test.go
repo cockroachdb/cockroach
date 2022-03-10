@@ -673,8 +673,7 @@ func TestCorruptData(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
-		pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(*sql.InternalExecutor),
-			nil /* knobs */)
+		pts := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 
 		tCtx := &testContext{runWithDeprecatedSpans: true}
 		runCorruptDataTest(tCtx, s, tc, pts)
@@ -690,8 +689,7 @@ func TestCorruptData(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
-		pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(*sql.InternalExecutor),
-			&protectedts.TestingKnobs{})
+		pts := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		runCorruptDataTest(&testContext{}, s, tc, pts)
 	})
 	t.Run("corrupt hlc timestamp", func(t *testing.T) {
@@ -705,8 +703,7 @@ func TestCorruptData(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
-		pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(*sql.InternalExecutor),
-			&protectedts.TestingKnobs{})
+		pts := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 
 		rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
 		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

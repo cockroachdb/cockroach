@@ -12,6 +12,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

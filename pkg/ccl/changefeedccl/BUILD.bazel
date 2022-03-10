@@ -182,6 +182,7 @@ go_test(
         "//pkg/server/status",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/descbuilder",
