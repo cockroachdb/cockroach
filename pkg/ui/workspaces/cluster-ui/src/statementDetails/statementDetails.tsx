@@ -41,7 +41,7 @@ import { Button } from "src/button";
 import { SqlBox } from "src/sql";
 import { SortSetting } from "src/sortedtable";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { PlanView } from "./planView";
+import { PlanDetails } from "./planDetails";
 import { SummaryCard } from "src/summaryCard";
 import {
   latencyBreakdown,
@@ -444,6 +444,7 @@ export class StatementDetails extends React.Component<
       hasViewActivityRedactedRole,
     } = this.props;
     const { currentTab } = this.state;
+    const { statements_per_plan_hash } = this.props.statementDetails;
     const {
       stats,
       app_names,
@@ -500,9 +501,7 @@ export class StatementDetails extends React.Component<
     const regions = unique(
       (stats.nodes || []).map(node => nodeRegions[node.toString()]),
     ).sort();
-    const explainPlan =
-      stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
-    const explainGlobalProps = { distribution: distSQL, vectorized: vec };
+
     const duration = (v: number) => Duration(v * 1e9);
     const hasDiagnosticReports = diagnosticsReports.length > 0;
     const lastExec =
@@ -776,13 +775,13 @@ export class StatementDetails extends React.Component<
           </TabPane>
         )}
         <TabPane tab="Explain Plan" key="explain-plan">
-          <SummaryCard>
-            <PlanView
-              title="Explain Plan"
-              plan={explainPlan}
-              globalProperties={explainGlobalProps}
-            />
-          </SummaryCard>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={24}>
+              <SqlBox value={formatted_query} />
+            </Col>
+          </Row>
+          <p className={summaryCardStylesCx("summary--card__divider")} />
+          <PlanDetails plans={statements_per_plan_hash} />
         </TabPane>
         <TabPane
           tab="Execution Stats"
