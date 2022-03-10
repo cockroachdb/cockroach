@@ -420,8 +420,12 @@ type lockTableGuardImpl struct {
 
 	mu struct {
 		syncutil.Mutex
-		startWait        bool
-		requestWaitBegin time.Time
+		startWait bool
+		// curLockWaitStart represents the timestamp when the request started waiting
+		// on the current lock. Multiple consecutive waitingStates might refer to
+		// the same lock, in which case the curLockWaitStart is not updated in between
+		// them.
+		curLockWaitStart time.Time
 
 		state  waitingState
 		signal chan struct{}
@@ -1120,7 +1124,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			WaitingTxn:   l.reservation.txn,
 			ActiveWaiter: true,
 			Strength:     lock.Exclusive,
-			WaitDuration: now.Sub(l.reservation.mu.requestWaitBegin),
+			WaitDuration: now.Sub(l.reservation.mu.curLockWaitStart),
 		})
 		l.reservation.mu.Unlock()
 	}
@@ -1133,7 +1137,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			WaitingTxn:   readerGuard.txn,
 			ActiveWaiter: false,
 			Strength:     lock.None,
-			WaitDuration: now.Sub(readerGuard.mu.requestWaitBegin),
+			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
 		})
 		readerGuard.mu.Unlock()
 	}
@@ -1147,7 +1151,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			WaitingTxn:   writerGuard.txn,
 			ActiveWaiter: qg.active,
 			Strength:     lock.Exclusive,
-			WaitDuration: now.Sub(writerGuard.mu.requestWaitBegin),
+			WaitDuration: now.Sub(writerGuard.mu.curLockWaitStart),
 		})
 		writerGuard.mu.Unlock()
 	}
@@ -1355,7 +1359,7 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 		g := e.Value.(*lockTableGuardImpl)
 		g.mu.Lock()
-		waitDuration := now.Sub(g.mu.requestWaitBegin)
+		waitDuration := now.Sub(g.mu.curLockWaitStart)
 		totalWaitDuration += waitDuration
 		if waitDuration > maxWaitDuration {
 			maxWaitDuration = waitDuration
@@ -1366,7 +1370,7 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 		qg := e.Value.(*queuedGuard)
 		g := qg.guard
 		g.mu.Lock()
-		waitDuration := now.Sub(g.mu.requestWaitBegin)
+		waitDuration := now.Sub(g.mu.curLockWaitStart)
 		totalWaitDuration += waitDuration
 		if waitDuration > maxWaitDuration {
 			maxWaitDuration = waitDuration
@@ -1632,7 +1636,7 @@ func (l *lockState) tryActiveWait(
 				// would be more fair, but more complicated, and we expect that the
 				// common case is that this waiter will be at the end of the queue.
 				g.mu.startWait = true
-				g.mu.requestWaitBegin = timeProvider.Now()
+				g.mu.curLockWaitStart = timeProvider.Now()
 				state := waitForState
 				state.kind = waitQueueMaxLengthExceeded
 				g.mu.state = state
@@ -1684,7 +1688,7 @@ func (l *lockState) tryActiveWait(
 	// Make it an active waiter.
 	g.key = l.key
 	g.mu.startWait = true
-	g.mu.requestWaitBegin = timeProvider.Now()
+	g.mu.curLockWaitStart = timeProvider.Now()
 	if g.isSameTxnAsReservation(waitForState) {
 		state := waitForState
 		state.kind = waitSelf
