@@ -257,3 +257,8 @@ func (rec *SpanSetReplicaEvalContext) WatchForMerge(ctx context.Context) error {
 func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() *mon.BoundAccount {
 	return rec.i.GetResponseMemoryAccount()
 }
+
+// GetMaxBytes implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetMaxBytes() int64 {
+	return rec.i.GetMaxBytes()
+}
