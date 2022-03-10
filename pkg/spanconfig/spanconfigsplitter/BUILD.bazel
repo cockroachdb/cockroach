@@ -7,11 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/sql/catalog",
-        "//pkg/sql/rowenc",
-        "//pkg/sql/sem/tree",
-        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )

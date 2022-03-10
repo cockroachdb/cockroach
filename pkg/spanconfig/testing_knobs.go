@@ -57,6 +57,10 @@ type TestingKnobs struct {
 	// often the SQLWatcher checkpoints noops.
 	SQLWatcherCheckpointNoopsEveryDurationOverride time.Duration
 
+	// SplitterStepLogger is used to capture internal steps the splitter is
+	// making, for debugging and test-readability purposes.
+	SplitterStepLogger func(string)
+
 	// ExcludeDroppedDescriptorsFromLookup is used to control if the
 	// SQLTranslator ignores dropped descriptors. If enabled, dropped
 	// descriptors appear as missing -- a convenient+faster alternative to
