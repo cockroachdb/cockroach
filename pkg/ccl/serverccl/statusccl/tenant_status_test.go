@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -86,8 +87,16 @@ func TestTenantStatusAPI(t *testing.T) {
 		testTenantStatusCancelSession(t, testHelper)
 	})
 
+	t.Run("tenant_cancel_session_error_messages", func(t *testing.T) {
+		testTenantStatusCancelSessionErrorMessages(t, testHelper)
+	})
+
 	t.Run("tenant_cancel_query", func(t *testing.T) {
 		testTenantStatusCancelQuery(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_cancel_query_error_messages", func(t *testing.T) {
+		testTenantStatusCancelQueryErrorMessages(t, testHelper)
 	})
 
 	t.Run("index_usage_stats", func(t *testing.T) {
@@ -854,6 +863,45 @@ func testTenantStatusCancelSession(t *testing.T, helper *tenantTestHelper) {
 	require.Equal(t, fmt.Sprintf("session ID %s not found", sessionID), cancelSessionResp.Error)
 }
 
+func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper *tenantTestHelper) {
+	testCases := []struct {
+		sessionID     string
+		expectedError string
+	}{
+		{
+			sessionID:     "",
+			expectedError: "session ID 00000000000000000000000000000000 not found",
+		},
+		{
+			sessionID:     "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
+			expectedError: "session ID 00000000000000000000000000000001 not found",
+		},
+		{
+			sessionID:     "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
+			expectedError: "session ID 00000000000000000000000000000002 not found",
+		},
+		{
+			sessionID:     "42", // This query ID claims to have SQL instance ID 42, which does not exist.
+			expectedError: "session ID 00000000000000000000000000000042 not found",
+		},
+	}
+
+	client := helper.testCluster().tenantHTTPClient(t, 1)
+	defer client.Close()
+
+	for _, testCase := range testCases {
+		t.Run(fmt.Sprintf("sessionID-%s", testCase.sessionID), func(t *testing.T) {
+			sessionID, err := sql.StringToClusterWideID(testCase.sessionID)
+			require.NoError(t, err)
+			resp := serverpb.CancelSessionResponse{}
+			client.PostJSON("/_status/cancel_session/0", &serverpb.CancelSessionRequest{
+				SessionID: sessionID.GetBytes(),
+			}, &resp)
+			require.Equal(t, testCase.expectedError, resp.Error)
+		})
+	}
+}
+
 func selectClusterQueryIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 	var queryIDs []string
 	rows := conn.QueryStr(t, "SELECT query_id FROM crdb_internal.cluster_queries")
@@ -925,6 +973,48 @@ func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tena
 	httpPod1.PostJSON("/_status/cancel_query/0", &cancelQueryReq, &cancelQueryResp)
 	require.Equal(t, false, cancelQueryResp.Canceled)
 	require.Equal(t, fmt.Sprintf("query ID %s not found", query.ID), cancelQueryResp.Error)
+}
+
+func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper *tenantTestHelper) {
+	testCases := []struct {
+		queryID       string
+		expectedError string
+	}{
+		{
+			queryID: "BOGUS_QUERY_ID",
+			expectedError: "query ID 00000000000000000000000000000000 malformed: " +
+				"could not decode BOGUS_QUERY_ID as hex: encoding/hex: invalid byte: U+004F 'O'",
+		},
+		{
+			queryID:       "",
+			expectedError: "query ID 00000000000000000000000000000000 not found",
+		},
+		{
+			queryID:       "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
+			expectedError: "query ID 00000000000000000000000000000001 not found",
+		},
+		{
+			queryID:       "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
+			expectedError: "query ID 00000000000000000000000000000002 not found",
+		},
+		{
+			queryID:       "42", // This query ID claims to have SQL instance ID 42, which does not exist.
+			expectedError: "query ID 00000000000000000000000000000042 not found",
+		},
+	}
+
+	client := helper.testCluster().tenantHTTPClient(t, 1)
+	defer client.Close()
+
+	for _, testCase := range testCases {
+		t.Run(fmt.Sprintf("queryID-%s", testCase.queryID), func(t *testing.T) {
+			resp := serverpb.CancelQueryResponse{}
+			client.PostJSON("/_status/cancel_query/0", &serverpb.CancelQueryRequest{
+				QueryID: testCase.queryID,
+			}, &resp)
+			require.Equal(t, testCase.expectedError, resp.Error)
+		})
+	}
 }
 
 // testTxnIDResolutionRPC tests the reachability of TxnIDResolution RPC. The
