@@ -43,26 +43,36 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// to have multiple ranges, and some sstables with only table keys.
 			t.Status("importing tpcc fixture")
 			c.Run(ctx, workloadNode,
-				"./cockroach workload fixtures import tpcc --warehouses=500 --fks=false --checks=false")
+				"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false")
 			return nil
 		})
 		m.Wait()
 	}
 
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), crdbNodes)
+	opts := option.DefaultStopOpts()
+	opts.RoachprodOpts.Wait = true
+	c.Stop(ctx, t.L(), opts, crdbNodes)
+
+	const findTablesCmd = "" +
+		// Take the latest manifest file ...
+		"ls -tr {store-dir}/MANIFEST-* | tail -n1 | " +
+		// ... dump its contents ...
+		"xargs ./cockroach debug pebble manifest dump | " +
+		// ... shuffle the files to distribute corruption over the LSM.
+		"shuf | " +
+		// ... filter for up to six SSTables that contain table data.
+		"grep -v added | grep -v deleted | grep '/Table/' | tail -n6"
 
 	for _, node := range corruptNodes {
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node),
-			"./cockroach debug pebble manifest dump {store-dir}/MANIFEST-* | grep -v added | grep -v deleted | grep \"\\[/Table\"")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), findTablesCmd)
 		if err != nil {
 			t.Fatalf("could not find tables to corrupt: %s\nstdout: %s\nstderr: %s", err, result.Stdout, result.Stderr)
 		}
-		tableSSTs := strings.Split(result.Stdout, "\n")
+		tableSSTs := strings.Split(strings.TrimSpace(result.Stdout), "\n")
 		if len(tableSSTs) == 0 {
 			t.Fatal("expected at least one sst containing table keys only, got none")
 		}
-		// Corrupt up to 6 SSTs containing table keys.
-		corruptedFiles := 0
+		// Corrupt the SSTs.
 		for _, sstLine := range tableSSTs {
 			sstLine = strings.TrimSpace(sstLine)
 			firstFileIdx := strings.Index(sstLine, ":")
@@ -73,10 +83,6 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			t.Status(fmt.Sprintf("corrupting sstable %s on node %d", sstLine[:firstFileIdx], node))
 			c.Run(ctx, c.Node(node), fmt.Sprintf("dd if=/dev/urandom of={store-dir}/%s.sst seek=256 count=128 bs=1 conv=notrunc", sstLine[:firstFileIdx]))
-			corruptedFiles++
-			if corruptedFiles >= 6 {
-				break
-			}
 		}
 	}
 
