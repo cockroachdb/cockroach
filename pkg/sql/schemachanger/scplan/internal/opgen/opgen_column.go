@@ -27,8 +27,8 @@ func init() {
 						Column: *protoutil.Clone(this).(*scpb.Column),
 					}
 				}),
-				emit(func(this *scpb.Column, ts scpb.TargetState) scop.Op {
-					return newLogEventOp(this, ts)
+				emit(func(this *scpb.Column, md targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
@@ -59,8 +59,8 @@ func init() {
 						ColumnID: this.ColumnID,
 					}
 				}),
-				emit(func(this *scpb.Column, ts scpb.TargetState) scop.Op {
-					return newLogEventOp(this, ts)
+				emit(func(this *scpb.Column, md targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 			to(scpb.Status_DELETE_ONLY,

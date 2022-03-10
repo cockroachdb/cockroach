@@ -61,14 +61,12 @@ func (b *builderState) Ensure(
 	id := screl.GetDescID(e)
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
-	var found bool
-	for _, i := range c.ers.indexes {
+	key := screl.ElementString(e)
+	if i, ok := c.elementIndexMap[key]; ok {
 		es := &b.output[i]
 		if !screl.EqualElements(es.element, e) {
-			continue
-		}
-		if found {
-			panic(errors.AssertionFailedf("element is not unique: %s", screl.ElementString(es.element)))
+			panic(errors.AssertionFailedf("element key %v does not match element: %s",
+				key, screl.ElementString(es.element)))
 		}
 		if current != scpb.Status_UNKNOWN {
 			es.current = current
@@ -76,24 +74,23 @@ func (b *builderState) Ensure(
 		es.target = target
 		es.element = e
 		es.metadata = meta
-		found = true
-	}
-	if found {
-		return
-	}
-	if current == scpb.Status_UNKNOWN {
-		if target == scpb.ToAbsent {
-			panic(errors.AssertionFailedf("element not found: %s", screl.ElementString(e)))
+	} else {
+		if current == scpb.Status_UNKNOWN {
+			if target == scpb.ToAbsent {
+				panic(errors.AssertionFailedf("element not found: %s", screl.ElementString(e)))
+			}
+			current = scpb.Status_ABSENT
 		}
-		current = scpb.Status_ABSENT
+		c.ers.indexes = append(c.ers.indexes, len(b.output))
+		c.elementIndexMap[key] = len(b.output)
+		b.output = append(b.output, elementState{
+			element:  e,
+			target:   target,
+			current:  current,
+			metadata: meta,
+		})
 	}
-	c.ers.indexes = append(c.ers.indexes, len(b.output))
-	b.output = append(b.output, elementState{
-		element:  e,
-		target:   target,
-		current:  current,
-		metadata: meta,
-	})
+
 }
 
 // ForEachElementStatus implements the scpb.ElementStatusIterator interface.
@@ -721,10 +718,11 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		return
 	}
 	c := &cachedDesc{
-		desc:         b.readDescriptor(id),
-		privileges:   make(map[privilege.Kind]error),
-		hasOwnership: b.hasAdmin,
-		ers:          &elementResultSet{b: b},
+		desc:            b.readDescriptor(id),
+		privileges:      make(map[privilege.Kind]error),
+		hasOwnership:    b.hasAdmin,
+		ers:             &elementResultSet{b: b},
+		elementIndexMap: map[string]int{},
 	}
 	// Collect privileges
 	if !c.hasOwnership {
@@ -741,6 +739,8 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	}
 	visitorFn := func(status scpb.Status, e scpb.Element) {
 		c.ers.indexes = append(c.ers.indexes, len(b.output))
+		key := screl.ElementString(e)
+		c.elementIndexMap[key] = len(b.output)
 		b.output = append(b.output, elementState{
 			element: e,
 			target:  scpb.AsTargetStatus(status),

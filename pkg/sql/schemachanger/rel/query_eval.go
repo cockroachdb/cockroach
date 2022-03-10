@@ -24,9 +24,10 @@ type evalContext struct {
 	db *Database
 	ri ResultIterator
 
-	facts      []fact
-	depth, cur int
-	slots      []slot
+	facts             []fact
+	depth, cur        int
+	slots             []slot
+	filterSliceCaches map[int][]reflect.Value
 }
 
 func newEvalContext(q *Query) *evalContext {
@@ -182,36 +183,44 @@ func (ec *evalContext) haveUnboundSlots() bool {
 }
 
 func (ec *evalContext) checkFilters() (done bool) {
-	for _, f := range ec.q.filters {
-		// TODO(ajwerner): Catch panics here and convert them to errors.
-		ins := make([]reflect.Value, len(f.input))
-		insI := make([]interface{}, len(f.input))
-		for i, idx := range f.input {
-			inI := ec.slots[idx].typedValue.toInterface()
-			in := reflect.ValueOf(inI)
-			// Note that this will enforce that the type of the input to the filter
-			// matches the expectation by omitting results of the wrong type. This
-			// may or may not be the right behavior.
-			//
-			// TODO(ajwerner): Enforce the typing at a lower layer. See the TODO
-			// where this filter was built.
-			inType := f.predicate.Type().In(i)
-			if in.Type() != inType {
-				if in.Type().ConvertibleTo(inType) {
-					in = in.Convert(inType)
-				} else {
-					return true
-				}
-			}
-			ins[i] = in
-			insI[i] = inI
-		}
-		outs := f.predicate.Call(ins)
-		if !outs[0].Bool() {
+	for i := range ec.q.filters {
+		if done = ec.checkFilter(i); done {
 			return true
 		}
 	}
 	return false
+}
+
+func (ec *evalContext) checkFilter(i int) bool {
+	f := ec.q.filters[i]
+	ins := ec.getFilterInput(i)
+	defer func() {
+		for i := range f.input {
+			ins[i] = reflect.Value{}
+		}
+	}()
+	for i, idx := range f.input {
+		inI := ec.slots[idx].typedValue.toInterface()
+		in := reflect.ValueOf(inI)
+		// Note that this will enforce that the type of the input to the filter
+		// matches the expectation by omitting results of the wrong type. This
+		// may or may not be the right behavior.
+		//
+		// TODO(ajwerner): Enforce the typing at a lower layer. See the TODO
+		// where this filter was built.
+		inType := f.predicate.Type().In(i)
+		if in.Type() != inType {
+			if in.Type().ConvertibleTo(inType) {
+				in = in.Convert(inType)
+			} else {
+				return true
+			}
+		}
+		ins[i] = in
+	}
+	// TODO(ajwerner): Catch panics here and convert them to errors.
+	outs := f.predicate.Call(ins)
+	return !outs[0].Bool()
 }
 
 // Construct a where clause with all the bound values known for the next
@@ -328,4 +337,16 @@ func (ec *evalContext) maybeVisitAlreadyBoundEntity() (done bool, _ error) {
 		return true, nil // contradiction
 	}
 	return true, ec.visit(e)
+}
+
+func (ec *evalContext) getFilterInput(i int) (ins []reflect.Value) {
+	if ec.filterSliceCaches == nil {
+		ec.filterSliceCaches = make(map[int][]reflect.Value)
+	}
+	c, ok := ec.filterSliceCaches[i]
+	if !ok {
+		c = make([]reflect.Value, len(ec.q.filters[i].input))
+		ec.filterSliceCaches[i] = c
+	}
+	return c
 }

@@ -47,8 +47,8 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.Database, ts scpb.TargetState) scop.Op {
-					return newLogEventOp(this, ts)
+				emit(func(this *scpb.Database, md targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 				emit(func(this *scpb.Database) scop.Op {
 					return &scop.CreateGcJobForDatabase{

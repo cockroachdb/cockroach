@@ -82,7 +82,8 @@ func TestRegistry(t *testing.T) {
 			var ok bool
 			registry, ok = registryMap[registryKey]
 			if !ok {
-				registry = contention.NewRegistry(st, nil /* status */)
+				m := contention.NewMetrics()
+				registry = contention.NewRegistry(st, nil /* status */, &m)
 				registryMap[registryKey] = registry
 			}
 			return d.Expected
@@ -176,7 +177,8 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	// Disable the event store.
 	contention.TxnIDResolutionInterval.Override(context.Background(), &st.SV, 0)
-	registry := contention.NewRegistry(st, nil /* status */)
+	m := contention.NewMetrics()
+	registry := contention.NewRegistry(st, nil /* status */, &m)
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
@@ -311,7 +313,8 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 	// Disable the event store.
 	contention.TxnIDResolutionInterval.Override(context.Background(), &st.SV, 0)
 	createNewSerializedRegistry := func() contentionpb.SerializedRegistry {
-		r := contention.NewRegistry(st, nil /* status */)
+		m := contention.NewMetrics()
+		r := contention.NewRegistry(st, nil /* status */, &m)
 		populateRegistry(r)
 		s := r.Serialize()
 		checkSerializedRegistryInvariants(s)
