@@ -101,6 +101,7 @@ func MakeBulkAdder(
 	b := &BufferingAdder{
 		name: opts.Name,
 		sink: SSTBatcher{
+			name:                   opts.Name,
 			db:                     db,
 			rc:                     rangeCache,
 			settings:               settings,
