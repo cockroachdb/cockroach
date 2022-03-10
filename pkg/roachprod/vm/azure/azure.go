@@ -416,7 +416,7 @@ func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 		return nil, err
 	}
 
-	it, err := client.ListAllComplete(ctx, "false")
+	it, err := client.ListAllComplete(ctx, "false", "")
 	if err != nil {
 		return nil, err
 	}
