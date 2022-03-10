@@ -679,7 +679,7 @@ func TestEvalAddSSTable(t *testing.T) {
 					sst, start, end := sstutil.MakeSST(t, st, tc.sst)
 					resp := &roachpb.AddSSTableResponse{}
 					result, err := batcheval.EvalAddSSTable(ctx, engine, batcheval.CommandArgs{
-						EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st, Desc: &roachpb.RangeDescriptor{}}).EvalContext(),
 						Stats:   stats,
 						Header: roachpb.Header{
 							Timestamp: hlc.Timestamp{WallTime: tc.reqTS},
@@ -847,7 +847,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			// Build and add SST.
 			sst, start, end := sstutil.MakeSST(t, st, tc.sst)
 			result, err := batcheval.EvalAddSSTable(ctx, opLogger, batcheval.CommandArgs{
-				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
+				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st, Desc: &roachpb.RangeDescriptor{}}).EvalContext(),
 				Header: roachpb.Header{
 					Timestamp: reqTS,
 				},
@@ -930,13 +930,13 @@ func runTestDBAddSSTable(
 		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 2, "1"}})
 
 		// Key is before the range in the request span.
-		err := db.AddSSTable(
+		_, _, err := db.AddSSTable(
 			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Key is after the range in the request span.
-		err = db.AddSSTable(
+		_, _, err = db.AddSSTable(
 			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
@@ -944,8 +944,9 @@ func runTestDBAddSSTable(
 		// Do an initial ingest.
 		ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 		defer getRecAndFinish()
-		require.NoError(t, db.AddSSTable(
-			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
+		_, _, err = db.AddSSTable(
+			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		require.NoError(t, err)
 		trace := getRecAndFinish().String()
 		require.Contains(t, trace, "evaluating AddSSTable")
 		require.Contains(t, trace, "sideloadable proposal detected")
@@ -970,8 +971,9 @@ func runTestDBAddSSTable(
 	// the value returned by Get.
 	{
 		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 1, "2"}})
-		require.NoError(t, db.AddSSTable(
-			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
+		_, _, err := db.AddSSTable(
+			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		require.NoError(t, err)
 		r, err := db.Get(ctx, "bb")
 		require.NoError(t, err)
 		require.Equal(t, []byte("1"), r.ValueBytes())
@@ -993,8 +995,9 @@ func runTestDBAddSSTable(
 			ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 			defer getRecAndFinish()
 
-			require.NoError(t, db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
+			_, _, err := db.AddSSTable(
+				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			require.NoError(t, err)
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
 			require.Contains(t, trace, "sideloadable proposal detected")
@@ -1029,8 +1032,9 @@ func runTestDBAddSSTable(
 			ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 			defer getRecAndFinish()
 
-			require.NoError(t, db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS))
+			_, _, err := db.AddSSTable(
+				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS)
+			require.NoError(t, err)
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
 			require.Contains(t, trace, "via regular write batch")
@@ -1060,7 +1064,7 @@ func runTestDBAddSSTable(
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
 
-		err := db.AddSSTable(
+		_, _, err := db.AddSSTable(
 			ctx, "b", "c", sstFile.Data(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
@@ -1072,9 +1076,14 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const max = 1 << 10
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
+	evalCtx := &batcheval.MockEvalCtx{
+		ClusterSettings: st,
+		MaxBytes:        max,
+		Desc:            &roachpb.RangeDescriptor{},
+	}
 
 	dir := t.TempDir()
 	engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
@@ -1121,8 +1130,10 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	// applying the diff to the stats
 	statsBefore := engineStats(t, engine, 0)
 	ts := hlc.Timestamp{WallTime: 7}
+	evalCtx.Stats = *statsBefore
+
 	cArgs := batcheval.CommandArgs{
-		EvalCtx: evalCtx,
+		EvalCtx: evalCtx.EvalContext(),
 		Header: roachpb.Header{
 			Timestamp: ts,
 		},
@@ -1132,7 +1143,8 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		},
 		Stats: &enginepb.MVCCStats{},
 	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
+	var resp roachpb.AddSSTableResponse
+	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
 	require.NoError(t, err)
 
 	sstPath := filepath.Join(dir, "sst")
@@ -1143,12 +1155,18 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	statsEvaled.Add(*cArgs.Stats)
 	statsEvaled.Add(statsDelta)
 	statsEvaled.ContainsEstimates = 0
-	require.Equal(t, engineStats(t, engine, statsEvaled.LastUpdateNanos), statsEvaled)
+
+	newStats := engineStats(t, engine, statsEvaled.LastUpdateNanos)
+	require.Equal(t, newStats, statsEvaled)
+
+	// Check that actual remaining bytes equals the returned remaining bytes once
+	// the delta for stats inaccuracy is applied.
+	require.Equal(t, max-newStats.Total(), resp.AvailableBytes-statsDelta.Total())
 
 	// Check stats for a single KV.
 	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{{"zzzzzzz", ts.WallTime, "zzz"}})
 	cArgs = batcheval.CommandArgs{
-		EvalCtx: evalCtx,
+		EvalCtx: evalCtx.EvalContext(),
 		Header:  roachpb.Header{Timestamp: ts},
 		Args: &roachpb.AddSSTableRequest{
 			RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
@@ -1156,7 +1174,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		},
 		Stats: &enginepb.MVCCStats{},
 	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
+	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &roachpb.AddSSTableResponse{})
 	require.NoError(t, err)
 	require.Equal(t, enginepb.MVCCStats{
 		ContainsEstimates: 1,
@@ -1178,7 +1196,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
+	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st, Desc: &roachpb.RangeDescriptor{}}).EvalContext()
 
 	engine := storage.NewDefaultInMemForTesting()
 	defer engine.Close()
@@ -1228,7 +1246,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		},
 		Stats: &commandStats,
 	}
-	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
+	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &roachpb.AddSSTableResponse{})
 	require.NoError(t, err)
 	firstSSTStats := commandStats
 
@@ -1252,7 +1270,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		DisallowShadowing: true,
 		MVCCStats:         sstutil.ComputeStats(t, sst),
 	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
+	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &roachpb.AddSSTableResponse{})
 	require.NoError(t, err)
 
 	// Check that there has been no double counting of stats. All keys in second SST are shadowing.
@@ -1272,7 +1290,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		DisallowShadowing: true,
 		MVCCStats:         sstutil.ComputeStats(t, sst),
 	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
+	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &roachpb.AddSSTableResponse{})
 	require.NoError(t, err)
 
 	// This is the stats contribution of the KV {"e", 2, "ee"}. This should be

@@ -1763,6 +1763,20 @@ message AddSSTableRequest {
 // AddSSTableResponse is the response to a AddSSTable() operation.
 message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // RangeSpan is the span of the range which just added this sstable. It is 
+  // included in the reply along with AvailableBytes so that callers can tell if
+  // a file they are about to send would be sent to the same range as a file
+  // sent previously (i.e. if it intersects with this span as sent then), and if
+  // so, if its size would fit within the size remaining in this range.
+  Span range_span = 2 [(gogoproto.nullable) = false];
+
+  // AvailableBytes indicates how many bytes remain before the range which into
+  // which the SSTable added by this request was added is "full". This is for 
+  // use by callers to check if they should keep sending another SST to this 
+  // range or if they should split first. Such callers can use RangeSpan to see
+  // if the file they would be sending would also send to this range.
+  int64 available_bytes = 3;
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
