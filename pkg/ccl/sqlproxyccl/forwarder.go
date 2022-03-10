@@ -12,6 +12,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
@@ -31,6 +32,15 @@ type forwarder struct {
 	// forwarder whenever ctx has been cancelled to prevent leaks.
 	ctx       context.Context
 	ctxCancel context.CancelFunc
+
+	// connector is an instance of the connector, which will be used to open a
+	// new connection to a SQL pod. This connector instance must be associated
+	// to the same tenant as the forwarder.
+	connector *connector
+
+	// metrics contains various counters reflecting proxy operations. This is
+	// the same as the metrics field in the proxyHandler instance.
+	metrics *metrics
 
 	// clientConn and serverConn provide a convenient way to read and forward
 	// Postgres messages, while minimizing IO reads and memory allocations.
@@ -69,18 +79,27 @@ type forwarder struct {
 // clientConn and serverConn must not be nil in all cases except for testing.
 //
 // Note that callers MUST call Close in all cases, even if ctx was cancelled,
-// and callers will need to detect that.
-func forward(ctx context.Context, clientConn, serverConn net.Conn) *forwarder {
+// and callers will need to detect that (for now).
+func forward(
+	ctx context.Context,
+	connector *connector,
+	metrics *metrics,
+	clientConn net.Conn,
+	serverConn net.Conn,
+) *forwarder {
 	ctx, cancelFn := context.WithCancel(ctx)
 	f := &forwarder{
 		ctx:        ctx,
 		ctxCancel:  cancelFn,
 		errCh:      make(chan error, 1),
+		connector:  connector,
+		metrics:    metrics,
 		clientConn: interceptor.NewPGConn(clientConn),
 		serverConn: interceptor.NewPGConn(serverConn),
 	}
-	f.request = newProcessor(f.clientConn, f.serverConn)  // client -> server
-	f.response = newProcessor(f.serverConn, f.clientConn) // server -> client
+	clockFn := makeLogicalClockFn()
+	f.request = newProcessor(clockFn, f.clientConn, f.serverConn)  // client -> server
+	f.response = newProcessor(clockFn, f.serverConn, f.clientConn) // server -> client
 	f.resumeProcessors()
 	return f
 }
@@ -168,6 +187,18 @@ func wrapServerToClientError(err error) error {
 	return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
 }
 
+// makeLogicalClockFn returns a function that implements a simple logical clock.
+// This implementation could overflow in theory, but it doesn't matter for the
+// forwarder since the worst that could happen is that we are unable to transfer
+// for an extremely short period of time until all the processors have wrapped
+// around. That said, this situation is rare since uint64 is a huge number.
+func makeLogicalClockFn() func() uint64 {
+	var counter uint64
+	return func() uint64 {
+		return atomic.AddUint64(&counter, 1)
+	}
+}
+
 // aLongTimeAgo is a non-zero time, far in the past, used for immediate
 // cancellation of dials.
 var aLongTimeAgo = timeutil.Unix(1, 0)
@@ -191,11 +222,19 @@ type processor struct {
 		resumed    bool
 		inPeek     bool
 		suspendReq bool // Indicates that a suspend has been requested.
+
+		lastMessageTransferredAt uint64 // Updated through logicalClockFn
+		lastMessageType          byte
+	}
+	logicalClockFn func() uint64
+
+	testingKnobs struct {
+		beforeForwardMsg func()
 	}
 }
 
-func newProcessor(src *interceptor.PGConn, dst *interceptor.PGConn) *processor {
-	p := &processor{src: src, dst: dst}
+func newProcessor(logicalClockFn func() uint64, src, dst *interceptor.PGConn) *processor {
+	p := &processor{logicalClockFn: logicalClockFn, src: src, dst: dst}
 	p.mu.cond = sync.NewCond(&p.mu)
 	return p
 }
@@ -252,7 +291,7 @@ func (p *processor) resume(ctx context.Context) error {
 
 		// Always peek the message to ensure that we're blocked on reading the
 		// header, rather than when forwarding during idle periods.
-		_, _, peekErr := p.src.PeekMsg()
+		typ, _, peekErr := p.src.PeekMsg()
 
 		suspendReq := exitPeek()
 
@@ -273,6 +312,15 @@ func (p *processor) resume(ctx context.Context) error {
 			return peekErr
 		}
 
+		if p.testingKnobs.beforeForwardMsg != nil {
+			p.testingKnobs.beforeForwardMsg()
+		}
+
+		// Update last message that is set to be forwarded.
+		p.mu.Lock()
+		p.mu.lastMessageType = typ
+		p.mu.lastMessageTransferredAt = p.logicalClockFn()
+		p.mu.Unlock()
 		if _, err := p.src.ForwardMsg(p.dst); err != nil {
 			return errors.Wrap(err, "forwarding message")
 		}
