@@ -13,10 +13,12 @@ package batcheval
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -35,7 +37,19 @@ func init() {
 	// could instead iterate over the SST and take out point latches/locks, but
 	// the cost is likely not worth it since AddSSTable is often used with
 	// unpopulated spans.
-	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareIsolatedKeys, EvalAddSSTable)
+	RegisterReadWriteCommand(roachpb.AddSSTable, declareKeysAddSSTable, EvalAddSSTable)
+}
+
+func declareKeysAddSSTable(
+	rs ImmutableRangeState,
+	header *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
+) {
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	// We look up the range descriptor key to return its span.
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
@@ -52,7 +66,7 @@ var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced",
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
 func EvalAddSSTable(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
@@ -230,6 +244,10 @@ func EvalAddSSTable(
 			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
 		}
 	}
+
+	reply := resp.(*roachpb.AddSSTableResponse)
+	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
+	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 
 	if args.IngestAsWrites {
 		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))})
