@@ -18,8 +18,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -67,15 +65,18 @@ type operationGenerator struct {
 	// stmtsInTxn is a list of statements in the current transaction.
 	stmtsInTxt []string
 
+	// opGenLog log of statement used to generate the current statement.
 	opGenLog strings.Builder
 }
 
+// LogQueryResults logs a string query result.
 func (og *operationGenerator) LogQueryResults(queryName string, result string) {
 	og.opGenLog.WriteString(fmt.Sprintf("QUERY [%s] :", queryName))
 	og.opGenLog.WriteString(result)
 	og.opGenLog.WriteString("\n")
 }
 
+// LogQueryResultArray logs a query result that is a strng array.
 func (og *operationGenerator) LogQueryResultArray(queryName string, results []string) {
 	og.opGenLog.WriteString(fmt.Sprintf("QUERY [%s] : ", queryName))
 	for _, result := range results {
@@ -86,6 +87,7 @@ func (og *operationGenerator) LogQueryResultArray(queryName string, results []st
 	og.opGenLog.WriteString("\n")
 }
 
+// GetOpGenLog fetches the generated log entries.
 func (og *operationGenerator) GetOpGenLog() string {
 	return og.opGenLog.String()
 }
@@ -115,12 +117,6 @@ func (og *operationGenerator) resetTxnState() {
 
 //go:generate stringer -type=opType
 type opType int
-
-// isDDL returns true if the operation mutates the system config span and thus
-// cannot follow a write elsewhere.
-func (ot opType) isDDL() bool {
-	return ot != insertRow && ot != validate
-}
 
 const (
 	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -250,7 +246,7 @@ var opWeights = []int{
 	setColumnNotNull:        1,
 	setColumnType:           0, // Disabled and tracked with #66662.
 	survive:                 1,
-	insertRow:               0,
+	insertRow:               1, // Temporarily reduced because of #80820
 	validate:                2, // validate twice more often
 }
 
@@ -277,34 +273,13 @@ func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt strin
 			return "", err
 		}
 		// Screen for schema change after write in the same transaction.
-		og.checkIfOpViolatesDDLAfterWrite(op)
 		og.stmtsInTxt = append(og.stmtsInTxt, stmt)
-
 		// Add candidateExpectedCommitErrors to expectedCommitErrors
 		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
 		break
 	}
 
 	return stmt, err
-}
-
-func (og *operationGenerator) checkIfOpViolatesDDLAfterWrite(ot opType) {
-	if ot.isDDL() && og.haveInsertBeforeAnyDDLs() {
-		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
-	}
-	og.opsInTxn = append(og.opsInTxn, ot)
-}
-
-func (og *operationGenerator) haveInsertBeforeAnyDDLs() bool {
-	for _, ot := range og.opsInTxn {
-		if ot.isDDL() {
-			break
-		}
-		if ot == insertRow {
-			return true
-		}
-	}
-	return false
 }
 
 func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (string, error) {
@@ -1122,36 +1097,9 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (strin
 	if err != nil {
 		return "", err
 	}
-
-	// Detect if primary indexes contain computed columns, which are disallowed
-	// on older versions of Cockroach.
-	computedColInIndex := false
-	primaryKeyDisallowsComputedCols, err := isClusterVersionLessThan(ctx, tx,
-		clusterversion.TestingBinaryMinSupportedVersion)
-	if err != nil {
-		return "", err
-	}
-	if primaryKeyDisallowsComputedCols {
-		computedCols := make(map[string]struct{})
-		for _, def := range stmt.Defs {
-			if colDef, ok := def.(*tree.ColumnTableDef); ok {
-				if colDef.IsVirtual() {
-					computedCols[colDef.Name.String()] = struct{}{}
-				}
-			} else if indexDef, ok := def.(*tree.IndexTableDef); ok {
-				for _, indexCol := range indexDef.Columns {
-					if _, ok := computedCols[indexCol.Column.String()]; ok {
-						computedColInIndex = true
-					}
-				}
-			}
-		}
-	}
-
 	codesWithConditions{
 		{code: pgcode.DuplicateRelation, condition: tableExists && !stmt.IfNotExists},
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
-		{code: pgcode.FeatureNotSupported, condition: computedColInIndex},
 	}.add(og.expectedExecErrors)
 
 	return tree.Serialize(stmt), nil
@@ -2250,7 +2198,7 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (string, e
 	return fmt.Sprintf(`ALTER DATABASE %s SURVIVE %s`, dbName, survive), nil
 }
 
-func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (string, error) {
+func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq string, err error) {
 	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting random table name")
@@ -2266,62 +2214,93 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (string,
 			tableName,
 		), nil
 	}
-	cols, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+	allColumns, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+	nonGeneratedCols := allColumns
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting table columns for insert row")
 	}
 
 	// Filter out computed columns.
 	{
-		truncated := cols[:0]
-		for _, c := range cols {
+		truncated := nonGeneratedCols[:0]
+		for _, c := range nonGeneratedCols {
 			if !c.generated {
 				truncated = append(truncated, c)
 			}
 		}
-		cols = truncated
+		nonGeneratedCols = truncated
 	}
 	colNames := []string{}
 	rows := [][]string{}
-	for _, col := range cols {
+	for _, col := range nonGeneratedCols {
 		colNames = append(colNames, col.name)
 	}
 	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
 		var row []string
-		for _, col := range cols {
+		for _, col := range nonGeneratedCols {
 			d := randgen.RandDatum(og.params.rng, col.typ, col.nullable)
-			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
+			// Unfortunately, RandDatum for OIDs only selects random values, which will
+			// always fail validation. So, for OIDs we will select a random known type
+			// instead.
+			if col.typ.Family() == types.Oid.Family() {
+				d = tree.NewDOid(tree.DInt(randgen.RandColumnType(og.params.rng).Oid()))
+			}
+			str := tree.AsStringWithFlags(d, tree.FmtParsable)
+			row = append(row, str)
 		}
 
 		rows = append(rows, row)
 	}
-
-	// Verify if the new row will violate unique constraints by checking the constraints and
-	// existing rows in the database.
-	uniqueConstraintViolation, err := og.violatesUniqueConstraints(ctx, tx, tableName, colNames, rows)
-	if err != nil {
-		return "", err
+	// Verify that none of the generated expressions will blow up on this insert.
+	anyInvalidInserts := false
+	for _, row := range rows {
+		invalidInsert, generatedErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, colNames, allColumns, row)
+		if err != nil {
+			return "", err
+		}
+		if invalidInsert {
+			generatedErrors.add(og.expectedExecErrors)
+			// We will be pessimistic and assume that other column related errors can
+			// be hit, since the function above fails only on generated columns. But,
+			// there maybe index expressions with the exact same problem.
+			og.expectedExecErrors.add(pgcode.NumericValueOutOfRange)
+			og.expectedExecErrors.add(pgcode.FloatingPointException)
+			og.expectedExecErrors.add(pgcode.NotNullViolation)
+			anyInvalidInserts = true
+		}
 	}
 
-	// Verify if the new row will violate fk constraints by checking the constraints and rows
-	// in the database.
-	foreignKeyViolation, err := og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
-	if err != nil {
-		return "", err
-	}
+	// Only evaluate these if we know that the inserted values are sane, since
+	// we will need to evaluate generated expressions below.
+	uniqueConstraintViolation := false
+	foreignKeyViolation := false
+	if !anyInvalidInserts {
+		// Verify if the new row will violate unique constraints by checking the constraints and
+		// existing rows in the database.
+		var generatedErrors codesWithConditions
+		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, colNames, allColumns, rows)
+		if err != nil {
+			return "", err
+		}
+		if !uniqueConstraintViolation {
+			generatedErrors.add(og.expectedExecErrors)
+		}
 
-	// TODO(ajwerner): Errors can occur if computed columns are referenced. It's
-	// hard to classify all the ways this can cause problems. One source of
-	// problems is that the expression may overflow the width of a computed column
-	// that has a smaller width than the inputs.
+		// Verify if the new row will violate fk constraints by checking the constraints and rows
+		// in the database.
+		foreignKeyViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		if err != nil {
+			return "", err
+		}
+	}
 
 	codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
 		{code: pgcode.ForeignKeyViolation, condition: foreignKeyViolation},
 	}.add(og.expectedExecErrors)
 
-	formattedRows := []string{}
+	var formattedRows []string
 	for _, row := range rows {
 		formattedRows = append(formattedRows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
 	}
@@ -2369,23 +2348,43 @@ func (og *operationGenerator) validate(ctx context.Context, tx pgx.Tx) (string, 
 }
 
 type column struct {
-	name      string
-	typ       *types.T
-	nullable  bool
-	generated bool
+	name                string
+	typ                 *types.T
+	nullable            bool
+	generated           bool
+	generatedExpression string
 }
 
 func (og *operationGenerator) getTableColumns(
 	ctx context.Context, tx pgx.Tx, tableName string, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
-SELECT column_name,
-       data_type,
-       is_nullable,
-       generation_expression != '' AS is_generated
-  FROM [SHOW COLUMNS FROM %s];
+    WITH tab_json AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'desc',
+                            descriptor
+                           )->'table' AS t
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                  ),
+         columns_json AS (
+                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
+                      ),
+         columns AS (
+                  SELECT c->>'computeExpr' AS generation_expression,
+                         c->>'name' AS column_name
+                    FROM columns_json
+                 )
+  SELECT show_columns.column_name,
+         show_columns.data_type,
+         show_columns.is_nullable,
+         columns.generation_expression IS NOT NULL AS is_generated,
+         COALESCE(columns.generation_expression, '') as generated_expression
+    FROM [SHOW COLUMNS FROM %s] AS show_columns, columns
+   WHERE show_columns.column_name != 'rowid'
+         AND show_columns.column_name = columns.column_name
 `, tableName)
-	rows, err := tx.Query(ctx, q)
+	rows, err := tx.Query(ctx, q, tableName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
 	}
@@ -2395,7 +2394,7 @@ SELECT column_name,
 	for rows.Next() {
 		var c column
 		var typName string
-		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated)
+		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated, &c.generatedExpression)
 		if err != nil {
 			return nil, err
 		}
@@ -3062,22 +3061,4 @@ func (og *operationGenerator) typeFromTypeName(
 		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
-}
-
-// Check if the test is running with a mixed version cluster, with a version
-// less than or equal to the target version number. This can be used to detect
-// in mixed version environments if certain errors should be encountered.
-func isClusterVersionLessThan(
-	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
-) (bool, error) {
-	var clusterVersionStr string
-	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
-	if err := row.Scan(&clusterVersionStr); err != nil {
-		return false, err
-	}
-	clusterVersion, err := roachpb.ParseVersion(clusterVersionStr)
-	if err != nil {
-		return false, err
-	}
-	return clusterVersion.LessEq(targetVersion), nil
 }
