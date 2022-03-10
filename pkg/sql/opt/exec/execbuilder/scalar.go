@@ -114,7 +114,11 @@ func (b *Builder) buildTypedExpr(
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	return tree.ReType(tree.DNull, scalar.DataType()), nil
+	retypedNull, ok := tree.ReType(tree.DNull, scalar.DataType())
+	if !ok {
+		return nil, errors.AssertionFailedf("failed to retype NULL to %s", scalar.DataType())
+	}
+	return retypedNull, nil
 }
 
 func (b *Builder) buildVariable(
