@@ -1636,7 +1636,6 @@ func (l *lockState) tryActiveWait(
 				// would be more fair, but more complicated, and we expect that the
 				// common case is that this waiter will be at the end of the queue.
 				g.mu.startWait = true
-				g.mu.curLockWaitStart = timeProvider.Now()
 				state := waitForState
 				state.kind = waitQueueMaxLengthExceeded
 				g.mu.state = state
