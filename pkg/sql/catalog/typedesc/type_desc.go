@@ -947,6 +947,29 @@ func (desc *immutable) GetPostDeserializationChanges() catalog.PostDeserializati
 	return desc.changes
 }
 
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (desc *immutable) HasConcurrentSchemaChanges() bool {
+	if desc.DeclarativeSchemaChangerState == nil {
+		return false
+	}
+	if desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		return true
+	}
+	// Check if the set of elements include this descriptor, in which case
+	// some schema change is active. Enum related schema changes may not have
+	// job targets.
+	for _, t := range desc.DeclarativeSchemaChangerState.Targets {
+		if t.EnumType != nil &&
+			(t.EnumType.TypeID == desc.ID ||
+				t.EnumType.ArrayTypeID == desc.ID) &&
+			t.TargetStatus != scpb.Status_UNKNOWN {
+			return true
+		}
+		//TODO(fqazi): Deal with enum member additions / removals too in the future.
+	}
+	return false
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
