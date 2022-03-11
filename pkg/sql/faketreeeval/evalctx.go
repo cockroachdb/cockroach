@@ -278,6 +278,11 @@ func (*DummyEvalPlanner) RevalidateUniqueConstraint(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// ValidateTTLScheduledJobsInCurrentDB is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // ExecutorConfig is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil

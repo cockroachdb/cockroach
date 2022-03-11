@@ -44,6 +44,9 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
 statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
 
@@ -113,6 +116,9 @@ CREATE TABLE public.tbl (
    CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
    FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
 )
+
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]

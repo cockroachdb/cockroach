@@ -3030,6 +3030,8 @@ table. Returns an error if validation fails.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.validate_session_revival_token"></a><code>crdb_internal.validate_session_revival_token(token: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validate a token that was created by create_session_revival_token. Intended for testing.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.validate_ttl_scheduled_jobs"></a><code>crdb_internal.validate_ttl_scheduled_jobs() &rarr; void</code></td><td><span class="funcdesc"><p>Validate all TTL tables have a valid scheduled job attached.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.void_func"></a><code>crdb_internal.void_func() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
