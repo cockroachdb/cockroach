@@ -167,6 +167,22 @@ SHOW BACKUP '_' IN '_' -- literals removed
 SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
 
 parse
+SHOW BACKUP FILES 'foo' IN 'bar'
+----
+SHOW BACKUP FILES 'foo' IN 'bar'
+SHOW BACKUP FILES ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP FILES '_' IN '_' -- literals removed
+SHOW BACKUP FILES 'foo' IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP RANGES 'foo' IN 'bar'
+----
+SHOW BACKUP RANGES 'foo' IN 'bar'
+SHOW BACKUP RANGES ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP RANGES '_' IN '_' -- literals removed
+SHOW BACKUP RANGES 'foo' IN 'bar' -- identifiers removed
+
+parse
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
 ----
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
