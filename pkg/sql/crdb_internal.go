@@ -1396,10 +1396,10 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 	}}},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor,
 		addRow func(...tree.Datum) error) error {
-		// We only want to generate rows when an index constraint is provided on the
-		// query accessing this vtable. This index constraint will provide the
-		// trace_id for which we will collect inflight trace spans from the cluster.
-		return nil
+		// We refuse queries without an index constraint. This index constraint will
+		// provide the trace_id for which we will collect inflight trace spans from
+		// the cluster.
+		return pgerror.New(pgcode.FeatureNotSupported, "a trace_id value needs to be specified")
 	},
 }
 
