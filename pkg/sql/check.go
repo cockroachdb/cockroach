@@ -16,8 +16,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // validateCheckExpr verifies that the given CHECK expression returns true
@@ -575,6 +578,84 @@ func validateUniqueConstraint(
 			),
 		)
 	}
+	return nil
+}
+
+// ValidateTTLScheduledJobsInCurrentDB is part of the EvalPlanner interface.
+func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
+	dbName := p.CurrentDatabase()
+	log.Infof(ctx, "validating scheduled jobs in database %s", dbName)
+	db, err := p.Descriptors().GetImmutableDatabaseByName(
+		ctx, p.Txn(), dbName, tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db.GetID())
+	if err != nil {
+		return err
+	}
+
+	for _, tableDesc := range tableDescs {
+		if err = p.validateTTLScheduledJobInTable(ctx, tableDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTTLScheduledJobsInCurrentDB is part of the EvalPlanner interface.
+func (p *planner) validateTTLScheduledJobInTable(
+	ctx context.Context, tableDesc catalog.TableDescriptor,
+) error {
+	if !tableDesc.HasRowLevelTTL() {
+		return nil
+	}
+	ttl := tableDesc.GetRowLevelTTL()
+
+	execCfg := p.ExecCfg()
+	env := JobSchedulerEnv(execCfg)
+
+	sj, err := jobs.LoadScheduledJob(
+		ctx,
+		env,
+		ttl.ScheduleID,
+		execCfg.InternalExecutor,
+		p.txn,
+	)
+	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			return pgerror.Newf(
+				pgcode.Internal,
+				"table id %d maps to a non-existent scheduled job id %d",
+				tableDesc.GetID(),
+				ttl.ScheduleID,
+			)
+		}
+		return errors.Wrapf(err, "error fetching scheduled job %d for table id %d", ttl.ScheduleID, tableDesc.GetID())
+	}
+
+	var args catpb.ScheduledRowLevelTTLArgs
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, &args); err != nil {
+		return pgerror.Wrapf(
+			err,
+			pgcode.Internal,
+			"error unmarshalling scheduled jobs args for table id %d, schedule id %d",
+			tableDesc.GetID(),
+			ttl.ScheduleID,
+		)
+	}
+
+	if args.TableID != tableDesc.GetID() {
+		return pgerror.Newf(
+			pgcode.Internal,
+			"scheduled job id %d points to table id %d instead of table id %d",
+			ttl.ScheduleID,
+			args.TableID,
+			tableDesc.GetID(),
+		)
+	}
+
 	return nil
 }
 
