@@ -3498,6 +3498,77 @@ func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn))
 }
 
+func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		ptsInterval := 50 * time.Millisecond
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, ptsInterval)
+		changefeedbase.ActiveProtectedTimestampsEnabled.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, true)
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
+		defer closeFeed(t, foo)
+
+		fooDesc := catalogkv.TestingGetTableDescriptor(
+			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+		ptsProvider := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+
+		var tableID int
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables `+
+			`WHERE name = 'foo' AND database_name = current_database()`).
+			Scan(&tableID)
+
+		getTablePtsRecord := func() *ptpb.Record {
+			var r *ptpb.Record
+			require.NoError(t, ptsProvider.Refresh(context.Background(), f.Server().Clock().Now()))
+			ptsProvider.Iterate(context.Background(), tableSpan.Key, tableSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
+				r = record
+				return false
+			})
+
+			expectedKeys := map[string]struct{}{
+				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
+				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
+			}
+			require.Equal(t, len(r.Spans), len(expectedKeys))
+			for _, s := range r.Spans {
+				require.Contains(t, expectedKeys, string(s.Key))
+			}
+			return r
+		}
+
+		// Wait and return the next resolved timestamp after the wait time
+		waitAndDrainResolved := func(ts time.Duration) hlc.Timestamp {
+			targetTs := timeutil.Now().Add(ts)
+			for {
+				resolvedTs := expectResolvedTimestamp(t, foo)
+				if resolvedTs.GoTime().UnixNano() > targetTs.UnixNano() {
+					return resolvedTs
+				}
+			}
+		}
+
+		// Observe the protected timestamp advancing along with resolved timestamps
+		for i := 0; i < 5; i++ {
+			// Progress the changefeed and allow time for a pts record to be laid down
+			nextResolved := waitAndDrainResolved(100 * time.Millisecond)
+			time.Sleep(2 * ptsInterval)
+			rec := getTablePtsRecord()
+			require.LessOrEqual(t, nextResolved.GoTime().UnixNano(), rec.Timestamp.GoTime().UnixNano())
+		}
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
+	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
+}
+
 func TestChangefeedProtectedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
