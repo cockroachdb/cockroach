@@ -333,6 +333,11 @@ func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDes
 	return catalog.PostDeserializationChanges{}
 }
 
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (v TableImplicitRecordType) HasConcurrentSchemaChanges() bool {
+	return false
+}
+
 func (v TableImplicitRecordType) panicNotSupported(message string) {
 	panic(errors.AssertionFailedf("implicit table record type for table %q: not supported: %s", v.GetName(), message))
 }

@@ -180,7 +180,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		)
 	})
 
-	t.Run("wait for declarative schema changes", func(t *testing.T) {
+	t.Run("wait for declarative schema changes for tables", func(t *testing.T) {
 		// This test starts a declarative schema change job (job 1), and then starts
 		// another declarative schema change job (job 2) while job 1 is backfilling.
 		ctx := context.Background()
@@ -300,6 +300,192 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
 			},
 		)
+	})
+
+	t.Run("wait for declarative schema changes for schema", func(t *testing.T) {
+		// This test starts a declarative schema change job (job 1), and then starts
+		// another declarative schema change job (job 2) involving dropping schemas.
+		// Both of these jobs will need to concurrently touch the database descriptor.
+		ctx := context.Background()
+
+		var jobWaitForPostCommit sync.Once
+		var jobWaitBeforeWait sync.Once
+		// Closed when we're ready to continue with job 1.
+		job2StartExecution := make(chan struct{})
+		job2ContinueNotification := make(chan struct{})
+		completionCount := int32(0)
+
+		stmt1 := `DROP SCHEMA db.s1`
+		stmt2 := `DROP SCHEMA db.s2`
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					if p.Params.ExecutionPhase != scop.PostCommitPhase {
+						return nil
+					}
+					jobWaitForPostCommit.Do(func() {
+						job2StartExecution <- struct{}{}
+						job2ContinueNotification <- struct{}{}
+					})
+					return nil
+				},
+				BeforeWaitingForConcurrentSchemaChanges: func(stmts []string) {
+					if stmts[0] == stmt2 {
+						atomic.AddInt32(&completionCount, 1)
+						jobWaitBeforeWait.Do(func() {
+							<-job2ContinueNotification
+						})
+					}
+				},
+			},
+		}
+
+		var s serverutils.TestServerInterface
+		var sqlDB *gosql.DB
+		s, sqlDB, _ = serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t, `CREATE DATABASE db`)
+		tdb.Exec(t, `CREATE SCHEMA db.s1`)
+		tdb.Exec(t, `CREATE SCHEMA db.s2`)
+
+		g := ctxgroup.WithContext(ctx)
+
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := sqlDB.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			_, err = conn.ExecContext(ctx, `SET use_declarative_schema_changer = 'unsafe'`)
+			assert.NoError(t, err)
+			_, err = conn.ExecContext(ctx, stmt1)
+			assert.NoError(t, err)
+			return nil
+		})
+
+		<-job2StartExecution
+
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := sqlDB.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			_, err = conn.ExecContext(ctx, `SET use_declarative_schema_changer = 'unsafe'`)
+			assert.NoError(t, err)
+			_, err = conn.ExecContext(ctx, stmt2)
+			assert.NoError(t, err)
+			return nil
+		})
+
+		require.NoError(t, g.Wait())
+
+		tdb.CheckQueryResults(t,
+			fmt.Sprintf(`SELECT job_type, status FROM crdb_internal.jobs WHERE job_type = '%s' OR job_type = '%s' ORDER BY created`,
+				jobspb.TypeSchemaChange.String(), jobspb.TypeNewSchemaChange.String(),
+			),
+			[][]string{
+				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded)},
+				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded)},
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
+			},
+		)
+		// We should observe the schema change was tried at least twice.
+		require.GreaterOrEqual(t, atomic.LoadInt32(&completionCount), int32(1))
+	})
+	t.Run("wait for declarative schema changes for type", func(t *testing.T) {
+		// This test starts a declarative schema change job (job 1), and then starts
+		// another declarative schema change job (job 2) involving dropping tables.
+		// Both of these jobs will need to concurrently touch type descriptors.
+		ctx := context.Background()
+
+		var jobWaitForPostCommit sync.Once
+		var jobWaitBeforeWait sync.Once
+		// Closed when we're ready to continue with job 1.
+		job2StartExecution := make(chan struct{})
+		job2ContinueNotification := make(chan struct{})
+		completionCount := int32(0)
+
+		stmt1 := `DROP TABLE db.t1`
+		stmt2 := `DROP TABLE db.t2`
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					if p.Params.ExecutionPhase != scop.PostCommitPhase {
+						return nil
+					}
+					jobWaitForPostCommit.Do(func() {
+						job2StartExecution <- struct{}{}
+						job2ContinueNotification <- struct{}{}
+					})
+					return nil
+				},
+				BeforeWaitingForConcurrentSchemaChanges: func(stmts []string) {
+					if stmts[0] == stmt2 {
+						atomic.AddInt32(&completionCount, 1)
+						jobWaitBeforeWait.Do(func() {
+							<-job2ContinueNotification
+						})
+					}
+				},
+			},
+		}
+
+		var s serverutils.TestServerInterface
+		var sqlDB *gosql.DB
+		s, sqlDB, _ = serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t, `CREATE DATABASE db`)
+		tdb.Exec(t, `CREATE TYPE db.status AS ENUM ('open', 'closed', 'inactive');`)
+		tdb.Exec(t, `CREATE TABLE db.t1(t db.status)`)
+		tdb.Exec(t, `CREATE TABLE db.t2(t db.status)`)
+
+		g := ctxgroup.WithContext(ctx)
+
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := sqlDB.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			_, err = conn.ExecContext(ctx, `SET use_declarative_schema_changer = 'unsafe'`)
+			assert.NoError(t, err)
+			_, err = conn.ExecContext(ctx, stmt1)
+			assert.NoError(t, err)
+			return nil
+		})
+
+		<-job2StartExecution
+
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := sqlDB.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			_, err = conn.ExecContext(ctx, `SET use_declarative_schema_changer = 'unsafe'`)
+			assert.NoError(t, err)
+			_, err = conn.ExecContext(ctx, stmt2)
+			assert.NoError(t, err)
+			return nil
+		})
+
+		require.NoError(t, g.Wait())
+
+		tdb.CheckQueryResults(t,
+			fmt.Sprintf(`SELECT job_type, status FROM crdb_internal.jobs WHERE job_type = '%s' OR job_type = '%s' ORDER BY created`,
+				jobspb.TypeSchemaChange.String(), jobspb.TypeNewSchemaChange.String(),
+			),
+			[][]string{
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
+			},
+		)
+		// We should observe the schema change was tried at least twice.
+		require.GreaterOrEqual(t, atomic.LoadInt32(&completionCount), int32(1))
 	})
 }
 
