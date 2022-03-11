@@ -4673,8 +4673,15 @@ subtest variables
 ## commit/session; distsql, experimental_distsql_planning and vectorize as they
 ## depend on distsql and vectorization turned on/off. Also excluding
 ## use_declarative_schema_changer, which can be adjusted based on the mode.
+## Skipping enable_implicit_transaction_for_batch_statements since the default
+## value is a metamorphic constant.
+
 query TT colnames
-SELECT * FROM information_schema.session_variables where variable not in ('crdb_version', 'session_id', 'distsql', 'vectorize', 'experimental_distsql_planning', 'use_declarative_schema_changer')
+SELECT * FROM information_schema.session_variables where variable not in (
+  'crdb_version', 'session_id', 'distsql', 'vectorize',
+  'experimental_distsql_planning', 'use_declarative_schema_changer',
+  'enable_implicit_transaction_for_batch_statements'
+)
 ----
 variable                                              value
 allow_prepare_as_opt_plan                             off

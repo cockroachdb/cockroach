@@ -1,5 +1,10 @@
 # LogicTest: local
 
+# Since this setting is metamorphic, we configure it explicitly to make the
+# traces deterministic.
+statement ok
+SET enable_implicit_transaction_for_batch_statements = true
+
 # Prepare a trace to be inspected below.
 
 # TODO(yuzefovich): clean up the tracing in the vectorized engine and remove

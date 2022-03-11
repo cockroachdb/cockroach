@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1936,7 +1937,31 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(int64(tabledesc.MaxBucketAllowed), 10)
 		},
 	},
+	// CockroachDB extension.
+	`enable_implicit_transaction_for_batch_statements`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_transaction_for_batch_statements`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_implicit_transaction_for_batch_statements", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableImplicitTransactionForBatchStatements(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableImplicitTransactionForBatchStatements), nil
+		},
+		GlobalDefault: displayPgBool(defaultEnableImplicitTransactionForBatchStatements),
+	},
 }
+
+// This must be initialized outside of the varGen map declaration, so that it
+// is executed at init-time, and not when the GlobalDefault function is called
+// lazily.
+var defaultEnableImplicitTransactionForBatchStatements = util.ConstantWithMetamorphicTestBool(
+	"enable_implicit_transaction_for_batch_statements",
+	true, /* defaultValue */
+)
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 
