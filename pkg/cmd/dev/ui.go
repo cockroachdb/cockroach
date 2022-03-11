@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -36,6 +37,7 @@ func makeUICmd(d *dev) *cobra.Command {
 
 	uiCmd.AddCommand(makeUIWatchCmd(d))
 	uiCmd.AddCommand(makeUILintCmd(d))
+	uiCmd.AddCommand(makeUITestCmd(d))
 
 	return uiCmd
 }
@@ -218,7 +220,6 @@ Replaces 'make ui-lint'.`,
 				return err
 			}
 
-			// Build prerequisites for db-console and cluster-ui.
 			args := []string{
 				"test",
 				"//pkg/ui:lint",
@@ -247,4 +248,205 @@ Replaces 'make ui-lint'.`,
 	lintCmd.Flags().Bool(verboseFlag, false, "show all linter output")
 
 	return lintCmd
+}
+
+// arrangeFilesForTestWatchers moves files from Bazel's build output directory into the locations they'd be found during
+// a non-Bazel build, so that test watchers can successfully operate outside of the bazel sandbox.
+func arrangeFilesForTestWatchers(d *dev) error {
+	bazelBin, err := d.getBazelBin(d.cli.Context())
+	if err != nil {
+		return err
+	}
+
+	ossProtobufSrc := filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console")
+	cclProtobufSrc := filepath.Join(ossProtobufSrc, "ccl")
+
+	dstDirs, err := getUIDirs(d)
+	if err != nil {
+		return err
+	}
+	ossProtobufDst := dstDirs.dbConsole
+	cclProtobufDst := filepath.Join(ossProtobufDst, "ccl")
+
+	protoFiles := []string{
+		filepath.Join("src", "js", "protos.js"),
+		filepath.Join("src", "js", "protos.d.ts"),
+	}
+
+	// Delete and recreate protobuf client files that were previously copied out of the sandbox
+	for _, relPath := range protoFiles {
+		ossDst := filepath.Join(ossProtobufDst, relPath)
+		cclDst := filepath.Join(cclProtobufDst, relPath)
+		if err := d.os.Remove(ossDst); err != nil {
+			return err
+		}
+		if err := d.os.Remove(cclDst); err != nil {
+			return err
+		}
+
+		if err := d.os.CopyFile(filepath.Join(ossProtobufSrc, relPath), ossDst); err != nil {
+			return err
+		}
+		if err := d.os.CopyFile(filepath.Join(cclProtobufSrc, relPath), cclDst); err != nil {
+			return err
+		}
+	}
+
+	err = d.os.RemoveAll(filepath.Join(dstDirs.clusterUI, "dist"))
+	if err != nil {
+		return err
+	}
+
+	err = d.os.CopyAll(
+		filepath.Join(bazelBin, "pkg", "ui", "workspaces", "cluster-ui", "dist"),
+		filepath.Join(dstDirs.clusterUI, "dist"),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// makeUIWatchCmd initializes the 'ui test' subcommand, which runs unit tests for both db-console and cluster-ui.
+func makeUITestCmd(d *dev) *cobra.Command {
+	const (
+		// watchFlag is the name of the boolean long (GNU-style) flag that determines whether tests should be re-run when
+		// source files and test files change
+		watchFlag        = "watch"
+		verboseFlag      = "verbose"
+		streamOutputFlag = "stream-output"
+	)
+
+	testCmd := &cobra.Command{
+		Use:   "test",
+		Short: "Runs tests for UI subprojects",
+		Long: `Runs unit tests for db-console and cluster-ui, optionally setting up watchers to rerun those tests when files change.
+
+Replaces 'make ui-test' and 'make ui-test-watch'.`,
+		Args: cobra.MinimumNArgs(0),
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			isDebug, _ := cmd.PersistentFlags().GetBool("debug")
+
+			// Create a context that cancels when OS signals come in
+			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
+			defer stop()
+
+			isWatch, err := cmd.Flags().GetBool(watchFlag)
+			if err != nil {
+				return err
+			}
+
+			isVerbose, err := cmd.Flags().GetBool(verboseFlag)
+			if err != nil {
+				return err
+			}
+
+			isStreamOutput, err := cmd.Flags().GetBool(streamOutputFlag)
+			if err != nil {
+				return err
+			}
+
+			if isWatch {
+				// Build prerequisites for watch-mode only. Non-watch tests are run through bazel, so it'll take care of this
+				// for us.
+				args := []string{
+					"build",
+					"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				}
+				logCommand("bazel", args...)
+				err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+
+				if err != nil {
+					log.Fatalf("failed to build UI test prerequisites: %v", err)
+					return err
+				}
+
+				err = arrangeFilesForTestWatchers(d)
+				if err != nil {
+					// nolint:errwrap
+					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
+				}
+
+				err := d.ensureBinaryInPath("yarn")
+				if err != nil {
+					return err
+				}
+
+				dirs, err := getUIDirs(d)
+				if err != nil {
+					log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
+					return err
+				}
+
+				nbExec := d.exec.AsNonBlocking()
+
+				args = []string{
+					"--silent",
+					"--cwd",
+					dirs.dbConsole,
+					"karma:watch",
+				}
+
+				env := append(os.Environ(), "BAZEL_TARGET=fake")
+				logCommand("yarn", args...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "yarn", args...)
+				if err != nil {
+					// nolint:errwrap
+					return fmt.Errorf("unable to start db-console tests in watch mode: %+v", err)
+				}
+
+				args = []string{
+					"--silent",
+					"--cwd",
+					dirs.clusterUI,
+					"jest",
+					"--watch",
+				}
+				logCommand("yarn", args...)
+				env = append(os.Environ(), "BAZEL_TARGET=fake", "CI=1")
+				err = nbExec.CommandContextWithEnv(ctx, env, "yarn", args...)
+				if err != nil {
+					// nolint:errwrap
+					return fmt.Errorf("unable to start cluster-ui tests in watch mode: %+v", err)
+				}
+
+				// Wait for OS signals to cancel if we're not in test-mode
+				if !d.exec.IsDryrun() {
+					<-ctx.Done()
+				}
+			} else {
+				testOutputArg := d.getTestOutputArgs(
+					false, // stress
+					isVerbose,
+					false,                     // showLogs
+					isWatch || isStreamOutput, // streamOutput
+				)
+				args := append([]string{
+					"test",
+					"//pkg/ui/workspaces/db-console:karma",
+					"//pkg/ui/workspaces/cluster-ui:jest",
+				}, testOutputArg...)
+
+				if isDebug {
+					args = append(args, "--subcommands")
+				}
+
+				logCommand("bazel", args...)
+				err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
+	}
+
+	testCmd.Flags().Bool(watchFlag, false, "watch source and test files for changes and rerun tests")
+	testCmd.Flags().BoolP(verboseFlag, "v", false, "show all test results when tests complete")
+	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run (default: true with --watch)")
+
+	return testCmd
 }
