@@ -536,8 +536,8 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     statements_per_plan_hash: [
       {
         stats: {
-          count: new Long(5),
-          first_attempt_count: new Long(5),
+          count: new Long(3),
+          first_attempt_count: new Long(3),
           max_retries: new Long(0),
           legacy_last_err: "",
           legacy_last_err_redacted: "",
@@ -627,6 +627,100 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
         },
         explain_plan: "• virtual table\n  table: @primary",
         plan_hash: new Long(14192395335876201826),
+      },
+      {
+        stats: {
+          count: new Long(2),
+          first_attempt_count: new Long(2),
+          max_retries: new Long(0),
+          legacy_last_err: "",
+          legacy_last_err_redacted: "",
+          num_rows: {
+            mean: 6,
+            squared_diffs: 0,
+          },
+          parse_lat: {
+            mean: 0.0000876,
+            squared_diffs: 2.35792e-8,
+          },
+          plan_lat: {
+            mean: 0.008131,
+            squared_diffs: 0.00127640837,
+          },
+          run_lat: {
+            mean: 0.0002796,
+            squared_diffs: 2.401919999999999e-8,
+          },
+          service_lat: {
+            mean: 0.008522,
+            squared_diffs: 0.001298238058,
+          },
+          overhead_lat: {
+            mean: 0.000023799999999999972,
+            squared_diffs: 5.492799999999973e-9,
+          },
+          sensitive_info: {
+            last_err: "",
+            most_recent_plan_description: {
+              name: "virtual table",
+              attrs: [
+                {
+                  key: "Table",
+                  value: "node_build_info@primary",
+                },
+              ],
+              children: [],
+            },
+            most_recent_plan_timestamp: {
+              seconds: new Long(1614851546),
+              nanos: 956814000,
+            },
+          },
+          bytes_read: {
+            mean: 0,
+            squared_diffs: 0,
+          },
+          rows_read: {
+            mean: 0,
+            squared_diffs: 0,
+          },
+          rows_written: {
+            mean: 0,
+            squared_diffs: 0,
+          },
+          exec_stats: {
+            count: new Long(5),
+            network_bytes: {
+              mean: 0,
+              squared_diffs: 0,
+            },
+            max_mem_usage: {
+              mean: 10240,
+              squared_diffs: 0,
+            },
+            contention_time: {
+              mean: 0,
+              squared_diffs: 0,
+            },
+            network_messages: {
+              mean: 0,
+              squared_diffs: 0,
+            },
+            max_disk_usage: {
+              mean: 0,
+              squared_diffs: 0,
+            },
+          },
+          sql_type: "TypeDML",
+          last_exec_timestamp: {
+            seconds: Long.fromInt(1599670292),
+            nanos: 111613000,
+          },
+          nodes: [new Long(1)],
+          plan_gists: ["Ah0GAg=="],
+        },
+        explain_plan: "• virtual table\n  table: @primary\nFULL SCAN",
+        plan_hash: new Long(14192395335876212345),
       },
     ],
     internal_app_name_prefix: "$ internal",

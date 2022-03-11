@@ -135,25 +135,25 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	switch expr.Operator.Symbol {
 	case treebin.Plus:
 		if v.isNumericZero(right) {
-			final = ReType(left, expectedType)
+			final, _ = ReType(left, expectedType)
 			break
 		}
 		if v.isNumericZero(left) {
-			final = ReType(right, expectedType)
+			final, _ = ReType(right, expectedType)
 			break
 		}
 	case treebin.Minus:
 		if types.IsAdditiveType(left.ResolvedType()) && v.isNumericZero(right) {
-			final = ReType(left, expectedType)
+			final, _ = ReType(left, expectedType)
 			break
 		}
 	case treebin.Mult:
 		if v.isNumericOne(right) {
-			final = ReType(left, expectedType)
+			final, _ = ReType(left, expectedType)
 			break
 		}
 		if v.isNumericOne(left) {
-			final = ReType(right, expectedType)
+			final, _ = ReType(right, expectedType)
 			break
 		}
 		// We can't simplify multiplication by zero to zero,
@@ -161,11 +161,13 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		// the result must be NULL.
 	case treebin.Div, treebin.FloorDiv:
 		if v.isNumericOne(right) {
-			final = ReType(left, expectedType)
+			final, _ = ReType(left, expectedType)
 			break
 		}
 	}
 
+	// final is nil when the binary expression did not match the cases above,
+	// or when ReType was unsuccessful.
 	if final == nil {
 		return expr
 	}
@@ -710,7 +712,12 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 		if value == DNull {
 			// We don't want to return an expression that has a different type; cast
 			// the NULL if necessary.
-			return ReType(DNull, expr.(TypedExpr).ResolvedType())
+			retypedNull, ok := ReType(DNull, expr.(TypedExpr).ResolvedType())
+			if !ok {
+				v.err = errors.AssertionFailedf("failed to retype NULL to %s", expr.(TypedExpr).ResolvedType())
+				return expr
+			}
+			return retypedNull
 		}
 		return value
 	}
@@ -942,14 +949,23 @@ func init() {
 	DecimalOne.SetInt64(1)
 }
 
-// ReType ensures that the given expression evaluates
-// to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType *types.T) TypedExpr {
+// ReType ensures that the given expression evaluates to the requested type,
+// wrapping the expression in a cast if necessary. Returns ok=false if a cast
+// cannot wrap the expression because no valid cast from the expression's type
+// to the wanted type exists.
+func ReType(expr TypedExpr, wantedType *types.T) (_ TypedExpr, ok bool) {
 	resolvedType := expr.ResolvedType()
 	if wantedType.Family() == types.AnyFamily || resolvedType.Identical(wantedType) {
-		return expr
+		return expr, true
+	}
+	// TODO(#75103): For legacy reasons, we check for a valid cast in the most
+	// permissive context, CastContextExplicit. To be consistent with Postgres,
+	// we should check for a valid cast in the most restrictive context,
+	// CastContextImplicit.
+	if !ValidCast(resolvedType, wantedType, CastContextExplicit) {
+		return nil, false
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}
 	res.typ = wantedType
-	return res
+	return res, true
 }
