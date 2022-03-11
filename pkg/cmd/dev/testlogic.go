@@ -150,6 +150,12 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 			dir := getDirectoryFromTarget(testTarget)
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
+			if choice == "ccl" {
+				// The ccl logictest target shares the testdata directory with the base
+				// logictest target -- make an allowance explicitly for that.
+				args = append(args, fmt.Sprintf("--sandbox_writable_path=%s",
+					filepath.Join(workspace, "pkg/sql/logictest")))
+			}
 		}
 		if timeout > 0 && !stress {
 			args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
