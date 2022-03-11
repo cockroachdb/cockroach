@@ -79,8 +79,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
-					ctx, flowCtx, input[0], tc.inputTypes,
-					tc.expr, false /* canFallbackToRowexec */, testMemAcc,
+					ctx, flowCtx, input[0], tc.inputTypes, tc.expr, testMemAcc,
 				)
 			})
 	}
@@ -130,8 +129,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	typs := []*types.T{types.Int}
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	op, err := colexectestutils.CreateTestProjectingOperator(
-		ctx, flowCtx, source, typs,
-		"abs(@1)" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+		ctx, flowCtx, source, typs, "abs(@1)" /* projectingExpr */, testMemAcc,
 	)
 	require.NoError(b, err)
 	op.Init(ctx)
