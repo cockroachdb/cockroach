@@ -38,7 +38,6 @@ type rowLevelTTLExecutor struct {
 var _ jobs.ScheduledJobController = (*rowLevelTTLExecutor)(nil)
 
 type rowLevelTTLMetrics struct {
-	// TODO(#75189): add more useful metrics here
 	*jobs.ExecutorMetrics
 }
 
