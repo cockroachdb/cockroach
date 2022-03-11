@@ -339,7 +339,7 @@ describe("keyed cachedDataReducer", function() {
   });
 });
 
-describe.only("PaginatedCachedDataReducer", function() {
+describe("PaginatedCachedDataReducer", function() {
   class Request implements WithPaginationRequest {
     constructor(
       public request: string,
