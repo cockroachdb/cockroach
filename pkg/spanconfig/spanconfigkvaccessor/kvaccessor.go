@@ -71,7 +71,59 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 // GetSpanConfigRecords is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
+) ([]spanconfig.Record, error) {
+	if k.optionalTxn != nil {
+		return k.getSpanConfigRecordsWithTxn(ctx, targets, k.optionalTxn)
+	}
+
+	var records []spanconfig.Record
+	if err := k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		records, err = k.getSpanConfigRecordsWithTxn(ctx, targets, txn)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+// UpdateSpanConfigRecords is part of the KVAccessor interface.
+func (k *KVAccessor) UpdateSpanConfigRecords(
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
+) error {
+	if k.optionalTxn != nil {
+		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
+	}
+
+	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
+	})
+}
+
+func newKVAccessor(
+	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	settings *cluster.Settings,
+	configurationsTableFQN string,
+	optionalTxn *kv.Txn,
+) *KVAccessor {
+	return &KVAccessor{
+		db:                     db,
+		ie:                     ie,
+		optionalTxn:            optionalTxn,
+		settings:               settings,
+		configurationsTableFQN: configurationsTableFQN,
+	}
+}
+
+func (k *KVAccessor) getSpanConfigRecordsWithTxn(
+	ctx context.Context, targets []spanconfig.Target, txn *kv.Txn,
 ) (records []spanconfig.Record, retErr error) {
+	if txn == nil {
+		log.Fatalf(ctx, "expected non-nil txn")
+	}
+
 	if len(targets) == 0 {
 		return records, nil
 	}
@@ -80,7 +132,7 @@ func (k *KVAccessor) GetSpanConfigRecords(
 	}
 
 	getStmt, getQueryArgs := k.constructGetStmtAndArgs(targets)
-	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", k.optionalTxn,
+	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getStmt, getQueryArgs...,
 	)
@@ -117,35 +169,6 @@ func (k *KVAccessor) GetSpanConfigRecords(
 	return records, nil
 }
 
-// UpdateSpanConfigRecords is part of the KVAccessor interface.
-func (k *KVAccessor) UpdateSpanConfigRecords(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
-) error {
-	if k.optionalTxn != nil {
-		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
-	}
-
-	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
-	})
-}
-
-func newKVAccessor(
-	db *kv.DB,
-	ie sqlutil.InternalExecutor,
-	settings *cluster.Settings,
-	configurationsTableFQN string,
-	optionalTxn *kv.Txn,
-) *KVAccessor {
-	return &KVAccessor{
-		db:                     db,
-		ie:                     ie,
-		optionalTxn:            optionalTxn,
-		settings:               settings,
-		configurationsTableFQN: configurationsTableFQN,
-	}
-}
-
 func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record, txn *kv.Txn,
 ) error {
@@ -157,25 +180,9 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		return err
 	}
 
-	var deleteStmt string
-	var deleteQueryArgs []interface{}
 	if len(toDelete) > 0 {
-		deleteStmt, deleteQueryArgs = k.constructDeleteStmtAndArgs(toDelete)
-	}
+		deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDelete)
 
-	var upsertStmt, validationStmt string
-	var upsertQueryArgs, validationQueryArgs []interface{}
-	if len(toUpsert) > 0 {
-		var err error
-		upsertStmt, upsertQueryArgs, err = k.constructUpsertStmtAndArgs(toUpsert)
-		if err != nil {
-			return err
-		}
-
-		validationStmt, validationQueryArgs = k.constructValidationStmtAndArgs(toUpsert)
-	}
-
-	if len(toDelete) > 0 {
 		n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			deleteStmt, deleteQueryArgs...,
@@ -189,8 +196,12 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	}
 
 	if len(toUpsert) == 0 {
-		// Nothing left to do
-		return nil
+		return nil // nothing left to do
+	}
+
+	upsertStmt, upsertQueryArgs, err := k.constructUpsertStmtAndArgs(toUpsert)
+	if err != nil {
+		return err
 	}
 
 	if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
@@ -202,6 +213,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsert), n)
 	}
 
+	validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsert)
 	if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		validationStmt, validationQueryArgs...,
