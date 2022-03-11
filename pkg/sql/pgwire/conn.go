@@ -869,6 +869,7 @@ func (c *conn) handleSimpleQuery(
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
+				LastInBatch:  i == len(stmts)-1,
 			}); err != nil {
 			return err
 		}
