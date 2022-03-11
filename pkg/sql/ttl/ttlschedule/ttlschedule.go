@@ -196,11 +196,12 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
-	schedule *jobs.ScheduledJob,
+	descsCol *descs.Collection,
+	sj *jobs.ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
 	args := &catpb.ScheduledRowLevelTTLArgs{}
-	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -278,6 +279,7 @@ func (n *recordScheduleExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
@@ -507,6 +509,7 @@ func (e *returnErrorExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
@@ -690,6 +693,7 @@ func (e *txnConflictExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
@@ -878,6 +882,7 @@ func (e *blockUntilCancelledExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
