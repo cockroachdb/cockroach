@@ -366,20 +366,20 @@ func getStatementDetails(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	statementsPerAggregatedTs, err := getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit)
+	statementStatisticsPerAggregatedTs, err := getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	statementsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit)
+	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
 	response := &serverpb.StatementDetailsResponse{
-		Statement:                 statementTotal,
-		StatementsPerAggregatedTs: statementsPerAggregatedTs,
-		StatementsPerPlanHash:     statementsPerPlanHash,
-		InternalAppNamePrefix:     catconstants.InternalAppNamePrefix,
+		Statement:                          statementTotal,
+		StatementStatisticsPerAggregatedTs: statementStatisticsPerAggregatedTs,
+		StatementStatisticsPerPlanHash:     statementStatisticsPerPlanHash,
+		InternalAppNamePrefix:              catconstants.InternalAppNamePrefix,
 	}
 
 	return response, nil

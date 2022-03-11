@@ -2166,8 +2166,8 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false)
 		require.NoError(t, err)
 		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
-		require.Equal(t, expected.aggregatedTsCount, len(resp.StatementsPerAggregatedTs))
-		require.Equal(t, expected.planHashCount, len(resp.StatementsPerPlanHash))
+		require.Equal(t, expected.aggregatedTsCount, len(resp.StatementStatisticsPerAggregatedTs))
+		require.Equal(t, expected.planHashCount, len(resp.StatementStatisticsPerPlanHash))
 		require.Equal(t, expected.appNames, resp.Statement.AppNames)
 	}
 
