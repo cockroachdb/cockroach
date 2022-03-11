@@ -11,7 +11,10 @@
 package screl
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
@@ -43,12 +46,24 @@ func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 			// - the parent schema of an object has no back-references to it,
 			// - the parent database has back-references to a schema, but these
 			//   will be captured by the scpb.SchemaParent target.
+			if te.DescriptorID == 104 {
+				fmt.Println("HERE")
+			}
 			ids.Add(te.DescriptorID)
 		case *scpb.ObjectParent:
+			if te.ObjectID == 104 {
+				fmt.Println("HERE")
+			}
 			// Ignore the parent schema, it won't have back-references.
 			ids.Add(te.ObjectID)
 		default:
-			AllDescIDs(e).ForEach(ids.Add)
+			add := func(id descpb.ID) {
+				if id == 104 {
+					fmt.Println("HERE")
+				}
+				ids.Add(id)
+			}
+			AllDescIDs(e).ForEach(add)
 		}
 	}
 	return ids

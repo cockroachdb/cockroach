@@ -75,6 +75,10 @@ type BuilderState interface {
 	// Ensure ensures the presence of the given element in the BuilderState with
 	// the given statuses and metadata.
 	Ensure(current scpb.Status, target scpb.TargetStatus, elem scpb.Element, meta scpb.TargetMetadata)
+
+	// CheckNoConcurrentSchemaChange checks no concurrent schema change exists for
+	// a given descriptor ID.
+	CheckNoConcurrentSchemaChange(descID catid.DescID)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -180,10 +184,6 @@ type TableHelpers interface {
 		index *scpb.SecondaryIndex,
 		partBy *tree.PartitionBy,
 	) catpb.PartitioningDescriptor
-
-	// CheckNoConcurrentSchemaChanges panics if the underlying table is undergoing
-	// concurrent schema changes.
-	CheckNoConcurrentSchemaChanges(table *scpb.Table)
 
 	// ResolveTypeRef resolves a type reference.
 	ResolveTypeRef(typeref tree.ResolvableTypeReference) scpb.TypeT

@@ -86,6 +86,9 @@ func Build(
 		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
 		current = append(current, e.current)
 	}
+	// Ensure that no concurrent schema change are on going on any targets.
+	descSet := screl.AllTargetDescIDs(ts)
+	descSet.ForEach(b.CheckNoConcurrentSchemaChange)
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
 }
 

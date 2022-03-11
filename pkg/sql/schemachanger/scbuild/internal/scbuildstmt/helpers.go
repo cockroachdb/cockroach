@@ -65,6 +65,7 @@ func dropElement(b BuildCtx, e scpb.Element) {
 // dropCascadeDescriptor contains the common logic for dropping something with
 // CASCADE.
 func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
+	// Drop should be disallowed if concurrent schema changes exist.
 	undropped := b.QueryByID(id).Filter(func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
 		return target == scpb.ToPublic
 	})

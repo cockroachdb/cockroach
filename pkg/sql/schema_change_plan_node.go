@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -112,17 +111,15 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 					return err
 				}
-				table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,
-					tree.ObjectLookupFlags{
-						CommonLookupFlags: tree.CommonLookupFlags{
-							Required:    true,
-							AvoidLeased: true,
-						},
+				desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
+					tree.CommonLookupFlags{
+						Required:    true,
+						AvoidLeased: true,
 					})
 				if err != nil {
 					return err
 				}
-				blocked = catalog.HasConcurrentSchemaChanges(table)
+				blocked = desc.HasConcurrentSchemaChanges()
 				return nil
 			}); err != nil {
 			return err

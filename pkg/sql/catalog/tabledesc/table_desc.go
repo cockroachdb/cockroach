@@ -59,6 +59,13 @@ func (desc *wrapper) GetPostDeserializationChanges() catalog.PostDeserialization
 	return desc.changes
 }
 
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (desc *wrapper) HasConcurrentSchemaChanges() bool {
+	return (desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID) ||
+		len(desc.Mutations) > 0
+}
+
 // ActiveChecks implements the TableDescriptor interface.
 func (desc *wrapper) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 	checks := make([]descpb.TableDescriptor_CheckConstraint, len(desc.Checks))

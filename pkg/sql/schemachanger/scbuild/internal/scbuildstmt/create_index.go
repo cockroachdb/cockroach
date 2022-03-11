@@ -91,6 +91,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", n.Table.ObjectName))
 	}
+	// Ensure that no other schema change is occuring concurrently.
+	b.CheckNoConcurrentSchemaChange(index.TableID)
 	// Resolve the index name and make sure it doesn't exist yet.
 	{
 		indexElements := b.ResolveIndex(index.TableID, n.Name, ResolveParams{

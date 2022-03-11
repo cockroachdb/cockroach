@@ -947,6 +947,12 @@ func (desc *immutable) GetPostDeserializationChanges() catalog.PostDeserializati
 	return desc.changes
 }
 
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (desc *immutable) HasConcurrentSchemaChanges() bool {
+	return desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
