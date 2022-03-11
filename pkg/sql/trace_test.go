@@ -264,16 +264,17 @@ func TestTrace(t *testing.T) {
 	defer cluster.Stopper().Stop(context.Background())
 
 	clusterDB := cluster.ServerConn(0)
+	if _, err := clusterDB.Exec(`CREATE DATABASE test;`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := clusterDB.Exec(`
-		CREATE DATABASE test;
-
 		--- test.foo is a single range table.
 		CREATE TABLE test.foo (id INT PRIMARY KEY);
-
 		--- test.bar is a multi-range table.
-		CREATE TABLE test.bar (id INT PRIMARY KEY);
-		ALTER TABLE  test.bar SPLIT AT VALUES (5);
-	`); err != nil {
+		CREATE TABLE test.bar (id INT PRIMARY KEY);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := clusterDB.Exec(`ALTER TABLE  test.bar SPLIT AT VALUES (5);`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,6 +307,10 @@ func TestTrace(t *testing.T) {
 							pgURL, cleanup := sqlutils.PGUrl(
 								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(security.RootUser))
 							defer cleanup()
+							q := pgURL.Query()
+							// This makes it easier to test with the `tracing` sesssion var.
+							q.Add("enable_implicit_transaction_for_batch_statements", "false")
+							pgURL.RawQuery = q.Encode()
 							sqlDB, err := gosql.Open("postgres", pgURL.String())
 							if err != nil {
 								t.Fatal(err)
