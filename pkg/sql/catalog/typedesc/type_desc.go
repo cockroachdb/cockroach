@@ -972,6 +972,18 @@ func (desc *immutable) GetPostDeserializationChanges() catalog.PostDeserializati
 	return desc.changes
 }
 
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (desc *immutable) HasConcurrentSchemaChanges() bool {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		return true
+	}
+	// TODO(fqazi): In the future we may not have concurrent declarative schema
+	// changes without a job ID. So, we should scan the elements involved for
+	// types.
+	return false
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
