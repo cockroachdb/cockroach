@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // We ignore any limits that are higher than this value to avoid integer
@@ -123,4 +124,80 @@ func (s *SpansWithCopy) Reset() {
 	}
 	s.Spans = nil
 	s.SpansCopy = s.SpansCopy[:0]
+}
+
+// ljLimitHintIndex tracks how many times the caller has read LimitHint() number
+// of rows.
+type ljLimitHintIndex int
+
+const (
+	ljFirstBatch ljLimitHintIndex = iota
+	ljSecondBatch
+	ljLimitHintDisabled
+)
+
+// ljSecondBatchLimitHintFactor is a multiple used when determining the limit
+// hint for the second batch of rows. This will be used when the original limit
+// hint turned out to be insufficient to satisfy the query.
+const ljSecondBatchLimitHintFactor = 10
+
+// LookupJoinLimitHelper is used for lookup and index joins in order to limit
+// batches of input rows in the presence of hard and soft limits.
+type LookupJoinLimitHelper struct {
+	origLimitHint int64
+	// currentLimitHint of zero indicates that the limit hint is disabled.
+	currentLimitHint int64
+	limitHintIdx     ljLimitHintIndex
+}
+
+// MakeLookupJoinLimitHelper creates a new LookupJoinLimitHelper.
+func MakeLookupJoinLimitHelper(
+	specLimitHint int64, post *execinfrapb.PostProcessSpec,
+) LookupJoinLimitHelper {
+	limitHint := LimitHint(specLimitHint, post)
+	return LookupJoinLimitHelper{
+		origLimitHint:    limitHint,
+		currentLimitHint: limitHint,
+		limitHintIdx:     ljFirstBatch,
+	}
+}
+
+// LimitHint returns the current guess on the remaining rows that need to be
+// read. Zero is returned when the limit hint is disabled.
+func (h *LookupJoinLimitHelper) LimitHint() int64 {
+	return h.currentLimitHint
+}
+
+// ReadSomeRows notifies the helper that its user has fetched the specified
+// number of rows. An error is returned when the user fetched more rows than the
+// current limit hint.
+func (h *LookupJoinLimitHelper) ReadSomeRows(rowsRead int64) error {
+	if h.currentLimitHint != 0 {
+		h.currentLimitHint -= rowsRead
+		if h.currentLimitHint == 0 {
+			// Set up the limit hint for the next batch of input rows if the
+			// current batch turns out to be insufficient.
+			//
+			// If we just finished the first batch of rows, then use the
+			// original limit hint times ljSecondBatchLimitHintFactor. If we
+			// finished the second or any of the following batches, then we keep
+			// the limit hint as zero (i.e. disabled) since it appears that our
+			// original hint was either way off or many input rows result in
+			// lookup misses.
+			switch h.limitHintIdx {
+			case ljFirstBatch:
+				h.currentLimitHint = ljSecondBatchLimitHintFactor * h.origLimitHint
+				h.limitHintIdx = ljSecondBatch
+			default:
+				h.currentLimitHint = 0
+				h.limitHintIdx = ljLimitHintDisabled
+			}
+		} else if h.currentLimitHint < 0 {
+			return errors.AssertionFailedf(
+				"unexpectedly the user of LookupJoinLimitHelper read " +
+					"more rows that the current limit hint",
+			)
+		}
+	}
+	return nil
 }
