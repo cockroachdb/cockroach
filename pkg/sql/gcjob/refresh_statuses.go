@@ -159,7 +159,7 @@ func updateTableStatus(
 
 		deadlineNanos := tableDropTimes[t.ID] + ttlSeconds*time.Second.Nanoseconds()
 		deadline = timeutil.Unix(0, deadlineNanos)
-		if isProtected(ctx, protectedtsCache, tableDropTimes[t.ID], sp) {
+		if deprecatedIsProtected(ctx, protectedtsCache, tableDropTimes[t.ID], sp) {
 			log.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)
 			return deadline
 		}
@@ -209,7 +209,7 @@ func updateIndexesStatus(
 
 		deadlineNanos := indexDropTimes[idxProgress.IndexID] + int64(ttlSeconds)*time.Second.Nanoseconds()
 		deadline := timeutil.Unix(0, deadlineNanos)
-		if isProtected(ctx, protectedtsCache, indexDropTimes[idxProgress.IndexID], sp) {
+		if deprecatedIsProtected(ctx, protectedtsCache, indexDropTimes[idxProgress.IndexID], sp) {
 			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
 			continue
 		}
@@ -257,7 +257,7 @@ func getTableTTL(defTTL int32, zoneCfg *zonepb.ZoneConfig) int32 {
 // TODO(pbardea): If the TTL for this index/table expired and we're only blocked
 // on a protected timestamp, this may be useful information to surface to the
 // user.
-func isProtected(
+func deprecatedIsProtected(
 	ctx context.Context, protectedtsCache protectedts.Cache, atTime int64, sp roachpb.Span,
 ) bool {
 	protected := false
