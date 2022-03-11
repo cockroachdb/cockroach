@@ -19,6 +19,10 @@ type TestingKnobs struct {
 	// Errors returned are injected into the executor.
 	BeforeStage func(p scplan.Plan, stageIdx int) error
 
+	// AfterStage is invoked after all ops are executed.
+	// Errors returned are injected into the executor.
+	AfterStage func(p scplan.Plan, stageIdx int) error
+
 	// BeforeWaitingForConcurrentSchemaChanges is called at the start of waiting
 	// for concurrent schema changes to finish.
 	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
