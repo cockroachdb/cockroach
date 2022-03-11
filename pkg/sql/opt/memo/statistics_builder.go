@@ -3723,20 +3723,12 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		return singleColSelectivity, minLocalSel
 	}
 
-	// If the input distinct count is ~equal to the input row count, it won't
-	// be possible to accurately determine the FD_strength. Just return the
-	// single column selectivity.
-	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
-	if inputColStat.DistinctCount+epsilon >= inputStats.RowCount {
-		return singleColSelectivity, minLocalSel
-	}
-
 	// Otherwise, calculate the selectivity using multi-column stats from
 	// equation (2). See the comment above the function definition for details
 	// about the formula.
+	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
 	fdStrength := min(maxOldDistinct/inputColStat.DistinctCount, 1.0)
-	maxMutiColOldDistinct := min(oldDistinctProduct, inputStats.RowCount)
-	minFdStrength := min(maxOldDistinct/maxMutiColOldDistinct, fdStrength)
+	minFdStrength := min(maxOldDistinct/oldDistinctProduct, fdStrength)
 	if minFdStrength < 1 {
 		// Scale the fdStrength so it ranges between 0 and 1.
 		fdStrength = (fdStrength - minFdStrength) / (1 - minFdStrength)
@@ -3749,7 +3741,8 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	colStat.AvgSize = inputColStat.AvgSize
 	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
 
-	// multiColSelectivity must be at least as large as singleColSelectivity.
+	// multiColSelectivity must be at least as large as singleColSelectivity,
+	// since singleColSelectivity corresponds to equation (1).
 	multiColSelectivity = props.MaxSelectivity(multiColSelectivity, singleColSelectivity)
 
 	// Now, we must adjust multiColSelectivity so that it is not greater than
@@ -3782,6 +3775,11 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		})
 
 		if lowDistinctCountCols.Len() > 1 {
+			// Find the selectivity of the low distinct count columns to ensure that
+			// multiColSelectivity is lower (see above comment). Additionally,
+			// multiply by the selectivity of the other columns to differentiate
+			// between different plans that constrain different subsets of these
+			// columns.
 			selLowDistinctCountCols, _ := sb.selectivityFromMultiColDistinctCounts(
 				lowDistinctCountCols, e, s,
 			)
@@ -3796,9 +3794,12 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 
 	// As described in the function comment, we actually return a weighted sum
 	// of multi-column and single-column selectivity estimates.
-	return props.MakeSelectivity(
-			(1-multiColWeight)*singleColSelectivity.AsFloat() + multiColWeight*multiColSelectivity.AsFloat(),
-		),
+	//
+	// Use MaxSelectivity to handle floating point rounding errors.
+	w := multiColWeight
+	return props.MaxSelectivity(singleColSelectivity, props.MakeSelectivity(
+			(1-w)*singleColSelectivity.AsFloat()+w*multiColSelectivity.AsFloat(),
+		)),
 		minLocalSel
 }
 
@@ -3806,6 +3807,37 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // given set of columns, as indicated by multi-column stats. It is a number
 // between 0 and 1, where 0 means the columns are completely independent, and 1
 // means the columns are completely correlated.
+//
+// Note that this isn't the real correlation; that would require calculating the
+// correlation coefficient between pairs of columns during table stats
+// collection. Instead, this is just a proxy obtained by estimating three values
+// for the selectivity of the filter constraining the given columns:
+// 1. lb (lower bound): the value returned by multiplying the individual
+//    conjunct selectivities together, estimated from single-column distinct
+//    counts. This would be the selectivity of the entire predicate if the
+//    columns were completely independent.
+// 2. ub (upper bound): the lowest single-conjunct selectivity estimated from
+//    single-column distinct counts. This would be the selectivity of the entire
+//    predicate if the columns were completely correlated. In other words, this
+//    would be the selectivity if the value of the column with the most
+//    selective predicate functionally determined the value of all other
+//    constrained columns.
+// 3. mc (multi-column selectivity): the value returned by estimating the
+//    predicate selectivity with a combination of single-column and multi-column
+//    distinct counts. It falls somewhere between upper and lower bound, and
+//    thus approximates the level of correlation of the columns.
+//
+// The "correlation" returned by this function is thus:
+//   corr = (mc - lb) / (ub - lb)
+// where
+//   lb <= mc <= ub
+//
+// This value will be used to refine the selectivity estimate from single-column
+// histograms, which do not contain information about column correlations.
+//
+// TODO(rytaft): There's probably a way to do this directly from distinct counts
+// without first estimating selectivities, but I couldn't find a formula that
+// didn't result in a lot of bad plans.
 func (sb *statisticsBuilder) correlationFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
 ) float64 {
@@ -3976,9 +4008,7 @@ func (sb *statisticsBuilder) selectivityFromConstrainedCols(
 		constrainedCols.Difference(histCols), e, s,
 	)
 	selectivity.Multiply(selectivity2)
-	if histCols.Len() == 0 {
-		selectivityUpperBound = selectivityUpperBound2
-	}
+	selectivityUpperBound = props.MinSelectivity(selectivityUpperBound, selectivityUpperBound2)
 	selectivity.Add(props.MakeSelectivity(
 		correlation * (selectivityUpperBound.AsFloat() - selectivity.AsFloat()),
 	))
