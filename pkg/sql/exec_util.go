@@ -3174,6 +3174,10 @@ func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {
 	m.data.CostScansWithDefaultColSize = val
 }
 
+func (m *sessionDataMutator) SetEnableImplicitTransactionForBatchStatements(val bool) {
+	m.data.EnableImplicitTransactionForBatchStatements = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
