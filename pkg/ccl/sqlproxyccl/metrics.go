@@ -9,6 +9,7 @@
 package sqlproxyccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
@@ -29,6 +30,7 @@ type metrics struct {
 	ConnMigrationErrorFatalCount       *metric.Counter
 	ConnMigrationErrorRecoverableCount *metric.Counter
 	ConnMigrationAttemptedCount        *metric.Counter
+	ConnMigrationAttemptedLatency      *metric.Histogram
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -100,12 +102,6 @@ var (
 	// Connection migration metrics.
 	//
 	// attempted = success + error_fatal + error_recoverable
-	metaConnMigrationAttemptedCount = metric.Metadata{
-		Name:        "proxy.conn_migration.attempted",
-		Help:        "Number of attempted connection migrations",
-		Measurement: "Connection Migrations",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaConnMigrationSuccessCount = metric.Metadata{
 		Name:        "proxy.conn_migration.success",
 		Help:        "Number of successful connection migrations",
@@ -125,6 +121,18 @@ var (
 		Help:        "Number of failed connection migrations that were recoverable",
 		Measurement: "Connection Migrations",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationAttemptedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.attempted",
+		Help:        "Number of attempted connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationAttemptedLatency = metric.Metadata{
+		Name:        "proxy.conn_migration.attempted.latency",
+		Help:        "Latency histogram for attempted connection migrations",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 )
 
@@ -146,6 +154,10 @@ func makeProxyMetrics() metrics {
 		ConnMigrationErrorFatalCount:       metric.NewCounter(metaConnMigrationErrorFatalCount),
 		ConnMigrationErrorRecoverableCount: metric.NewCounter(metaConnMigrationErrorRecoverableCount),
 		ConnMigrationAttemptedCount:        metric.NewCounter(metaConnMigrationAttemptedCount),
+		ConnMigrationAttemptedLatency: metric.NewLatency(
+			metaConnMigrationAttemptedLatency,
+			base.DefaultHistogramWindowInterval(),
+		),
 	}
 }
 

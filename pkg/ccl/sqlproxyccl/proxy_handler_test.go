@@ -948,6 +948,8 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
 				f.metrics.ConnMigrationSuccessCount.Count(),
 			)
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
 		})
 
 		// Transfers should fail if there is an open transaction. These failed
@@ -995,6 +997,8 @@ func TestConnectionMigration(t *testing.T) {
 			require.NotEqual(t, initAddr, queryAddr(t, tCtx, db))
 			require.Equal(t, prevErrorRecoverableCount, f.metrics.ConnMigrationErrorRecoverableCount.Count())
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
 
 			// We have already asserted metrics above, so transfer must have
 			// been completed.
@@ -1022,6 +1026,8 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, initAddr, queryAddr(t, tCtx, db))
 			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
 
 			// We have already asserted metrics above, so transfer must have
 			// been completed.
@@ -1125,6 +1131,8 @@ func TestConnectionMigration(t *testing.T) {
 			return f.metrics.ConnMigrationErrorFatalCount.Count() == 1
 		}, 30*time.Second, 100*time.Millisecond)
 		require.NotNil(t, f.ctx.Err())
+		require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
 	})
 }
 

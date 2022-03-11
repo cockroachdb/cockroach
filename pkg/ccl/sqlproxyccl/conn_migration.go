@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -133,8 +134,11 @@ func (f *forwarder) runTransfer() (retErr error) {
 	// the context (with the span) gets cleaned up. Some ideas to fix this:
 	// (1) errgroup (?), (2) use the stopper instead of the go keyword - that
 	// should fork a new span, and avoid this issue.
+	tBegin := timeutil.Now()
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(f.ctx))
 	defer func() {
+		f.metrics.ConnMigrationAttemptedLatency.RecordValue(timeutil.Since(tBegin).Nanoseconds())
+
 		if !ctx.isRecoverable() {
 			log.Infof(logCtx, "transfer failed: connection closed, err=%v", retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
