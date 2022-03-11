@@ -5316,8 +5316,6 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			return nil, nil, err
 		}
 
-		stats.Size()
-
 		memSQLStats, err :=
 			sslocal.NewTempSQLStatsFromExistingTxnStats(stats.Transactions)
 		if err != nil {
@@ -5478,13 +5476,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     contending_key               BYTES NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		resp, err := p.extendedEvalCtx.SQLStatusServer.TransactionContentionEvents(
-			ctx, &serverpb.TransactionContentionEventsRequest{})
-
-		if err != nil {
-			return nil, nil, err
-		}
-
+		// Check permission first before making RPC fanout.
 		hasPermission, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -5507,6 +5499,22 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 			if err != nil {
 				return nil, nil, err
 			}
+		}
+
+		// Account for memory used by the RPC fanout.
+		acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+		defer acc.Close(ctx)
+
+		resp, err := p.extendedEvalCtx.SQLStatusServer.TransactionContentionEvents(
+			ctx, &serverpb.TransactionContentionEventsRequest{})
+
+		if err != nil {
+			return nil, nil, err
+		}
+
+		respSize := resp.Size()
+		if err = acc.Grow(ctx, int64(respSize)); err != nil {
+			return nil, nil, err
 		}
 
 		row := make(tree.Datums, 6 /* number of columns for this virtual table */)
