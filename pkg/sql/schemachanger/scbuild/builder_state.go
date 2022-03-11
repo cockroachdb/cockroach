@@ -276,17 +276,6 @@ func (b *builderState) SecondaryIndexPartitioningDescriptor(
 	return ret
 }
 
-// CheckNoConcurrentSchemaChanges implements the scbuildstmt.TableHelpers
-// interface.
-func (b *builderState) CheckNoConcurrentSchemaChanges(tbl *scpb.Table) {
-	b.ensureDescriptor(tbl.TableID)
-	desc, ok := b.descCache[tbl.TableID].desc.(catalog.TableDescriptor)
-	if !ok || !catalog.HasConcurrentSchemaChanges(desc) {
-		return
-	}
-	panic(scerrors.ConcurrentSchemaChangeError(desc))
-}
-
 // ResolveTypeRef implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) ResolveTypeRef(ref tree.ResolvableTypeReference) scpb.TypeT {
 	toType, err := tree.ResolveType(b.ctx, ref, b.cr)
@@ -767,7 +756,8 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 			}
 		}
 	case catalog.SchemaDescriptor:
-		db := b.readDescriptor(c.desc.GetParentID())
+		b.ensureDescriptor(c.desc.GetParentID())
+		db := b.descCache[c.desc.GetParentID()].desc
 		c.prefix.CatalogName = tree.Name(db.GetName())
 		c.prefix.ExplicitCatalog = true
 		// Handle special case of schema children, which have to be added to
@@ -778,10 +768,12 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 			c.backrefs.Add(objectID)
 		}
 	default:
-		db := b.readDescriptor(c.desc.GetParentID())
+		b.ensureDescriptor(c.desc.GetParentID())
+		db := b.descCache[c.desc.GetParentID()].desc
 		c.prefix.CatalogName = tree.Name(db.GetName())
 		c.prefix.ExplicitCatalog = true
-		sc := b.readDescriptor(c.desc.GetParentSchemaID())
+		b.ensureDescriptor(c.desc.GetParentSchemaID())
+		sc := b.descCache[c.desc.GetParentSchemaID()].desc
 		c.prefix.SchemaName = tree.Name(sc.GetName())
 		c.prefix.ExplicitSchema = true
 	}

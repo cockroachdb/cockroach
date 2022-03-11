@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -86,6 +88,15 @@ func Build(
 		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
 		current = append(current, e.current)
 	}
+	// Ensure that no concurrent schema change are on going on any targets.
+	descSet := screl.AllTargetDescIDs(ts)
+	descSet.ForEach(func(id descpb.ID) {
+		bs.ensureDescriptor(id)
+		desc := bs.descCache[id]
+		if desc != nil && desc.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(desc.desc))
+		}
+	})
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
 }
 
