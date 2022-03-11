@@ -517,10 +517,20 @@ message RangesRequest {
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
+  // The pagination limit to use, if set.
+  // NB: Pagination is based on ascending RangeID.
+  int32 limit = 3;
+  // The pagination offset to use, if set.
+  // NB: Pagination is based on ascending RangeID.
+  int32 offset = 4;
 }
 
 message RangesResponse {
   repeated RangeInfo ranges = 1 [ (gogoproto.nullable) = false ];
+  // The next pagination offset to use, if any results remain. A value of 0
+  // indicates no more results.
+  // NB: Pagination is based on ascending RangeID.
+  int32 next = 2;
 }
 
 message TenantRangesRequest {}

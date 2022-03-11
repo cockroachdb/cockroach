@@ -1853,7 +1853,10 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
-	resp, _, err := s.rangesHelper(ctx, req, 0, 0)
+	resp, next, err := s.rangesHelper(ctx, req, int(req.Limit), int(req.Offset))
+	if resp != nil {
+		resp.Next = int32(next)
+	}
 	return resp, err
 }
 
@@ -2045,7 +2048,7 @@ func (s *statusServer) rangesHelper(
 		return nil, 0, status.Errorf(codes.Internal, err.Error())
 	}
 	var next int
-	if len(req.RangeIDs) > 0 {
+	if limit > 0 {
 		var outputInterface interface{}
 		outputInterface, next = simplePaginate(output.Ranges, limit, offset)
 		output.Ranges = outputInterface.([]serverpb.RangeInfo)
