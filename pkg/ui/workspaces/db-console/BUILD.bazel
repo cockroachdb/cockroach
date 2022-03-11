@@ -1,4 +1,5 @@
 load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
+load("@npm//karma:index.bzl", "karma_test")
 load("@npm//stylint:index.bzl", "stylint")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 
@@ -16,6 +17,8 @@ DEV_DEPENDENCIES = [
     "@npm//@babel/preset-react",
     "@npm//@cockroachlabs/eslint-config",
     "@npm//@storybook/react",
+    "@npm//@testing-library/react",
+    "@npm//@testing-library/user-event",
     "@npm//@types/analytics-node",
     "@npm//@types/assert",
     "@npm//@types/bytebuffer",
@@ -76,7 +79,6 @@ DEV_DEPENDENCIES = [
     "@npm//html-webpack-template",
     "@npm//http-proxy-middleware",
     "@npm//jsdoc",
-    "@npm//karma",
     "@npm//karma-chai",
     "@npm//karma-chrome-launcher",
     "@npm//karma-mocha",
@@ -241,4 +243,60 @@ nodejs_binary(
         "$$(rlocation $(rootpath src))",
         "$$(rlocation $(rootpath ccl))",
     ],
+)
+
+SRC_NOT_PROTO_CLIENT = glob(
+    ["src/**"],
+    exclude = ["protos.*"],
+)
+
+CCL_NOT_PROTO_CLIENT = glob(
+    ["ccl/**"],
+    exclude = ["protos.*"],
+)
+
+KARMA_DEPS = [
+    ":node_modules",
+    ".babelrc",
+    ".eslintrc.json",
+    ".stylintrc",
+    "assets",
+    "favicon.ico",
+    "fonts",
+    "styl",
+    "tsconfig.json",
+    "webpack.app.js",
+    "karma.conf.js",
+    "tests-loader.js",
+    "//pkg/ui/workspaces/cluster-ui:cluster-ui",
+    "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+    "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+] + SRC_NOT_PROTO_CLIENT + CCL_NOT_PROTO_CLIENT + DEPENDENCIES
+
+karma_test(
+    name = "karma",
+    data = KARMA_DEPS,
+    templated_args = [
+        "start",
+        "$(execpath karma.conf.js)",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+karma_test(
+    name = "karma-watch",
+    data = KARMA_DEPS,
+    tags = [
+        # Reduce test startup times under ibazel by letting the karma process run between file changes
+        "ibazel_notify_changes",
+    ],
+    templated_args = [
+        "start",
+        "$(execpath karma.conf.js)",
+        # Reduce test startup times under ibazel by using the default karma watchers
+        "--auto-watch",
+        # Don't close the karma server after tests complete
+        "--no-single-run",
+    ],
+    visibility = ["//visibility:public"],
 )
