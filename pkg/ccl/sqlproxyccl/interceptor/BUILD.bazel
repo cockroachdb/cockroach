@@ -7,6 +7,7 @@ go_library(
         "base.go",
         "chunkreader.go",
         "frontend_conn.go",
+        "pg_conn.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor",
     visibility = ["//visibility:public"],
@@ -26,6 +27,7 @@ go_test(
         "chunkreader_test.go",
         "frontend_conn_test.go",
         "interceptor_test.go",
+        "pg_conn_test.go",
     ],
     embed = [":interceptor"],
     deps = [

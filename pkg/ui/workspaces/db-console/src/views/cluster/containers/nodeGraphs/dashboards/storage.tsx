@@ -182,21 +182,56 @@ export default function(props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Compactions/Flushes"
+      title="Flushes"
       sources={storeSources}
-      tooltip={`The number of compactions and memtable flushes per second ${tooltipSelection}.`}
+      tooltip={`Bytes written by memtable flushes ${tooltipSelection}.`}
     >
-      <Axis label="count">
-        <Metric
-          name="cr.store.rocksdb.compactions"
-          title="Compactions"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.store.rocksdb.flushes"
-          title="Flushes"
-          nonNegativeRate
-        />
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.flushed-bytes"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Compactions"
+      sources={storeSources}
+      tooltip={`Bytes written by compactions ${tooltipSelection}.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.compacted-bytes-written"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Ingestions"
+      sources={storeSources}
+      tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.ingested-bytes"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
