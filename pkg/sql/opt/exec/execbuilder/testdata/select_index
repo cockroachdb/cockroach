@@ -509,11 +509,11 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 111 (missing stats)
+│ estimated row count: 133 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 133 (missing stats)
     │ filter: c < 1
     │
     └── • scan
@@ -572,11 +572,11 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 111 (missing stats)
+│ estimated row count: 133 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 133 (missing stats)
     │ filter: c > 1
     │
     └── • scan
@@ -593,11 +593,11 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 111 (missing stats)
+│ estimated row count: 133 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 133 (missing stats)
     │ filter: c < 1
     │
     └── • scan
@@ -712,11 +712,11 @@ vectorized: true
 ·
 • project
 │ columns: (b)
-│ estimated row count: 0 (missing stats)
+│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 0 (missing stats)
+      estimated row count: 1 (missing stats)
       table: abcd@abcd
       spans: /1/4-/1/5 /2/9-/2/10
 
@@ -957,7 +957,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b, c, d)
-  estimated row count: 3 (missing stats)
+  estimated row count: 4 (missing stats)
   table: abcd@abcd
   spans: /NULL/6-/!NULL
 
@@ -969,7 +969,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b, c, d)
-  estimated row count: 3 (missing stats)
+  estimated row count: 4 (missing stats)
   table: abcd@abcd
   spans: /NULL/!NULL-/NULL/5
 
@@ -1416,7 +1416,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b, c, d)
-│ estimated row count: 9 (missing stats)
+│ estimated row count: 4 (missing stats)
 │ filter: (c > 0) AND (d = 8)
 │
 └── • scan
@@ -1622,7 +1622,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 1 (1.2% of the table; stats collected <hidden> ago)
+      estimated row count: 1 (1.4% of the table; stats collected <hidden> ago)
       table: t2@bc
       spans: /2/!NULL-/2/2 /2/3-/3
 

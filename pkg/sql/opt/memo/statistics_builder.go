@@ -3723,17 +3723,10 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		return singleColSelectivity, minLocalSel
 	}
 
-	// If the input distinct count is ~equal to the input row count, it won't
-	// be possible to accurately determine the FD_strength. Just return the
-	// single column selectivity.
-	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
-	if inputColStat.DistinctCount+epsilon >= inputStats.RowCount {
-		return singleColSelectivity, minLocalSel
-	}
-
 	// Otherwise, calculate the selectivity using multi-column stats from
 	// equation (2). See the comment above the function definition for details
 	// about the formula.
+	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
 	fdStrength := min(maxOldDistinct/inputColStat.DistinctCount, 1.0)
 	maxMutiColOldDistinct := min(oldDistinctProduct, inputStats.RowCount)
 	minFdStrength := min(maxOldDistinct/maxMutiColOldDistinct, fdStrength)
@@ -3749,7 +3742,8 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	colStat.AvgSize = inputColStat.AvgSize
 	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
 
-	// multiColSelectivity must be at least as large as singleColSelectivity.
+	// multiColSelectivity must be at least as large as singleColSelectivity,
+	// since singleColSelectivity corresponds to equation (1).
 	multiColSelectivity = props.MaxSelectivity(multiColSelectivity, singleColSelectivity)
 
 	// Now, we must adjust multiColSelectivity so that it is not greater than
@@ -3782,6 +3776,11 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		})
 
 		if lowDistinctCountCols.Len() > 1 {
+			// Find the selectivity of the low distinct count columns to ensure that
+			// multiColSelectivity is lower (see above comment). Additionally,
+			// multiply by the selectivity of the other columns to differentiate
+			// between different plans that constrain different subsets of these
+			// columns.
 			selLowDistinctCountCols, _ := sb.selectivityFromMultiColDistinctCounts(
 				lowDistinctCountCols, e, s,
 			)
@@ -3796,9 +3795,18 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 
 	// As described in the function comment, we actually return a weighted sum
 	// of multi-column and single-column selectivity estimates.
-	return props.MakeSelectivity(
-			(1-multiColWeight)*singleColSelectivity.AsFloat() + multiColWeight*multiColSelectivity.AsFloat(),
-		),
+	//
+	// If the input distinct count is ~equal to the input row count, the
+	// FD_strength calculated above is less accurate. Reduce the weight of
+	// multi-col stats accordingly. At a minimum, multi-column stats will be
+	// weighted (1 - multiColWeight).
+	w := multiColWeight
+	w = min(w, (1-w)+(inputStats.RowCount-inputColStat.DistinctCount)/inputStats.RowCount)
+
+	// Use MaxSelectivity to handle floating point rounding errors.
+	return props.MaxSelectivity(singleColSelectivity, props.MakeSelectivity(
+			(1-w)*singleColSelectivity.AsFloat()+w*multiColSelectivity.AsFloat(),
+		)),
 		minLocalSel
 }
 

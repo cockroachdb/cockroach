@@ -1356,7 +1356,7 @@ LIMIT 1] OFFSET 2
         │
         └── • group (streaming)
             │ columns: (b, count_rows)
-            │ estimated row count: 333,333
+            │ estimated row count: 333,332
             │ aggregate 0: count_rows()
             │ group by: b
             │ ordered: +b

@@ -101,13 +101,13 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 460.259997
+ ├── cost: 385.926667
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
- │    ├── stats: [rows=1666.667, distinct(1)=1666.67, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2]
- │    ├── cost: 460.049997
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2, distinct(1,2)=2000, null(1,2)=0, avgsize(1,2)=3]
+ │    ├── cost: 385.716667
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -115,10 +115,10 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
  │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0, avgsize(1)=1]
- │    │    ├── cost: 448.019998
+ │    │    ├── cost: 375.686667
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    └── limit hint: 400.00
+ │    │    └── limit hint: 333.33
  │    └── filters
  │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
  └── 20
@@ -132,14 +132,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 442.739807
+ ├── cost: 158.395172
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
- │    ├── stats: [rows=22.50001, distinct(1)=22.5, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2]
- │    ├── cost: 442.529807
+ │    ├── stats: [rows=65.25, distinct(1)=65.25, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2, distinct(1,2)=65.25, null(1,2)=0, avgsize(1,2)=3]
+ │    ├── cost: 158.185172
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -148,10 +148,10 @@ limit
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
  │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0, avgsize(1)=1]
- │    │    ├── cost: 438.009807
+ │    │    ├── cost: 153.665172
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    └── limit hint: 400.00
+ │    │    └── limit hint: 137.93
  │    └── filters
  │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
  └── 20
@@ -484,13 +484,13 @@ upsert t64570
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 5.09833333
+ ├── cost: 5.1035
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── stats: [rows=1]
-      ├── cost: 5.08833333
+      ├── cost: 5.0935
       ├── key: ()
       ├── fd: ()-->(6-11)
       ├── values
@@ -505,8 +505,8 @@ upsert t64570
       │    ├── columns: x:9!null y:10!null v:11
       │    ├── constraint: /9/10: [/10/10 - /10/10]
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=0.3333333, distinct(9)=0.333333, null(9)=0, avgsize(9)=4, distinct(10)=0.333333, null(10)=0, avgsize(10)=4]
-      │    ├── cost: 5.03
+      │    ├── stats: [rows=0.4, distinct(9)=0.4, null(9)=0, avgsize(9)=4, distinct(10)=0.4, null(10)=0, avgsize(10)=4, distinct(9,10)=0.4, null(9,10)=0, avgsize(9,10)=8]
+      │    ├── cost: 5.034
       │    ├── key: ()
       │    └── fd: ()-->(9-11)
       └── filters (true)
