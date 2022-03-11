@@ -19,15 +19,17 @@ SELECT id FROM system.namespace WHERE name='t2'
 
 splits database=db table=t1
 ----
-/Table/106
-/Table/106/1
-/Table/106/2
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  between end of 1st index and end of table
+= 3
 
 splits database=db table=t2
 ----
-/Table/107
-/Table/107/1
-/Table/107/2
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  between end of 1st index and end of table
+= 3
 
 exec-sql
 DROP TABLE db.t2;
@@ -36,3 +38,4 @@ DROP TABLE db.t2;
 # Dropped tables should not observe any splits.
 splits id=107
 ----
+= 0
