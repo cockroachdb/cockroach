@@ -89,7 +89,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			ds: ds{
 				JobID: 1,
 				Targets: []scpb.Target{
-					scpb.MakeTarget(scpb.ToPublic, &scpb.Namespace{
+					scpb.MakeTarget(scpb.InvalidTarget, &scpb.Namespace{
 						DatabaseID:   2,
 						SchemaID:     2,
 						DescriptorID: 3,
@@ -112,6 +112,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 				},
 			},
 			expectedErrors: []string{
+				prefix + ` target 0 is targeting an invalid status UNKNOWN`,
 				prefix + ` unexpected statement 0 \(ALTER TABLE a RENAME TO b\)`,
 				prefix + ` missing statement for targets \(0\) / \(Namespace:\{DescID: 3, Name: foo, ReferencedDescID: 2\}\)`,
 			},
