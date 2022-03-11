@@ -43,6 +43,7 @@ type OS struct {
 
 	knobs struct { // testing knobs
 		dryrun bool
+		silent bool
 	}
 }
 
@@ -98,12 +99,21 @@ func WithDryrun() func(e *OS) {
 	}
 }
 
+func (o *OS) disableLogging() {
+	o.knobs.silent = true
+}
+
+func (o *OS) enableLogging() {
+	o.knobs.silent = false
+}
+
 // MkdirAll wraps around os.MkdirAll, creating a directory named path, along
 // with any necessary parents.
 func (o *OS) MkdirAll(path string) error {
 	command := fmt.Sprintf("mkdir %s", path)
-	o.logger.Print(command)
-
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 	_, err := o.Next(command, func() (output string, err error) {
 		return "", os.MkdirAll(path, 0755)
 	})
@@ -113,7 +123,9 @@ func (o *OS) MkdirAll(path string) error {
 // Remove wraps around os.Remove, removing the named file or (empty) directory.
 func (o *OS) Remove(path string) error {
 	command := fmt.Sprintf("rm %s", path)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	_, err := o.Next(command, func() (output string, err error) {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -128,7 +140,9 @@ func (o *OS) Remove(path string) error {
 // named paths.
 func (o *OS) Symlink(to, from string) error {
 	command := fmt.Sprintf("ln -s %s %s", to, from)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	_, err := o.Next(command, func() (output string, err error) {
 		return "", os.Symlink(to, from)
@@ -140,7 +154,9 @@ func (o *OS) Symlink(to, from string) error {
 // variable named by the key.
 func (o OS) Getenv(key string) string {
 	command := fmt.Sprintf("getenv %s", key)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	output, err := o.Next(command, func() (output string, err error) {
 		return os.Getenv(key), nil
@@ -155,7 +171,9 @@ func (o OS) Getenv(key string) string {
 // variable named by the key. It returns an error, if any.
 func (o *OS) Setenv(key, value string) error {
 	command := fmt.Sprintf("export %s=%s", key, value)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	_, err := o.Next(command, func() (output string, err error) {
 		return "", os.Setenv(key, value)
@@ -167,7 +185,9 @@ func (o *OS) Setenv(key, value string) error {
 // symbolic link. If there is an error, it will be of type *PathError.
 func (o *OS) Readlink(filename string) (string, error) {
 	command := fmt.Sprintf("readlink %s", filename)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	return o.Next(command, func() (output string, err error) {
 		return os.Readlink(filename)
@@ -179,7 +199,9 @@ func (o *OS) Readlink(filename string) (string, error) {
 // If there is an error, it will be of type *PathError.
 func (o *OS) IsDir(dirname string) (bool, error) {
 	command := fmt.Sprintf("find %s -type d", dirname)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	output, err := o.Next(command, func() (output string, err error) {
 		// Do the real thing.
@@ -199,7 +221,9 @@ func (o *OS) IsDir(dirname string) (bool, error) {
 // returning the contents.
 func (o *OS) ReadFile(filename string) (string, error) {
 	command := fmt.Sprintf("cat %s", filename)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	return o.Next(command, func() (output string, err error) {
 		buf, err := ioutil.ReadFile(filename)
@@ -221,7 +245,9 @@ func (o *OS) WriteFile(filename, contents string) error {
 		}
 		command = fmt.Sprintf("echo %q > %s", strings.TrimSpace(commandContents), filename)
 	}
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	_, err := o.Next(command, func() (output string, err error) {
 		return "", ioutil.WriteFile(filename, []byte(contents), 0666)
@@ -237,7 +263,9 @@ func (o *OS) WriteFile(filename, contents string) error {
 // no-op if `src` is already a symlink to `dst`.
 func (o *OS) CopyFile(src, dst string) error {
 	command := fmt.Sprintf("cp %s %s", src, dst)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	_, err := o.Next(command, func() (output string, err error) {
 		srcFile, err := os.Open(src)
@@ -279,7 +307,9 @@ func (o *OS) CopyFile(src, dst string) error {
 // end in the given suffix.
 func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 	command := fmt.Sprintf("find %s -name *%s", root, suffix)
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	output, err := o.Next(command, func() (output string, err error) {
 		var ret []string
@@ -309,7 +339,9 @@ func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 // CurrentUserAndGroup returns the user and effective group.
 func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
 	command := "id"
-	o.logger.Print(command)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
 
 	output, err := o.Next(command, func() (output string, err error) {
 		current, err := user.Current()
