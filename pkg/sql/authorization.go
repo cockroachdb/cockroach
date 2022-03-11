@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -33,10 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // MembershipCache is a shared cache for role membership information.
@@ -46,12 +51,17 @@ type MembershipCache struct {
 	boundAccount mon.BoundAccount
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[security.SQLUsername]userRoleMembership
+	// populateCacheGroup ensures that there is at most one request in-flight
+	// for each key.
+	populateCacheGroup singleflight.Group
+	stopper            *stop.Stopper
 }
 
 // NewMembershipCache initializes a new MembershipCache.
-func NewMembershipCache(account mon.BoundAccount) *MembershipCache {
+func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *MembershipCache {
 	return &MembershipCache{
 		boundAccount: account,
+		stopper:      stopper,
 	}
 }
 
@@ -355,7 +365,7 @@ func MemberOfWithAdminOption(
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, ie, txn)
+		return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
 	}
 
 	// We loop in case the table version changes while we're looking up memberships.
@@ -381,10 +391,31 @@ func MemberOfWithAdminOption(
 			return userMapping, nil
 		}
 
-		// Lookup memberships outside the lock.
-		memberships, err := resolveMemberOfWithAdminOption(ctx, member, ie, txn)
-		if err != nil {
-			return nil, err
+		// Lookup memberships outside the lock, with at most one request in-flight
+		// for each user The role_memberships table versions is also part
+		// of the request key so that we don't read data from an old version
+		// of the table.
+		ch, _ := roleMembersCache.populateCacheGroup.DoChan(
+			fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
+			func() (interface{}, error) {
+				// Use a different context to fetch, so that it isn't possible for
+				// one query to timeout and cause all the goroutines that are waiting
+				// to get a timeout error.
+				loadCtx, cancel := roleMembersCache.stopper.WithCancelOnQuiesce(
+					logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+				defer cancel()
+				return resolveMemberOfWithAdminOption(loadCtx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+			},
+		)
+		var memberships map[security.SQLUsername]bool
+		select {
+		case res := <-ch:
+			if res.Err != nil {
+				return nil, res.Err
+			}
+			memberships = res.Val.(map[security.SQLUsername]bool)
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 
 		finishedLoop := func() bool {
@@ -405,7 +436,7 @@ func MemberOfWithAdminOption(
 			}
 			if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
 				// If there is no memory available to cache the entry, we can still
-				// proceed so that the query has a chance to succeed..
+				// proceed so that the query has a chance to succeed.
 				log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
 			} else {
 				roleMembersCache.userCache[member] = memberships
@@ -418,14 +449,56 @@ func MemberOfWithAdminOption(
 	}
 }
 
+var defaultSingleQueryForRoleMembershipCache = util.ConstantWithMetamorphicTestBool(
+	"resolve-membership-single-scan-enabled",
+	false, /* defaultValue */
+)
+
+var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
+	"sql.auth.resolve_membership_single_scan.enabled",
+	"determines whether to populate the role membership cache with a single scan",
+	defaultSingleQueryForRoleMembershipCache,
+).WithPublic()
+
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
-// TODO(mberhault): this is the naive way and performs a full lookup for each user,
-// we could save detailed memberships (as opposed to fully expanded) and reuse them
-// across users. We may then want to lookup more than just this user.
 func resolveMemberOfWithAdminOption(
-	ctx context.Context, member security.SQLUsername, ie sqlutil.InternalExecutor, txn *kv.Txn,
+	ctx context.Context,
+	member security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	singleQuery bool,
 ) (map[security.SQLUsername]bool, error) {
 	ret := map[security.SQLUsername]bool{}
+	if singleQuery {
+		type membership struct {
+			role    security.SQLUsername
+			isAdmin bool
+		}
+		memberToRoles := make(map[security.SQLUsername][]membership)
+		if err := forEachRoleMembership(ctx, ie, txn, func(role, member security.SQLUsername, isAdmin bool) error {
+			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		// Recurse through all roles associated with the member.
+		var recurse func(u security.SQLUsername)
+		recurse = func(u security.SQLUsername) {
+			for _, membership := range memberToRoles[u] {
+				// If the parent role was seen before, we still might need to update
+				// the isAdmin flag for that role, but there's no need to recurse
+				// through the role's ancestry again.
+				prev, alreadySeen := ret[membership.role]
+				ret[membership.role] = prev || membership.isAdmin
+				if !alreadySeen {
+					recurse(membership.role)
+				}
+			}
+		}
+		recurse(member)
+		return ret, nil
+	}
 
 	// Keep track of members we looked up.
 	visited := map[security.SQLUsername]struct{}{}

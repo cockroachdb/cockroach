@@ -1,7 +1,7 @@
 exp,benchmark
-15,AlterRole/alter_role_with_1_option
-16,AlterRole/alter_role_with_2_options
-21,AlterRole/alter_role_with_3_options
+14,AlterRole/alter_role_with_1_option
+15,AlterRole/alter_role_with_2_options
+20,AlterRole/alter_role_with_3_options
 15,AlterTableAddCheckConstraint/alter_table_add_1_check_constraint
 15,AlterTableAddCheckConstraint/alter_table_add_2_check_constraints
 15,AlterTableAddCheckConstraint/alter_table_add_3_check_constraints
@@ -50,8 +50,8 @@ exp,benchmark
 16,Grant/grant_all_on_1_table
 18,Grant/grant_all_on_2_tables
 20,Grant/grant_all_on_3_tables
-17,GrantRole/grant_1_role
-20,GrantRole/grant_2_roles
+13,GrantRole/grant_1_role
+15,GrantRole/grant_2_roles
 2,ORMQueries/activerecord_type_introspection_query
 2,ORMQueries/django_table_introspection_1_table
 2,ORMQueries/django_table_introspection_4_tables
@@ -72,8 +72,8 @@ exp,benchmark
 16,Revoke/revoke_all_on_1_table
 18,Revoke/revoke_all_on_2_tables
 20,Revoke/revoke_all_on_3_tables
-16,RevokeRole/revoke_1_role
-18,RevokeRole/revoke_2_roles
+13,RevokeRole/revoke_1_role
+15,RevokeRole/revoke_2_roles
 1,SystemDatabaseQueries/select_system.users_with_empty_database_Name
 1,SystemDatabaseQueries/select_system.users_with_schema_Name
 2,SystemDatabaseQueries/select_system.users_without_schema_Name
