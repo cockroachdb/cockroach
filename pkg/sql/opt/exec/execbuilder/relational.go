@@ -1628,7 +1628,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	needed, output := b.getColumns(cols, join.Table)
 	res := execPlan{outputCols: output}
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, tab, keyCols, needed, res.reqOrdering(join),
+		input.root, tab, keyCols, needed, res.reqOrdering(join), int(math.Ceil(join.RequiredPhysical().LimitHint)),
 	)
 	if err != nil {
 		return execPlan{}, err

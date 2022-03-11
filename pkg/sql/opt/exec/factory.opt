@@ -245,6 +245,7 @@ define IndexJoin {
     KeyCols []exec.NodeColumnOrdinal
     TableCols exec.TableColumnOrdinalSet
     ReqOrdering exec.OutputOrdering
+    LimitHint int
 }
 
 # LookupJoin performs a lookup join.

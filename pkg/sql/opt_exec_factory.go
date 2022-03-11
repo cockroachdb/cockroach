@@ -599,6 +599,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	limitHint int,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
@@ -620,6 +621,7 @@ func (ef *execFactory) ConstructIndexJoin(
 		cols:          cols,
 		resultColumns: colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
 		reqOrdering:   ReqOrdering(reqOrdering),
+		limitHint:     limitHint,
 	}
 
 	n.keyCols = make([]int, len(keyCols))

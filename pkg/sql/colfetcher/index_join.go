@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -34,6 +35,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+)
+
+var useIndexJoinLimitHint = settings.RegisterBoolSetting(
+	"sql.distsql.index_join_limit_hint.enabled",
+	"determines whether the limit hint is used by the index join for its input batching behavior",
+	false,
 )
 
 // ColIndexJoin operators are used to execute index joins (lookup joins that
@@ -57,6 +64,9 @@ type ColIndexJoin struct {
 	// because the size of input rows from which spans are generated is limited,
 	// and may not correspond to batch boundaries.
 	startIdx int
+
+	limitHint     int
+	origLimitHint int
 
 	mem struct {
 		// inputBatchSize tracks the size of the rows that have been used to
@@ -140,13 +150,30 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// Because index joins discard input rows, we do not have to maintain a
 				// reference to input tuples after span generation. So, we can discard
 				// the input batch reference on each iteration.
-				endIdx := s.findEndIndex(len(spans) > 0)
+				endIdx := s.findEndIndex(rowCount > 0)
+				if s.limitHint != 0 && rowCount+endIdx-s.startIdx > s.limitHint {
+					endIdx = s.startIdx + (s.limitHint - rowCount)
+				}
 				rowCount += endIdx - s.startIdx
 				s.spanAssembler.ConsumeBatch(s.batch, s.startIdx, endIdx)
 				s.startIdx = endIdx
+				if s.limitHint != 0 && s.limitHint == rowCount {
+					// Reached the limit hint.
+					break
+				}
 				if endIdx < s.batch.Length() {
 					// Reached the memory limit.
 					break
+				}
+			}
+			if s.limitHint != 0 {
+				s.limitHint -= rowCount
+				if s.limitHint == 0 {
+					// A hack to use the limit hint twice - in order to go
+					// around the eager fetching happening in the ordered
+					// synchronizer.
+					s.limitHint = s.origLimitHint
+					s.origLimitHint = 0
 				}
 			}
 			spans = s.spanAssembler.GetSpans()
@@ -455,6 +482,11 @@ func NewColIndexJoin(
 	spanAssembler := colexecspan.NewColSpanAssembler(
 		flowCtx.Codec(), allocator, table, index, inputTypes, neededColumns)
 
+	var limitHint int
+	if useIndexJoinLimitHint.Get(&flowCtx.EvalCtx.Settings.SV) {
+		limitHint = int(spec.IndexJoinLimitHint)
+	}
+
 	op := &ColIndexJoin{
 		OneInputNode:     colexecop.NewOneInputNode(input),
 		flowCtx:          flowCtx,
@@ -462,6 +494,8 @@ func NewColIndexJoin(
 		spanAssembler:    spanAssembler,
 		ResultTypes:      typs,
 		maintainOrdering: spec.MaintainOrdering,
+		limitHint:        limitHint,
+		origLimitHint:    limitHint,
 	}
 	op.prepareMemLimit(inputTypes)
 

@@ -415,6 +415,8 @@ message JoinReaderSpec {
   // used for lookups - it depends on whether the joiner decides it wants
   // DistSender-parallelism or not.
   optional int64 lookup_batch_bytes_limit = 18 [(gogoproto.nullable) = false];
+
+  optional int64 index_join_limit_hint = 19 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

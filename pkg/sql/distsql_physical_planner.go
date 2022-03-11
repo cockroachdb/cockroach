@@ -2223,14 +2223,15 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.AddProjection(pkCols, execinfrapb.Ordering{})
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
-		IndexIdx:          0,
-		Type:              descpb.InnerJoin,
-		Visibility:        n.table.colCfg.visibility,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
-		MaintainOrdering:  len(n.reqOrdering) > 0,
-		HasSystemColumns:  n.table.containsSystemColumns,
+		Table:              *n.table.desc.TableDesc(),
+		IndexIdx:           0,
+		Type:               descpb.InnerJoin,
+		Visibility:         n.table.colCfg.visibility,
+		LockingStrength:    n.table.lockingStrength,
+		LockingWaitPolicy:  n.table.lockingWaitPolicy,
+		MaintainOrdering:   len(n.reqOrdering) > 0,
+		HasSystemColumns:   n.table.containsSystemColumns,
+		IndexJoinLimitHint: int64(n.limitHint),
 	}
 
 	post := execinfrapb.PostProcessSpec{
