@@ -218,7 +218,7 @@ func TestProjectInInt64(t *testing.T) {
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					fmt.Sprintf("@1 %s", c.inClause), false /* canFallbackToRowexec */, testMemAcc,
+					fmt.Sprintf("@1 %s", c.inClause), testMemAcc,
 				)
 			})
 	}

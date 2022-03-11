@@ -53,7 +53,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
-				"@1 + 1" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+				"@1 + 1" /* projectingExpr */, testMemAcc,
 			)
 		})
 }
@@ -75,7 +75,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
-				"@1 + @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+				"@1 + @2" /* projectingExpr */, testMemAcc,
 			)
 		})
 }
@@ -97,7 +97,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
-				"@1 / @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+				"@1 / @2" /* projectingExpr */, testMemAcc,
 			)
 		})
 }
@@ -244,7 +244,7 @@ func TestRandomComparisons(t *testing.T) {
 			input := colexectestutils.NewChunkingBatchSource(testAllocator, typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
 			op, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input, []*types.T{typ, typ},
-				fmt.Sprintf("@1 %s @2", cmpOp), false /* canFallbackToRowexec */, testMemAcc,
+				fmt.Sprintf("@1 %s @2", cmpOp), testMemAcc,
 			)
 			require.NoError(t, err)
 			op.Init(ctx)
@@ -388,7 +388,7 @@ func BenchmarkProjOp(b *testing.B) {
 							expr = fmt.Sprintf("@1 %s 2", opInfixForm)
 						}
 						return colexectestutils.CreateTestProjectingOperator(
-							ctx, flowCtx, source, inputTypes, expr, false /* canFallbackToRowexec */, testMemAcc,
+							ctx, flowCtx, source, inputTypes, expr, testMemAcc,
 						)
 					}, inputTypes, useSel, hasNulls)
 				}

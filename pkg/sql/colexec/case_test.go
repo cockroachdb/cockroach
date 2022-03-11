@@ -87,8 +87,7 @@ func TestCaseOp(t *testing.T) {
 	} {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 			caseOp, err := colexectestutils.CreateTestProjectingOperator(
-				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr,
-				false /* canFallbackToRowexec */, testMemAcc,
+				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr, testMemAcc,
 			)
 			if err != nil {
 				return nil, err
@@ -182,8 +181,7 @@ func TestCaseOpRandomized(t *testing.T) {
 	input := execinfra.NewRepeatableRowSource(inputTypes, inputRows)
 	columnarizer := NewBufferingColumnarizer(testAllocator, flowCtx, 1 /* processorID */, input)
 	caseOp, err := colexectestutils.CreateTestProjectingOperator(
-		ctx, flowCtx, columnarizer, inputTypes, caseExpr,
-		false /* canFallbackToRowexec */, testMemAcc,
+		ctx, flowCtx, columnarizer, inputTypes, caseExpr, testMemAcc,
 	)
 	require.NoError(t, err)
 	// We will project out all input columns while keeping only the output
