@@ -276,7 +276,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [123 as T] WITH (expire_after = ...)
+ALTER TABLE test.public.tbl WITH (ttl = 'on', ...)
 
 statement ok
 DROP TABLE tbl
