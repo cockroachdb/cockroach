@@ -102,25 +102,25 @@ func (d *dummyVersionSettingImpl) Decode(val []byte) (settings.ClusterVersionImp
 	return &oldD, nil
 }
 
-func (d *dummyVersionSettingImpl) Validate(
+func (d *dummyVersionSettingImpl) ValidateVersionUpgrade(
 	ctx context.Context, sv *settings.Values, oldV, newV []byte,
-) ([]byte, error) {
+) error {
 	var oldD dummyVersion
 	if err := protoutil.Unmarshal(oldV, &oldD); err != nil {
-		return nil, err
+		return err
 	}
 
 	var newD dummyVersion
 	if err := protoutil.Unmarshal(newV, &newD); err != nil {
-		return nil, err
+		return err
 	}
 
 	// We have a new proposed update to the value, validate it.
 	if len(newD.growsbyone) != len(oldD.growsbyone)+1 {
-		return nil, errors.New("dashes component must grow by exactly one")
+		return errors.New("dashes component must grow by exactly one")
 	}
 
-	return newD.Marshal()
+	return nil
 }
 
 func (d *dummyVersionSettingImpl) ValidateBinaryVersions(
@@ -258,29 +258,29 @@ func TestCache(t *testing.T) {
 
 		growsTooFast := []byte("default.grows too fast")
 		curVal := []byte(mB.Encoded(sv))
-		if _, err := mB.Validate(ctx, sv, curVal, growsTooFast); !testutils.IsError(err,
+		if err := mB.Validate(ctx, sv, curVal, growsTooFast); !testutils.IsError(err,
 			"must grow by exactly one") {
 			t.Fatal(err)
 		}
 
 		hasDots := []byte("default.a.b.c")
-		if _, err := mB.Validate(ctx, sv, curVal, hasDots); !testutils.IsError(err,
+		if err := mB.Validate(ctx, sv, curVal, hasDots); !testutils.IsError(err,
 			"expected two parts") {
 			t.Fatal(err)
 		}
 
 		ab := []byte("default.ab")
-		if _, err := mB.Validate(ctx, sv, curVal, ab); err != nil {
+		if err := mB.Validate(ctx, sv, curVal, ab); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), ab); !testutils.IsError(err,
+		if err := mB.Validate(ctx, sv, []byte("takes.precedence"), ab); !testutils.IsError(err,
 			"must grow by exactly one") {
 			t.Fatal(err)
 		}
 
 		precedenceX := []byte("takes.precedencex")
-		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), precedenceX); err != nil {
+		if err := mB.Validate(ctx, sv, []byte("takes.precedence"), precedenceX); err != nil {
 			t.Fatal(err)
 		}
 

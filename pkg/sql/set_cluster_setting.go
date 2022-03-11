@@ -223,8 +223,14 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			// Stringify the value set by the statement for reporting in errors, logs etc.
 			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
 
-			var prev tree.Datum
-			_, isSetVersion := n.setting.(*settings.VersionSetting)
+			// Validate the input and convert it to the binary encoding.
+			encoded, err := toSettingString(ctx, n.st, n.name, n.setting, value)
+			expectedEncodedValue = encoded
+			if err != nil {
+				return err
+			}
+
+			verSetting, isSetVersion := n.setting.(*settings.VersionSetting)
 			if isSetVersion {
 				// In the special case of the 'version' cluster setting,
 				// we must first read the previous value to validate that the
@@ -237,6 +243,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
+				var prev tree.Datum
 				if len(datums) == 0 {
 					// There is a SQL migration which adds this value. If it
 					// hasn't run yet, we can't update the version as we don't
@@ -262,14 +269,16 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				} else {
 					prev = datums[0]
 				}
-			}
-			encoded, err := toSettingString(ctx, n.st, n.name, n.setting, value, prev)
-			expectedEncodedValue = encoded
-			if err != nil {
-				return err
-			}
 
-			if isSetVersion {
+				// Validate that the upgrade to the new version is valid.
+				dStr, ok := prev.(*tree.DString)
+				if !ok {
+					return errors.Errorf("the existing value is not a string, got %T", prev)
+				}
+				if err := verSetting.Validate(ctx, &n.st.SV, []byte(string(*dStr)), []byte(encoded)); err != nil {
+					return err
+				}
+
 				// Updates the version inside the system.settings table.
 				// If we are already at the target version, then this
 				// function is idempotent.
@@ -312,6 +321,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 					return err
 				}
 			} else {
+				// Modifying another setting than the version.
 				if _, err = execCfg.InternalExecutor.ExecEx(
 					ctx, "update-setting", txn,
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -476,7 +486,7 @@ func (n *setClusterSettingNode) Close(_ context.Context)        {}
 // prev: Only specified if the setting is a StateMachineSetting. Represents the
 //   current value of the setting, read from the system.settings table.
 func toSettingString(
-	ctx context.Context, st *cluster.Settings, name string, s settings.Setting, d, prev tree.Datum,
+	ctx context.Context, st *cluster.Settings, name string, s settings.Setting, d tree.Datum,
 ) (string, error) {
 	switch setting := s.(type) {
 	case *settings.StringSetting:
@@ -489,22 +499,11 @@ func toSettingString(
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.VersionSetting:
 		if s, ok := d.(*tree.DString); ok {
-			dStr, ok := prev.(*tree.DString)
-			if !ok {
-				return "", errors.Errorf("the existing value is not a string, got %T", prev)
-			}
-
-			prevRawVal := []byte(string(*dStr))
 			newRawVal, err := clusterversion.EncodingFromVersionStr(string(*s))
 			if err != nil {
 				return "", err
 			}
-
-			newBytes, err := setting.Validate(ctx, &st.SV, prevRawVal, newRawVal)
-			if err != nil {
-				return "", err
-			}
-			return string(newBytes), nil
+			return string(newRawVal), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.BoolSetting:
