@@ -2057,7 +2057,7 @@ func (s *statusServer) rangesHelper(
 }
 
 func (s *statusServer) TenantRanges(
-	ctx context.Context, _ *serverpb.TenantRangesRequest,
+	ctx context.Context, req *serverpb.TenantRangesRequest,
 ) (*serverpb.TenantRangesResponse, error) {
 	propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
@@ -2109,6 +2109,7 @@ func (s *statusServer) TenantRanges(
 	}
 
 	nodeResults := make([][]serverpb.RangeInfo, 0, len(replicaNodeIDs))
+	var next int
 	for nodeID := range replicaNodeIDs {
 		nodeIDString := nodeID.String()
 		_, local, err := s.parseNodeID(nodeIDString)
@@ -2116,14 +2117,16 @@ func (s *statusServer) TenantRanges(
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 
-		req := &serverpb.RangesRequest{
+		nodeReq := &serverpb.RangesRequest{
 			NodeId:   nodeIDString,
 			RangeIDs: rangeIDs,
+			Limit:    req.Limit,
+			Offset:   req.Offset,
 		}
 
 		var resp *serverpb.RangesResponse
 		if local {
-			resp, _, err = s.rangesHelper(ctx, req, 0, 0)
+			resp, next, err = s.rangesHelper(ctx, nodeReq, int(req.Limit), int(req.Offset))
 			if err != nil {
 				return nil, err
 			}
@@ -2133,7 +2136,7 @@ func (s *statusServer) TenantRanges(
 				return nil, serverError(ctx, err)
 			}
 
-			resp, err = statusServer.Ranges(ctx, req)
+			resp, err = statusServer.Ranges(ctx, nodeReq)
 			if err != nil {
 				return nil, err
 			}
@@ -2182,6 +2185,7 @@ func (s *statusServer) TenantRanges(
 
 	resp := &serverpb.TenantRangesResponse{
 		RangesByLocality: make(map[string]serverpb.TenantRangesResponse_TenantRangeList),
+		Next:             int32(next),
 	}
 
 	for _, rangeMetas := range nodeResults {
