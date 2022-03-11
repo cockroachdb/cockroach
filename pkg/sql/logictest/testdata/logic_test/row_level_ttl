@@ -70,6 +70,12 @@ WHERE label LIKE 'row-level-ttl-%'
 ----
 1
 
+let $schedule_id
+SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'
+
+statement error cannot drop a row level TTL schedule\nHINT: use ALTER TABLE test\.public\.tbl RESET \(ttl\) instead
+DROP SCHEDULE $schedule_id
+
 statement ok
 ALTER TABLE tbl SET (ttl_expire_after = '10 days')
 
