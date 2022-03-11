@@ -107,7 +107,6 @@
     "jest-environment-enzyme": "^7.1.2",
     "jest-enzyme": "^7.1.2",
     "jest-fetch-mock": "^3.0.3",
-    "jest-runner-eslint": "^1.0.0",
     "less": "^3.12.2",
     "less-loader": "^6.2.0",
     "long": "^4.0.0",
