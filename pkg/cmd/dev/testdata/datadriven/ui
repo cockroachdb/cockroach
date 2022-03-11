@@ -52,3 +52,30 @@ exec
 dev ui lint --verbose
 ----
 bazel test //pkg/ui:lint --test_output all
+
+exec
+dev ui test
+----
+bazel test //pkg/ui/workspaces/db-console:karma //pkg/ui/workspaces/cluster-ui:jest --test_output errors
+
+exec
+dev ui test --verbose
+----
+bazel test //pkg/ui/workspaces/db-console:karma //pkg/ui/workspaces/cluster-ui:jest --test_output all
+
+exec
+dev ui test test --watch
+----
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+bazel info bazel-bin --color=no
+bazel info workspace --color=no
+cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
+cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.js
+cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.d.ts
+cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
+rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
+cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
+which yarn
+bazel info workspace --color=no
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console karma:watch
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui jest --watch
