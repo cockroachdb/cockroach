@@ -126,12 +126,6 @@ Replaces 'make ui-watch'.`,
 			}
 			secure := mustGetFlagBool(cmd, secureFlag)
 
-			// `yarn` is required to be on a user's path, since it won't run via Bazel
-			err = d.ensureBinaryInPath("yarn")
-			if err != nil {
-				return err
-			}
-
 			dirs, err := getUIDirs(d)
 			if err != nil {
 				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
@@ -140,7 +134,10 @@ Replaces 'make ui-watch'.`,
 
 			// Start the cluster-ui watch task
 			nbExec := d.exec.AsNonBlocking()
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", "--silent", "--cwd", dirs.clusterUI, "build:watch")
+			argv := buildBazelYarnArgv(
+				"--silent", "--cwd", dirs.clusterUI, "build:watch",
+			)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "bazel", argv...)
 			if err != nil {
 				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
 				return err
@@ -170,8 +167,10 @@ Replaces 'make ui-watch'.`,
 				args = append(args, "--https")
 			}
 
+			argv = buildBazelYarnArgv(args...)
+
 			// Start the db-console web server + watcher
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "bazel", argv...)
 			if err != nil {
 				log.Fatalf("Unable to serve db-console: %v", err)
 				return err
@@ -353,11 +352,6 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
 				}
 
-				err := d.ensureBinaryInPath("yarn")
-				if err != nil {
-					return err
-				}
-
 				dirs, err := getUIDirs(d)
 				if err != nil {
 					log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
@@ -366,31 +360,31 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 
 				nbExec := d.exec.AsNonBlocking()
 
-				args = []string{
+				argv := buildBazelYarnArgv(
 					"--silent",
 					"--cwd",
 					dirs.dbConsole,
 					"karma:watch",
-				}
+				)
 
 				env := append(os.Environ(), "BAZEL_TARGET=fake")
 				logCommand("yarn", args...)
-				err = nbExec.CommandContextWithEnv(ctx, env, "yarn", args...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "bazel", argv...)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to start db-console tests in watch mode: %+v", err)
 				}
 
-				args = []string{
+				argv = buildBazelYarnArgv(
 					"--silent",
 					"--cwd",
 					dirs.clusterUI,
 					"jest",
 					"--watch",
-				}
+				)
 				logCommand("yarn", args...)
 				env = append(os.Environ(), "BAZEL_TARGET=fake", "CI=1")
-				err = nbExec.CommandContextWithEnv(ctx, env, "yarn", args...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "bazel", argv...)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to start cluster-ui tests in watch mode: %+v", err)
@@ -404,7 +398,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				testOutputArg := d.getTestOutputArgs(
 					isWatch || isStreamOutput,
 					isVerbose,
-					false,                     // showLogs
+					false, // showLogs
 				)
 				args := append([]string{
 					"test",
@@ -432,4 +426,15 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run (default: true with --watch)")
 
 	return testCmd
+}
+
+// buildBazelYarnArgv returns the provided argv formatted so it can be run with
+// the bazel-provided version of yarn via `d.exec.CommandContextWithEnv`, e.g.:
+//
+//     argv := buildBazelYarnArgv("--cwd", "/path/to/dir", "run", "some-target")
+//     d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
+func buildBazelYarnArgv(argv ...string) []string {
+	return append([]string{
+		"run", "@nodejs//:yarn", "--",
+	}, argv...)
 }
