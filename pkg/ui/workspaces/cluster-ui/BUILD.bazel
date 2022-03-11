@@ -1,4 +1,5 @@
 load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
+load("@npm//jest-cli:index.bzl", "jest_test", "jest")
 load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 load("@npm//@bazel/typescript:index.bzl", "ts_project")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
@@ -8,6 +9,7 @@ load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 #
 # Do not include following packages:
 # "@npm//@cockroachlabs/crdb-protobuf-client",
+# "@npm//jest" (added automatically by the jest rule)
 DEPENDENCIES = [
     "@npm//@bazel/typescript",
     "@npm//@babel/cli",
@@ -77,7 +79,6 @@ DEPENDENCIES = [
     "@npm//highlight.js",
     "@npm//http-proxy-middleware",
     "@npm//identity-obj-proxy",
-    "@npm//jest",
     "@npm//jest-environment-enzyme",
     "@npm//jest-enzyme",
     "@npm//jest-fetch-mock",
@@ -94,6 +95,7 @@ DEPENDENCIES = [
     "@npm//react-helmet",
     "@npm//react-popper",
     "@npm//react-redux",
+    "@npm//react-router-dom",
     "@npm//react-select",
     "@npm//react-test-renderer",
     "@npm//redux",
@@ -160,7 +162,6 @@ webpack(
         "$(execpath src/index.ts)",
         "--config",
         "$(execpath webpack.config.js)",
-        "--env.is_bazel_build",
         "--mode",
         "production",
         "-o $@",
@@ -209,4 +210,32 @@ nodejs_binary(
         "--format=codeframe",
         "$$(rlocation $(rootpath src))",
     ],
+)
+
+JEST_DEPS = DEPENDENCIES + [
+    ".jest",
+    ".eslintrc.json",
+    ".eslintignore",
+    "babel.config.js",
+    "package.json",
+    "enzyme.setup.js",
+    "jest.config.js",
+    "jest.testing.config.js",
+    "jest.lint.config.js",
+    "jest-runner-eslint.config.js",
+    "tsconfig.json",
+    "src",
+    "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+    "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+]
+
+jest_test(
+  name = "jest",
+  data = JEST_DEPS,
+  templated_args = [
+    "--runInBand",
+    "--ci",
+    "--config",
+    "$(rootpath jest.config.js)",
+  ],
 )

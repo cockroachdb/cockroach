@@ -8,6 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+const path = require("path");
+const isBazel = !!process.env.BAZEL_TARGET;
+
+
+const bazelOnlySettings = {
+  haste: {
+    // Platforms that include a POSIX-compatible `find` binary default to using it for test file
+    // discovery, but jest-haste-map's invocation of `find` doesn't include `-L` when node was
+    // started with `--preserve-symlinks`. This causes Jest to be unable to find test files when run
+    // via Bazel, which uses readonly symlinks for its build sandbox and launches node with
+    // `--presrve-symlinks`. Use jest's pure-node implementation instead, which respects
+    // `--preserve-symlinks`.
+    forceNodeFilesystemAPI: true,
+    enableSymlinks: true,
+  },
+  watchman: false,
+};
+
 module.exports = {
   displayName: "test",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
@@ -28,9 +46,10 @@ module.exports = {
   testRegex: "(/__tests__/.*|(\\.|/)(test|spec))\\.tsx?$",
   transform: {
     "^.+\\.tsx?$": "ts-jest",
-    "^.+\\.jsx?$": "babel-jest"
+    "^.+\\.jsx?$": ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(@cockroachlabs/crdb-protobuf-client)/)"
-  ]
+    "node_modules/(?!(.*crdb-protobuf-client.*))",
+  ],
+  ...( isBazel ? bazelOnlySettings : {} ),
 };
