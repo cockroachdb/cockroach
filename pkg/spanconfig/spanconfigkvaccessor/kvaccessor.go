@@ -13,12 +13,14 @@ package spanconfigkvaccessor
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -28,6 +30,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+)
+
+// batchSizeSetting is a hidden cluster setting to control how many span config
+// records we access in a single batch, beyond which we start paginating.
+// No limit enforced if set to zero (or something negative).
+var batchSizeSetting = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"spanconfig.kvaccessor.batch_size",
+	`number of span config records to access in a single batch`,
+	10000,
 )
 
 // KVAccessor provides read/write access to all the span configurations for a
@@ -45,19 +57,25 @@ type KVAccessor struct {
 	// configurationsTableFQN is typically 'system.public.span_configurations',
 	// but left configurable for ease-of-testing.
 	configurationsTableFQN string
+
+	knobs *spanconfig.TestingKnobs
 }
 
 var _ spanconfig.KVAccessor = &KVAccessor{}
 
 // New constructs a new KVAccessor.
 func New(
-	db *kv.DB, ie sqlutil.InternalExecutor, settings *cluster.Settings, configurationsTableFQN string,
+	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	settings *cluster.Settings,
+	configurationsTableFQN string,
+	knobs *spanconfig.TestingKnobs,
 ) *KVAccessor {
 	if _, err := parser.ParseQualifiedTableName(configurationsTableFQN); err != nil {
 		panic(fmt.Sprintf("unabled to parse configurations table FQN: %s", configurationsTableFQN))
 	}
 
-	return newKVAccessor(db, ie, settings, configurationsTableFQN, nil /* optionalTxn */)
+	return newKVAccessor(db, ie, settings, configurationsTableFQN, knobs, nil /* optionalTxn */)
 }
 
 // WithTxn is part of the KVAccessor interface.
@@ -65,7 +83,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	if k.optionalTxn != nil {
 		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?)")
 	}
-	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, txn)
+	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, k.knobs, txn)
 }
 
 // GetSpanConfigRecords is part of the KVAccessor interface.
@@ -106,66 +124,79 @@ func newKVAccessor(
 	ie sqlutil.InternalExecutor,
 	settings *cluster.Settings,
 	configurationsTableFQN string,
+	knobs *spanconfig.TestingKnobs,
 	optionalTxn *kv.Txn,
 ) *KVAccessor {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
 	return &KVAccessor{
 		db:                     db,
 		ie:                     ie,
 		optionalTxn:            optionalTxn,
 		settings:               settings,
 		configurationsTableFQN: configurationsTableFQN,
+		knobs:                  knobs,
 	}
 }
 
 func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 	ctx context.Context, targets []spanconfig.Target, txn *kv.Txn,
-) (records []spanconfig.Record, retErr error) {
+) ([]spanconfig.Record, error) {
 	if txn == nil {
 		log.Fatalf(ctx, "expected non-nil txn")
 	}
 
 	if len(targets) == 0 {
-		return records, nil
+		return nil, nil
 	}
 	if err := validateSpanTargets(targets); err != nil {
 		return nil, err
 	}
 
-	getStmt, getQueryArgs := k.constructGetStmtAndArgs(targets)
-	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		getStmt, getQueryArgs...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := it.Close(); closeErr != nil {
-			records, retErr = nil, errors.CombineErrors(retErr, closeErr)
-		}
-	}()
-
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		row := it.Cur()
-		span := roachpb.Span{
-			Key:    []byte(*row[0].(*tree.DBytes)),
-			EndKey: []byte(*row[1].(*tree.DBytes)),
-		}
-		var conf roachpb.SpanConfig
-		if err := protoutil.Unmarshal(([]byte)(*row[2].(*tree.DBytes)), &conf); err != nil {
-			return nil, err
-		}
-
-		record, err := spanconfig.MakeRecord(spanconfig.DecodeTarget(span), conf)
+	var records []spanconfig.Record
+	if err := k.paginate(len(targets), func(startIdx, endIdx int) (retErr error) {
+		targetsBatch := targets[startIdx:endIdx]
+		getStmt, getQueryArgs := k.constructGetStmtAndArgs(targetsBatch)
+		it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			getStmt, getQueryArgs...,
+		)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		records = append(records, record)
-	}
-	if err != nil {
+		defer func() {
+			if closeErr := it.Close(); closeErr != nil {
+				records, retErr = nil, errors.CombineErrors(retErr, closeErr)
+			}
+		}()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+			span := roachpb.Span{
+				Key:    []byte(*row[0].(*tree.DBytes)),
+				EndKey: []byte(*row[1].(*tree.DBytes)),
+			}
+			var conf roachpb.SpanConfig
+			if err := protoutil.Unmarshal(([]byte)(*row[2].(*tree.DBytes)), &conf); err != nil {
+				return err
+			}
+
+			record, err := spanconfig.MakeRecord(spanconfig.DecodeTarget(span), conf)
+			if err != nil {
+				return err
+			}
+			records = append(records, record)
+		}
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
+
 	return records, nil
 }
 
@@ -181,17 +212,22 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	}
 
 	if len(toDelete) > 0 {
-		deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDelete)
-
-		n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			deleteStmt, deleteQueryArgs...,
-		)
-		if err != nil {
+		if err := k.paginate(len(toDelete), func(startIdx, endIdx int) error {
+			toDeleteBatch := toDelete[startIdx:endIdx]
+			deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDeleteBatch)
+			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				deleteStmt, deleteQueryArgs...,
+			)
+			if err != nil {
+				return err
+			}
+			if n != len(toDeleteBatch) {
+				return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDeleteBatch), n)
+			}
+			return nil
+		}); err != nil {
 			return err
-		}
-		if n != len(toDelete) {
-			return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDelete), n)
 		}
 	}
 
@@ -199,31 +235,32 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		return nil // nothing left to do
 	}
 
-	upsertStmt, upsertQueryArgs, err := k.constructUpsertStmtAndArgs(toUpsert)
-	if err != nil {
-		return err
-	}
+	return k.paginate(len(toUpsert), func(startIdx, endIdx int) error {
+		toUpsertBatch := toUpsert[startIdx:endIdx]
+		upsertStmt, upsertQueryArgs, err := k.constructUpsertStmtAndArgs(toUpsertBatch)
+		if err != nil {
+			return err
+		}
+		if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			upsertStmt, upsertQueryArgs...,
+		); err != nil {
+			return err
+		} else if n != len(toUpsertBatch) {
+			return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsertBatch), n)
+		}
 
-	if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		upsertStmt, upsertQueryArgs...,
-	); err != nil {
-		return err
-	} else if n != len(toUpsert) {
-		return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsert), n)
-	}
-
-	validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsert)
-	if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		validationStmt, validationQueryArgs...,
-	); err != nil {
-		return err
-	} else if valid := bool(tree.MustBeDBool(datums[0])); !valid {
-		return errors.AssertionFailedf("expected to find single row containing upserted spans")
-	}
-
-	return nil
+		validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsertBatch)
+		if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			validationStmt, validationQueryArgs...,
+		); err != nil {
+			return err
+		} else if valid := bool(tree.MustBeDBool(datums[0])); !valid {
+			return errors.AssertionFailedf("expected to find single row containing upserted spans")
+		}
+		return nil
+	})
 }
 
 // constructGetStmtAndArgs constructs the statement and query arguments needed
@@ -496,6 +533,36 @@ func validateSpans(spans ...roachpb.Span) error {
 	for _, span := range spans {
 		if !span.Valid() || len(span.EndKey) == 0 {
 			return errors.AssertionFailedf("invalid span: %s", span)
+		}
+	}
+	return nil
+}
+
+// paginate is a helper method to paginate through a list with the batch size
+// controlled by the spanconfig.kvaccessor.batch_size setting. It invokes the
+// provided callback with the [start,end) indexes over the original list.
+func (k *KVAccessor) paginate(totalLen int, f func(startIdx, endIdx int) error) error {
+	batchSize := math.MaxInt32
+	if b := batchSizeSetting.Get(&k.settings.SV); int(b) > 0 {
+		batchSize = int(b) // check for overflow, negative or 0 value
+	}
+
+	if fn := k.knobs.KVAccessorBatchSizeOverrideFn; fn != nil {
+		batchSize = fn()
+	}
+
+	for i := 0; i < totalLen; i += batchSize {
+		j := i + batchSize
+		if j > totalLen {
+			j = totalLen
+		}
+
+		if fn := k.knobs.KVAccessorPaginationInterceptor; fn != nil {
+			fn()
+		}
+
+		if err := f(i, j); err != nil {
+			return err
 		}
 	}
 	return nil
