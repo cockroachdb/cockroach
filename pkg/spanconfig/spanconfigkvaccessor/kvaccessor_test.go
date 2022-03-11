@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDataDriven runs datadriven tests against the kvaccessor interface.
@@ -72,6 +74,7 @@ func TestDataDriven(t *testing.T) {
 			tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 			tc.Server(0).ClusterSettings(),
 			dummySpanConfigurationsFQN,
+			nil, /* knobs */
 		)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -102,4 +105,111 @@ func TestDataDriven(t *testing.T) {
 			return ""
 		})
 	})
+}
+
+func TestKVAccessorPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
+
+	var batches, batchSize int
+	accessor := spanconfigkvaccessor.New(
+		tc.Server(0).DB(),
+		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		tc.Server(0).ClusterSettings(),
+		dummySpanConfigurationsFQN,
+		&spanconfig.TestingKnobs{
+			KVAccessorPaginationInterceptor: func() {
+				batches++
+			},
+			KVAccessorBatchSizeOverrideFn: func() int {
+				return batchSize
+			},
+		},
+	)
+	const upsert10Confs = `
+upsert [a,b):X
+upsert [b,c):X
+upsert [c,d):X
+upsert [d,e):X
+upsert [e,f):X
+upsert [f,g):X
+upsert [g,h):X
+upsert [h,i):X
+upsert [i,j):X
+upsert [j,k):X
+`
+
+	const delete10Confs = `
+delete [a,b)
+delete [b,c)
+delete [c,d)
+delete [d,e)
+delete [e,f)
+delete [f,g)
+delete [g,h)
+delete [h,i)
+delete [i,j)
+delete [j,k)
+`
+	const get10Confs = `
+span [a,b)
+span [b,c)
+span [c,d)
+span [d,e)
+span [e,f)
+span [f,g)
+span [g,h)
+span [h,i)
+span [i,j)
+span [j,k)
+`
+	{ // Seed the accessor with 10 entries.
+		batches, batchSize = 0, 100
+		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.Equal(t, 1, batches)
+	}
+
+	{ // Lower the batch size, we should observe more batches.
+		batches, batchSize = 0, 2
+		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.Equal(t, 5, batches)
+	}
+
+	{ // Try another multiple, and with deletions.
+		batches, batchSize = 0, 5
+		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, delete10Confs)
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.Equal(t, 2, batches)
+	}
+
+	{ // Try a multiple that doesn't factor exactly (re-inserting original entries).
+		batches, batchSize = 0, 3
+		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.Equal(t, 4, batches)
+	}
+
+	{ // Try another multiple using both upserts and deletes.
+		batches, batchSize = 0, 4
+		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, delete10Confs+upsert10Confs)
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.Equal(t, 6, batches)
+	}
+
+	{ // Try another multiple but for gets.
+		batches, batchSize = 0, 6
+		targets := spanconfigtestutils.ParseKVAccessorGetArguments(t, get10Confs)
+		_, err := accessor.GetSpanConfigRecords(ctx, targets)
+		require.NoError(t, err)
+		require.Equal(t, 2, batches)
+	}
 }

@@ -49,6 +49,14 @@ type TestingKnobs struct {
 	// setting up a new store.
 	StoreKVSubscriberOverride KVSubscriber
 
+	// KVAccessorPaginationInterceptor, if set, is invoked on every pagination
+	// event.
+	KVAccessorPaginationInterceptor func()
+
+	// KVAccessorBatchSizeOverride overrides the batch size KVAccessor makes use
+	// of internally.
+	KVAccessorBatchSizeOverrideFn func() int
+
 	// SQLWatcherOnEventInterceptor, if set, is invoked when the SQLWatcher
 	// receives an event on one of its rangefeeds.
 	SQLWatcherOnEventInterceptor func() error
