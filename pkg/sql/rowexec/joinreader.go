@@ -217,6 +217,10 @@ type joinReader struct {
 	// used.
 	lookupBatchBytesLimit rowinfra.BytesLimit
 
+	// limitHintHelper is used in limiting batches of input rows in the presence
+	// of hard and soft limits.
+	limitHintHelper execinfra.LimitHintHelper
+
 	// scanStats is collected from the trace after we finish doing work for this
 	// join.
 	scanStats execinfra.ScanStats
@@ -316,6 +320,7 @@ func newJoinReader(
 		lockWaitPolicy:                    row.GetWaitPolicy(spec.LockingWaitPolicy),
 		usesStreamer:                      useStreamer,
 		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
+		limitHintHelper:                   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -754,6 +759,10 @@ func (jr *joinReader) readInput() (
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(encDatumRow))
+
+		if l := jr.limitHintHelper.LimitHint(); l != 0 && l == int64(len(jr.scratchInputRows)) {
+			break
+		}
 	}
 
 	if err := jr.performMemoryAccounting(); err != nil {
@@ -781,6 +790,11 @@ func (jr *joinReader) readInput() (
 
 	if jr.groupingState != nil && len(jr.scratchInputRows) > 0 {
 		jr.updateGroupingStateForNonEmptyBatch()
+	}
+
+	if err := jr.limitHintHelper.ReadSomeRows(int64(len(jr.scratchInputRows))); err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 
 	// Figure out what key spans we need to lookup.
