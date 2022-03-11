@@ -54,41 +54,46 @@ func TestSystemSpanConfigStoreCombine(t *testing.T) {
 	// Ten 20 -> Ten 20: 300
 	//
 	// Span config: 1
+	makeSpanConfigAddition := func(target spanconfig.Target, conf roachpb.SpanConfig) spanconfig.Update {
+		addition, err := spanconfig.Addition(target, conf)
+		require.NoError(t, err)
+		return addition
+	}
 
 	updates := []spanconfig.Update{
-		spanconfig.Addition(
+		makeSpanConfigAddition(
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
 			makeSystemSpanConfig(100),
 		),
-		spanconfig.Addition(spanconfig.MakeTargetFromSystemTarget(
+		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
 				t, roachpb.SystemTenantID, roachpb.SystemTenantID,
 			),
 		),
 			makeSystemSpanConfig(120),
 		),
-		spanconfig.Addition(spanconfig.MakeTargetFromSystemTarget(
+		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
 				t, roachpb.SystemTenantID, roachpb.MakeTenantID(10),
 			),
 		),
 			makeSystemSpanConfig(150),
 		),
-		spanconfig.Addition(spanconfig.MakeTargetFromSystemTarget(
+		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
 				t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10),
 			),
 		),
 			makeSystemSpanConfig(200),
 		),
-		spanconfig.Addition(spanconfig.MakeTargetFromSystemTarget(
+		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
 				t, roachpb.MakeTenantID(20), roachpb.MakeTenantID(20),
 			),
 		),
 			makeSystemSpanConfig(300),
 		),
-		spanconfig.Addition(spanconfig.MakeTargetFromSystemTarget(
+		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
 				t, roachpb.SystemTenantID, roachpb.MakeTenantID(30),
 			),

@@ -1283,7 +1283,11 @@ func ValidCast(src, tgt *types.T, ctx CastContext) bool {
 
 	// If src and tgt are tuple types, check for a valid cast between each
 	// corresponding tuple element.
-	if srcFamily == types.TupleFamily && tgtFamily == types.TupleFamily {
+	//
+	// Casts from a tuple type to AnyTuple are a no-op so they are always valid.
+	// If tgt is AnyTuple, we continue to lookupCast below which contains a
+	// special case for these casts.
+	if srcFamily == types.TupleFamily && tgtFamily == types.TupleFamily && tgt != types.AnyTuple {
 		srcTypes := src.TupleContents()
 		tgtTypes := tgt.TupleContents()
 		// The tuple types must have the same number of elements.
@@ -1371,6 +1375,15 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 	if srcFamily == types.TupleFamily && tgtFamily == types.StringFamily {
 		return cast{
 			maxContext: CastContextAssignment,
+			volatility: VolatilityImmutable,
+		}, true
+	}
+
+	// Casts from any tuple type to AnyTuple are no-ops, so they are implicit
+	// and immutable.
+	if srcFamily == types.TupleFamily && tgt == types.AnyTuple {
+		return cast{
+			maxContext: CastContextImplicit,
 			volatility: VolatilityImmutable,
 		}, true
 	}
