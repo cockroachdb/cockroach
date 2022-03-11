@@ -5701,6 +5701,16 @@ show_backup_stmt:
       Options: $5.kvOptions(),
     }
   }
+| SHOW BACKUP SCHEMAS string_or_placeholder IN string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+			Details: tree.BackupDefaultDetails,
+			ShouldIncludeSchemas: true,
+			Path:    $4.expr(),
+			InCollection: $6.expr(),
+			Options: $7.kvOptions(),
+		}
+	}
 | SHOW BACKUP RANGES string_or_placeholder opt_with_options
   {
     /* SKIP DOC */
@@ -5709,6 +5719,16 @@ show_backup_stmt:
       Path:    $4.expr(),
       Options: $5.kvOptions(),
     }
+  }
+| SHOW BACKUP RANGES string_or_placeholder IN string_or_placeholder opt_with_options
+  {
+		/* SKIP DOC */
+		$$.val = &tree.ShowBackup{
+			Details: tree.BackupRangeDetails,
+			Path:    $4.expr(),
+			InCollection: $6.expr(),
+			Options: $7.kvOptions(),
+		}
   }
 | SHOW BACKUP FILES string_or_placeholder opt_with_options
   {
@@ -5719,6 +5739,16 @@ show_backup_stmt:
       Options: $5.kvOptions(),
     }
   }
+| SHOW BACKUP FILES string_or_placeholder IN string_or_placeholder opt_with_options
+	{
+		/* SKIP DOC */
+		$$.val = &tree.ShowBackup{
+			Details: tree.BackupFileDetails,
+			Path:    $4.expr(),
+			InCollection: $6.expr(),
+			Options: $7.kvOptions(),
+		}
+	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
