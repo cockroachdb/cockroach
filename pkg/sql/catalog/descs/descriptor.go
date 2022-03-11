@@ -125,21 +125,48 @@ func (tc *Collection) getDescriptorsByID(
 		}
 	}
 
-	kvIDs := make([]descpb.ID, 0, len(ids))
+	remainingIDs := make([]descpb.ID, 0, len(ids))
 	indexes := make([]int, 0, len(ids))
 	for i, id := range ids {
 		if descs[i] != nil {
 			continue
 		}
-		kvIDs = append(kvIDs, id)
+		remainingIDs = append(remainingIDs, id)
 		indexes = append(indexes, i)
 	}
-	if len(kvIDs) == 0 {
+	if len(remainingIDs) == 0 {
 		// No KV lookup necessary, return early.
 		return descs, nil
 	}
-	kvDescs, err := tc.withReadFromStore(flags.RequireMutable, func() ([]catalog.MutableDescriptor, error) {
-		return tc.kv.getByIDs(ctx, txn, tc.version, kvIDs)
+	kvDescs, err := tc.withReadFromStore(flags.RequireMutable, func() ([]catalog.Descriptor, error) {
+		ret := make([]catalog.Descriptor, len(remainingIDs))
+		// Try to re-use any unvalidated descriptors we may have.
+		kvIDs := make([]descpb.ID, 0, len(remainingIDs))
+		kvIndexes := make([]int, 0, len(remainingIDs))
+		for i, id := range remainingIDs {
+			if imm, status := tc.uncommitted.getImmutableByID(id); imm != nil && status == notValidatedYet {
+				err := tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, imm)
+				if err != nil {
+					return nil, err
+				}
+				ret[i] = imm
+				continue
+			}
+			kvIDs = append(kvIDs, id)
+			kvIndexes = append(kvIndexes, i)
+		}
+		// Read all others from the store.
+		if len(kvIDs) > 0 {
+			vd := tc.newValidationDereferencer(txn)
+			kvDescs, err := tc.kv.getByIDs(ctx, tc.version, txn, vd, kvIDs)
+			if err != nil {
+				return nil, err
+			}
+			for k, imm := range kvDescs {
+				ret[kvIndexes[k]] = imm
+			}
+		}
+		return ret, nil
 	})
 	if err != nil {
 		return nil, err
@@ -179,8 +206,8 @@ func (q *byIDLookupContext) lookupSynthetic(id descpb.ID) (catalog.Descriptor, e
 }
 
 func (q *byIDLookupContext) lookupUncommitted(id descpb.ID) (_ catalog.Descriptor, err error) {
-	ud := q.tc.uncommitted.getByID(id)
-	if ud == nil {
+	ud, status := q.tc.uncommitted.getImmutableByID(id)
+	if ud == nil || status == notValidatedYet {
 		return nil, nil
 	}
 	log.VEventf(q.ctx, 2, "found uncommitted descriptor %d", id)
@@ -291,21 +318,22 @@ func (tc *Collection) getByName(
 	}
 
 	var descs []catalog.Descriptor
-	descs, err = tc.withReadFromStore(mutable, func() ([]catalog.MutableDescriptor, error) {
-		uncommittedDB, _ := tc.uncommitted.getByID(parentID).(catalog.DatabaseDescriptor)
+	descs, err = tc.withReadFromStore(mutable, func() ([]catalog.Descriptor, error) {
+		// Try to re-use an unvalidated descriptor if there is one.
+		if imm := tc.uncommitted.getUnvalidatedByName(parentID, parentSchemaID, name); imm != nil {
+			return []catalog.Descriptor{imm},
+				tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, imm)
+		}
+		// If not possible, read it from the store.
+		uncommittedParent, _ := tc.uncommitted.getImmutableByID(parentID)
+		uncommittedDB, _ := catalog.AsDatabaseDescriptor(uncommittedParent)
 		version := tc.settings.Version.ActiveVersion(ctx)
-		desc, err := tc.kv.getByName(
-			ctx,
-			txn,
-			version,
-			uncommittedDB,
-			parentID,
-			parentSchemaID,
-			name)
+		vd := tc.newValidationDereferencer(txn)
+		imm, err := tc.kv.getByName(ctx, version, txn, vd, uncommittedDB, parentID, parentSchemaID, name)
 		if err != nil {
 			return nil, err
 		}
-		return []catalog.MutableDescriptor{desc}, nil
+		return []catalog.Descriptor{imm}, nil
 	})
 	if err != nil {
 		return false, nil, err
@@ -318,18 +346,17 @@ func (tc *Collection) getByName(
 // layer. The logic is the same regardless of whether the descriptor was read
 // by name or by ID.
 func (tc *Collection) withReadFromStore(
-	requireMutable bool, readFn func() ([]catalog.MutableDescriptor, error),
+	requireMutable bool, readFn func() ([]catalog.Descriptor, error),
 ) (descs []catalog.Descriptor, _ error) {
-	muts, err := readFn()
+	descs, err := readFn()
 	if err != nil {
 		return nil, err
 	}
-	descs = make([]catalog.Descriptor, len(muts))
-	for i, mut := range muts {
-		if mut == nil {
+	for i, desc := range descs {
+		if desc == nil {
 			continue
 		}
-		desc, err := tc.uncommitted.add(mut)
+		desc, err = tc.uncommitted.add(desc.NewBuilder().BuildExistingMutable(), notCheckedOutYet)
 		if err != nil {
 			return nil, err
 		}

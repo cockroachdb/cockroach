@@ -139,54 +139,53 @@ func makeDirect(ctx context.Context, codec keys.SQLCodec, s *cluster.Settings) d
 }
 
 func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return catkv.GetCatalogUnvalidated(ctx, txn, d.codec)
+	return catkv.GetCatalogUnvalidated(ctx, d.codec, txn)
 }
+
 func (d *direct) MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.DatabaseDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.version, id, catalog.Database)
+	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Database)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.DatabaseDescriptor), nil
 }
+
 func (d *direct) MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.SchemaDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.version, id, catalog.Schema)
+	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.SchemaDescriptor), nil
 }
+
 func (d *direct) MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.version, id, catalog.Table)
+	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Table)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.TableDescriptor), nil
 }
+
 func (d *direct) MustGetTypeDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.TypeDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.version, id, catalog.Type)
+	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Type)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.TypeDescriptor), nil
 }
+
 func (d *direct) GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
 ) ([]catalog.SchemaDescriptor, error) {
-	descs, err := catkv.MustGetDescriptorsByID(
-		ctx,
-		txn,
-		d.codec,
-		d.version,
-		ids,
-		catalog.Schema)
+	descs, err := catkv.MustGetDescriptorsByID(ctx, d.version, d.codec, txn, nil /* vd */, ids, catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +195,7 @@ func (d *direct) GetSchemaDescriptorsFromIDs(
 	}
 	return ret, nil
 }
+
 func (d *direct) ResolveSchemaID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
@@ -208,6 +208,7 @@ func (d *direct) ResolveSchemaID(
 	}
 	return catkv.LookupID(ctx, txn, d.codec, dbID, keys.RootNamespaceID, scName)
 }
+
 func (d *direct) GetDescriptorCollidingWithObject(
 	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) (catalog.Descriptor, error) {
@@ -216,13 +217,7 @@ func (d *direct) GetDescriptorCollidingWithObject(
 		return nil, err
 	}
 	// ID is already in use by another object.
-	desc, err := catkv.MaybeGetDescriptorByID(
-		ctx,
-		txn,
-		d.codec,
-		id,
-		catalog.Any,
-		d.version)
+	desc, err := catkv.MaybeGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Any)
 	if desc == nil && err == nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			catalog.ErrDescriptorNotFound,
@@ -234,6 +229,7 @@ func (d *direct) GetDescriptorCollidingWithObject(
 	}
 	return desc, nil
 }
+
 func (d *direct) CheckObjectCollision(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -254,21 +250,25 @@ func (d *direct) CheckObjectCollision(
 	}
 	return nil
 }
+
 func (d *direct) LookupObjectID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaID descpb.ID, objectName string,
 ) (descpb.ID, error) {
 	return catkv.LookupID(ctx, txn, d.codec, dbID, schemaID, objectName)
 }
+
 func (d *direct) LookupSchemaID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
 ) (descpb.ID, error) {
 	return catkv.LookupID(ctx, txn, d.codec, dbID, keys.RootNamespaceID, schemaName)
 }
+
 func (d *direct) LookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, dbName string,
 ) (descpb.ID, error) {
 	return catkv.LookupID(ctx, txn, d.codec, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
 }
+
 func (d *direct) WriteNewDescToBatch(
 	ctx context.Context, kvTrace bool, b *kv.Batch, desc catalog.Descriptor,
 ) error {

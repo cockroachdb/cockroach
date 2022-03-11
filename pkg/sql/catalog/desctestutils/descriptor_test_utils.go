@@ -42,7 +42,7 @@ func TestingGetDatabaseDescriptorWitVersion(
 		} else if id == descpb.InvalidID {
 			panic(fmt.Sprintf("database %s not found", database))
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, version, id, catalog.Database)
+		desc, err = catkv.MustGetDescriptorByID(ctx, version, codec, txn, nil /* vd */, id, catalog.Database)
 		if err != nil {
 			panic(err)
 		}
@@ -79,7 +79,7 @@ func TestingGetSchemaDescriptorWithVersion(
 		} else if schemaID == descpb.InvalidID {
 			panic(fmt.Sprintf("schema %s not found", schemaName))
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, version, schemaID, catalog.Schema)
+		desc, err = catkv.MustGetDescriptorByID(ctx, version, codec, txn, nil /* vd */, schemaID, catalog.Schema)
 		if err != nil {
 			panic(err)
 		}
@@ -189,7 +189,7 @@ func testingGetObjectDescriptor(
 		if objectID == descpb.InvalidID {
 			return errors.Errorf("object %s not found", object)
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, latestBinaryVersion, objectID, catalog.Any)
+		desc, err = catkv.MustGetDescriptorByID(ctx, latestBinaryVersion, codec, txn, nil /* vd */, objectID, catalog.Any)
 		return err
 	}); err != nil {
 		panic(err)

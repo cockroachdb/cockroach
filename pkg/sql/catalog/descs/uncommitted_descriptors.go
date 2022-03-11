@@ -23,17 +23,48 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// uncommittedDescriptorStatus is the status of an uncommitted descriptor.
+type uncommittedDescriptorStatus int
+
+const (
+	// notValidatedYet designates descriptors which have been read from
+	// storage but have not been validated yet. Until they're validated they
+	// cannot be used for anything else than validating other descriptors.
+	notValidatedYet uncommittedDescriptorStatus = iota
+
+	// notCheckedOutYet designates descriptors which have been properly read from
+	// storage and have been validated but have never been checked out yet. This
+	// means that the mutable and immutable descriptor protos are known to be the
+	// exact same.
+	notCheckedOutYet
+
+	// checkedOutAtLeastOnce designates descriptors which have been checked out at
+	// least once. Newly-created descriptors are considered to have been checked
+	// out as well.
+	checkedOutAtLeastOnce
+)
+
 // uncommittedDescriptor is a descriptor that has been modified in the current
 // transaction.
 type uncommittedDescriptor struct {
+
+	// immutable holds the descriptor as it was when this struct was initialized,
+	// either after being read from storage or after being checked in.
 	immutable catalog.Descriptor
 
-	// mutable generally holds the descriptor as it was read from the database.
-	// In the rare case that this struct corresponds to a singleton which is
-	// added to optimize for special cases of system descriptors.
-	// It should be accessed through getMutable() which will construct a new
-	// value in cases where it is nil.
+	// mutable is initialized as a mutable copy of immutable when the descriptor
+	// is read from storage.
+	// This value might be nil in some rare cases where we completely bypass
+	// storage for performance reasons because the descriptor is guaranteed to
+	// never change. Such is the case of the system database descriptor for
+	// instance.
+	// This value should not make its way outside the uncommittedDescriptors
+	// other than via checkOut.
 	mutable catalog.MutableDescriptor
+
+	// uncommittedDescriptorStatus describes the status of the mutable and
+	// immutable descriptors
+	uncommittedDescriptorStatus
 }
 
 // GetName implements the catalog.NameEntry interface.
@@ -56,14 +87,13 @@ func (u uncommittedDescriptor) GetID() descpb.ID {
 	return u.immutable.GetID()
 }
 
-// getMutable is how the mutable descriptor should be accessed. It constructs
-// a new descriptor in the case that this descriptor is a cached, in-memory
-// singleton for a system descriptor.
-func (u *uncommittedDescriptor) getMutable() catalog.MutableDescriptor {
-	if u.mutable != nil {
-		return u.mutable
+// checkOut is how the mutable descriptor should be accessed.
+func (u *uncommittedDescriptor) checkOut() catalog.MutableDescriptor {
+	u.uncommittedDescriptorStatus = checkedOutAtLeastOnce
+	if u.mutable == nil {
+		return u.immutable.NewBuilder().BuildExistingMutable()
 	}
-	return u.immutable.NewBuilder().BuildExistingMutable()
+	return u.mutable
 }
 
 var _ catalog.NameEntry = (*uncommittedDescriptor)(nil)
@@ -115,8 +145,10 @@ func (ud *uncommittedDescriptors) reset() {
 
 // add adds a descriptor to the set of uncommitted descriptors and returns
 // an immutable copy of that descriptor.
-func (ud *uncommittedDescriptors) add(mut catalog.MutableDescriptor) (catalog.Descriptor, error) {
-	uNew, err := makeUncommittedDescriptor(mut)
+func (ud *uncommittedDescriptors) add(
+	mut catalog.MutableDescriptor, status uncommittedDescriptorStatus,
+) (catalog.Descriptor, error) {
+	uNew, err := makeUncommittedDescriptor(mut, status)
 	if err != nil {
 		return nil, err
 	}
@@ -129,31 +161,37 @@ func (ud *uncommittedDescriptors) add(mut catalog.MutableDescriptor) (catalog.De
 
 // checkOut checks out an uncommitted mutable descriptor for use in the
 // transaction. This descriptor should later be checked in again.
-func (ud *uncommittedDescriptors) checkOut(id descpb.ID) (catalog.MutableDescriptor, error) {
+func (ud *uncommittedDescriptors) checkOut(id descpb.ID) (_ catalog.MutableDescriptor, err error) {
+	defer func() {
+		err = errors.NewAssertionErrorWithWrappedErrf(
+			err, "cannot check out uncommitted descriptor with ID %d", id,
+		)
+	}()
 	if id == keys.SystemDatabaseID {
 		ud.maybeAddSystemDatabase()
 	}
 	entry := ud.descs.GetByID(id)
 	if entry == nil {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(
-			errors.New("descriptor hasn't been added yet"),
-			"cannot check in uncommitted descriptor with ID %d",
-			id)
-
+		return nil, errors.New("descriptor hasn't been added yet")
 	}
 	u := entry.(*uncommittedDescriptor)
-	return u.getMutable(), nil
+	if u.uncommittedDescriptorStatus == notValidatedYet {
+		return nil, errors.New("descriptor hasn't been validated yet")
+	}
+	return u.checkOut(), nil
 }
 
 // checkIn checks in an uncommitted mutable descriptor that was previously
 // checked out.
 func (ud *uncommittedDescriptors) checkIn(mut catalog.MutableDescriptor) error {
 	// TODO(postamar): actually check that the descriptor has been checked out.
-	_, err := ud.add(mut)
+	_, err := ud.add(mut, checkedOutAtLeastOnce)
 	return err
 }
 
-func makeUncommittedDescriptor(desc catalog.MutableDescriptor) (*uncommittedDescriptor, error) {
+func makeUncommittedDescriptor(
+	desc catalog.MutableDescriptor, status uncommittedDescriptorStatus,
+) (*uncommittedDescriptor, error) {
 	version := desc.GetVersion()
 	origVersion := desc.OriginalVersion()
 	if version != origVersion && version != origVersion+1 {
@@ -168,8 +206,9 @@ func makeUncommittedDescriptor(desc catalog.MutableDescriptor) (*uncommittedDesc
 	}
 
 	return &uncommittedDescriptor{
-		mutable:   mutable,
-		immutable: mutable.ImmutableCopy(),
+		mutable:                     mutable,
+		immutable:                   mutable.ImmutableCopy(),
+		uncommittedDescriptorStatus: status,
 	}, nil
 }
 
@@ -188,16 +227,19 @@ func maybeRefreshCachedFieldsOnTypeDescriptor(
 	return desc, nil
 }
 
-// getByID looks up an uncommitted descriptor by ID.
-func (ud *uncommittedDescriptors) getByID(id descpb.ID) catalog.Descriptor {
-	if id == keys.SystemDatabaseID && !ud.addedSystemDatabase {
+// getImmutableByID looks up an uncommitted descriptor by ID.
+func (ud *uncommittedDescriptors) getImmutableByID(
+	id descpb.ID,
+) (catalog.Descriptor, uncommittedDescriptorStatus) {
+	if id == keys.SystemDatabaseID {
 		ud.maybeAddSystemDatabase()
 	}
 	entry := ud.descs.GetByID(id)
 	if entry == nil {
-		return nil
+		return nil, notValidatedYet
 	}
-	return entry.(*uncommittedDescriptor).immutable
+	u := entry.(*uncommittedDescriptor)
+	return u.immutable, u.uncommittedDescriptorStatus
 }
 
 // getByName returns a descriptor for the requested name if the requested name
@@ -216,7 +258,11 @@ func (ud *uncommittedDescriptors) getByName(
 	// Walk latest to earliest so that a DROP followed by a CREATE with the same
 	// name will result in the CREATE being seen.
 	if got := ud.descs.GetByName(dbID, schemaID, name); got != nil {
-		return false, got.(*uncommittedDescriptor).immutable
+		u := got.(*uncommittedDescriptor)
+		if u.uncommittedDescriptorStatus == notValidatedYet {
+			return false, nil
+		}
+		return false, u.immutable
 	}
 	// Check whether the set is empty to avoid allocating the NameInfo.
 	if ud.descNames.Empty() {
@@ -229,30 +275,55 @@ func (ud *uncommittedDescriptors) getByName(
 	}), nil
 }
 
+// getUnvalidatedByName looks up an unvalidated descriptor by name.
+func (ud *uncommittedDescriptors) getUnvalidatedByName(
+	dbID descpb.ID, schemaID descpb.ID, name string,
+) catalog.Descriptor {
+	if dbID == 0 && schemaID == 0 && name == systemschema.SystemDatabaseName {
+		ud.maybeAddSystemDatabase()
+	}
+	entry := ud.descs.GetByName(dbID, schemaID, name)
+	if entry == nil {
+		return nil
+	}
+	u := entry.(*uncommittedDescriptor)
+	if u.uncommittedDescriptorStatus != notValidatedYet {
+		return nil
+	}
+	return u.immutable
+}
+
 func (ud *uncommittedDescriptors) iterateNewVersionByID(
-	fn func(entry catalog.NameEntry, originalVersion lease.IDVersion) error,
+	fn func(originalVersion lease.IDVersion) error,
 ) error {
 	return ud.descs.IterateByID(func(entry catalog.NameEntry) error {
-		mut := entry.(*uncommittedDescriptor).mutable
+		u := entry.(*uncommittedDescriptor)
+		if u.uncommittedDescriptorStatus == notValidatedYet {
+			return nil
+		}
+		mut := u.mutable
 		if mut == nil || mut.IsNew() || !mut.IsUncommittedVersion() {
 			return nil
 		}
-		return fn(entry, lease.NewIDVersionPrev(mut.OriginalName(), mut.OriginalID(), mut.OriginalVersion()))
+		return fn(lease.NewIDVersionPrev(mut.OriginalName(), mut.OriginalID(), mut.OriginalVersion()))
 	})
 }
 
-func (ud *uncommittedDescriptors) iterateImmutableByID(
+func (ud *uncommittedDescriptors) iterateUncommittedByID(
 	fn func(imm catalog.Descriptor) error,
 ) error {
 	return ud.descs.IterateByID(func(entry catalog.NameEntry) error {
-		return fn(entry.(*uncommittedDescriptor).immutable)
+		u := entry.(*uncommittedDescriptor)
+		if u.uncommittedDescriptorStatus != checkedOutAtLeastOnce || !u.immutable.IsUncommittedVersion() {
+			return nil
+		}
+		return fn(u.immutable)
 	})
 }
 
 func (ud *uncommittedDescriptors) getUncommittedTables() (tables []catalog.TableDescriptor) {
-	_ = ud.iterateImmutableByID(func(imm catalog.Descriptor) error {
-		table, ok := imm.(catalog.TableDescriptor)
-		if ok && imm.IsUncommittedVersion() {
+	_ = ud.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
 			tables = append(tables, table)
 		}
 		return nil
@@ -263,18 +334,15 @@ func (ud *uncommittedDescriptors) getUncommittedTables() (tables []catalog.Table
 func (ud *uncommittedDescriptors) getUncommittedDescriptorsForValidation() (
 	descs []catalog.Descriptor,
 ) {
-	_ = ud.iterateImmutableByID(func(imm catalog.Descriptor) error {
-		// TODO(postamar): only return descriptors with !IsUncommittedVersion()
-		// This requires safeguard mechanisms like actually enforcing uncommitted
-		// descriptor check=out and check-in rules.
-		descs = append(descs, imm)
+	_ = ud.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		descs = append(descs, desc)
 		return nil
 	})
 	return descs
 }
 
 func (ud *uncommittedDescriptors) hasUncommittedTables() (has bool) {
-	_ = ud.iterateImmutableByID(func(desc catalog.Descriptor) error {
+	_ = ud.iterateUncommittedByID(func(desc catalog.Descriptor) error {
 		if _, has = desc.(catalog.TableDescriptor); has {
 			return iterutil.StopIteration()
 		}
@@ -284,7 +352,7 @@ func (ud *uncommittedDescriptors) hasUncommittedTables() (has bool) {
 }
 
 func (ud *uncommittedDescriptors) hasUncommittedTypes() (has bool) {
-	_ = ud.iterateImmutableByID(func(desc catalog.Descriptor) error {
+	_ = ud.iterateUncommittedByID(func(desc catalog.Descriptor) error {
 		if _, has = desc.(catalog.TypeDescriptor); has {
 			return iterutil.StopIteration()
 		}
@@ -294,10 +362,11 @@ func (ud *uncommittedDescriptors) hasUncommittedTypes() (has bool) {
 }
 
 var systemUncommittedDatabase = &uncommittedDescriptor{
-	immutable: dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).
-		BuildImmutableDatabase(),
+	immutable: dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).BuildImmutableDatabase(),
 	// Note that the mutable field is left as nil. We'll generate a new
 	// value lazily when this is needed, which ought to be exceedingly rare.
+	mutable:                     nil,
+	uncommittedDescriptorStatus: notCheckedOutYet,
 }
 
 func (ud *uncommittedDescriptors) maybeAddSystemDatabase() {

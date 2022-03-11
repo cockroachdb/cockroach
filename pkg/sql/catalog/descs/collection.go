@@ -194,9 +194,6 @@ func (tc *Collection) HasUncommittedTypes() bool {
 	return tc.uncommitted.hasUncommittedTypes()
 }
 
-// Satisfy the linter.
-var _ = (*Collection).HasUncommittedTypes
-
 // AddUncommittedDescriptor adds an uncommitted descriptor modified in the
 // transaction to the Collection. The descriptor must either be a new descriptor
 // or carry the original version or carry the subsequent version to the original
@@ -261,7 +258,7 @@ func (tc *Collection) WriteDesc(
 // returned for each schema change is ClusterVersion - 1, because that's the one
 // that will be used when checking for table descriptor two version invariance.
 func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
-	_ = tc.uncommitted.iterateNewVersionByID(func(_ catalog.NameEntry, originalVersion lease.IDVersion) error {
+	_ = tc.uncommitted.iterateNewVersionByID(func(originalVersion lease.IDVersion) error {
 		originalVersions = append(originalVersions, originalVersion)
 		return nil
 	})
@@ -294,7 +291,8 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-	return tc.kv.getAllDatabaseDescriptors(ctx, txn, tc.version)
+	vd := tc.newValidationDereferencer(txn)
+	return tc.kv.getAllDatabaseDescriptors(ctx, tc.version, txn, vd)
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
