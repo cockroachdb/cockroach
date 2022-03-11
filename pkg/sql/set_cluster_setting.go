@@ -204,6 +204,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var reportedValue string
 		if n.value == nil {
+			// This code is doing work for RESET CLUSTER SETTING.
 			reportedValue = "DEFAULT"
 			expectedEncodedValue = n.setting.EncodedDefault()
 			if _, err := execCfg.InternalExecutor.ExecEx(
@@ -214,14 +215,20 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				return err
 			}
 		} else {
+			// Setting a non-DEFAULT value.
 			value, err := n.value.Eval(params.p.EvalContext())
 			if err != nil {
 				return err
 			}
+			// Stringify the value set by the statement for reporting in errors, logs etc.
 			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
+
 			var prev tree.Datum
 			_, isSetVersion := n.setting.(*settings.VersionSetting)
 			if isSetVersion {
+				// In the special case of the 'version' cluster setting,
+				// we must first read the previous value to validate that the
+				// value change is valid.
 				datums, err := execCfg.InternalExecutor.QueryRowEx(
 					ctx, "retrieve-prev-setting", txn,
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -395,7 +402,19 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		return err
 	}
 
-	if _, ok := n.setting.(*settings.VersionSetting); ok && n.value == nil {
+	return waitForSettingUpdate(params.ctx, execCfg,
+		n.setting, n.value == nil /* reset */, n.name, expectedEncodedValue)
+}
+
+func waitForSettingUpdate(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	setting settings.NonMaskedSetting,
+	reset bool,
+	name string,
+	expectedEncodedValue string,
+) error {
+	if _, ok := setting.(*settings.VersionSetting); ok && reset {
 		// The "version" setting doesn't have a well defined "default" since it
 		// is set in a startup migration.
 		return nil
@@ -403,7 +422,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
 	var observed string
 	err := retry.ForDuration(10*time.Second, func() error {
-		observed = n.setting.Encoded(&execCfg.Settings.SV)
+		observed = setting.Encoded(&execCfg.Settings.SV)
 		if observed != expectedEncodedValue {
 			return errNotReady
 		}
@@ -411,8 +430,8 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	})
 	if err != nil {
 		log.Warningf(
-			params.ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
-			n.name, expectedEncodedValue, observed,
+			ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
+			name, expectedEncodedValue, observed,
 		)
 	}
 	return err
