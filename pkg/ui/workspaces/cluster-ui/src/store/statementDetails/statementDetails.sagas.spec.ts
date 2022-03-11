@@ -149,7 +149,7 @@ describe("SQLDetailsStats sagas", () => {
           plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
         },
       },
-      statements_per_aggregated_ts: [
+      statement_statistics_per_aggregated_ts: [
         {
           stats: {
             count: new Long(1),
@@ -535,7 +535,7 @@ describe("SQLDetailsStats sagas", () => {
           },
         },
       ],
-      statements_per_plan_hash: [
+      statement_statistics_per_plan_hash: [
         {
           stats: {
             count: new Long(5),
