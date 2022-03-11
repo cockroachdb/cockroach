@@ -6,6 +6,8 @@
 <tr><td><code>admission.epoch_lifo.epoch_duration</code></td><td>duration</td><td><code>100ms</code></td><td>the duration of an epoch, for epoch-LIFO admission control ordering</td></tr>
 <tr><td><code>admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo</code></td><td>duration</td><td><code>105ms</code></td><td>the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering</td></tr>
 <tr><td><code>admission.kv.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the KV layer is subject to admission control</td></tr>
+<tr><td><code>admission.kv.stores.tenant_weights.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, tenant weights are enabled for KV-stores admission control</td></tr>
+<tr><td><code>admission.kv.tenant_weights.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, tenant weights are enabled for KV admission control</td></tr>
 <tr><td><code>admission.sql_kv_response.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the SQL layer when receiving a KV response is subject to admission control</td></tr>
 <tr><td><code>admission.sql_sql_response.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control</td></tr>
 <tr><td><code>bulkio.backup.file_size</code></td><td>byte size</td><td><code>128 MiB</code></td><td>target size for individual data files produced during BACKUP</td></tr>
@@ -201,6 +203,6 @@
 <tr><td><code>trace.opentelemetry.collector</code></td><td>string</td><td><code></code></td><td>address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.</td></tr>
 <tr><td><code>trace.span_registry.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, ongoing traces can be seen at https://<ui>/debug/tracez</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.</td></tr>
-<tr><td><code>version</code></td><td>version</td><td><code>21.2-88</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
+<tr><td><code>version</code></td><td>version</td><td><code>21.2-90</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
 </tbody>
 </table>

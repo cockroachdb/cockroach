@@ -322,16 +322,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 		return err
 	}
-	var f *forwarder
-	defer func() {
-		// Only close crdbConn if the forwarder hasn't been started. We want
-		// this here to ensure that we close the idle monitor wrapped
-		// connection. If the forwarder has been created, crdbConn is owned by
-		// the forwarder.
-		if f == nil {
-			_ = crdbConn.Close()
-		}
-	}()
+	defer func() { _ = crdbConn.Close() }()
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
 
@@ -341,8 +332,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
-	// Pass ownership of crdbConn to the forwarder.
-	f = forward(ctx, conn, crdbConn)
+	// Pass ownership of conn and crdbConn to the forwarder.
+	f := forward(ctx, conn, crdbConn)
 	defer f.Close()
 
 	// Block until an error is received, or when the stopper starts quiescing,
@@ -357,7 +348,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	// TODO(jaylim-crl): It would be nice to have more consistency in how we
 	// manage background goroutines, communicate errors, etc.
 	select {
-	case err := <-f.errChan: // From forwarder.
+	case <-ctx.Done():
+		// Context cancellations do not terminate forward() so we will need
+		// to manually handle that here. When this returns, we would call
+		// f.Close(). This should only happen during shutdown.
+		handler.metrics.updateForError(ctx.Err())
+		return ctx.Err()
+	case err := <-f.errCh: // From forwarder.
 		handler.metrics.updateForError(err)
 		return err
 	case err := <-errConnection: // From denyListWatcher or idleMonitor.

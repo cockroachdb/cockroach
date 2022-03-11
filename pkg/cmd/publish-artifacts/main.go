@@ -11,9 +11,11 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -70,7 +72,14 @@ func main() {
 		log.Fatalf("unable to locate CRDB directory: %s", err)
 	}
 
-	var versionStr string
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = pkg
+	log.Printf("%s %s", cmd.Env, cmd.Args)
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
+	}
+	versionStr := string(bytes.TrimSpace(out))
 
 	svc, err := testableS3()
 	if err != nil {
@@ -96,6 +105,7 @@ func main() {
 		o.VersionStr = versionStr
 		o.BucketName = bucketName
 		o.Branch = branch
+		o.AbsolutePath = filepath.Join(pkg, "cockroach"+release.SuffixFromPlatform(platform))
 
 		log.Printf("building %s", pretty.Sprint(o))
 
