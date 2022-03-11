@@ -231,6 +231,12 @@ message LocalOnlySessionData {
   // OptSplitScanLimit indicates the maximum number of UNION ALL statements a
   // Scan may be split into during query optimization to avoid a sort.
   int32 opt_split_scan_limit = 63;
+  // EnableImplicitTransactionForBatchStatements configures the handling of
+  // multiple statements in a single query. If enabled, then an implicit
+  // transaction is used when multiple statements are sent in a single query.
+  // Setting this to false is a divergence from the pgwire protocol, but
+  // matches the behavior of CockroachDB v21.2 and earlier.
+  bool enable_implicit_transaction_for_batch_statements = 64;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

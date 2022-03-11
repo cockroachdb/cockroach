@@ -1936,6 +1936,22 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(int64(tabledesc.MaxBucketAllowed), 10)
 		},
 	},
+	// CockroachDB extension.
+	`enable_implicit_transaction_for_batch_statements`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_transaction_for_batch_statements`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_implicit_transaction_for_batch_statements", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableImplicitTransactionForBatchStatements(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableImplicitTransactionForBatchStatements), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
