@@ -255,7 +255,7 @@ var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
-	descs := p.ExtendedEvalContext().Descs
+	descsCol := p.ExtendedEvalContext().Descs
 
 	if enabled := jobEnabled.Get(p.ExecCfg().SV()); !enabled {
 		return errors.Newf(
@@ -292,7 +292,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var name string
 	var rangeSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := descs.GetImmutableTableByID(
+		desc, err := descsCol.GetImmutableTableByID(
 			ctx,
 			txn,
 			details.TableID,
@@ -329,34 +329,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
-		_, dbDesc, err := descs.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			desc.GetParentID(),
-			tree.CommonLookupFlags{
-				Required: true,
-			},
-		)
+		tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, desc)
 		if err != nil {
-			return err
-		}
-		schemaDesc, err := descs.GetImmutableSchemaByID(
-			ctx,
-			txn,
-			desc.GetParentSchemaID(),
-			tree.CommonLookupFlags{
-				Required: true,
-			},
-		)
-		if err != nil {
-			return err
+			return errors.Wrapf(err, "error fetching table name for TTL")
 		}
 
-		tn := tree.MakeTableNameWithSchema(
-			tree.Name(dbDesc.GetName()),
-			tree.Name(schemaDesc.GetName()),
-			tree.Name(desc.GetName()),
-		)
 		name = tn.FQString()
 		rangeSpan = desc.TableSpan(p.ExecCfg().Codec)
 		ttlSettings = *ttl
