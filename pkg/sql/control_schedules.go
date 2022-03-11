@@ -158,9 +158,14 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
 					params.ExecCfg().ProtectedTimestampProvider, params.ExecCfg().InternalExecutor)
-				if err := controller.OnDrop(params.ctx, scheduleControllerEnv,
-					scheduledjobs.ProdJobSchedulerEnv, schedule,
-					params.extendedEvalCtx.Txn); err != nil {
+				if err := controller.OnDrop(
+					params.ctx,
+					scheduleControllerEnv,
+					scheduledjobs.ProdJobSchedulerEnv,
+					schedule,
+					params.extendedEvalCtx.Txn,
+					params.p.Descriptors(),
+				); err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
 			}
