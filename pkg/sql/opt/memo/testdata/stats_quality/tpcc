@@ -577,7 +577,7 @@ project
       ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=1, distinct(2)=1, null(2)=0, avgsize(2)=1, distinct(11)=0.633968, null(11)=0, avgsize(11)=3]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=1, distinct(2)=1, null(2)=0, avgsize(2)=1, distinct(11)=0.633968, null(11)=0, avgsize(11)=3, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=2]
       ├── key: ()
       └── fd: ()-->(1,2,11)
 

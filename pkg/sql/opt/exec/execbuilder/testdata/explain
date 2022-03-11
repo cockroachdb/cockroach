@@ -1219,7 +1219,7 @@ vectorized: true
 ·
 • filter
 │ columns: (x int, y int)
-│ estimated row count: 111 (missing stats)
+│ estimated row count: 311 (missing stats)
 │ filter: ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
 │
 └── • scan
@@ -1654,11 +1654,11 @@ vectorized: true
 ·
 • project
 │ columns: (attnum)
-│ estimated row count: 0 (missing stats)
+│ estimated row count: 1 (missing stats)
 │
 └── • filter
     │ columns: (attrelid, attname, attnum)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ filter: attname = 'b'
     │
     └── • virtual table
