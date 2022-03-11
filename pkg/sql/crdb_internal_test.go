@@ -817,7 +817,9 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 	// the query contains an index constraint.
 
 	t.Run("no-index-constraint", func(t *testing.T) {
-		sqlDB.CheckQueryResults(t, `SELECT * from crdb_internal.cluster_inflight_traces`, [][]string{})
+		_, err := sqlDB.DB.ExecContext(ctx, `SELECT * from crdb_internal.cluster_inflight_traces`)
+		require.NotNil(t, err)
+		require.Contains(t, err.Error(), "a trace_id value needs to be specified")
 	})
 
 	t.Run("with-index-constraint", func(t *testing.T) {
