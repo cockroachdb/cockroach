@@ -558,6 +558,49 @@ func TestShowNonDefaultBackups(t *testing.T) {
 		require.Greater(t, newCountInc, oldCount[i])
 	}
 }
+
+// TestShowBackupTenantView ensures that SHOW BACKUP on a tenant backup returns the same results
+// as a SHOW BACKUP on a cluster backup that contains the same data.
+// TODO(msbutler): convert to data driven test, and test cluster and database
+// level backups once tenants support nodelocal or once http external storage supports listing.
+func TestShowBackupTenantView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	_ = security.EmbeddedTenantIDs()
+
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	defer conn10.Close()
+
+	tenant10 := sqlutils.MakeSQLRunner(conn10)
+	dataQuery := `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`
+	backupQuery := `BACKUP TABLE foo.bar INTO $1`
+	showBackupQuery := "SELECT object_name, object_type, rows FROM [SHOW BACKUP FROM LATEST IN $1]"
+	tenant10.Exec(t, dataQuery)
+
+	// First, assert that SHOW BACKUPS on a tenant backup returns the same results if
+	// either the system tenant or tenant10 calls it.
+	tenantAddr, httpServerCleanup := makeInsecureHTTPServer(t)
+	defer httpServerCleanup()
+
+	tenant10.Exec(t, backupQuery, tenantAddr)
+	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, tenantAddr)
+	require.Equal(t, systemTenantShowRes, tenant10.QueryStr(t, showBackupQuery, tenantAddr))
+
+	// If the system tenant created the same data, and conducted the same backup,
+	// the row counts should look the same.
+	systemAddr, httpServerCleanup2 := makeInsecureHTTPServer(t)
+	defer httpServerCleanup2()
+
+	systemDB.Exec(t, dataQuery)
+	systemDB.Exec(t, backupQuery, systemAddr)
+	require.Equal(t, systemTenantShowRes, systemDB.QueryStr(t, showBackupQuery, systemAddr))
+}
 func TestShowBackupTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
