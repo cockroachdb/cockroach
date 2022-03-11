@@ -1853,7 +1853,10 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
-	resp, _, err := s.rangesHelper(ctx, req, 0, 0)
+	resp, next, err := s.rangesHelper(ctx, req, int(req.Limit), int(req.Offset))
+	if resp != nil {
+		resp.Next = int32(next)
+	}
 	return resp, err
 }
 
