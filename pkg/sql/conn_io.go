@@ -136,6 +136,10 @@ type ExecStmt struct {
 	// stats reporting.
 	ParseStart time.Time
 	ParseEnd   time.Time
+
+	// LastInBatch indicates if this command contains the last query in a
+	// simple protocol Query message that contains a batch of 1 or more queries.
+	LastInBatch bool
 }
 
 // command implements the Command interface.
