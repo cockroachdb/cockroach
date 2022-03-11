@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
@@ -59,13 +61,13 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	codec         io.WriteCloser
-	rawSize       int
-	numMessages   int
-	buf           bytes.Buffer
-	alloc         kvevent.Alloc
-	oldestMVCC    hlc.Timestamp
-	recordMetrics recordEmittedMessagesCallback
+	created     time.Time
+	codec       io.WriteCloser
+	rawSize     int
+	numMessages int
+	buf         bytes.Buffer
+	alloc       kvevent.Alloc
+	oldestMVCC  hlc.Timestamp
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -422,8 +424,8 @@ func (s *cloudStorageSink) getOrCreateFile(
 		return f
 	}
 	f := &cloudStorageSinkFile{
+		created:             timeutil.Now(),
 		cloudStorageSinkKey: key,
-		recordMetrics:       s.metrics.recordEmittedMessages(),
 		oldestMVCC:          eventMVCC,
 	}
 	switch s.compression {
@@ -446,6 +448,7 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
+	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	file := s.getOrCreateFile(topic, mvcc)
 	file.alloc.Merge(&alloc)
 
@@ -586,7 +589,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	if err := cloud.WriteFile(ctx, s.es, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
 		return err
 	}
-	file.recordMetrics(file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
+	s.metrics.recordEmittedBatch(file.created, file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
 
 	return nil
 }

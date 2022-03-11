@@ -205,7 +205,7 @@ func (s *kafkaSink) Close() error {
 
 type messageMetadata struct {
 	alloc         kvevent.Alloc
-	updateMetrics recordEmittedMessagesCallback
+	updateMetrics recordOneMessageCallback
 	mvcc          hlc.Timestamp
 }
 
@@ -226,7 +226,7 @@ func (s *kafkaSink) EmitRow(
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordEmittedMessages()},
+		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
 	}
 	return s.emitMessage(ctx, msg)
 }
@@ -369,7 +369,7 @@ func (s *kafkaSink) workerLoop() {
 
 		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
 			if ackError == nil {
-				m.updateMetrics(1, m.mvcc, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
+				m.updateMetrics(m.mvcc, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
 			}
 			m.alloc.Release(s.ctx)
 		}
