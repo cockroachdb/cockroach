@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -393,20 +392,9 @@ func backupShowerDefault(
 						}
 					}
 				}
-				descSizes := make(map[descpb.ID]RowCount)
-				for _, file := range manifest.Files {
-					// TODO(dan): This assumes each file in the backup only contains
-					// data from a single table, which is usually but not always
-					// correct. It does not account for interleaved tables or if a
-					// BACKUP happened to catch a newly created table that hadn't yet
-					// been split into its own range.
-					_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
-					if err != nil {
-						continue
-					}
-					s := descSizes[descpb.ID(tableID)]
-					s.add(file.EntryCounts)
-					descSizes[descpb.ID(tableID)] = s
+				tableSizes, err := getTableSizes(manifest.Files)
+				if err != nil {
+					return nil, err
 				}
 				backupType := tree.NewDString("full")
 				if manifest.isIncremental() {
@@ -460,9 +448,9 @@ func backupShowerDefault(
 						dbID = desc.GetParentID()
 						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
 						parentSchemaID = desc.GetParentSchemaID()
-						descSize := descSizes[desc.GetID()]
-						dataSizeDatum = tree.NewDInt(tree.DInt(descSize.DataSize))
-						rowCountDatum = tree.NewDInt(tree.DInt(descSize.Rows))
+						tableSize := tableSizes[desc.GetID()]
+						dataSizeDatum = tree.NewDInt(tree.DInt(tableSize.DataSize))
+						rowCountDatum = tree.NewDInt(tree.DInt(tableSize.Rows))
 
 						displayOptions := sql.ShowCreateDisplayOptions{
 							FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
@@ -555,6 +543,39 @@ func backupShowerDefault(
 			return rows, nil
 		},
 	}
+}
+
+// getTableSizes gathers row and size count for each table in the manifest
+func getTableSizes(files []BackupManifest_File) (map[descpb.ID]RowCount, error) {
+	tableSizes := make(map[descpb.ID]RowCount)
+	if len(files) == 0 {
+		return tableSizes, nil
+	}
+	_, tenantID, err := keys.DecodeTenantPrefix(files[0].Span.Key)
+	if err != nil {
+		return nil, err
+	}
+	showCodec := keys.MakeSQLCodec(tenantID)
+
+	for _, file := range files {
+		// TODO(dan): This assumes each file in the backup only contains
+		// data from a single table, which is usually but not always
+		// correct. It does not account for interleaved tables or if a
+		// BACKUP happened to catch a newly created table that hadn't yet
+		// been split into its own range.
+
+		// TODO(msbutler): after handling the todo above, understand whether
+		// we should return an error if a key does not have tableId. The lack
+		// of error handling let #77705 sneak by our unit tests.
+		_, tableID, err := showCodec.DecodeTablePrefix(file.Span.Key)
+		if err != nil {
+			continue
+		}
+		s := tableSizes[descpb.ID(tableID)]
+		s.add(file.EntryCounts)
+		tableSizes[descpb.ID(tableID)] = s
+	}
+	return tableSizes, nil
 }
 
 func nullIfEmpty(s string) tree.Datum {
