@@ -599,6 +599,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	limitHint int,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
@@ -620,6 +621,7 @@ func (ef *execFactory) ConstructIndexJoin(
 		cols:          cols,
 		resultColumns: colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
 		reqOrdering:   ReqOrdering(reqOrdering),
+		limitHint:     limitHint,
 	}
 
 	n.keyCols = make([]int, len(keyCols))
@@ -645,6 +647,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
+	limitHint int,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
@@ -680,6 +683,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		eqColsAreKey:               eqColsAreKey,
 		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
 		reqOrdering:                ReqOrdering(reqOrdering),
+		limitHint:                  limitHint,
 	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {

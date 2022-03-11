@@ -105,6 +105,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.telemetry.query_sampling.sample_rate":                       {},
 	"diagnostics.sql_stat_reset.interval":                            {},
 	"changefeed.mem.pushback_enabled":                                {},
+	"sql.distsql.index_join_limit_hint.enabled":                      {},
 }
 
 // register adds a setting to the registry.
