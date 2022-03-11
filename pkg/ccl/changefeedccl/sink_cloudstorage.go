@@ -446,6 +446,7 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
+	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	file := s.getOrCreateFile(topic, mvcc)
 	file.alloc.Merge(&alloc)
 
