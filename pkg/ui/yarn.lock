@@ -6357,15 +6357,6 @@ create-hmac@^1.1.0, create-hmac@^1.1.4, create-hmac@^1.1.7:
     safe-buffer "^5.0.1"
     sha.js "^2.4.8"
 
-create-jest-runner@^0.6.0:
-  version "0.6.0"
-  resolved "https://registry.yarnpkg.com/create-jest-runner/-/create-jest-runner-0.6.0.tgz#9ca6583d969acc15cdc21cd07d430945daf83de6"
-  integrity sha512-9ibH8XA4yOJwDLRlzIUv5Ceg2DZFrQFjEtRKplVP6scGKwoz28V27xPHTbXziq2LePAD/xXlJlywhUq1dtF+nw==
-  dependencies:
-    chalk "^3.0.0"
-    jest-worker "^25.1.0"
-    throat "^5.0.0"
-
 create-react-class@^15.5.3:
   version "15.7.0"
   resolved "https://registry.yarnpkg.com/create-react-class/-/create-react-class-15.7.0.tgz#7499d7ca2e69bb51d13faf59bd04f0c65a1d6c1e"
@@ -7158,13 +7149,6 @@ dot-case@^3.0.4:
   dependencies:
     no-case "^3.0.4"
     tslib "^2.0.3"
-
-dot-prop@^5.3.0:
-  version "5.3.0"
-  resolved "https://registry.yarnpkg.com/dot-prop/-/dot-prop-5.3.0.tgz#90ccce708cd9cd82cc4dc8c3ddd9abdd55b20e88"
-  integrity sha512-QM8q3zDe58hqUqjraQOmzZ1LIH9SWQJTlEKCH4kJ2oQvLZk7RbQXvtDM2XEq3fwkV9CCvvH4LA0AV+ogFsBM2Q==
-  dependencies:
-    is-obj "^2.0.0"
 
 dotenv-defaults@^1.0.2:
   version "1.1.1"
@@ -10224,11 +10208,6 @@ is-number@^7.0.0:
   resolved "https://registry.yarnpkg.com/is-number/-/is-number-7.0.0.tgz#7535345b896734d5f80c4d06c50955527a14f12b"
   integrity sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==
 
-is-obj@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/is-obj/-/is-obj-2.0.0.tgz#473fb05d973705e3fd9620545018ca8e22ef4982"
-  integrity sha512-drqDG3cbczxxEJRoOXcOjtdp1J/lyp1mNn0xaznRs8+muBhgQcrnbspox5X5fOw0HnMnbfDzvnEMEtqDEJEo8w==
-
 is-object@^1.0.1:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/is-object/-/is-object-1.0.2.tgz#a56552e1c665c9e950b4a025461da87e72f86fcf"
@@ -10828,16 +10807,6 @@ jest-resolve@^27.5.1:
     resolve.exports "^1.1.0"
     slash "^3.0.0"
 
-jest-runner-eslint@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/jest-runner-eslint/-/jest-runner-eslint-1.0.0.tgz#5cede321ed5ed57233462c5204a0fa8d90f993bd"
-  integrity sha512-LMlAaIQqIIySEThv651bfvzwX6J4nOu91RaEUYmXJgn4XXbM40rSMlBaC8ZrrFcFemu88MFlnrCLuYf7ZHE2sQ==
-  dependencies:
-    chalk "^3.0.0"
-    cosmiconfig "^6.0.0"
-    create-jest-runner "^0.6.0"
-    dot-prop "^5.3.0"
-
 jest-runner@^27.5.1:
   version "27.5.1"
   resolved "https://registry.yarnpkg.com/jest-runner/-/jest-runner-27.5.1.tgz#071b27c1fa30d90540805c5645a0ec167c7b62e5"
@@ -10965,14 +10934,6 @@ jest-watcher@^27.5.1:
     chalk "^4.0.0"
     jest-util "^27.5.1"
     string-length "^4.0.1"
-
-jest-worker@^25.1.0:
-  version "25.5.0"
-  resolved "https://registry.yarnpkg.com/jest-worker/-/jest-worker-25.5.0.tgz#2611d071b79cea0f43ee57a3d118593ac1547db1"
-  integrity sha512-/dsSmUkIy5EBGfv/IjjqmFxrNAUpBERfGs1oHROyD7yxjG/w+t0GOJDX8O1k32ySmd7+a5IhnJU2qQFcJ4n1vw==
-  dependencies:
-    merge-stream "^2.0.0"
-    supports-color "^7.0.0"
 
 jest-worker@^26.5.0:
   version "26.6.2"
@@ -16837,11 +16798,6 @@ thread-loader@^2.1.3:
     loader-runner "^2.3.1"
     loader-utils "^1.1.0"
     neo-async "^2.6.0"
-
-throat@^5.0.0:
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/throat/-/throat-5.0.0.tgz#c5199235803aad18754a667d659b5e72ce16764b"
-  integrity sha512-fcwX4mndzpLQKBS1DVYhGAcYaYt7vsHNIvQV+WXMvnow5cgjPphq5CaayLaGsjRdSCKZFNGt7/GYAuXaNOiYCA==
 
 throat@^6.0.1:
   version "6.0.1"
