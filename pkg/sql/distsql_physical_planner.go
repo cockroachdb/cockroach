@@ -2233,6 +2233,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
+		LimitHint:         int64(n.limitHint),
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.cols))
@@ -2301,6 +2302,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		LeftJoinWithPairedJoiner:          n.isSecondJoinInPairedJoiner,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
+		LimitHint:                         int64(n.limitHint),
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
