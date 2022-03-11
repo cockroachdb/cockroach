@@ -128,6 +128,7 @@ func TestDataDriven(t *testing.T) {
 			tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 			tc.Server(0).ClusterSettings(),
 			fmt.Sprintf("defaultdb.public.%s", dummyTableName),
+			nil, /* knobs */
 		)
 
 		mu := struct {
