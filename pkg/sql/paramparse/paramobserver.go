@@ -194,7 +194,7 @@ var tableParams = map[string]tableParam{
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			if !setTrue && po.tableDesc.RowLevelTTL != nil {
-				return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
+				po.tableDesc.RowLevelTTL = nil
 			}
 			return nil
 		},
