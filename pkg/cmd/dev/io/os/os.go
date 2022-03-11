@@ -11,6 +11,7 @@
 package os
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -133,6 +134,24 @@ func (o *OS) Remove(path string) error {
 		}
 		return "", nil
 	})
+	return err
+}
+
+// RemoveAll wraps around os.RemoveAll, removing path and any children it contains.
+func (o *OS) RemoveAll(path string) error {
+	command := fmt.Sprintf("rm -rf %s", path)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	_, err := o.Next(command, func() (output string, err error) {
+		if err := os.RemoveAll(path); err != nil {
+			return "", err
+		}
+
+		return "", nil
+	})
+
 	return err
 }
 
@@ -299,6 +318,52 @@ func (o *OS) CopyFile(src, dst string) error {
 		defer func() { _ = dstFile.Close() }()
 		_, err = io.Copy(dstFile, srcFile)
 		return "", err
+	})
+	return err
+}
+
+// CopyAll recursively copies a directory from one locatino to another.
+// Uses OS.ListFilesWithSuffix, OS.MkdirAll, and OS.CopyFile to discover files, create directories,
+// and move files, respectively
+func (o *OS) CopyAll(src, dst string) error {
+	command := fmt.Sprintf("cp -r %s %s", src, dst)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	_, err := o.Next(command, func() (output string, err error) {
+		o.disableLogging()
+		defer o.enableLogging()
+
+		files, err := o.ListFilesWithSuffix(src, "")
+		if err != nil {
+			return "", err
+		}
+
+		for _, filename := range files {
+			rel, err := filepath.Rel(src, filename)
+			if err != nil {
+				return "", err
+			}
+
+			dstFile := filepath.Join(dst, rel)
+			dstDir := filepath.Dir(dstFile)
+
+			// Ensure the destination directory exists, checking for existence before attempting to create it
+			if _, err := os.Stat(dstDir); errors.Is(err, fs.ErrNotExist) {
+				if err := o.MkdirAll(dstDir); err != nil {
+					return "", err
+				}
+			}
+
+			// Actually copy the file, now that its destination exists
+			err = o.CopyFile(filename, dstFile)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		return "", nil
 	})
 	return err
 }
