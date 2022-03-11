@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -63,8 +64,14 @@ type ScheduledJobExecutor interface {
 type ScheduledJobController interface {
 	// OnDrop runs before the passed in `schedule` is dropped as part of a `DROP
 	// SCHEDULE` query.
-	OnDrop(ctx context.Context, scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
-		env scheduledjobs.JobSchedulerEnv, schedule *ScheduledJob, txn *kv.Txn) error
+	OnDrop(
+		ctx context.Context,
+		scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+		env scheduledjobs.JobSchedulerEnv,
+		schedule *ScheduledJob,
+		txn *kv.Txn,
+		descsCol *descs.Collection,
+	) error
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

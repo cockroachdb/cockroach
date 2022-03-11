@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,6 +54,7 @@ func (s rowLevelTTLExecutor) OnDrop(
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 ) error {
 	return errors.WithHint(
 		pgerror.Newf(
