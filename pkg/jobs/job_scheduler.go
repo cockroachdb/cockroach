@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -301,7 +302,15 @@ func (s *jobScheduler) executeSchedules(
 			continue
 		}
 
+		timeout := schedulerScheduleExecutionTimeout.Get(&s.Settings.SV)
 		if processErr := withSavePoint(ctx, txn, func() error {
+			if timeout > 0 {
+				return contextutil.RunWithTimeout(
+					ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
+					func(ctx context.Context) error {
+						return s.processSchedule(ctx, schedule, numRunning, stats, txn)
+					})
+			}
 			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
 		}); processErr != nil {
 			if errors.HasType(processErr, (*savePointError)(nil)) {
@@ -396,6 +405,9 @@ func (sf *syncCancelFunc) withCancelOnDisabled(
 
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
 		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 
@@ -424,7 +436,6 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				}); err != nil {
 					log.Errorf(ctx, "error executing schedules: %+v", err)
 				}
-
 			}
 		}
 	})
@@ -445,7 +456,13 @@ var schedulerPaceSetting = settings.RegisterDurationSetting(
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
 	"jobs.scheduler.max_jobs_per_iteration",
 	"how many schedules to start per iteration; setting to 0 turns off this limit",
-	10,
+	5,
+)
+
+var schedulerScheduleExecutionTimeout = settings.RegisterDurationSetting(
+	"jobs.scheduler.schedule_execution.timeout",
+	"sets a timeout on for schedule execution; 0 disables timeout",
+	0*time.Second,
 )
 
 // Returns the amount of time to wait before starting initial scan.
