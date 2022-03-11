@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -541,13 +540,25 @@ func backupShowerDefault(
 					}
 				}
 				descSizes := make(map[descpb.ID]roachpb.RowCount)
+				var showCodec keys.SQLCodec
+				if len(manifest.Files) > 0 {
+					_, tenantID, err := keys.DecodeTenantPrefix(manifest.Files[0].Span.Key)
+					if err != nil {
+						return nil, err
+					}
+					showCodec = keys.MakeSQLCodec(tenantID)
+				}
 				for _, file := range manifest.Files {
 					// TODO(dan): This assumes each file in the backup only
 					// contains data from a single table, which is usually but
 					// not always correct. It does not account for a BACKUP that
 					// happened to catch a newly created table that hadn't yet
 					// been split into its own range.
-					_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
+
+					// TODO(msbutler): after handling the todo above, understand whether
+					// we should return an error if a key does not have tableId. The lack
+					// of error handling let #77705 sneak by our unit tests.
+					_, tableID, err := showCodec.DecodeTablePrefix(file.Span.Key)
 					if err != nil {
 						continue
 					}
