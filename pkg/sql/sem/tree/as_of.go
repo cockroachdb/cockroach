@@ -13,7 +13,6 @@ package tree
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -282,35 +281,40 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 // DecimalToHLC performs the conversion from an inputted DECIMAL datum for an
 // AS OF SYSTEM TIME query to an HLC timestamp.
 func DecimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
-	// Format the decimal into a string and split on `.` to extract the nanosecond
-	// walltime and logical tick parts.
-	// TODO(mjibson): use d.Modf() instead of converting to a string.
-	s := d.Text('f')
-	parts := strings.SplitN(s, ".", 2)
-	nanos, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "parsing argument")
+	if d.Negative {
+		return hlc.Timestamp{}, pgerror.Newf(pgcode.Syntax, "cannot be negative")
 	}
-	var logical int64
-	if len(parts) > 1 {
-		// logicalLength is the number of decimal digits expected in the
-		// logical part to the right of the decimal. See the implementation of
-		// cluster_logical_timestamp().
-		const logicalLength = 10
-		p := parts[1]
-		if lp := len(p); lp > logicalLength {
-			return hlc.Timestamp{}, pgerror.Newf(pgcode.Syntax, "logical part has too many digits")
-		} else if lp < logicalLength {
-			p += strings.Repeat("0", logicalLength-lp)
-		}
-		logical, err = strconv.ParseInt(p, 10, 32)
-		if err != nil {
-			return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "parsing argument")
-		}
+	var integral, fractional apd.Decimal
+	d.Modf(&integral, &fractional)
+	timestamp, err := integral.Int64()
+	if err != nil {
+		return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "converting timestamp to integer") // should never happen
+	}
+	if fractional.IsZero() {
+		// there is no logical portion to this clock
+		return hlc.Timestamp{WallTime: timestamp}, nil
+	}
+
+	var logical apd.Decimal
+	multiplier := apd.New(1, 10)
+	condition, err := apd.BaseContext.Mul(&logical, &fractional, multiplier)
+	if err != nil {
+		return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "determining value of logical clock")
+	}
+	if _, err := condition.GoError(apd.DefaultTraps); err != nil {
+		return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "determining value of logical clock")
+	}
+
+	counter, err := logical.Int64()
+	if err != nil {
+		return hlc.Timestamp{}, pgerror.Newf(pgcode.Syntax, "logical part has too many digits")
+	}
+	if counter > 1<<31 {
+		return hlc.Timestamp{}, pgerror.Newf(pgcode.Syntax, "logical clock too large: %d", counter)
 	}
 	return hlc.Timestamp{
-		WallTime: nanos,
-		Logical:  int32(logical),
+		WallTime: timestamp,
+		Logical:  int32(counter),
 	}, nil
 }
 
