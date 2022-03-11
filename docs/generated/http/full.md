@@ -1643,6 +1643,11 @@ Support status: [reserved](#support-status)
 
 
 
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| limit | [int32](#cockroach.server.serverpb.TenantRangesRequest-int32) |  | The pagination limit. This limit will be applied to each node, meaning that if a range is replicated 3 times, 3*limit elements will be returned. NB: Pagination here is based on ascending RangeID. | [reserved](#support-status) |
+| offset | [int32](#cockroach.server.serverpb.TenantRangesRequest-int32) |  | The pagination offset. NB: Pagination here is based on ascending RangeID. | [reserved](#support-status) |
+
 
 
 
@@ -1660,6 +1665,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | ranges_by_locality | [TenantRangesResponse.RangesByLocalityEntry](#cockroach.server.serverpb.TenantRangesResponse-cockroach.server.serverpb.TenantRangesResponse.RangesByLocalityEntry) | repeated | ranges_by_locality maps each range replica to its specified availability zone, as defined within the replica's locality metadata (default key `az`). Replicas without the default available zone key set will fall under the `locality-unset` key. | [reserved](#support-status) |
+| next | [int32](#cockroach.server.serverpb.TenantRangesResponse-int32) |  | The next offset, if pagination was used. NB: Pagination here is based on ascending RangeID. | [reserved](#support-status) |
 
 
 

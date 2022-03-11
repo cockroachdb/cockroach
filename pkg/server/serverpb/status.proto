@@ -535,7 +535,15 @@ message RangesResponse {
   int32 next = 2;
 }
 
-message TenantRangesRequest {}
+message TenantRangesRequest {
+  // The pagination limit. This limit will be applied to each node, meaning that
+  // if a range is replicated 3 times, 3*limit elements will be returned.
+  // NB: Pagination here is based on ascending RangeID.
+  int32 limit = 1;
+  // The pagination offset.
+  // NB: Pagination here is based on ascending RangeID.
+  int32 offset = 2;
+}
 
 message TenantRangesResponse {
   message TenantRangeList {
@@ -546,6 +554,9 @@ message TenantRangesResponse {
   // Replicas without the default available zone key set will fall under the
   // `locality-unset` key.
   map<string, TenantRangeList> ranges_by_locality = 1 [ (gogoproto.nullable) = false ];
+  // The next offset, if pagination was used.
+  // NB: Pagination here is based on ascending RangeID.
+  int32 next = 2;
 }
 
 message GossipRequest {
