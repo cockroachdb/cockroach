@@ -159,7 +159,7 @@ message TableDescriptor {
 }
 ```
 
-### Storage Parameters for Controlling Delete Rate
+### Storage Parameters
 As part of the `(option = value, …)` storage parameter syntax, we will support
 the following options to control the TTL job:
 
@@ -172,10 +172,9 @@ Option | Description
 `ttl_select_batch_size` | How many rows to fetch from the range that have expired at a given time. Defaults to 500. Must be at least `1`.
 `ttl_delete_batch_size` | How many rows to delete at a time. Defaults to 100. Must be at least `1`.
 `ttl_range_concurrency` | How many concurrent ranges are being worked on at a time. Defaults to `cpu_core_count`. Must be at least `1`.
-`ttl_admission_control_priority` | Priority of the admission control to use when deleting. Set to a high amount if deletion traffic is the priority.
-`ttl_select_as_of_system_time` | AS OF SYSTEM TIME to use for the SELECT clause. Defaults to `-30s`. Proposed as a hidden option, as I'm not sure anyone will actually need it.
-`ttl_maximum_rows_deleted_per_second` | Maximum number of rows to be deleted per second (acts as the rate limit). Defaults to 0 (signifying none).
-`ttl_pause` | Pauses the TTL job from executing.
+`ttl_delete_rate_limit` | Maximum number of rows to be deleted per second (acts as the rate limit). Defaults to 0 (signifying none).
+`ttl_row_stats_poll_interval` | Whilst the TTL job is running, counts rows and expired rows on the table to report as prometheus metrics. By default unset, meaning no stats are fetched.
+`ttl_pause` | Stops the TTL job from executing.
 `ttl_job_cron` | Frequency the job runs, specified using the CRON syntax.
 
 ### Applying or Altering TTL for a table
