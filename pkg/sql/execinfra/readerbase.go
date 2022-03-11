@@ -124,3 +124,47 @@ func (s *SpansWithCopy) Reset() {
 	s.Spans = nil
 	s.SpansCopy = s.SpansCopy[:0]
 }
+
+// LookupJoinLimitHelper is used for lookup and index joins in order to limit
+// batches of input rows in the presence of hard and soft limits.
+type LookupJoinLimitHelper struct {
+	origLimitHint    int64
+	currentLimitHint int64
+	limitHintIdx     int
+}
+
+// MakeLookupJoinLimitHelper creates a new LookupJoinLimitHelper.
+func MakeLookupJoinLimitHelper(
+	specLimitHint int64, post *execinfrapb.PostProcessSpec,
+) LookupJoinLimitHelper {
+	limitHint := LimitHint(specLimitHint, post)
+	return LookupJoinLimitHelper{origLimitHint: limitHint, currentLimitHint: limitHint}
+}
+
+// LimitHint returns the current guess on the remaining rows that need to be
+// processed. Zero is returned when the limiting is not active.
+func (h *LookupJoinLimitHelper) LimitHint() int64 {
+	return h.currentLimitHint
+}
+
+// ReadSomeRows notifies the helper that its user has fetched the specified
+// number of rows.
+func (h *LookupJoinLimitHelper) ReadSomeRows(rowsRead int64) {
+	if h.currentLimitHint != 0 {
+		h.currentLimitHint -= rowsRead
+		if h.currentLimitHint == 0 {
+			// Set up the limit hint for the next batch of input rows if the
+			// current batch turns out to be insufficient.
+			//
+			// If we just finished the first batch of rows, then use 10x of the
+			// original limit hint. If we finished the second or any of the
+			// following batches, then we keep the limit hint as zero (i.e.
+			// disabled) since it appears that our original hint was either way
+			// off or many input rows result in lookup misses.
+			h.limitHintIdx++
+			if h.limitHintIdx == 1 {
+				h.currentLimitHint = 10 * h.origLimitHint
+			}
+		}
+	}
+}
