@@ -188,6 +188,7 @@ role      member    isAdmin
 admin     root      true
 testrole  testuser  true
 
+
 user testuser
 
 statement ok

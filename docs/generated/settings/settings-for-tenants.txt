@@ -65,6 +65,7 @@ server.shutdown.query_wait	duration	10s	the server will wait for at least this a
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
+sql.auth.resolve_membership_single_scan.enabled	boolean	false	determines whether to populate the role membership cache with a single scan
 sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
