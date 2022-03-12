@@ -12,7 +12,9 @@ package kvserver_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -49,6 +51,7 @@ import (
 type testStream struct {
 	ctx    context.Context
 	cancel func()
+	block  chan struct{}
 	mu     struct {
 		syncutil.Mutex
 		events []*roachpb.RangeFeedEvent
@@ -76,8 +79,11 @@ func (s *testStream) Cancel() {
 
 func (s *testStream) Send(e *roachpb.RangeFeedEvent) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.mu.events = append(s.mu.events, e)
+	s.mu.Unlock()
+	if s.block != nil {
+		<-s.block
+	}
 	return nil
 }
 
@@ -489,6 +495,9 @@ func TestReplicaRangefeed(t *testing.T) {
 	})
 }
 
+// TODO(nvanbenschoten): expiration-based leases are no longer incompatible with
+// rangefeeds now that closed timestamps are published on these ranges. We can
+// remove this limitation.
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -574,17 +583,6 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		t *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error, span roachpb.Span,
 	) {
 		t.Helper()
-		noResolveTimestampEvent := roachpb.RangeFeedEvent{
-			Checkpoint: &roachpb.RangeFeedCheckpoint{
-				Span:       span,
-				ResolvedTS: hlc.Timestamp{},
-			},
-		}
-		resolveTimestampEvent := roachpb.RangeFeedEvent{
-			Checkpoint: &roachpb.RangeFeedCheckpoint{
-				Span: span,
-			},
-		}
 		var events []*roachpb.RangeFeedEvent
 		testutils.SucceedsSoon(t, func() error {
 			if len(streamErrC) > 0 {
@@ -600,21 +598,28 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		if len(streamErrC) > 0 {
 			t.Fatalf("unexpected error from stream: %v", <-streamErrC)
 		}
-		expEvents := []*roachpb.RangeFeedEvent{&noResolveTimestampEvent}
+		makeCheckpoint := func() *roachpb.RangeFeedEvent {
+			return &roachpb.RangeFeedEvent{
+				Checkpoint: &roachpb.RangeFeedCheckpoint{
+					Span: span,
+				},
+			}
+		}
+		expEvents := []*roachpb.RangeFeedEvent{makeCheckpoint()}
 		if len(events) > 1 {
 			// Unfortunately there is a timing issue here and the range feed may
-			// publish two checkpoints, one with a resolvedTs and one without, so we
-			// check for either case.
-			resolveTimestampEvent.Checkpoint.ResolvedTS = events[1].Checkpoint.ResolvedTS
-			expEvents = []*roachpb.RangeFeedEvent{
-				&noResolveTimestampEvent,
-				&resolveTimestampEvent,
-			}
+			// publish two checkpoints, so we check for either case.
+			expEvents = append(expEvents, makeCheckpoint())
+		}
+		for i := range expEvents {
+			// Assert that the checkpoints exist, but not on the specific value of
+			// their resolved timestamp.
+			require.NotNil(t, events[i].Checkpoint)
+			expEvents[i].Checkpoint.ResolvedTS = events[i].Checkpoint.ResolvedTS
 		}
 		if !reflect.DeepEqual(events, expEvents) {
 			t.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
 		}
-
 	}
 
 	assertRangefeedRetryErr := func(
@@ -1162,6 +1167,218 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	}
 	// Now cancel it and wait for it to shut down.
 	rangeFeedCancel()
+}
+
+// TestReplicaRangefeedProgressOnSlowConsumer tests that a rangefeed with a slow
+// consumer will still make progress between retry attempts, even if one or more
+// REASON_SLOW_CONSUMER errors are hit in the process.
+func TestReplicaRangefeedCatchUpProgressOnSlowConsumer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const eventChanCap = 64
+	const initVersions = 4096
+	// The catch-up scan consumes and publishes 4 versions for every 1 new version
+	// written to the range. The guarantee we want is that if the catch-up scan
+	// throughput is larger than the foreground traffic throughput, then the
+	// rangefeed will eventually catch up and establish a stable connection, even
+	// with a small buffer.
+	const catchUpRateMultiplier = 4
+
+	ctx := context.Background()
+	splitKey := roachpb.Key("a")
+
+	settings := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &settings.SV, 10*time.Millisecond)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Drop the per-registration buffer size.
+					RangeFeedEventChanCap: eventChanCap,
+					// Disable the per-range initial resolved timestamp scan, which is
+					// used to initialize the per-range resolved timestamp tracker. For
+					// the reasons listed in #77696, this scan cannot reliably guarantee
+					// that new registrations will receive a non-zero checkpoint before
+					// overflowing their buffer. This is why syncRTSScanConsumer exists.
+					// However, its presence can disrupt this test, so we disable it.
+					RangeFeedSkipInitResolvedTS: true,
+				},
+			},
+			Settings: settings,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Servers[0]
+	store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	tc.SplitRangeOrFatal(t, splitKey)
+	rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
+
+	// Build a large amount of MVCC history that the rangefeed will need to catch
+	// up on.
+	writeVersionsAndWait := func(num int) hlc.Timestamp {
+		t.Logf("performing %d writes", num)
+		ba := roachpb.BatchRequest{}
+		for i := 0; i < num; i++ {
+			key := strconv.AppendInt(splitKey, int64(i), 10)
+			ba.Add(incrementArgs(key, 1))
+		}
+		br, pErr := store.TestSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		// Wait for the range's closed timestamp to elapse the write timestamp. In
+		// doing so, we ensure that any non-zero checkpoint established after this
+		// write will have a resolved timestamp above the writes' timestamps, so
+		// that they won't be included in a catch-up scan based at that timestamp.
+		writeTs := br.Timestamp
+		testutils.SucceedsSoon(t, func() error {
+			resTs, err := tc.Servers[0].DB().QueryResolvedTimestamp(ctx, splitKey, splitKey.Next(), true)
+			require.NoError(t, err)
+			if writeTs.LessEq(resTs) {
+				return nil
+			}
+			return fmt.Errorf("waiting for closed timestamp to elapse %s, found %s", writeTs, resTs)
+		})
+		return writeTs
+	}
+	catchUpVersions := initVersions
+	writeTs := writeVersionsAndWait(catchUpVersions)
+
+	maxCheckpointTs := hlc.MinTimestamp
+	for {
+		// Set up a rangefeed with a slow (blocked) consumer across a-c.
+		stream := newTestStream()
+		stream.block = make(chan struct{})
+		streamErrC := make(chan *roachpb.Error, 1)
+		go func() {
+			t.Logf("establishing rangefeed at ts=%s", maxCheckpointTs)
+			req := roachpb.RangeFeedRequest{
+				Header: roachpb.Header{RangeID: rangeID, Timestamp: maxCheckpointTs},
+				Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			}
+			streamErrC <- store.RangeFeed(&req, stream)
+		}()
+
+		// Wait for the rangefeed registration.
+		testutils.SucceedsSoon(t, func() error {
+			if len(stream.Events()) == 0 {
+				return errors.Errorf("rangefeed not yet registered")
+			}
+			return nil
+		})
+
+		// While catching up on the previous versions, new versions are published in
+		// accordance with the defined ratio between the two rates.
+		prevCatchUpVersions := catchUpVersions
+		catchUpVersions /= catchUpRateMultiplier
+		prevWriteTs := writeTs
+		writeTs = writeVersionsAndWait(catchUpVersions)
+
+		// After those writes have completed, unblock the rangefeed's consumer to
+		// allow its catch-up scan to run.
+		close(stream.block)
+
+		// Each iteration will need to catch up on progressively fewer versions.
+		// As a result, the retry loop will eventually converge to a point where
+		// the catch-up scan completes before the rangefeed buffer overflow, after
+		// which point, a stable connection can be maintained.
+		//
+		// iter 1: 4096 versions consumed, 1024 versions written, overflow
+		// iter 2: 1024 versions consumed,  256 versions written, overflow
+		// iter 3:  256 versions consumed,   64 versions written, overflow
+		// iter 4:   64 versions consumed,   16 versions written, no overflow
+		if catchUpVersions >= eventChanCap {
+			// OVERFLOW CASE.
+
+			// Check the error. The rangefeed's buffer should have overflowed and it
+			// should have been disconnected.
+			pErr := <-streamErrC
+			expErr := roachpb.NewRangeFeedRetryError(roachpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
+			require.Equal(t, expErr, pErr.GetDetail())
+
+			prevMaxCheckpointTs := maxCheckpointTs
+			catchUpVersionsSeen := -1
+			for i, ev := range stream.Events() {
+				if ev.Checkpoint != nil {
+					maxCheckpointTs.Forward(ev.Checkpoint.ResolvedTS)
+					// All events before the first checkpoint are from the catch-up scan.
+					// This allows us to assert that the catch-up scan produces the exact
+					// number of events that we expect.
+					if catchUpVersionsSeen < 0 {
+						catchUpVersionsSeen = i
+					}
+				}
+			}
+
+			// The checkpoint timestamp should have progressed.
+			require.True(t, prevMaxCheckpointTs.Less(maxCheckpointTs))
+			// The checkpoint timestamp should be in advance of the versions written
+			// in the prior iteration. This is ensured by writeVersionsAndWait. While
+			// this condition is not strictly true in practice, it helps make the test
+			// deterministic and allows us to perform the next assertion.
+			require.True(t, prevWriteTs.LessEq(maxCheckpointTs))
+			// The catch-up scan saw exactly the versions written in the prior
+			// iteration.
+			require.Equal(t, prevCatchUpVersions, catchUpVersionsSeen)
+		} else {
+			// STABLE CONNECTION CASE.
+
+			// Wait for propagation of both the catch-up scan and the new writes. The
+			// connection should not drop during this period.
+			var memo struct{ idx, count int } // avoid quadratic loop
+			valsPublished := func() int {
+				evs := stream.Events()
+				for _, ev := range evs[memo.idx:] {
+					if ev.Val != nil {
+						memo.count++
+					}
+				}
+				memo.idx = len(evs)
+				return memo.count
+			}
+			waitForVals := func(num int) {
+				testutils.SucceedsSoon(t, func() error {
+					select {
+					case pErr := <-streamErrC:
+						t.Fatalf("unexpected errror %v", pErr)
+					default:
+					}
+					if valsPublished() < num {
+						return errors.Errorf("waiting for writes to reach rangefeed consumer")
+					}
+					return nil
+				})
+			}
+			expVals := prevCatchUpVersions + catchUpVersions
+			waitForVals(expVals)
+
+			// Furthermore, because the connection is stable, future writes should
+			// make it to the rangefeed consumer successfully.
+			for i := 0; i < 10; i++ {
+				// Write eventChanCap / 2 values at a time, to avoid overflowing the
+				// registration's buffer due to goroutine scheduling slowness.
+				const writes = eventChanCap / 2
+				for j := 0; j < writes; j++ {
+					incArgs := incrementArgs(splitKey, 1)
+					_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+					require.Nil(t, pErr)
+				}
+
+				// Wait for propagation.
+				expVals += writes
+				waitForVals(expVals)
+			}
+
+			// Gracefully cancel the feed.
+			stream.Cancel()
+			pErr := <-streamErrC
+			require.Nil(t, pErr.GetDetail())
+			break
+		}
+	}
 }
 
 // Test that a rangefeed registration receives checkpoints even if the lease

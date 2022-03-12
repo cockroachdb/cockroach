@@ -218,15 +218,14 @@ func (r *Replica) rangeFeedWithRangeID(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
 	if usingCatchUpIter {
-		catchUpIterFunc = func(span roachpb.Span, startTime hlc.Timestamp) *rangefeed.CatchUpIterator {
-			// Assert that we still hold the raftMu when this is called to ensure
-			// that the catchUpIter reads from the current snapshot.
-			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease)
-		}
+		catchUpIterFunc = r.makeCatchUpIteratorConstructor(iterSemRelease)
 	}
+
+	// Register the stream with an iterator to initialize the resolved timestamp.
+	rtsIterFunc := r.makeIntentScannerConstructor()
+
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, errC,
+		ctx, rSpan, args.Timestamp, catchUpIterFunc, rtsIterFunc, args.WithDiff, lockedStream, errC,
 	)
 	r.raftMu.Unlock()
 
@@ -290,16 +289,6 @@ func (r *Replica) updateRangefeedFilterLocked() bool {
 	return false
 }
 
-// The size of an event is 72 bytes, so this will result in an allocation on
-// the order of ~300KB per RangeFeed. That's probably ok given the number of
-// ranges on a node that we'd like to support with active rangefeeds, but it's
-// certainly on the upper end of the range.
-//
-// TODO(dan): Everyone seems to agree that this memory limit would be better set
-// at a store-wide level, but there doesn't seem to be an easy way to accomplish
-// that.
-const defaultEventChanCap = 4096
-
 // Rangefeed registration takes place under the raftMu, so log if we ever hold
 // the mutex for too long, as this could affect foreground traffic.
 //
@@ -324,12 +313,18 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp, // exclusive
-	catchUpIter rangefeed.CatchUpIteratorConstructor,
+	catchUpIterFunc rangefeed.CatchUpIteratorConstructor,
+	rtsIterFunc rangefeed.IntentScannerConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
 ) *rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
+
+	r.mu.RLock()
+	desc := r.descRLocked()
+	closedTS := r.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */)
+	r.mu.RUnlock()
 
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
@@ -337,7 +332,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
+		reg, filter := p.Register(span, startTS, closedTS, catchUpIterFunc, rtsIterFunc, withDiff, stream, errC)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -357,46 +352,30 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
 
 	// Create a new rangefeed.
-	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
-		AmbientContext:   r.AmbientContext,
-		Clock:            r.Clock(),
-		RangeID:          r.RangeID,
-		Span:             desc.RSpan(),
-		TxnPusher:        &tp,
-		PushTxnsInterval: r.store.TestingKnobs().RangeFeedPushTxnsInterval,
-		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
-		EventChanCap:     defaultEventChanCap,
-		EventChanTimeout: 50 * time.Millisecond,
-		Metrics:          r.store.metrics.RangeFeedMetrics,
-		MemBudget:        feedBudget,
+		AmbientContext:     r.AmbientContext,
+		Clock:              r.Clock(),
+		RangeID:            r.RangeID,
+		Span:               desc.RSpan(),
+		InitClosedTS:       closedTS,
+		TxnPusher:          &tp,
+		PushTxnsInterval:   r.store.TestingKnobs().RangeFeedPushTxnsInterval,
+		PushTxnsAge:        r.store.TestingKnobs().RangeFeedPushTxnsAge,
+		EventChanCap:       r.store.TestingKnobs().RangeFeedEventChanCap,
+		EventChanTimeout:   50 * time.Millisecond,
+		SkipInitResolvedTS: r.store.TestingKnobs().RangeFeedSkipInitResolvedTS,
+		Metrics:            r.store.metrics.RangeFeedMetrics,
+		MemBudget:          feedBudget,
 	}
 	p = rangefeed.NewProcessor(cfg)
-
-	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() rangefeed.IntentScanner {
-		// Assert that we still hold the raftMu when this is called to ensure
-		// that the rtsIter reads from the current snapshot. The replica
-		// synchronizes with the rangefeed Processor calling this function by
-		// waiting for the Register call below to return.
-		r.raftMu.AssertHeld()
-
-		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
-		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
-		iter := r.Engine().NewEngineIterator(storage.IterOptions{
-			LowerBound: lowerBound,
-			UpperBound: upperBound,
-		})
-		return rangefeed.NewSeparatedIntentScanner(iter)
-	}
 
 	// NB: This only errors if the stopper is stopping, and we have to return here
 	// in that case. We do check ShouldQuiesce() below, but that's not sufficient
 	// because the stopper has two states: stopping and quiescing. If this errors
 	// due to stopping, but before it enters the quiescing state, then the select
 	// below will fall through to the panic.
-	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
+	if err := p.Start(r.store.Stopper(), rtsIterFunc); err != nil {
 		errC <- roachpb.NewError(err)
 		return nil
 	}
@@ -406,7 +385,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
+	reg, filter := p.Register(span, startTS, closedTS, catchUpIterFunc, rtsIterFunc, withDiff, stream, errC)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
@@ -425,9 +404,36 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
-	r.handleClosedTimestampUpdateRaftMuLocked(ctx, r.GetCurrentClosedTimestamp(ctx))
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx, closedTS)
 
 	return p
+}
+
+func (r *Replica) makeCatchUpIteratorConstructor(
+	closer func(),
+) rangefeed.CatchUpIteratorConstructor {
+	return func(span roachpb.Span, startTime hlc.Timestamp) *rangefeed.CatchUpIterator {
+		// Assert that we still hold the raftMu when this is called to ensure
+		// that the catchUpIter reads from the current snapshot.
+		r.raftMu.AssertHeld()
+		return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, closer)
+	}
+}
+
+func (r *Replica) makeIntentScannerConstructor() rangefeed.IntentScannerConstructor {
+	return func(span roachpb.Span) rangefeed.IntentScanner {
+		// Assert that we still hold the raftMu when this is called to ensure
+		// that the rtsIterFunc reads from the current snapshot.
+		r.raftMu.AssertHeld()
+
+		lowerBound, _ := keys.LockTableSingleKey(span.Key, nil)
+		upperBound, _ := keys.LockTableSingleKey(span.EndKey, nil)
+		iter := r.Engine().NewEngineIterator(storage.IterOptions{
+			LowerBound: lowerBound,
+			UpperBound: upperBound,
+		})
+		return rangefeed.NewSeparatedIntentScanner(iter)
+	}
 }
 
 // maybeDisconnectEmptyRangefeed tears down the provided Processor if it is

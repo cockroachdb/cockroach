@@ -82,9 +82,10 @@ type resolvedTimestamp struct {
 	intentQ    unresolvedIntentQueue
 }
 
-func makeResolvedTimestamp() resolvedTimestamp {
+func makeResolvedTimestamp(initClosedTS hlc.Timestamp) resolvedTimestamp {
 	return resolvedTimestamp{
-		intentQ: makeUnresolvedIntentQueue(),
+		closedTS: initClosedTS,
+		intentQ:  makeUnresolvedIntentQueue(),
 	}
 }
 

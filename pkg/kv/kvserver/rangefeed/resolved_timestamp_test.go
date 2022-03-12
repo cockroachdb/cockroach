@@ -176,7 +176,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 
 func TestResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rts := makeResolvedTimestamp()
+	rts := makeResolvedTimestamp(hlc.Timestamp{})
 	rts.Init()
 
 	// Test empty resolved timestamp.
@@ -348,7 +348,7 @@ func TestResolvedTimestamp(t *testing.T) {
 
 func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rts := makeResolvedTimestamp()
+	rts := makeResolvedTimestamp(hlc.Timestamp{})
 	rts.Init()
 
 	// Add a value. No closed timestamp so no resolved timestamp.
@@ -386,7 +386,7 @@ func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
 
 func TestResolvedTimestampNoIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rts := makeResolvedTimestamp()
+	rts := makeResolvedTimestamp(hlc.Timestamp{})
 	rts.Init()
 
 	// Set a closed timestamp. Resolved timestamp advances.
@@ -418,21 +418,30 @@ func TestResolvedTimestampNoIntents(t *testing.T) {
 func TestResolvedTimestampInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Run("CT Before Init", func(t *testing.T) {
-		rts := makeResolvedTimestamp()
+	t.Run("CT Before Init On Creation", func(t *testing.T) {
+		rts := makeResolvedTimestamp(hlc.Timestamp{WallTime: 5})
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Init. Resolved timestamp moves to closed timestamp.
+		fwd := rts.Init()
+		require.True(t, fwd)
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+	})
+	t.Run("CT Before Init After Creation", func(t *testing.T) {
+		rts := makeResolvedTimestamp(hlc.Timestamp{WallTime: 5})
 
 		// Set a closed timestamp. Not initialized so no resolved timestamp.
-		fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 7})
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Init. Resolved timestamp moves to closed timestamp.
 		fwd = rts.Init()
 		require.True(t, fwd)
-		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+		require.Equal(t, hlc.Timestamp{WallTime: 7}, rts.Get())
 	})
 	t.Run("No CT Before Init", func(t *testing.T) {
-		rts := makeResolvedTimestamp()
+		rts := makeResolvedTimestamp(hlc.Timestamp{})
 
 		// Add an intent. Not initialized so no resolved timestamp.
 		txn1 := uuid.MakeV4()
@@ -446,16 +455,11 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 	})
 	t.Run("Write Before Init", func(t *testing.T) {
-		rts := makeResolvedTimestamp()
+		rts := makeResolvedTimestamp(hlc.Timestamp{WallTime: 5})
 
 		// Add an intent. Not initialized so no resolved timestamp.
 		txn1 := uuid.MakeV4()
 		fwd := rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 3}))
-		require.False(t, fwd)
-		require.Equal(t, hlc.Timestamp{}, rts.Get())
-
-		// Set a closed timestamp. Not initialized so no resolved timestamp.
-		fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
@@ -465,7 +469,7 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{WallTime: 2}, rts.Get())
 	})
 	t.Run("Abort + Write Before Init", func(t *testing.T) {
-		rts := makeResolvedTimestamp()
+		rts := makeResolvedTimestamp(hlc.Timestamp{WallTime: 5})
 
 		// Abort an intent. Not initialized so no resolved timestamp.
 		txn1 := uuid.MakeV4()
@@ -486,18 +490,13 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
-		// Set a closed timestamp. Not initialized so no resolved timestamp.
-		fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
-		require.False(t, fwd)
-		require.Equal(t, hlc.Timestamp{}, rts.Get())
-
 		// Init. Resolved timestamp moves to closed timestamp.
 		fwd = rts.Init()
 		require.True(t, fwd)
 		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
 	})
 	t.Run("Abort Before Init, No Write", func(t *testing.T) {
-		rts := makeResolvedTimestamp()
+		rts := makeResolvedTimestamp(hlc.Timestamp{WallTime: 5})
 
 		// Abort an intent. Not initialized so no resolved timestamp.
 		txn1 := uuid.MakeV4()
@@ -513,7 +512,7 @@ func TestResolvedTimestampInit(t *testing.T) {
 
 func TestResolvedTimestampTxnAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rts := makeResolvedTimestamp()
+	rts := makeResolvedTimestamp(hlc.Timestamp{})
 	rts.Init()
 
 	// Set a closed timestamp. Resolved timestamp advances.
@@ -569,7 +568,7 @@ func TestResolvedTimestampTxnAborted(t *testing.T) {
 func TestClosedTimestampLogicalPart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rts := makeResolvedTimestamp()
+	rts := makeResolvedTimestamp(hlc.Timestamp{})
 	rts.Init()
 
 	// Set a new closed timestamp. Resolved timestamp advances.

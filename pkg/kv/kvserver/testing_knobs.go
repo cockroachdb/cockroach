@@ -332,6 +332,12 @@ type StoreTestingKnobs struct {
 	// RangeFeedPushTxnsAge overrides the default value for
 	// rangefeed.Config.PushTxnsAge.
 	RangeFeedPushTxnsAge time.Duration
+	// RangeFeedEventChanCap overrides the default value for
+	// rangefeed.Config.EventChanCap.
+	RangeFeedEventChanCap int
+	// RangeFeedEventChanCap overrides the default value for
+	// rangefeed.Config.SkipInitResolvedTS.
+	RangeFeedSkipInitResolvedTS bool
 	// AllowLeaseProposalWhenNotLeader, if set, makes the proposal buffer allow
 	// lease request proposals even when the replica inserting that proposal is
 	// not the Raft leader. This can be used in tests to allow a replica to

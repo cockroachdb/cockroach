@@ -88,6 +88,14 @@ type registration struct {
 	// is being registered by the processor.
 	catchUpIterConstructor CatchUpIteratorConstructor
 
+	// initClosedTimestamp and rtsIterConstructor are used to perform an ad-hoc
+	// resolved timestamp computation for the registration, in cases where the
+	// registration's buffer hits a memory limit before it succeeds in publishing
+	// a non-empty checkpoint. This ensures progress after a large catch-up scan,
+	// so that the client doesn't spin without advancing its frontier.
+	initClosedTimestamp hlc.Timestamp
+	rtsIterConstructor  IntentScannerConstructor
+
 	// Output.
 	stream Stream
 	errC   chan<- *roachpb.Error
@@ -114,13 +122,20 @@ type registration struct {
 		// Replica.raftMu is still held. If it is non-nil at the time that
 		// disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
+
+		// rtsIter is populated on the Processor's goroutine while the
+		// Replica.raftMu is still held. If it is non-nil at the time that
+		// disconnect is called, it is closed by disconnect.
+		rtsIter IntentScanner
 	}
 }
 
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
+	initClosedTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
+	rtsIterConstructor IntentScannerConstructor,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -130,7 +145,9 @@ func newRegistration(
 	r := registration{
 		span:                   span,
 		catchUpTimestamp:       startTS,
+		initClosedTimestamp:    initClosedTS,
 		catchUpIterConstructor: catchUpIterConstructor,
+		rtsIterConstructor:     rtsIterConstructor,
 		withDiff:               withDiff,
 		metrics:                metrics,
 		stream:                 stream,
@@ -278,6 +295,10 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 			r.mu.catchUpIter.Close()
 			r.mu.catchUpIter = nil
 		}
+		if r.mu.rtsIter != nil {
+			r.mu.rtsIter.Close()
+			r.mu.rtsIter = nil
+		}
 		if r.mu.outputLoopCancelFn != nil {
 			r.mu.outputLoopCancelFn()
 		}
@@ -316,14 +337,20 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		}
 		r.mu.Unlock()
 		if overflowed {
+			if err := r.maybeRunResolvedTSScan(ctx); err != nil {
+				return err
+			}
 			return newErrBufferCapacityExceeded().GoError()
 		}
 
 		select {
-		case nextEvent := <-r.buf:
-			err := r.stream.Send(nextEvent.event)
-			nextEvent.alloc.Release(ctx)
-			putPooledSharedEvent(nextEvent)
+		case event := <-r.buf:
+			if event.event.Checkpoint != nil && !event.event.Checkpoint.ResolvedTS.IsEmpty() {
+				r.maybeCloseResolvedTSIter()
+			}
+			err := r.stream.Send(event.event)
+			event.alloc.Release(ctx)
+			putPooledSharedEvent(event)
 			if err != nil {
 				return err
 			}
@@ -384,6 +411,49 @@ func (r *registration) maybeRunCatchUpScan() error {
 	}()
 
 	return catchUpIter.CatchUpScan(r.stream.Send, r.withDiff)
+}
+
+// maybeRunResolvedTSScan performs an ad-hoc resolved timestamp computation for
+// the registration. It is used in cases where the registration's buffer hits a
+// memory limit before it succeeds in publishing a non-empty checkpoint. This
+// ensures progress after a large catch-up scan, so that the client doesn't spin
+// without advancing its frontier.
+//
+// If the registration does not have an rtsIter, either because it did not
+// perform a catch-up scan or because it has already published a non-empty
+// checkpoint, this method is a no-op.
+func (r *registration) maybeRunResolvedTSScan(ctx context.Context) error {
+	rtsIter := r.detachRTSIter()
+	if rtsIter == nil {
+		// Non-empty checkpoint already published.
+		return nil
+	}
+
+	c := newSyncRTSScanConsumer(r.initClosedTimestamp)
+	initScan := newInitResolvedTSScan(rtsIter, r.span, c)
+	initScan.Run(ctx)
+	if c.err != nil {
+		return c.err
+	}
+
+	rts := c.resolvedTimestamp()
+	if !rts.IsInit() {
+		log.Fatal(ctx, "resolved timestamp computation incomplete")
+	}
+
+	var event roachpb.RangeFeedEvent
+	event.MustSetValue(&roachpb.RangeFeedCheckpoint{
+		Span:       r.span,
+		ResolvedTS: rts.Get(),
+	})
+	return r.stream.Send(&event)
+}
+
+func (r *registration) maybeCloseResolvedTSIter() {
+	rtsIter := r.detachRTSIter()
+	if rtsIter != nil {
+		rtsIter.Close()
+	}
 }
 
 // ID implements interval.Interface.
@@ -574,9 +644,13 @@ func (r *registration) maybeConstructCatchUpIter() {
 	catchUpIter := r.catchUpIterConstructor(r.span, r.catchUpTimestamp)
 	r.catchUpIterConstructor = nil
 
+	rtsIter := r.rtsIterConstructor(r.span)
+	r.catchUpIterConstructor = nil
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.catchUpIter = catchUpIter
+	r.mu.rtsIter = rtsIter
 }
 
 // detachCatchUpIter detaches the catchUpIter that was previously attached.
@@ -586,6 +660,15 @@ func (r *registration) detachCatchUpIter() *CatchUpIterator {
 	catchUpIter := r.mu.catchUpIter
 	r.mu.catchUpIter = nil
 	return catchUpIter
+}
+
+// detachRTSIter detaches the rtsIter that was previously attached.
+func (r *registration) detachRTSIter() IntentScanner {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rtsIter := r.mu.rtsIter
+	r.mu.rtsIter = nil
+	return rtsIter
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to
