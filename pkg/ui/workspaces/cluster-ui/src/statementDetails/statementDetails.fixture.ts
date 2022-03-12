@@ -147,7 +147,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
     },
-    statements_per_aggregated_ts: [
+    statement_statistics_per_aggregated_ts: [
       {
         stats: {
           count: new Long(1),
@@ -533,7 +533,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
         },
       },
     ],
-    statements_per_plan_hash: [
+    statement_statistics_per_plan_hash: [
       {
         stats: {
           count: new Long(3),
