@@ -35,6 +35,7 @@ import {
   appAttr,
   appNamesAttr,
   statementAttr,
+  RenderCount,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -209,17 +210,6 @@ function renderTransactionType(implicitTxn: boolean) {
     return "Implicit";
   }
   return "Explicit";
-}
-
-function renderCount(yesCount: Long, totalCount: Long) {
-  if (longToInt(yesCount) == 0) {
-    return "No";
-  }
-  if (longToInt(yesCount) == longToInt(totalCount)) {
-    return "Yes";
-  }
-  const noCount = longToInt(totalCount) - longToInt(yesCount);
-  return `${longToInt(yesCount)} Yes / ${noCount} No`;
 }
 
 class NumericStatTable extends React.Component<NumericStatTableProps> {
@@ -457,6 +447,7 @@ export class StatementDetails extends React.Component<
       databases,
       dist_sql_count,
       failed_count,
+      full_scan_count,
       vec_count,
       total_count,
       implicit_txn,
@@ -692,15 +683,19 @@ export class StatementDetails extends React.Component<
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
-                  <Text>{renderCount(failed_count, total_count)}</Text>
+                  <Text>{RenderCount(failed_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
-                  <Text>{renderCount(dist_sql_count, total_count)}</Text>
+                  <Text>{RenderCount(dist_sql_count, total_count)}</Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Full Scan?</Text>
+                  <Text>{RenderCount(full_scan_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Vectorized execution?</Text>
-                  <Text>{renderCount(vec_count, total_count)}</Text>
+                  <Text>{RenderCount(vec_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Transaction type</Text>
