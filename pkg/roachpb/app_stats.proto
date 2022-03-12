@@ -201,6 +201,24 @@ message StatementStatisticsKey {
      (gogoproto.casttype) = "TransactionFingerprintID"];
 }
 
+message AggregatedStatementMetadata {
+  optional string query = 1 [(gogoproto.nullable) = false];
+  // Formatted query is the return of the key_data.query after prettify_statement.
+  // The query above cannot be replaced by the formatted value, because is used as is for
+  // diagnostic bundle.
+  optional string formatted_query = 2 [(gogoproto.nullable) = false];
+  optional string query_summary = 3 [(gogoproto.nullable) = false];
+  optional string stmt_type = 4 [(gogoproto.nullable) = false];
+  repeated string app_names = 5;
+  repeated string databases = 6;
+  optional bool implicit_txn = 7 [(gogoproto.nullable) = false];
+  optional int64 dist_sql_count = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "DistSQLCount"];
+  optional int64 failed_count = 9 [(gogoproto.nullable) = false];
+  optional int64 full_scan_count = 10 [(gogoproto.nullable) = false];
+  optional int64 vec_count = 11 [(gogoproto.nullable) = false];
+  optional int64 total_count = 12 [(gogoproto.nullable) = false];
+}
+
 // CollectedStatementStatistics wraps collected timings and metadata for some
 // query's execution.
 message CollectedStatementStatistics {
