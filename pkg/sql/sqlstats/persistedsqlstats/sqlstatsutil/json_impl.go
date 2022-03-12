@@ -102,6 +102,23 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	}
 }
 
+type aggregatedMetadata roachpb.AggregatedStatementMetadata
+
+func (s *aggregatedMetadata) jsonFields() jsonFields {
+	return jsonFields{
+		{"db", (*stringArray)(&s.Databases)},
+		{"distSqlCount", (*jsonInt)(&s.DistSqlCount)},
+		{"failedCount", (*jsonInt)(&s.FailedCount)},
+		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
+		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
+		{"query", (*jsonString)(&s.Query)},
+		{"querySummary", (*jsonString)(&s.QuerySummary)},
+		{"stmtType", (*jsonString)(&s.StmtType)},
+		{"vecCount", (*jsonInt)(&s.VecCount)},
+		{"totalCount", (*jsonInt)(&s.TotalCount)},
+	}
+}
+
 type int64Array []int64
 
 func (a *int64Array) decodeJSON(js json.JSON) error {

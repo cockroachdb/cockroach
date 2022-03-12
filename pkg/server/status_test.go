@@ -2168,7 +2168,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
 		require.Equal(t, expected.aggregatedTsCount, len(resp.StatementStatisticsPerAggregatedTs))
 		require.Equal(t, expected.planHashCount, len(resp.StatementStatisticsPerPlanHash))
-		require.Equal(t, expected.appNames, resp.Statement.AppNames)
+		require.Equal(t, expected.appNames, resp.Statement.KeyData.AppNames)
 	}
 
 	// Grant VIEWACTIVITY.
