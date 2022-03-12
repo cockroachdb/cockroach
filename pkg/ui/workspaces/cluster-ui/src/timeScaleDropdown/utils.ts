@@ -87,6 +87,11 @@ export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
   return [start, end];
 };
 
+// toRoundedDateRange round the TimeScale selected, with the start
+// rounded down and end rounded up one hour.
+// e.g.
+// start: 17:45:23  ->  17:00:00
+// end:   20:14:32  ->  21:00:00
 export const toRoundedDateRange = (
   ts: TimeScale,
 ): [moment.Moment, moment.Moment] => {

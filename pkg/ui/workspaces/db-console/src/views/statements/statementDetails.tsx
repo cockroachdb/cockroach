@@ -69,6 +69,11 @@ export const selectStatementDetails = createSelector(
     timeScale,
     statementDetailsStats,
   ): StatementDetailsResponseMessage => {
+    // Since the aggregation interval is 1h, we want to round the selected timeScale to include
+    // the full hour. If a timeScale is between 14:32 - 15:17 we want to search for values
+    // between 14:00 - 16:00. We don't encourage the aggregation interval to be modified, but
+    // in case that changes in the future we might consider changing this function to use the
+    // cluster settings value for the rounding function.
     const [start, end] = toRoundedDateRange(timeScale);
     const key = generateStmtDetailsToID(
       fingerprintID,

@@ -1502,12 +1502,12 @@ message StatementDetailsResponse {
 
   // statement returns the total statistics for the statement.
   CollectedStatementSummary statement = 1 [(gogoproto.nullable) = false];
-  // statements_per_aggregated_ts returns the same statement from above, but with its statistics
+  // statement_statistics_per_aggregated_ts returns the same statement from above, but with its statistics
   // separated by the aggregated timestamp.
-  repeated CollectedStatementGroupedByAggregatedTs statements_per_aggregated_ts = 2 [(gogoproto.nullable) = false];
-  // statements_per_plan_hash returns the same statement from above, but with its statistics
+  repeated CollectedStatementGroupedByAggregatedTs statement_statistics_per_aggregated_ts = 2 [(gogoproto.nullable) = false];
+  // statement_statistics_per_plan_hash returns the same statement from above, but with its statistics
   // separated by the plan hash.
-  repeated CollectedStatementGroupedByPlanHash statements_per_plan_hash = 3 [(gogoproto.nullable) = false];
+  repeated CollectedStatementGroupedByPlanHash statement_statistics_per_plan_hash = 3 [(gogoproto.nullable) = false];
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 4;

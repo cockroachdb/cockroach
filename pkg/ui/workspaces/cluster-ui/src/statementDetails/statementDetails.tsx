@@ -444,7 +444,7 @@ export class StatementDetails extends React.Component<
       hasViewActivityRedactedRole,
     } = this.props;
     const { currentTab } = this.state;
-    const { statements_per_plan_hash } = this.props.statementDetails;
+    const { statement_statistics_per_plan_hash } = this.props.statementDetails;
     const {
       stats,
       app_names,
@@ -781,7 +781,7 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
-          <PlanDetails plans={statements_per_plan_hash} />
+          <PlanDetails plans={statement_statistics_per_plan_hash} />
         </TabPane>
         <TabPane
           tab="Execution Stats"
