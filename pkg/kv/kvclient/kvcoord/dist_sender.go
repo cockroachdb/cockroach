@@ -139,6 +139,24 @@ errors as 'roachpb.InternalErrType'.
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedTotalRanges = metric.Metadata{
+		Name: "distsender.rangefeed.catchup_ranges",
+		Help: `Number of ranges executing rangefeed
+
+This counts the total number of ranges that are rangefeed
+`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderRangefeedCatchupRanges = metric.Metadata{
+		Name: "distsender.rangefeed.catchup_ranges",
+		Help: `Number of ranges in catchup mode
+
+This counts the number of ranges that are performing catchup scan.
+`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -202,6 +220,8 @@ type DistSenderMetrics struct {
 	InLeaseTransferBackoffs *metric.Counter
 	RangeLookups            *metric.Counter
 	SlowRPCs                *metric.Gauge
+	RangefeedRanges         *metric.Gauge
+	RangefeedCatchupRanges  *metric.Gauge
 	MethodCounts            [roachpb.NumMethods]*metric.Counter
 	ErrCounts               [roachpb.NumErrors]*metric.Counter
 }
@@ -219,6 +239,8 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
+		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
 	}
 	for i := range m.MethodCounts {
 		method := roachpb.Method(i).String()
