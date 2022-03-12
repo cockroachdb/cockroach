@@ -43,6 +43,11 @@ func DecodeStmtStatsMetadataJSON(
 	return (*stmtStatsMetadata)(result).jsonFields().decodeJSON(metadata)
 }
 
+// DecodeAggregatedMetadataJSON decodes the 'aggregated metadata' represented by roachpb.AggregatedStatementMetadata.
+func DecodeAggregatedMetadataJSON(metadata json.JSON, result *roachpb.AggregatedStatementMetadata) error {
+	return (*aggregatedMetadata)(result).jsonFields().decodeJSON(metadata)
+}
+
 // DecodeStmtStatsStatisticsJSON decodes the 'statistics' field and the
 // 'execution_statistics' field in the given json into
 // roachpb.StatementStatistics.

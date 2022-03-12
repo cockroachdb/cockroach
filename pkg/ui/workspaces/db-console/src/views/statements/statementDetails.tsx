@@ -93,7 +93,7 @@ const mapStateToProps = (
   props: RouteComponentProps,
 ): StatementDetailsStateProps => {
   const statementDetails = selectStatementDetails(state, props);
-  const statementFingerprint = statementDetails?.statement.key_data.query;
+  const statementFingerprint = statementDetails?.statement.metadata.query;
   return {
     statementDetails,
     statementsError: state.cachedData.statements.lastError,
