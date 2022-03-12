@@ -102,6 +102,39 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	}
 }
 
+type booleanCount roachpb.BooleanCount
+
+func (b *booleanCount) jsonFields() jsonFields {
+	return jsonFields{
+		{"true", (*jsonInt)(&b.True)},
+		{"false", (*jsonInt)(&b.False)},
+	}
+}
+
+func (b *booleanCount) decodeJSON(js json.JSON) error {
+	return b.jsonFields().decodeJSON(js)
+}
+
+func (b *booleanCount) encodeJSON() (json.JSON, error) {
+	return b.jsonFields().encodeJSON()
+}
+
+type stmtDetailsStatsMetadata roachpb.StatementDetailsStatisticsKey
+
+func (s *stmtDetailsStatsMetadata) jsonFields() jsonFields {
+	return jsonFields{
+		{"db", (*stringArray)(&s.Databases)},
+		{"distsql", (*booleanCount)(&s.DistSQL)},
+		{"failed", (*booleanCount)(&s.Failed)},
+		{"fullScan", (*booleanCount)(&s.FullScan)},
+		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
+		{"query", (*jsonString)(&s.Query)},
+		{"querySummary", (*jsonString)(&s.QuerySummary)},
+		{"stmtTyp", (*jsonString)(&s.StmtTyp)},
+		{"vec", (*booleanCount)(&s.Vec)},
+	}
+}
+
 type int64Array []int64
 
 func (a *int64Array) decodeJSON(js json.JSON) error {

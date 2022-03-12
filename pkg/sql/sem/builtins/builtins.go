@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -4152,6 +4153,71 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDJSON(aggregatedJSON), nil
 			},
 			Info:       "Merge an array of roachpb.TransactionStatistics into a single JSONB object",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"crdb_internal.merge_stats_metadata": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"input", types.JSONArray}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				metadata := &roachpb.StatementDetailsStatisticsKey{}
+				metadata.DistSQL = roachpb.BooleanCount{True: 0, False: 0}
+				metadata.Failed = roachpb.BooleanCount{True: 0, False: 0}
+				metadata.FullScan = roachpb.BooleanCount{True: 0, False: 0}
+				metadata.Vec = roachpb.BooleanCount{True: 0, False: 0}
+
+				for _, metadataDatum := range arr.Array {
+					if metadataDatum == tree.DNull {
+						continue
+					}
+
+					var statistics roachpb.CollectedStatementStatistics
+					metadataJSON := tree.MustBeDJSON(metadataDatum).JSON
+					err := sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &statistics)
+					if err != nil {
+						return nil, err
+					}
+					metadata.ImplicitTxn = statistics.Key.ImplicitTxn
+					metadata.Query = statistics.Key.Query
+					metadata.QuerySummary = statistics.Key.QuerySummary
+					metadata.StmtTyp = statistics.Stats.SQLType
+					metadata.Databases = util.CombineUniqueString(metadata.Databases, []string{statistics.Key.Database})
+
+					if statistics.Key.DistSQL {
+						metadata.DistSQL.True++
+					} else {
+						metadata.DistSQL.False++
+					}
+
+					if statistics.Key.Failed {
+						metadata.Failed.True++
+					} else {
+						metadata.Failed.False++
+					}
+
+					if statistics.Key.FullScan {
+						metadata.FullScan.True++
+					} else {
+						metadata.FullScan.False++
+					}
+
+					if statistics.Key.Vec {
+						metadata.Vec.True++
+					} else {
+						metadata.Vec.False++
+					}
+				}
+
+				aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(metadata)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDJSON(aggregatedJSON), nil
+			},
+			Info:       "Merge an array of StmtStatsMetadata into a single JSONB object",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),

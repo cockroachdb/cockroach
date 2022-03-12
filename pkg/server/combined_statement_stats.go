@@ -375,6 +375,30 @@ func getStatementDetails(
 		return nil, serverError(ctx, err)
 	}
 
+	// At this point the boolean counts on statementTotal.keyData have the count for how many times we saw that value
+	// as a row, and not the count of executions for each value.
+	// The values on statementStatisticsPerPlanHash.keyData have the correct count,
+	// since the metadata is unique per plan hash.
+	// Update the statementTotal.keyData with the counts from statementStatisticsPerPlanHash.keyData.
+	statementTotal.KeyData.DistSQL.True = 0
+	statementTotal.KeyData.DistSQL.False = 0
+	statementTotal.KeyData.Failed.True = 0
+	statementTotal.KeyData.Failed.False = 0
+	statementTotal.KeyData.FullScan.True = 0
+	statementTotal.KeyData.FullScan.False = 0
+	statementTotal.KeyData.Vec.True = 0
+	statementTotal.KeyData.Vec.False = 0
+	for _, planStats := range statementStatisticsPerPlanHash {
+		statementTotal.KeyData.DistSQL.True += planStats.KeyData.DistSQL.True
+		statementTotal.KeyData.DistSQL.False += planStats.KeyData.DistSQL.False
+		statementTotal.KeyData.Failed.True += planStats.KeyData.Failed.True
+		statementTotal.KeyData.Failed.False += planStats.KeyData.Failed.False
+		statementTotal.KeyData.FullScan.True += planStats.KeyData.FullScan.True
+		statementTotal.KeyData.FullScan.False += planStats.KeyData.FullScan.False
+		statementTotal.KeyData.Vec.True += planStats.KeyData.Vec.True
+		statementTotal.KeyData.Vec.False += planStats.KeyData.Vec.False
+	}
+
 	response := &serverpb.StatementDetailsResponse{
 		Statement:                          statementTotal,
 		StatementStatisticsPerAggregatedTs: statementStatisticsPerAggregatedTs,
@@ -443,19 +467,17 @@ func getTotalStatementDetails(
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
 	query := fmt.Sprintf(
 		`SELECT
-				metadata,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				aggregation_interval,
-				prettify_statement(metadata ->> 'query', %d, %d, %d) as query,
 				array_agg(app_name) as app_names,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
-				metadata,
 				aggregation_interval
-		LIMIT 1`, tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase, whereClause)
+		LIMIT 1`, whereClause)
 
-	const expectedNumDatums = 6
+	const expectedNumDatums = 5
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
@@ -474,36 +496,52 @@ func getTotalStatementDetails(
 	}
 
 	var statistics roachpb.CollectedStatementStatistics
+	var keyData roachpb.StatementDetailsStatisticsKey
 	metadataJSON := tree.MustBeDJSON(row[0]).JSON
-	if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &statistics); err != nil {
+
+	if err = sqlstatsutil.DecodeMetadataJSON(metadataJSON, &keyData); err != nil {
 		return statement, serverError(ctx, err)
 	}
 
 	aggInterval := tree.MustBeDInterval(row[1]).Duration
-	queryPrettify := string(tree.MustBeDString(row[2]))
 
-	apps := tree.MustBeDArray(row[3])
+	apps := tree.MustBeDArray(row[2])
 	var appNames []string
 	for _, s := range apps.Array {
 		appNames = util.CombineUniqueString(appNames, []string{string(tree.MustBeDString(s))})
 	}
+	keyData.AppNames = appNames
 
-	statsJSON := tree.MustBeDJSON(row[4]).JSON
+	statsJSON := tree.MustBeDJSON(row[3]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
 		return statement, serverError(ctx, err)
 	}
 
-	planJSON := tree.MustBeDJSON(row[5]).JSON
+	planJSON := tree.MustBeDJSON(row[4]).JSON
 	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 	if err != nil {
 		return statement, serverError(ctx, err)
 	}
 	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
+	var args2 []interface{}
+	args2 = append(args2, keyData.Query)
+
+	query = fmt.Sprintf(
+		`SELECT prettify_statement($1, %d, %d, %d)`,
+		tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase)
+	row, err = ie.QueryRowEx(ctx, "combined-stmts-details-format-query", nil,
+		sessiondata.InternalExecutorOverride{
+			User: security.NodeUserName(),
+		}, query, args2...)
+
+	if err != nil {
+		return statement, serverError(ctx, err)
+	}
+	keyData.FormattedQuery = string(tree.MustBeDString(row[0]))
+
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
-		KeyData:             statistics.Key,
-		FormattedQuery:      queryPrettify,
-		AppNames:            appNames,
+		KeyData:             keyData,
 		AggregationInterval: time.Duration(aggInterval.Nanos()),
 		Stats:               statistics.Stats,
 	}
@@ -524,14 +562,13 @@ func getStatementDetailsPerAggregatedTs(
 	query := fmt.Sprintf(
 		`SELECT
 				aggregated_ts,
-				metadata,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				aggregation_interval
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
 				aggregated_ts,
-				metadata,
 				aggregation_interval
 		LIMIT $%d`, whereClause, len(args)+1)
 
@@ -569,8 +606,9 @@ func getStatementDetailsPerAggregatedTs(
 		aggregatedTs := tree.MustBeDTimestampTZ(row[0]).Time
 
 		var metadata roachpb.CollectedStatementStatistics
+		var keyData roachpb.StatementDetailsStatisticsKey
 		metadataJSON := tree.MustBeDJSON(row[1]).JSON
-		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
+		if err = sqlstatsutil.DecodeMetadataJSON(metadataJSON, &keyData); err != nil {
 			return nil, serverError(ctx, err)
 		}
 
@@ -592,6 +630,7 @@ func getStatementDetailsPerAggregatedTs(
 			AggregatedTs:        aggregatedTs,
 			AggregationInterval: time.Duration(aggInterval.Nanos()),
 			Stats:               metadata.Stats,
+			KeyData:             keyData,
 		}
 
 		statements = append(statements, stmt)
@@ -651,7 +690,7 @@ func getStatementDetailsPerPlanHash(
 		`SELECT
 				plan_hash,
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
-				metadata,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				aggregation_interval
@@ -659,7 +698,6 @@ func getStatementDetailsPerPlanHash(
 		GROUP BY
 				plan_hash,
 				plan_gist,
-				metadata,
 				aggregation_interval
 		LIMIT $%d`, whereClause, len(args)+1)
 
@@ -702,8 +740,9 @@ func getStatementDetailsPerPlanHash(
 		explainPlan := getExplainPlanFromGist(ctx, ie, planGist)
 
 		var metadata roachpb.CollectedStatementStatistics
+		var keyData roachpb.StatementDetailsStatisticsKey
 		metadataJSON := tree.MustBeDJSON(row[2]).JSON
-		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
+		if err = sqlstatsutil.DecodeMetadataJSON(metadataJSON, &keyData); err != nil {
 			return nil, serverError(ctx, err)
 		}
 
@@ -718,14 +757,38 @@ func getStatementDetailsPerPlanHash(
 			return nil, serverError(ctx, err)
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
+
+		// A metadata is unique for each plan, meaning it will only have count for True or False of
+		// its values. Updating the count of each value with the execution count of this plan hash to
+		// have the correct count of each metric.
+		if keyData.DistSQL.True > 0 {
+			keyData.DistSQL.True = metadata.Stats.Count
+		} else {
+			keyData.DistSQL.False = metadata.Stats.Count
+		}
+		if keyData.Failed.True > 0 {
+			keyData.Failed.True = metadata.Stats.Count
+		} else {
+			keyData.Failed.False = metadata.Stats.Count
+		}
+		if keyData.FullScan.True > 0 {
+			keyData.FullScan.True = metadata.Stats.Count
+		} else {
+			keyData.FullScan.False = metadata.Stats.Count
+		}
+		if keyData.Vec.True > 0 {
+			keyData.Vec.True = metadata.Stats.Count
+		} else {
+			keyData.Vec.False = metadata.Stats.Count
+		}
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash{
 			AggregationInterval: time.Duration(aggInterval.Nanos()),
 			ExplainPlan:         explainPlan,
 			PlanHash:            planHash,
 			Stats:               metadata.Stats,
+			KeyData:             keyData,
 		}
 
 		statements = append(statements, stmt)

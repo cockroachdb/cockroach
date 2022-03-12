@@ -201,6 +201,28 @@ message StatementStatisticsKey {
      (gogoproto.casttype) = "TransactionFingerprintID"];
 }
 
+message BooleanCount {
+  required int64 true = 1 [(gogoproto.nullable) = false];
+  required int64 false = 2 [(gogoproto.nullable) = false];
+}
+
+message StatementDetailsStatisticsKey {
+  optional string query = 1 [(gogoproto.nullable) = false];
+  // Formatted query is the return of the key_data.query after prettify_statement.
+  // The query above cannot be replaced by the formatted value, because is used as is for
+  // diagnostic bundle.
+  optional string formatted_query = 2 [(gogoproto.nullable) = false];
+  optional string query_summary = 3 [(gogoproto.nullable) = false];
+  optional string stmtTyp = 4 [(gogoproto.nullable) = false];
+  repeated string app_names = 5;
+  repeated string databases = 6;
+  optional bool implicit_txn = 7 [(gogoproto.nullable) = false];
+  optional BooleanCount distSQL = 8 [(gogoproto.nullable) = false];
+  optional BooleanCount failed = 9 [(gogoproto.nullable) = false];
+  optional BooleanCount full_scan = 10 [(gogoproto.nullable) = false];
+  optional BooleanCount vec = 11 [(gogoproto.nullable) = false];
+}
+
 // CollectedStatementStatistics wraps collected timings and metadata for some
 // query's execution.
 message CollectedStatementStatistics {

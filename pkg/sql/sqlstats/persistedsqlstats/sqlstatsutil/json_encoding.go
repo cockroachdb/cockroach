@@ -247,6 +247,47 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 	return (*txnStats)(&statistics.Stats).encodeJSON()
 }
 
+// BuildStmtDetailsMetadataJSON returns a json.JSON object for the metadata section of
+// the roachpb.CollectedStatementStatistics.
+// JSON Schema for statement metadata:
+//   {
+//     "$schema": "https://json-schema.org/draft/2020-12/schema",
+//     "title": "system.statement_statistics.metadata",
+//     "type": "object",
+//
+//     "definitions": {
+//       "boolean_count": {
+//         "type": "object",
+//         "properties": {
+//           "true":   { "type": "number" },
+//           "false": { "type": "number" }
+//         },
+//         "required": ["true", "false"]
+//       },
+//			},
+//     "properties": {
+//       "stmtTyp":              { "type": "string" },
+//       "query":                { "type": "string" },
+//       "querySummary":         { "type": "string" },
+//       "implicitTxn":          { "type": "boolean" },
+//       "distsql":              { "$ref": "#/definitions/boolean_count" },
+//       "failed":               { "$ref": "#/definitions/boolean_count" },
+//       "vec":                  { "$ref": "#/definitions/boolean_count" },
+//       "fullScan":             { "$ref": "#/definitions/boolean_count" },
+//       "db":                   {
+//      		"type": "array",
+//       	"items": {
+//        		"type": "string"
+//      		}
+//     	},
+//     }
+//   }
+func BuildStmtDetailsMetadataJSON(
+	metadata *roachpb.StatementDetailsStatisticsKey,
+) (json.JSON, error) {
+	return (*stmtDetailsStatsMetadata)(metadata).jsonFields().encodeJSON()
+}
+
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.
 func EncodeUint64ToBytes(id uint64) []byte {
 	result := make([]byte, 0, 8)

@@ -4134,9 +4134,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| key_data | [cockroach.sql.StatementStatisticsKey](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementStatisticsKey) |  |  | [reserved](#support-status) |
-| formatted_query | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | Formatted query is the return of the key_data.query after prettify_statement. The value from the key_data cannot be replaced by the formatted value, because is used as is for diagnostic bundle. | [reserved](#support-status) |
-| app_names | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) | repeated |  | [reserved](#support-status) |
+| key_data | [cockroach.sql.StatementDetailsStatisticsKey](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementDetailsStatisticsKey) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
 | aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
 
@@ -4151,6 +4149,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
+| key_data | [cockroach.sql.StatementDetailsStatisticsKey](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementDetailsStatisticsKey) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
 | aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
 | aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
@@ -4166,6 +4165,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
+| key_data | [cockroach.sql.StatementDetailsStatisticsKey](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementDetailsStatisticsKey) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
 | aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
 | explain_plan | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |

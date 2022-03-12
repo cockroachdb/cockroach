@@ -66,6 +66,7 @@ import {
 type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type BooleanCount = cockroach.sql.IBooleanCount;
 
 const { TabPane } = Tabs;
 
@@ -211,11 +212,16 @@ function renderTransactionType(implicitTxn: boolean) {
   return "Explicit";
 }
 
-function renderBools(b: boolean) {
-  if (b) {
+function renderBoolCount(booleanCount: BooleanCount) {
+  if (longToInt(booleanCount.true) == 0) {
+    return "No";
+  }
+  if (longToInt(booleanCount.false) == 0) {
     return "Yes";
   }
-  return "No";
+  return `${longToInt(booleanCount.true)} Yes / ${longToInt(
+    booleanCount.false,
+  )} No`;
 }
 
 class NumericStatTable extends React.Component<NumericStatTableProps> {
@@ -445,14 +451,14 @@ export class StatementDetails extends React.Component<
     } = this.props;
     const { currentTab } = this.state;
     const { statement_statistics_per_plan_hash } = this.props.statementDetails;
+    const { stats } = this.props.statementDetails.statement;
     const {
-      stats,
       app_names,
       formatted_query,
-    } = this.props.statementDetails.statement;
+    } = this.props.statementDetails.statement.key_data;
     const {
       query,
-      database,
+      databases,
       distSQL,
       failed,
       vec,
@@ -525,8 +531,8 @@ export class StatementDetails extends React.Component<
       </Tooltip>
     );
 
-    const db = database ? (
-      <Text>{database}</Text>
+    const db = databases ? (
+      <Text>{databases}</Text>
     ) : (
       <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
     );
@@ -689,15 +695,15 @@ export class StatementDetails extends React.Component<
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
-                  <Text>{renderBools(failed)}</Text>
+                  <Text>{renderBoolCount(failed)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
-                  <Text>{renderBools(distSQL)}</Text>
+                  <Text>{renderBoolCount(distSQL)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Vectorized execution?</Text>
-                  <Text>{renderBools(vec)}</Text>
+                  <Text>{renderBoolCount(vec)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Transaction type</Text>
