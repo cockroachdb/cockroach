@@ -264,7 +264,9 @@ func (ds *DistSender) partialRangeFeed(
 		},
 	}
 	rr.ranges.Store(active, nil)
+	ds.metrics.RangefeedRanges.Inc(1)
 	defer rr.ranges.Delete(active)
+	defer ds.metrics.RangefeedRanges.Dec(1)
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
@@ -384,6 +386,15 @@ func (ds *DistSender) singleRangeFeed(
 	}
 	defer transport.Release()
 
+	// checkpointSeen keeps track on whether we've seen range checkpoint.
+	// Initially set to true to avoid erroneously decrementing the counter.
+	checkpointSeen := true
+	defer func() {
+		if !checkpointSeen {
+			ds.metrics.RangefeedCatchupRanges.Dec(1)
+		}
+	}()
+
 	for {
 		if transport.IsExhausted() {
 			return args.Timestamp, newSendError(
@@ -406,6 +417,13 @@ func (ds *DistSender) singleRangeFeed(
 			}
 			continue
 		}
+
+		// Indicate this range is going to performs catchup scan.
+		// Counter decremented when range receive checkpoint event, or
+		// when this function terminates.
+		ds.metrics.RangefeedCatchupRanges.Inc(1)
+		checkpointSeen = false
+
 		for {
 			event, err := stream.Recv()
 			if err == io.EOF {
@@ -417,10 +435,18 @@ func (ds *DistSender) singleRangeFeed(
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
+					// If we see the first non-empty checkpoint, we know we're done with catchup scan.
+					if !t.ResolvedTS.IsEmpty() && !checkpointSeen {
+						checkpointSeen = true
+						ds.metrics.RangefeedCatchupRanges.Dec(1)
+					}
 					args.Timestamp.Forward(t.ResolvedTS)
 				}
 			case *roachpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+				if !checkpointSeen {
+					ds.metrics.RangefeedErrorCatchup.Inc(1)
+				}
 				return args.Timestamp, t.Error.GoError()
 			}
 			onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
