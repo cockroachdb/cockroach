@@ -70,7 +70,7 @@ function renderExplainPlan(
       >
         All Plans
       </Button>
-      <SqlBox value={plan.explain_plan} />
+      <SqlBox value={plan.explain_plan} className={"large"} />
     </div>
   );
 }
