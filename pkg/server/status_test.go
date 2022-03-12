@@ -2144,7 +2144,8 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	for _, stmt := range statements {
 		thirdServerSQL.Exec(t, stmt)
 	}
-	fingerprintID := roachpb.ConstructStatementFingerprintID(`INSERT INTO posts VALUES (_, '_')`,
+	query := `INSERT INTO posts VALUES (_, '_')`
+	fingerprintID := roachpb.ConstructStatementFingerprintID(query,
 		false, true, `roachblog`)
 	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
 
@@ -2156,10 +2157,13 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	type resultValues struct {
+		query             string
 		totalCount        int
 		aggregatedTsCount int
 		planHashCount     int
+		fullScanCount     int
 		appNames          []string
+		databases         []string
 	}
 
 	testPath := func(path string, expected resultValues) {
@@ -2168,7 +2172,11 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
 		require.Equal(t, expected.aggregatedTsCount, len(resp.StatementStatisticsPerAggregatedTs))
 		require.Equal(t, expected.planHashCount, len(resp.StatementStatisticsPerPlanHash))
-		require.Equal(t, expected.appNames, resp.Statement.AppNames)
+		require.Equal(t, expected.query, resp.Statement.Metadata.Query)
+		require.Equal(t, expected.appNames, resp.Statement.Metadata.AppNames)
+		require.Equal(t, int64(expected.totalCount), resp.Statement.Metadata.TotalCount)
+		require.Equal(t, expected.databases, resp.Statement.Metadata.Databases)
+		require.Equal(t, int64(expected.fullScanCount), resp.Statement.Metadata.FullScanCount)
 	}
 
 	// Grant VIEWACTIVITY.
@@ -2178,10 +2186,13 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	testPath(
 		path,
 		resultValues{
+			query:             query,
 			totalCount:        3,
 			aggregatedTsCount: 1,
 			planHashCount:     1,
 			appNames:          []string{"first-app"},
+			fullScanCount:     0,
+			databases:         []string{"roachblog"},
 		})
 	// Execute same fingerprint id statement on a different application
 	statements = []string{
@@ -2202,74 +2213,101 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		{ // Test with no query params.
 			path: path,
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        5,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"first-app", "second-app"}},
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 		{ // Test with end = 1 min after aggregatedTs; should give the same results as get all.
 			path: fmt.Sprintf("%v?end=%d", path, oneMinAfterAggregatedTs),
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        5,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"first-app", "second-app"}},
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 		{ // Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
 			path: fmt.Sprintf("%v?start=%d&end=%d", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        5,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"first-app", "second-app"}},
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 		{ // Test with start = 1 min after aggregatedTs; should give no results.
 			path: fmt.Sprintf("%v?start=%d", path, oneMinAfterAggregatedTs),
 			expectedResult: resultValues{
+				query:             "",
 				totalCount:        0,
 				aggregatedTsCount: 0,
 				planHashCount:     0,
-				appNames:          []string{}},
+				appNames:          []string{},
+				fullScanCount:     0,
+				databases:         []string{}},
 		},
 		{ // Test with one app_name.
 			path: fmt.Sprintf("%v?app_names=first-app", path),
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        3,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"first-app"}},
+				appNames:          []string{"first-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 		{ // Test with another app_name.
 			path: fmt.Sprintf("%v?app_names=second-app", path),
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        2,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"second-app"}},
+				appNames:          []string{"second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 		{ // Test with both app_names.
 			path: fmt.Sprintf("%v?app_names=first-app&app_names=second-app", path),
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        5,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"first-app", "second-app"}},
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 		{ // Test with non-existing app_name.
 			path: fmt.Sprintf("%v?app_names=non-existing", path),
 			expectedResult: resultValues{
+				query:             "",
 				totalCount:        0,
 				aggregatedTsCount: 0,
 				planHashCount:     0,
-				appNames:          []string{}},
+				appNames:          []string{},
+				fullScanCount:     0,
+				databases:         []string{}},
 		},
 		{ // Test with app_name, start and end time.
 			path: fmt.Sprintf("%v?start=%d&end=%d&app_names=first-app&app_names=second-app", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
 			expectedResult: resultValues{
+				query:             query,
 				totalCount:        5,
 				aggregatedTsCount: 1,
 				planHashCount:     1,
-				appNames:          []string{"first-app", "second-app"}},
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
 		},
 	}
 
