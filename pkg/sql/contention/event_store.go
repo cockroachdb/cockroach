@@ -234,9 +234,20 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 
 // addEvent implements the eventWriter interface.
 func (s *eventStore) addEvent(e contentionpb.ExtendedContentionEvent) {
+	// Setting the TxnIDResolutionInterval to 0 effectively disables the
+	// eventStore.
 	if TxnIDResolutionInterval.Get(&s.st.SV) == 0 {
 		return
 	}
+
+	// If the duration threshold is set, we only collect contention events whose
+	// duration exceeds the threshold.
+	if threshold := DurationThreshold.Get(&s.st.SV); threshold > 0 {
+		if e.BlockingEvent.Duration < threshold {
+			return
+		}
+	}
+
 	s.guard.AtomicWrite(func(writerIdx int64) {
 		e.CollectionTs = s.timeSrc()
 		s.guard.buffer[writerIdx] = e
