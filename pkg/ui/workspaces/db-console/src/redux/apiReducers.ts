@@ -308,7 +308,7 @@ const storesReducerObj = new KeyedCachedDataReducer(
 export const refreshStores = storesReducerObj.refresh;
 
 const queriesReducerObj = new CachedDataReducer(
-  api.getStatements,
+  api.getCombinedStatements,
   "statements",
   moment.duration(5, "m"),
   moment.duration(30, "m"),

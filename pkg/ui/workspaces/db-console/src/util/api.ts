@@ -689,8 +689,8 @@ export function getStores(
   );
 }
 
-// getStatements returns statements the cluster has recently executed, and some stats about them.
-export function getStatements(
+// getCombinedStatements returns statements the cluster has recently executed, and some stats about them.
+export function getCombinedStatements(
   req: StatementsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<StatementsResponseMessage> {

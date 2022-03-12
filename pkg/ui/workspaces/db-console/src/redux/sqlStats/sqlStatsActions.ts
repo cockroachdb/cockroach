@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
+import { PayloadAction } from "@reduxjs/toolkit";
+import { cockroach } from "src/js/protos";
 
 export const RESET_SQL_STATS = "cockroachui/sqlStats/RESET_SQL_STATS";
 export const RESET_SQL_STATS_COMPLETE =
@@ -16,9 +18,14 @@ export const RESET_SQL_STATS_COMPLETE =
 export const RESET_SQL_STATS_FAILED =
   "cockroachui/sqlStats/RESET_SQL_STATS_FAILED";
 
-export function resetSQLStatsAction(): Action {
+import StatementsRequest = cockroach.server.serverpb.StatementsRequest;
+
+export function resetSQLStatsAction(
+  req: StatementsRequest,
+): PayloadAction<StatementsRequest> {
   return {
     type: RESET_SQL_STATS,
+    payload: req,
   };
 }
 

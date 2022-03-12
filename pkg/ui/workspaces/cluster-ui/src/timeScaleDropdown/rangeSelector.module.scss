@@ -17,10 +17,6 @@
   position: relative;
 }
 
-.trigger-button {
-  width: 423px;
-  height: fit-content;
-}
 
 .trigger-container {
   width: 100%;
@@ -34,6 +30,11 @@
 
 .trigger-wrapper {
   width: 100%;
+
+  .trigger-button {
+    width: 423px;
+    height: fit-content;
+  }
 }
 
 .range-selector {
