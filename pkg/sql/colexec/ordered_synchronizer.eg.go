@@ -46,6 +46,10 @@ type OrderedSynchronizer struct {
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
 	inputIndices []int
+	// advanceMinBatch, if true, indicates that the minimum input (according to
+	// heap) needs to be advanced by one row. This advancement is delayed in
+	// order to not fetch the next batch from the input too eagerly.
+	advanceMinBatch bool
 	// heap is a min heap which stores indices into inputBatches. The "current
 	// value" of ith input batch is the tuple at inputIndices[i] position of
 	// inputBatches[i] batch. If an input is fully exhausted, it will be removed
@@ -139,8 +143,27 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 	o.resetOutput()
 	outputIdx := 0
 	for outputIdx < o.output.Capacity() && (o.maxCapacity == 0 || outputIdx < o.maxCapacity) {
+		if o.advanceMinBatch {
+			// Advance the minimum input batch, fetching a new batch if
+			// necessary.
+			minBatch := o.heap[0]
+			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
+				o.inputIndices[minBatch]++
+			} else {
+				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
+				o.inputIndices[minBatch] = 0
+				o.updateComparators(minBatch)
+			}
+			if o.inputBatches[minBatch].Length() == 0 {
+				heap.Remove(o, 0)
+			} else {
+				heap.Fix(o, 0)
+			}
+		}
+
 		if o.Len() == 0 {
 			// All inputs exhausted.
+			o.advanceMinBatch = false
 			break
 		}
 
@@ -254,19 +277,9 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 			}
 		}
 
-		// Advance the input batch, fetching a new batch if necessary.
-		if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
-			o.inputIndices[minBatch]++
-		} else {
-			o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
-			o.inputIndices[minBatch] = 0
-			o.updateComparators(minBatch)
-		}
-		if o.inputBatches[minBatch].Length() == 0 {
-			heap.Remove(o, 0)
-		} else {
-			heap.Fix(o, 0)
-		}
+		// Delay the advancement of the min input batch until the next row is
+		// needed.
+		o.advanceMinBatch = true
 
 		// Account for the memory of the row we have just set.
 		o.accountingHelper.AccountForSet(outputIdx)
