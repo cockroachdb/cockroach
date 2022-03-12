@@ -48,10 +48,10 @@ const sqlStatsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, action?: PayloadAction<StatementsRequest>) => {},
-    request: (_, action?: PayloadAction<StatementsRequest>) => {},
+    refresh: (_, action: PayloadAction<StatementsRequest>) => {},
+    request: (_, action: PayloadAction<StatementsRequest>) => {},
     updateTimeScale: (_, action: PayloadAction<UpdateTimeScalePayload>) => {},
-    reset: _ => {},
+    reset: (_, action: PayloadAction<StatementsRequest>) => {},
   },
 });
 
