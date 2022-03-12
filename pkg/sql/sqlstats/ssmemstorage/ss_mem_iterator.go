@@ -63,7 +63,7 @@ func (s *StmtStatsIterator) Next() bool {
 
 	stmtKey := s.stmtKeys[s.idx]
 
-	stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
+	stmtFingerprintID := stmtKey.statementFingerprintID
 	statementStats, _, _ :=
 		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
 
@@ -81,17 +81,20 @@ func (s *StmtStatsIterator) Next() bool {
 	fullScan := statementStats.mu.fullScan
 	database := statementStats.mu.database
 	querySummary := statementStats.mu.querySummary
+	anonymizedStmt := statementStats.mu.anonymizedStmt
+	failed := statementStats.mu.failed
+	implicitTxn := statementStats.mu.implicitTxn
 	statementStats.mu.Unlock()
 
 	s.currentValue = &roachpb.CollectedStatementStatistics{
 		Key: roachpb.StatementStatisticsKey{
-			Query:                    stmtKey.anonymizedStmt,
+			Query:                    anonymizedStmt,
 			QuerySummary:             querySummary,
 			DistSQL:                  distSQLUsed,
 			Vec:                      vectorized,
-			ImplicitTxn:              stmtKey.implicitTxn,
+			ImplicitTxn:              implicitTxn,
 			FullScan:                 fullScan,
-			Failed:                   stmtKey.failed,
+			Failed:                   failed,
 			App:                      s.container.appName,
 			Database:                 database,
 			PlanHash:                 stmtKey.planHash,
