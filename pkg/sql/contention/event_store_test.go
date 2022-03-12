@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -123,6 +124,71 @@ func TestEventStore(t *testing.T) {
 			require.Equal(t, expectedEvent, *actual)
 			return nil
 		}))
+}
+
+func TestCollectionThreshold(t *testing.T) {
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+
+	// Only collect contention events that has over 50 ms of contention duration.
+	threshold := 50 * time.Millisecond
+	DurationThreshold.Override(ctx, &st.SV, threshold)
+	statusServer := newFakeStatusServerCluster()
+
+	metrics := NewMetrics()
+	store := newEventStore(st, statusServer.txnIDResolution, time.Now, &metrics)
+	store.start(ctx, stopper)
+
+	input := []contentionpb.ExtendedContentionEvent{
+		{
+			BlockingEvent: roachpb.ContentionEvent{
+				TxnMeta: enginepb.TxnMeta{
+					ID: uuid.FastMakeV4(),
+				},
+				Duration: 10 * time.Millisecond,
+			},
+		},
+		{
+			BlockingEvent: roachpb.ContentionEvent{
+				TxnMeta: enginepb.TxnMeta{
+					ID: uuid.FastMakeV4(),
+				},
+				Duration: 2 * time.Second,
+			},
+		},
+	}
+
+	for i := range input {
+		store.addEvent(input[i])
+	}
+
+	const expectedNumOfEntries = 1
+
+	// Force the contention events to get flushed.
+	testutils.SucceedsWithin(t, func() error {
+		store.guard.ForceSync()
+		numOfEntries := 0
+		require.NoError(t,
+			store.ForEachEvent(func(e *contentionpb.ExtendedContentionEvent) error {
+				require.GreaterOrEqualf(t, e.BlockingEvent.Duration, threshold,
+					"expect contention event's duration to exceed the threshold of %s, "+
+						"but it didn't", threshold)
+				numOfEntries++
+				return nil
+			},
+			))
+
+		if numOfEntries != expectedNumOfEntries {
+			return errors.Newf("expected to have %d contention events, but %d "+
+				"events are found", expectedNumOfEntries, numOfEntries)
+		}
+
+		return nil
+	}, 3*time.Second)
 }
 
 func BenchmarkEventStoreIntake(b *testing.B) {

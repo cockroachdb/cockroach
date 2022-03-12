@@ -34,3 +34,14 @@ var StoreCapacity = settings.RegisterByteSizeSetting(
 	"the in-memory storage capacity per-node of contention event store",
 	64*1024*1024, // 64 MB per node.
 ).WithPublic()
+
+// DurationThreshold is the cluster setting for the threshold of
+// contention durations. Only the contention events whose duration exceeds the
+// threshold will be collected into crdb_internal.transaction_contention_events.
+var DurationThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.contention.event_store.duration_threshold",
+	"minimum contention duration to cause the contention events to be collected "+
+		"into crdb_internal.transaction_contention_events",
+	0,
+).WithPublic()
