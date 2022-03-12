@@ -66,6 +66,7 @@ import {
 type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type BooleanCount = cockroach.sql.IBooleanCount;
 
 const { TabPane } = Tabs;
 
