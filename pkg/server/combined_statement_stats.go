@@ -375,6 +375,24 @@ func getStatementDetails(
 		return nil, serverError(ctx, err)
 	}
 
+	// At this point the counts on statementTotal.metadata have the count for how many times we saw that value
+	// as a row, and not the count of executions for each value.
+	// The values on statementStatisticsPerPlanHash.Metadata.*Count have the correct count,
+	// since the metadata is unique per plan hash.
+	// Update the statementTotal.Metadata.*Count with the counts from statementStatisticsPerPlanHash.keyData.
+	statementTotal.Metadata.DistSqlCount = 0
+	statementTotal.Metadata.FailedCount = 0
+	statementTotal.Metadata.FullScanCount = 0
+	statementTotal.Metadata.VecCount = 0
+	statementTotal.Metadata.TotalCount = 0
+	for _, planStats := range statementStatisticsPerPlanHash {
+		statementTotal.Metadata.DistSqlCount += planStats.Metadata.DistSqlCount
+		statementTotal.Metadata.FailedCount += planStats.Metadata.FailedCount
+		statementTotal.Metadata.FullScanCount += planStats.Metadata.FullScanCount
+		statementTotal.Metadata.VecCount += planStats.Metadata.VecCount
+		statementTotal.Metadata.TotalCount += planStats.Metadata.TotalCount
+	}
+
 	response := &serverpb.StatementDetailsResponse{
 		Statement:                          statementTotal,
 		StatementStatisticsPerAggregatedTs: statementStatisticsPerAggregatedTs,
@@ -443,19 +461,17 @@ func getTotalStatementDetails(
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
 	query := fmt.Sprintf(
 		`SELECT
-				metadata,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				aggregation_interval,
-				prettify_statement(metadata ->> 'query', %d, %d, %d) as query,
 				array_agg(app_name) as app_names,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
-				metadata,
 				aggregation_interval
-		LIMIT 1`, tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase, whereClause)
+		LIMIT 1`, whereClause)
 
-	const expectedNumDatums = 6
+	const expectedNumDatums = 5
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
@@ -474,36 +490,51 @@ func getTotalStatementDetails(
 	}
 
 	var statistics roachpb.CollectedStatementStatistics
+	var aggregatedMetadata roachpb.AggregatedStatementMetadata
 	metadataJSON := tree.MustBeDJSON(row[0]).JSON
-	if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &statistics); err != nil {
+
+	if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
 		return statement, serverError(ctx, err)
 	}
 
 	aggInterval := tree.MustBeDInterval(row[1]).Duration
-	queryPrettify := string(tree.MustBeDString(row[2]))
 
-	apps := tree.MustBeDArray(row[3])
+	apps := tree.MustBeDArray(row[2])
 	var appNames []string
 	for _, s := range apps.Array {
 		appNames = util.CombineUniqueString(appNames, []string{string(tree.MustBeDString(s))})
 	}
+	aggregatedMetadata.AppNames = appNames
 
-	statsJSON := tree.MustBeDJSON(row[4]).JSON
+	statsJSON := tree.MustBeDJSON(row[3]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
 		return statement, serverError(ctx, err)
 	}
 
-	planJSON := tree.MustBeDJSON(row[5]).JSON
+	planJSON := tree.MustBeDJSON(row[4]).JSON
 	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 	if err != nil {
 		return statement, serverError(ctx, err)
 	}
 	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
+	args = []interface{}{}
+	args = append(args, aggregatedMetadata.Query)
+	query = fmt.Sprintf(
+		`SELECT prettify_statement($1, %d, %d, %d)`,
+		tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase)
+	row, err = ie.QueryRowEx(ctx, "combined-stmts-details-format-query", nil,
+		sessiondata.InternalExecutorOverride{
+			User: security.NodeUserName(),
+		}, query, args...)
+
+	if err != nil {
+		return statement, serverError(ctx, err)
+	}
+	aggregatedMetadata.FormattedQuery = string(tree.MustBeDString(row[0]))
+
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
-		KeyData:             statistics.Key,
-		FormattedQuery:      queryPrettify,
-		AppNames:            appNames,
+		Metadata:            aggregatedMetadata,
 		AggregationInterval: time.Duration(aggInterval.Nanos()),
 		Stats:               statistics.Stats,
 	}
@@ -524,14 +555,13 @@ func getStatementDetailsPerAggregatedTs(
 	query := fmt.Sprintf(
 		`SELECT
 				aggregated_ts,
-				metadata,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				aggregation_interval
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
 				aggregated_ts,
-				metadata,
 				aggregation_interval
 		LIMIT $%d`, whereClause, len(args)+1)
 
@@ -569,8 +599,9 @@ func getStatementDetailsPerAggregatedTs(
 		aggregatedTs := tree.MustBeDTimestampTZ(row[0]).Time
 
 		var metadata roachpb.CollectedStatementStatistics
+		var aggregatedMetadata roachpb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[1]).JSON
-		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
+		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
 			return nil, serverError(ctx, err)
 		}
 
@@ -592,6 +623,7 @@ func getStatementDetailsPerAggregatedTs(
 			AggregatedTs:        aggregatedTs,
 			AggregationInterval: time.Duration(aggInterval.Nanos()),
 			Stats:               metadata.Stats,
+			Metadata:            aggregatedMetadata,
 		}
 
 		statements = append(statements, stmt)
@@ -651,7 +683,7 @@ func getStatementDetailsPerPlanHash(
 		`SELECT
 				plan_hash,
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
-				metadata,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				aggregation_interval
@@ -659,7 +691,6 @@ func getStatementDetailsPerPlanHash(
 		GROUP BY
 				plan_hash,
 				plan_gist,
-				metadata,
 				aggregation_interval
 		LIMIT $%d`, whereClause, len(args)+1)
 
@@ -702,8 +733,9 @@ func getStatementDetailsPerPlanHash(
 		explainPlan := getExplainPlanFromGist(ctx, ie, planGist)
 
 		var metadata roachpb.CollectedStatementStatistics
+		var aggregatedMetadata roachpb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[2]).JSON
-		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
+		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
 			return nil, serverError(ctx, err)
 		}
 
@@ -718,14 +750,31 @@ func getStatementDetailsPerPlanHash(
 			return nil, serverError(ctx, err)
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
+
+		// A metadata is unique for each plan, meaning if any of the counts are greater than zero,
+		// we can update the value of each count with the execution count of this plan hash to
+		// have the correct count of each metric.
+		if aggregatedMetadata.DistSqlCount > 0 {
+			aggregatedMetadata.DistSqlCount = metadata.Stats.Count
+		}
+		if aggregatedMetadata.FailedCount > 0 {
+			aggregatedMetadata.FailedCount = metadata.Stats.Count
+		}
+		if aggregatedMetadata.FullScanCount > 0 {
+			aggregatedMetadata.FullScanCount = metadata.Stats.Count
+		}
+		if aggregatedMetadata.VecCount > 0 {
+			aggregatedMetadata.VecCount = metadata.Stats.Count
+		}
+		aggregatedMetadata.TotalCount = metadata.Stats.Count
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash{
 			AggregationInterval: time.Duration(aggInterval.Nanos()),
 			ExplainPlan:         explainPlan,
 			PlanHash:            planHash,
 			Stats:               metadata.Stats,
+			Metadata:            aggregatedMetadata,
 		}
 
 		statements = append(statements, stmt)

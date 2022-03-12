@@ -247,6 +247,38 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 	return (*txnStats)(&statistics.Stats).encodeJSON()
 }
 
+// BuildStmtDetailsMetadataJSON returns a json.JSON object for the aggregated metadata
+// roachpb.AggregatedStatementMetadata.
+// JSON Schema for statement aggregated metadata:
+//   {
+//     "$schema": "https://json-schema.org/draft/2020-12/schema",
+//     "title": "system.statement_statistics.aggregated_metadata",
+//     "type": "object",
+//
+//     "properties": {
+//       "stmtType":             { "type": "string" },
+//       "query":                { "type": "string" },
+//       "querySummary":         { "type": "string" },
+//       "implicitTxn":          { "type": "boolean" },
+//       "distSqlCount":         { "type": "number" },
+//       "failedCount":          { "type": "number" },
+//       "vecCount":             { "type": "number" },
+//       "fullScanCount":        { "type": "number" },
+//       "totalCount":           { "type": "number" },
+//       "db":                   {
+//      		"type": "array",
+//      		"items": {
+//      		  "type": "string"
+//      		}
+//     	},
+//     }
+//   }
+func BuildStmtDetailsMetadataJSON(
+	metadata *roachpb.AggregatedStatementMetadata,
+) (json.JSON, error) {
+	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
+}
+
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.
 func EncodeUint64ToBytes(id uint64) []byte {
 	result := make([]byte, 0, 8)

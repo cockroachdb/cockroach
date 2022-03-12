@@ -364,6 +364,41 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, input, actualJSONUnmarshalled)
 	})
+
+	t.Run("statement aggregated metadata", func(t *testing.T) {
+		data := genRandomData()
+
+		input := roachpb.AggregatedStatementMetadata{}
+
+		expectedAggregatedMetadataStrTemplate := `
+{
+  "stmtType": "{{.String}}",
+  "query": "{{.String}}",
+  "formattedQuery": "{{.String}}",
+  "querySummary": "{{.String}}",
+  "implicitTxn": {{.Bool}},
+  "distSqlCount": {{.Int64}},
+  "failedCount": {{.Int64}},
+  "vecCount": {{.Int64}},
+  "fullScanCount": {{.Int64}},
+  "totalCount": {{.Int64}},
+  "db": [{{joinStrings .StringArray}}],
+  "appNames": [{{joinStrings .StringArray}}]
+}
+		 `
+		expectedAggregatedMetadataStr := fillTemplate(t, expectedAggregatedMetadataStrTemplate, data)
+		fillObject(t, reflect.ValueOf(&input), &data)
+
+		actualMetadataJSON, err := BuildStmtDetailsMetadataJSON(&input)
+		require.NoError(t, err)
+		jsonTestHelper(t, expectedAggregatedMetadataStr, actualMetadataJSON)
+
+		// Ensure that we get the same protobuf after we decode the JSON.
+		var actualJSONUnmarshalled roachpb.AggregatedStatementMetadata
+		err = DecodeAggregatedMetadataJSON(actualMetadataJSON, &actualJSONUnmarshalled)
+		require.NoError(t, err)
+		require.Equal(t, input, actualJSONUnmarshalled)
+	})
 }
 
 func BenchmarkSQLStatsJson(b *testing.B) {
@@ -439,6 +474,35 @@ func BenchmarkSQLStatsJson(b *testing.B) {
 					b.Fatal(err)
 				}
 				err = DecodeTxnStatsStatisticsJSON(inputTxnStatsJSON, &result.Stats)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	})
+
+	b.Run("statement_metadata", func(b *testing.B) {
+		inputStmtStats := roachpb.CollectedStatementStatistics{}
+		inputStmtMetadata := roachpb.AggregatedStatementMetadata{}
+		b.Run("encoding", func(b *testing.B) {
+			b.SetBytes(int64(inputStmtStats.Size()))
+
+			for i := 0; i < b.N; i++ {
+				_, err := BuildStmtDetailsMetadataJSON(&inputStmtMetadata)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		inputStmtStatsAggregatedMetaJSON, _ := BuildStmtMetadataJSON(&inputStmtStats)
+		result := roachpb.AggregatedStatementMetadata{}
+
+		b.Run("decoding", func(b *testing.B) {
+			b.SetBytes(int64(inputStmtStatsAggregatedMetaJSON.Size()))
+
+			for i := 0; i < b.N; i++ {
+				err := DecodeAggregatedMetadataJSON(inputStmtStatsAggregatedMetaJSON, &result)
 				if err != nil {
 					b.Fatal(err)
 				}

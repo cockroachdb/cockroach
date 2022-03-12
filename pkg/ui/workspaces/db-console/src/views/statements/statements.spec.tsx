@@ -29,11 +29,17 @@ import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
 
-const { generateStmtDetailsToID } = util;
+const { generateStmtDetailsToID, longToInt } = util;
 
 type CollectedStatementStatistics = util.CollectedStatementStatistics;
 type ExecStats = util.ExecStats;
 type StatementStatistics = util.StatementStatistics;
+type StatementDetails = protos.cockroach.server.serverpb.StatementDetailsResponse;
+
+interface StatementDetailsWithID {
+  details: StatementDetails;
+  id: Long;
+}
 
 const INTERNAL_STATEMENT_PREFIX = "$ internal";
 
@@ -311,47 +317,75 @@ describe("selectStatement", () => {
     const stmtA = makeFingerprint(1);
     const stmtB = makeFingerprint(2, "foobar");
     const stmtC = makeFingerprint(3, "another");
-    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale);
+    const detailsA = makeDetails(stmtA);
+    const detailsB = makeDetails(stmtB);
+    const detailsC = makeDetails(stmtC);
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale, [
+      detailsA,
+      detailsB,
+      detailsC,
+    ]);
 
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatementDetails(state, props).statement;
 
-    assert.equal(result.key_data.query, stmtA.key.key_data.query);
+    assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app_names, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.key_data.distSQL, false);
-    assert.deepEqual(result.key_data.vec, false);
-    assert.deepEqual(result.key_data.failed, false);
-    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
+    assert.deepEqual(result.metadata.app_names, [stmtA.key.key_data.app]);
+    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
+    assert.equal(longToInt(result.metadata.failed_count), 0);
+    assert.equal(longToInt(result.metadata.full_scan_count), 0);
+    assert.equal(longToInt(result.metadata.vec_count), 0);
+    assert.equal(longToInt(result.metadata.total_count), 1);
   });
 
   it("filters out statements when app param is set", () => {
     const stmtA = makeFingerprint(1, "foo");
+    const stmtB = makeFingerprint(2, "bar");
+    const stmtC = makeFingerprint(3, "baz");
+    const detailsA = makeDetails(stmtA);
+    const detailsB = makeDetails(stmtB);
+    const detailsC = makeDetails(stmtC);
+    const appFilter = "foo";
+
     const state = makeStateWithStatements(
-      [stmtA, makeFingerprint(2, "bar"), makeFingerprint(3, "baz")],
+      [stmtA, stmtB, stmtC],
       timeScale,
+      [detailsA, detailsB, detailsC],
+      appFilter,
     );
     const stmtAFingerprintID = stmtA.id.toString();
-    const props = makeRoutePropsWithStatementAndApp(stmtAFingerprintID, "foo");
+    const props = makeRoutePropsWithStatementAndApp(
+      stmtAFingerprintID,
+      appFilter,
+    );
 
     const result = selectStatementDetails(state, props).statement;
 
-    assert.equal(result.key_data.query, stmtA.key.key_data.query);
+    assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app_names, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.key_data.distSQL, false);
-    assert.deepEqual(result.key_data.vec, false);
-    assert.deepEqual(result.key_data.failed, false);
-    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
+    assert.deepEqual(result.metadata.app_names, [stmtA.key.key_data.app]);
+    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
+    assert.equal(longToInt(result.metadata.failed_count), 0);
+    assert.equal(longToInt(result.metadata.full_scan_count), 0);
+    assert.equal(longToInt(result.metadata.vec_count), 0);
+    assert.equal(longToInt(result.metadata.total_count), 1);
   });
 
   it('filters out statements with app set when app param is "(unset)"', () => {
     const stmtA = makeFingerprint(1, "");
-    const state = makeStateWithStatements(
-      [stmtA, makeFingerprint(2, "bar"), makeFingerprint(3, "baz")],
-      timeScale,
-    );
+    const stmtB = makeFingerprint(2, "bar");
+    const stmtC = makeFingerprint(3, "baz");
+    const detailsA = makeDetails(stmtA);
+    const detailsB = makeDetails(stmtB);
+    const detailsC = makeDetails(stmtC);
+
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale, [
+      detailsA,
+      detailsB,
+      detailsC,
+    ]);
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(
       stmtAFingerprintID,
@@ -360,37 +394,47 @@ describe("selectStatement", () => {
 
     const result = selectStatementDetails(state, props).statement;
 
-    assert.equal(result.key_data.query, stmtA.key.key_data.query);
+    assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app_names, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.key_data.distSQL, false);
-    assert.deepEqual(result.key_data.vec, false);
-    assert.deepEqual(result.key_data.failed, false);
-    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
+    assert.deepEqual(result.metadata.app_names, [stmtA.key.key_data.app]);
+    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
+    assert.equal(longToInt(result.metadata.failed_count), 0);
+    assert.equal(longToInt(result.metadata.full_scan_count), 0);
+    assert.equal(longToInt(result.metadata.vec_count), 0);
+    assert.equal(longToInt(result.metadata.total_count), 1);
   });
 
   it('filters out statements with app set when app param is "$ internal"', () => {
     const stmtA = makeFingerprint(1, "$ internal_stmnt_app");
+    const stmtB = makeFingerprint(2, "bar");
+    const stmtC = makeFingerprint(3, "baz");
+    const detailsA = makeDetails(stmtA);
+    const detailsB = makeDetails(stmtB);
+    const detailsC = makeDetails(stmtC);
+    const appFilter = "$ internal";
     const state = makeStateWithStatements(
-      [stmtA, makeFingerprint(2, "bar"), makeFingerprint(3, "baz")],
+      [stmtA, stmtB, stmtC],
       timeScale,
+      [detailsA, detailsB, detailsC],
+      appFilter,
     );
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(
       stmtAFingerprintID,
-      "$ internal",
+      appFilter,
     );
 
     const result = selectStatementDetails(state, props)?.statement;
 
-    assert.equal(result.key_data.query, stmtA.key.key_data.query);
+    assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     // Statements with internal app prefix should have "$ internal" as app name
-    assert.deepEqual(result.app_names, ["$ internal_stmnt_app"]);
-    assert.deepEqual(result.key_data.distSQL, false);
-    assert.deepEqual(result.key_data.vec, false);
-    assert.deepEqual(result.key_data.failed, false);
-    assert.deepEqual(result.stats.nodes, stmtA.stats.nodes);
+    assert.deepEqual(result.metadata.app_names, ["$ internal_stmnt_app"]);
+    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
+    assert.equal(longToInt(result.metadata.failed_count), 0);
+    assert.equal(longToInt(result.metadata.full_scan_count), 0);
+    assert.equal(longToInt(result.metadata.vec_count), 0);
+    assert.equal(longToInt(result.metadata.total_count), 1);
   });
 });
 
@@ -415,6 +459,38 @@ function makeFingerprint(
     },
     id: Long.fromNumber(id),
     stats: makeStats(),
+  };
+}
+
+function makeDetails(
+  statement: CollectedStatementStatistics,
+): StatementDetailsWithID {
+  return {
+    id: statement.id,
+    details: {
+      statement: {
+        metadata: {
+          query: statement.key.key_data.query,
+          app_names: [statement.key.key_data.app],
+          dist_sql_count: statement.key.key_data.distSQL
+            ? new Long(1)
+            : new Long(0),
+          failed_count: statement.key.key_data.failed
+            ? new Long(1)
+            : new Long(0),
+          full_scan_count: statement.key.key_data.full_scan
+            ? new Long(1)
+            : new Long(0),
+          vec_count: statement.key.key_data.vec ? new Long(1) : new Long(0),
+          total_count: new Long(1),
+        },
+        stats: statement.stats,
+      },
+      statement_statistics_per_aggregated_ts: [],
+      statement_statistics_per_plan_hash: [],
+      internal_app_name_prefix: "$ internal",
+      toJSON: () => ({}),
+    },
   };
 }
 
@@ -493,6 +569,8 @@ function makeStateWithStatementsAndLastReset(
   statements: CollectedStatementStatistics[],
   lastReset: number,
   timeScale: TimeScale,
+  statementsDetails?: StatementDetailsWithID[],
+  appFilter?: string,
 ) {
   const store = createAdminUIStore(H.createMemoryHistory());
   const state = merge(store.getState(), {
@@ -524,31 +602,28 @@ function makeStateWithStatementsAndLastReset(
   const timeStart = Long.fromNumber(start.unix());
   const timeEnd = Long.fromNumber(end.unix());
 
-  for (const stmt of statements) {
-    state.cachedData.statementDetails[
-      generateStmtDetailsToID(
-        stmt.id.toString(),
-        stmt.key.key_data.app,
-        timeStart,
-        timeEnd,
-      )
-    ] = {
-      data: protos.cockroach.server.serverpb.StatementDetailsResponse.fromObject(
-        {
-          statement: {
-            key_data: stmt.key.key_data,
-            formatted_query: stmt.key.key_data.query,
-            app_names: [stmt.key.key_data.app],
-            stats: stmt.stats,
+  if (statementsDetails) {
+    for (const stmt of statementsDetails) {
+      state.cachedData.statementDetails[
+        generateStmtDetailsToID(
+          stmt.id.toString(),
+          appFilter,
+          timeStart,
+          timeEnd,
+        )
+      ] = {
+        data: protos.cockroach.server.serverpb.StatementDetailsResponse.fromObject(
+          {
+            statement: stmt.details.statement,
+            statement_statistics_per_aggregated_ts: [],
+            statement_statistics_per_plan_hash: [],
+            internal_app_name_prefix: "$ internal",
           },
-          statement_statistics_per_aggregated_ts: [],
-          statement_statistics_per_plan_hash: [],
-          internal_app_name_prefix: "$ internal",
-        },
-      ),
-      inFlight: false,
-      valid: true,
-    };
+        ),
+        inFlight: false,
+        valid: true,
+      };
+    }
   }
 
   return state;
@@ -557,8 +632,16 @@ function makeStateWithStatementsAndLastReset(
 function makeStateWithStatements(
   statements: CollectedStatementStatistics[],
   timeScale: TimeScale,
+  statementsDetails?: StatementDetailsWithID[],
+  appFilter?: string,
 ) {
-  return makeStateWithStatementsAndLastReset(statements, 0, timeScale);
+  return makeStateWithStatementsAndLastReset(
+    statements,
+    0,
+    timeScale,
+    statementsDetails,
+    appFilter,
+  );
 }
 
 function makeStateWithLastReset(lastReset: number, timeScale: TimeScale) {
