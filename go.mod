@@ -80,6 +80,7 @@ require (
 	github.com/google/flatbuffers v2.0.0+incompatible
 	github.com/google/go-cmp v0.5.6
 	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/go-github/v42 v42.0.0
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
@@ -146,11 +147,11 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
-	golang.org/x/crypto v0.0.0-20220112180741-5e0467b6c7ce
+	golang.org/x/crypto v0.0.0-20220307211146-efcb8507fb70
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net v0.0.0-20220121210141-e204ce36a2ba
-	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
@@ -233,7 +234,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/google/go-querystring v1.0.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.1.1 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
