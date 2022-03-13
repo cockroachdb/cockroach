@@ -22,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -275,6 +277,51 @@ func deprecatedIsProtected(
 	return protected
 }
 
+// isTenantProtected returns true if there exist any protected timestamp records
+// written by the system tenant, that targets the tenant with tenantID.
+func isTenantProtected(
+	ctx context.Context, atTime hlc.Timestamp, tenantID roachpb.TenantID, execCfg *sql.ExecutorConfig,
+) (bool, error) {
+	if !execCfg.Codec.ForSystemTenant() {
+		return false, errors.AssertionFailedf("isTenantProtected incorrectly invoked by secondary tenant")
+	}
+
+	isProtected := false
+	ptsProvider := execCfg.ProtectedTimestampProvider
+	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		ptsState, err := ptsProvider.GetState(ctx, txn)
+		if err != nil {
+			return errors.Wrap(err, "failed to get protectedts State")
+		}
+		ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+
+		// First check if the system tenant has any cluster level protections that protect
+		// all secondary tenants.
+		clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
+		for _, p := range clusterProtections {
+			if p.ProtectedTimestamp.Less(atTime) {
+				isProtected = true
+				return nil
+			}
+		}
+
+		// Now check if the system tenant has any protections that target the
+		// tenantID's keyspace.
+		protectionsOnTenant := ptsStateReader.GetProtectionsForTenant(tenantID)
+		for _, p := range protectionsOnTenant {
+			if p.ProtectedTimestamp.Less(atTime) {
+				isProtected = true
+				return nil
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return isProtected, nil
+}
+
 // refreshTenant updates the status of tenant that is waiting to be GC'd. It
 // returns whether or the tenant has expired or the duration until it expires.
 func refreshTenant(
@@ -283,13 +330,15 @@ func refreshTenant(
 	dropTime int64,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
-) (expired bool, deadline time.Time) {
+) (expired bool, _ time.Time, _ error) {
 	if progress.Tenant.Status != jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
-		return true, time.Time{}
+		return true, time.Time{}, nil
 	}
-	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
+
+	// Read the tenant's GC TTL to check if the tenant's data has expired.
 	tenID := details.Tenant.ID
 	cfg := execCfg.SystemConfig.GetSystemConfig()
+	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	zoneCfg, err := cfg.GetZoneConfigForObject(keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)), 0)
 	if err == nil {
 		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
@@ -298,9 +347,25 @@ func refreshTenant(
 	}
 
 	deadlineNanos := dropTime + int64(tenantTTLSeconds)*time.Second.Nanoseconds()
+	deadlineUnix := timeutil.Unix(0, deadlineNanos)
 	if timeutil.Now().UnixNano() >= deadlineNanos {
+		// If the tenant's GC TTL has elapsed, check if there are any protected timestamp records
+		// that apply to the tenant keyspace.
+		atTime := hlc.Timestamp{WallTime: dropTime}
+		isProtected, err := isTenantProtected(ctx, atTime, roachpb.MakeTenantID(tenID), execCfg)
+		if err != nil {
+			return false, time.Time{}, err
+		}
+
+		if isProtected {
+			log.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
+				"record(s) on the tenant keyspace are preventing GC", tenID)
+			return false, deadlineUnix, nil
+		}
+
+		// At this point, the tenant's keyspace is ready for GC.
 		progress.Tenant.Status = jobspb.SchemaChangeGCProgress_DELETING
-		return true, time.Time{}
+		return true, deadlineUnix, nil
 	}
-	return false, timeutil.Unix(0, deadlineNanos)
+	return false, deadlineUnix, nil
 }
