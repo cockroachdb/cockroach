@@ -228,17 +228,31 @@ statement error unimplemented
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
 
 onlyif config 3node-tenant
-statement error unimplemented
+query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTINGS FOR TENANT 10
 
 skipif config 3node-tenant
-statement error unimplemented
-SHOW CLUSTER SETTINGS FOR TENANT 10
+query error tenant ID must be non-zero
+SHOW CLUSTER SETTINGS FOR TENANT 0
 
 skipif config 3node-tenant
-statement error unimplemented
-SHOW PUBLIC CLUSTER SETTINGS FOR TENANT 10
+query error use SHOW CLUSTER SETTINGS to display settings for the system tenant
+SHOW CLUSTER SETTINGS FOR TENANT 1
 
 skipif config 3node-tenant
-statement error unimplemented
-SHOW ALL CLUSTER SETTINGS FOR TENANT 10
+query error no tenant found with ID 1111
+SHOW CLUSTER SETTINGS FOR TENANT 1111
+
+# The IN clause should contain one public and one hidden cluster setting.
+skipif config 3node-tenant
+query TTT
+SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time  d  unsupported - see issue #77935
+
+skipif config 3node-tenant
+query TTBT
+SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT 10] WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time     d  true   unsupported - see issue #77935
+jobs.scheduler.enabled  b  false  unsupported - see issue #77935

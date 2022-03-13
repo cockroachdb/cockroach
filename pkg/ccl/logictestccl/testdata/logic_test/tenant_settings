@@ -10,6 +10,11 @@ user host-cluster-root
 statement ok
 ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = false
 
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+false  per-tenant-override
+
 user root
 
 query B retry
@@ -22,6 +27,11 @@ user host-cluster-root
 
 statement ok
 ALTER TENANT 10 RESET CLUSTER SETTING sql.notices.enabled
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+NULL  unsupported - see issue #77935
 
 user root
 
@@ -36,6 +46,11 @@ user host-cluster-root
 statement ok
 ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false
 
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+false  all-tenants-override
+
 user root
 
 query B retry
@@ -48,6 +63,11 @@ user host-cluster-root
 # Now set a tenant-specific override which takes precedence.
 statement ok
 ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = true
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true  per-tenant-override
 
 user root
 
@@ -68,6 +88,11 @@ user host-cluster-root
 # Remove the all-tenant override; should make no difference.
 statement ok
 ALTER TENANT ALL RESET CLUSTER SETTING sql.notices.enabled
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true  per-tenant-override
 
 user root
 
@@ -99,6 +124,11 @@ user host-cluster-root
 
 statement ok
 ALTER TENANT 10 SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'kv.protectedts.reconciliation.interval'
+----
+45s  per-tenant-override
 
 user root
 
