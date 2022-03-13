@@ -16,27 +16,39 @@ import (
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
 type metrics struct {
-	BackendDisconnectCount             *metric.Counter
-	IdleDisconnectCount                *metric.Counter
-	BackendDownCount                   *metric.Counter
-	ClientDisconnectCount              *metric.Counter
-	CurConnCount                       *metric.Gauge
-	RoutingErrCount                    *metric.Counter
-	RefusedConnCount                   *metric.Counter
-	SuccessfulConnCount                *metric.Counter
-	AuthFailedCount                    *metric.Counter
-	ExpiredClientConnCount             *metric.Counter
-	ConnMigrationSuccessCount          *metric.Counter
-	ConnMigrationErrorFatalCount       *metric.Counter
-	ConnMigrationErrorRecoverableCount *metric.Counter
-	ConnMigrationAttemptedCount        *metric.Counter
-	ConnMigrationAttemptedLatency      *metric.Histogram
+	BackendDisconnectCount *metric.Counter
+	IdleDisconnectCount    *metric.Counter
+	BackendDownCount       *metric.Counter
+	ClientDisconnectCount  *metric.Counter
+	CurConnCount           *metric.Gauge
+	RoutingErrCount        *metric.Counter
+	RefusedConnCount       *metric.Counter
+	SuccessfulConnCount    *metric.Counter
+	AuthFailedCount        *metric.Counter
+	ExpiredClientConnCount *metric.Counter
+
+	ConnMigrationSuccessCount                *metric.Counter
+	ConnMigrationErrorFatalCount             *metric.Counter
+	ConnMigrationErrorRecoverableCount       *metric.Counter
+	ConnMigrationAttemptedCount              *metric.Counter
+	ConnMigrationAttemptedLatency            *metric.Histogram
+	ConnMigrationTransferResponseMessageSize *metric.Histogram
 }
 
 // MetricStruct implements the metrics.Struct interface.
 func (metrics) MetricStruct() {}
 
 var _ metric.Struct = metrics{}
+
+const (
+	// maxExpectedTransferResponseMessageSize corresponds to maximum expected
+	// response message size for the SHOW TRANSFER STATE query. We choose 16MB
+	// here to match the defaultMaxReadBufferSize used for ingesting SQL
+	// statements in the SQL server (see pkg/sql/pgwire/pgwirebase/encoding.go).
+	//
+	// This will be used to tune sql.session_transfer.max_session_size.
+	maxExpectedTransferResponseMessageSize = 1 << 24 // 16MB
+)
 
 var (
 	metaCurConnCount = metric.Metadata{
@@ -134,6 +146,12 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaConnMigrationTransferResponseMessageSize = metric.Metadata{
+		Name:        "proxy.conn_migration.transfer_response.message_size",
+		Help:        "Message size for the SHOW TRANSFER STATE response",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -157,6 +175,12 @@ func makeProxyMetrics() metrics {
 		ConnMigrationAttemptedLatency: metric.NewLatency(
 			metaConnMigrationAttemptedLatency,
 			base.DefaultHistogramWindowInterval(),
+		),
+		ConnMigrationTransferResponseMessageSize: metric.NewHistogram(
+			metaConnMigrationTransferResponseMessageSize,
+			base.DefaultHistogramWindowInterval(),
+			maxExpectedTransferResponseMessageSize,
+			1,
 		),
 	}
 }

@@ -950,6 +950,8 @@ func TestConnectionMigration(t *testing.T) {
 			)
 			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
 				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 		})
 
 		// Transfers should fail if there is an open transaction. These failed
@@ -999,6 +1001,8 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
 				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 
 			// We have already asserted metrics above, so transfer must have
 			// been completed.
@@ -1028,6 +1032,8 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
 				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
+				f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 
 			// We have already asserted metrics above, so transfer must have
 			// been completed.
@@ -1133,6 +1139,11 @@ func TestConnectionMigration(t *testing.T) {
 		require.NotNil(t, f.ctx.Err())
 		require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
 			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+
+		// Here, we get a transfer timeout in response, so the message size
+		// should not be recorded.
+		require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count()-1,
+			f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 	})
 }
 
