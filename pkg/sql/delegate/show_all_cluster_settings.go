@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (d *delegator) delegateShowClusterSettingList(
@@ -54,6 +53,82 @@ func (d *delegator) delegateShowClusterSettingList(
 func (d *delegator) delegateShowTenantClusterSettingList(
 	stmt *tree.ShowTenantClusterSettingList,
 ) (tree.Statement, error) {
-	return nil, unimplemented.NewWithIssue(73857,
-		`unimplemented: tenant-level cluster settings not supported`)
+	// Viewing cluster settings for other tenants is a more
+	// privileged operation than viewing local cluster settings. So we
+	// shouldn't be allowing with just the role option
+	// VIEWCLUSTERSETTINGS.
+	//
+	// TODO(knz): Using admin authz for now; we may want to introduce a
+	// more specific role option later.
+	if err := d.catalog.RequireAdminRole(d.ctx, "show a tenant cluster setting"); err != nil {
+		return nil, err
+	}
+
+	if !d.evalCtx.Codec.ForSystemTenant() {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators")
+	}
+
+	publicCol := `allsettings.public,`
+	var publicFilter string
+	if !stmt.All {
+		publicCol = ``
+		publicFilter = `WHERE public IS TRUE`
+	}
+
+	// Note: we do the validation in SQL (via CASE...END) because the
+	// TenantID expression may be complex (incl subqueries, etc) and we
+	// cannot evaluate it in the go code.
+	return parse(`
+WITH
+  tenant_id AS (SELECT (` + stmt.TenantID.String() + `) AS tenant_id),
+  isvalid AS (
+    SELECT
+      CASE
+       WHEN tenant_id=0 THEN
+         crdb_internal.force_error('22023', 'tenant ID must be non-zero')
+       WHEN tenant_id=1 THEN
+         crdb_internal.force_error('22023', 'use SHOW CLUSTER SETTINGS to display settings for the system tenant')
+       WHEN st.id IS NULL THEN
+         crdb_internal.force_error('22023', 'no tenant found with ID '||tenant_id)
+       ELSE 0
+      END AS ok
+    FROM      tenant_id
+    LEFT JOIN system.tenants st ON id = tenant_id.tenant_id
+  ),
+  tenantspecific AS (
+     SELECT t.name, t.value
+     FROM system.tenant_settings t, tenant_id
+     WHERE t.tenant_id = tenant_id.tenant_id
+  ),
+  allsettings AS (
+    SELECT variable, value, public, type, description
+    FROM system.crdb_internal.cluster_settings ` + publicFilter + `
+  )
+SELECT
+  allsettings.variable || substr('', (SELECT ok FROM isvalid)) AS variable,
+  crdb_internal.decode_cluster_setting(allsettings.variable,
+     -- NB: careful not to coalesce with allsettings.value directly!
+     -- This is the value for the system tenant and is not relevant to other tenants.
+     COALESCE(tenantspecific.value,
+              overrideall.value,
+              -- NB: we can't compute the actual value here, which is the entry in the tenant's settings table.
+              -- See discussion on issue #77935.
+              NULL)
+  ) AS value,
+  allsettings.type,
+  ` + publicCol + `
+  CASE
+    WHEN tenantspecific.value IS NOT NULL THEN 'per-tenant-override'
+    WHEN overrideall.value IS NOT NULL THEN 'all-tenants-override'
+    ELSE 'no-override'
+  END AS origin,
+  allsettings.description
+FROM
+  allsettings
+  LEFT JOIN tenantspecific ON
+                  allsettings.variable = tenantspecific.name
+  LEFT JOIN system.tenant_settings AS overrideall ON
+                  allsettings.variable = overrideall.name AND overrideall.tenant_id = 0
+`)
 }
