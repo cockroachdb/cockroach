@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -3602,7 +3603,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				testutils.SucceedsSoon(t, func() error {
-					if err := verifyProtectionTimestampExistsOnSpans(ctx, t, tc, ptsReader, protectionTimestamp,
+					if err := ptutil.TestingVerifyProtectionTimestampExistsOnSpans(ctx, t, tc.Server(i),
+						ptsReader, protectionTimestamp,
 						[]roachpb.Span{span}); err != nil {
 						return errors.Newf("protection timestamp %s does not exist on span %s",
 							protectionTimestamp, span)
