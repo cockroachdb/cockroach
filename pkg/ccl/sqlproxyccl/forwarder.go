@@ -272,10 +272,7 @@ func makeLogicalClockFn() func() uint64 {
 // cancellation of dials.
 var aLongTimeAgo = timeutil.Unix(1, 0)
 
-var (
-	errProcessorResumed  = errors.New("processor has already been resumed")
-	errSuspendInProgress = errors.New("suspension is already in progress")
-)
+var errProcessorResumed = errors.New("processor has already been resumed")
 
 // processor must always be constructed through newProcessor.
 type processor struct {
@@ -287,10 +284,11 @@ type processor struct {
 
 	mu struct {
 		syncutil.Mutex
-		cond       *sync.Cond
-		resumed    bool
-		inPeek     bool
-		suspendReq bool // Indicates that a suspend has been requested.
+		cond                *sync.Cond
+		resumed             bool
+		inPeek              bool
+		suspendReq          bool
+		readDeadlineUpdated bool
 
 		lastMessageTransferredAt uint64 // Updated through logicalClockFn
 		lastMessageType          byte
@@ -346,6 +344,17 @@ func (p *processor) resume(ctx context.Context) error {
 		p.mu.inPeek = false
 		return p.mu.suspendReq
 	}
+	updateLastMessage := func(typ byte) (terminate bool) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		// Suspend has been requested. Suspend now before forwarding.
+		if p.mu.suspendReq {
+			return true
+		}
+		p.mu.lastMessageType = typ
+		p.mu.lastMessageTransferredAt = p.logicalClockFn()
+		return false
+	}
 
 	if err := enterResume(); err != nil {
 		return err
@@ -353,8 +362,8 @@ func (p *processor) resume(ctx context.Context) error {
 	defer exitResume()
 
 	for ctx.Err() == nil {
-		// If suspend was requested, we terminate to avoid blocking on PeekMsg
-		// as an optimization.
+		// If suspend was requested, or a transfer has been started, we
+		// terminate to avoid blocking on PeekMsg as an optimization.
 		if terminate := enterPeek(); terminate {
 			return nil
 		}
@@ -386,11 +395,11 @@ func (p *processor) resume(ctx context.Context) error {
 			p.testingKnobs.beforeForwardMsg()
 		}
 
-		// Update last message that is set to be forwarded.
-		p.mu.Lock()
-		p.mu.lastMessageType = typ
-		p.mu.lastMessageTransferredAt = p.logicalClockFn()
-		p.mu.Unlock()
+		// Update last message that is set to be forwarded. If we start
+		// suspending, terminate early.
+		if terminate := updateLastMessage(typ); terminate {
+			return nil
+		}
 		if _, err := p.src.ForwardMsg(p.dst); err != nil {
 			return errors.Wrap(err, "forwarding message")
 		}
@@ -421,24 +430,33 @@ func (p *processor) suspend(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.mu.suspendReq {
-		return errSuspendInProgress
-	}
-
-	p.mu.suspendReq = true
 	defer func() {
 		p.mu.suspendReq = false
-		_ = p.src.SetReadDeadline(time.Time{})
+		if p.mu.readDeadlineUpdated {
+			_ = p.src.SetReadDeadline(time.Time{})
+			p.mu.readDeadlineUpdated = false
+		}
 	}()
 
 	for p.mu.resumed {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if p.mu.inPeek {
+		p.mu.suspendReq = true
+		// Even though multiple goroutines may invoke methods on a Conn
+		// simultaneously, doing so may lead to unexpected results (e.g.
+		// getting a deadline error while peeking when suspendReq == false).
+		// It is hypothesized that these requests are being queued under the
+		// hood. Due to this, we would ensure that multiple suspend calls will
+		// only set the read deadline once. Practically, this isn't a problem
+		// for the proxy since there will only be one suspend blocking during
+		// the connection migration, but the tests exercise multiple
+		// resume/suspend calls for correctness.
+		if p.mu.inPeek && !p.mu.readDeadlineUpdated {
 			if err := p.src.SetReadDeadline(aLongTimeAgo); err != nil {
 				return err
 			}
+			p.mu.readDeadlineUpdated = true
 		}
 		p.mu.cond.Wait()
 	}

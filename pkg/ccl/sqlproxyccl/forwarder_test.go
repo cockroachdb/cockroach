@@ -619,10 +619,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		// Wait until all initial suspend calls have returned.
 		for i := 0; i < concurrency; i++ {
 			err := <-errSuspendCh
-			// If error is not nil, it has to be a suspend in-progress error.
-			if err != nil {
-				require.EqualError(t, err, errSuspendInProgress.Error())
-			}
+			require.NoError(t, err)
 		}
 
 		// At this point, we know that all pending resume and suspend calls
