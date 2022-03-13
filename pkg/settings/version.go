@@ -126,7 +126,21 @@ func (v *VersionSetting) Encoded(sv *Values) string {
 
 // EncodedDefault is part of the NonMaskedSetting interface.
 func (v *VersionSetting) EncodedDefault() string {
-	return "unsupported"
+	return encodedDefaultVersion
+}
+
+const encodedDefaultVersion = "unsupported"
+
+// DecodeToString decodes and renders an encoded value.
+func (v *VersionSetting) DecodeToString(encoded string) (string, error) {
+	if encoded == encodedDefaultVersion {
+		return encodedDefaultVersion, nil
+	}
+	cv, err := v.impl.Decode([]byte(encoded))
+	if err != nil {
+		return "", err
+	}
+	return cv.String(), nil
 }
 
 // Get retrieves the encoded value (in string form) in the setting. It panics if

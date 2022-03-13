@@ -461,7 +461,7 @@ func TestCache(t *testing.T) {
 		if expected, actual := 1, changes.eA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
+		if expected, err := "strconv.ParseInt: parsing \"notAValidValue\": invalid syntax",
 			u.Set(ctx, "e", v("notAValidValue", "e")); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
 		}
@@ -599,7 +599,7 @@ func TestCache(t *testing.T) {
 		{
 			u := settings.NewUpdater(sv)
 			if err := u.Set(ctx, "i.2", v(settings.EncodeBool(false), "i")); !testutils.IsError(err,
-				"strconv.Atoi: parsing \"false\": invalid syntax",
+				"strconv.ParseInt: parsing \"false\": invalid syntax",
 			) {
 				t.Fatal(err)
 			}

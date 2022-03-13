@@ -99,11 +99,11 @@ func (u updater) Set(ctx context.Context, key string, value EncodedValue) error 
 		setting.set(ctx, u.sv, b)
 		return nil
 	case numericSetting:
-		i, err := strconv.Atoi(value.Value)
+		i, err := setting.decodeNum(value.Value)
 		if err != nil {
 			return err
 		}
-		return setting.set(ctx, u.sv, int64(i))
+		return setting.set(ctx, u.sv, i)
 	case *FloatSetting:
 		f, err := strconv.ParseFloat(value.Value, 64)
 		if err != nil {
