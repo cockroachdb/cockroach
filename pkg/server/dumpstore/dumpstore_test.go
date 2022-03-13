@@ -144,13 +144,7 @@ func TestRemoveOldAndTooBig(t *testing.T) {
 
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			path, err := ioutil.TempDir("", "remove")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = os.RemoveAll(path) }()
-
-			files := populate(t, path, tc.startFiles, tc.sizes)
+			files := populate(t, t.TempDir(), tc.startFiles, tc.sizes)
 
 			cleaned := []string{}
 			cleanupFn := func(s string) error {
