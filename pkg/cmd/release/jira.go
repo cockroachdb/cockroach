@@ -85,7 +85,7 @@ type sreIssueTemplateArgs struct {
 	Tag     string
 }
 
-type issueDetails struct {
+type jiraIssue struct {
 	ID           string
 	Key          string
 	TypeName     string
@@ -111,17 +111,17 @@ func newJiraClient(baseURL string, username string, password string) (*jiraClien
 	}, nil
 }
 
-// getIssueDetails stores a subset of details from jira.Issue into issueDetails.
-func (j *jiraClient) getIssueDetails(issueID string) (issueDetails, error) {
+// getIssueDetails stores a subset of details from jira.Issue into jiraIssue.
+func (j *jiraClient) getIssueDetails(issueID string) (jiraIssue, error) {
 	issue, _, err := j.client.Issue.Get(issueID, nil)
 	if err != nil {
-		return issueDetails{}, err
+		return jiraIssue{}, err
 	}
 	customFields, _, err := j.client.Issue.GetCustomFields(issueID)
 	if err != nil {
-		return issueDetails{}, err
+		return jiraIssue{}, err
 	}
-	return issueDetails{
+	return jiraIssue{
 		ID:           issue.ID,
 		Key:          issue.Key,
 		TypeName:     issue.Fields.Type.Name,
@@ -132,7 +132,7 @@ func (j *jiraClient) getIssueDetails(issueID string) (issueDetails, error) {
 	}, nil
 }
 
-func newIssue(details *issueDetails) *jira.Issue {
+func newIssue(details *jiraIssue) *jira.Issue {
 	var issue jira.Issue
 	issue.Fields = &jira.IssueFields{}
 	issue.Fields.Project = jira.Project{
@@ -153,19 +153,19 @@ func newIssue(details *issueDetails) *jira.Issue {
 	return &issue
 }
 
-func (d issueDetails) url() string {
+func (d jiraIssue) url() string {
 	return fmt.Sprintf("%s/browse/%s", strings.TrimSuffix(jiraBaseURL, "/"), d.Key)
 }
 
 // createJiraIssue creates a **real** JIRA issue.
-func createJiraIssue(client *jiraClient, issue *jira.Issue) (issueDetails, error) {
+func createJiraIssue(client *jiraClient, issue *jira.Issue) (jiraIssue, error) {
 	newIssue, _, err := client.client.Issue.Create(issue)
 	if err != nil {
-		return issueDetails{}, err
+		return jiraIssue{}, err
 	}
 	details, err := client.getIssueDetails(newIssue.ID)
 	if err != nil {
-		return issueDetails{}, err
+		return jiraIssue{}, err
 	}
 	return details, nil
 }
@@ -175,8 +175,8 @@ func createJiraIssue(client *jiraClient, issue *jira.Issue) (issueDetails, error
 // - https://cockroachlabs.atlassian.net/browse/REL-3
 // - https://cockroachlabs.atlassian.net/rest/api/2/issue/REL-3
 func createTrackingIssue(
-	client *jiraClient, release releaseInfo, sreIssue issueDetails, dryRun bool,
-) (issueDetails, error) {
+	client *jiraClient, release releaseInfo, sreIssue jiraIssue, dryRun bool,
+) (jiraIssue, error) {
 	templateArgs := trackingIssueTemplateArgs{
 		Version:  release.nextReleaseVersion,
 		Tag:      release.buildInfo.Tag,
@@ -185,14 +185,14 @@ func createTrackingIssue(
 	}
 	description, err := templateToText(trackingIssueTemplate, templateArgs)
 	if err != nil {
-		return issueDetails{}, fmt.Errorf("cannot parse tracking issue template: %w", err)
+		return jiraIssue{}, fmt.Errorf("cannot parse tracking issue template: %w", err)
 	}
 	summary := fmt.Sprintf("Release: %s", release.nextReleaseVersion)
 	projectKey := "RE"
 	if dryRun {
 		projectKey = dryRunProject
 	}
-	issue := newIssue(&issueDetails{
+	issue := newIssue(&jiraIssue{
 		// TODO: remove the following when ready
 		// Before sending the post request, let's override
 		// the `REL` project with our test `RE` project.
@@ -216,14 +216,14 @@ func createTrackingIssue(
 // explicitly specify which partition to use, so that we don't "overwrite" the
 // qualification of one release candidate by pushing a second release candidate
 // to the same cluster. Tracked in: https://cockroachlabs.atlassian.net/browse/RE-83
-func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (issueDetails, error) {
+func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (jiraIssue, error) {
 	templateArgs := sreIssueTemplateArgs{
 		Version: release.nextReleaseVersion,
 		Tag:     release.buildInfo.Tag,
 	}
 	description, err := templateToHTML(sreIssueTemplate, templateArgs)
 	if err != nil {
-		return issueDetails{}, fmt.Errorf("cannot parse SRE issue template: %w", err)
+		return jiraIssue{}, fmt.Errorf("cannot parse SRE issue template: %w", err)
 	}
 	projectKey := "SREOPS"
 	summary := fmt.Sprintf("Deploy %s to release qualification cluster", release.nextReleaseVersion)
@@ -233,7 +233,7 @@ func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (issue
 		projectKey = dryRunProject
 		customFields = nil
 	}
-	issue := newIssue(&issueDetails{
+	issue := newIssue(&jiraIssue{
 		ProjectKey:   projectKey,
 		TypeName:     "Task",
 		Summary:      summary,
