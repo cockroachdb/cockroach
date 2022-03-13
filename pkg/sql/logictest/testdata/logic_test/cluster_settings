@@ -158,6 +158,26 @@ SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
 ----
 10 MiB
 
+skipif config 3node-tenant
+query T
+SELECT crdb_internal.cluster_setting_encoded_default('kv.snapshot_rebalance.max_rate')
+----
+33554432
+
+skipif config 3node-tenant
+query T
+SELECT crdb_internal.decode_cluster_setting('kv.snapshot_rebalance.max_rate', '33554432')
+----
+32 MiB
+
+onlyif config 3node-tenant
+query error unknown cluster setting
+SELECT crdb_internal.cluster_setting_encoded_default('kv.snapshot_rebalance.max_rate')
+
+onlyif config 3node-tenant
+query error unknown cluster setting
+SELECT crdb_internal.decode_cluster_setting('kv.snapshot_rebalance.max_rate', '33554432')
+
 onlyif config 3node-tenant
 statement error unknown cluster setting
 SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
