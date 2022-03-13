@@ -20,9 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -218,8 +217,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(
-			ctx, t, tc, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
+		ptutil.VerifyProtectionTimestampExistsOnSpans(
+			ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
 		),
 	)
 
@@ -237,8 +236,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	// does not affect the ability to GC.
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(
-			ctx, t, tc, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
+		ptutil.VerifyProtectionTimestampExistsOnSpans(
+			ctx, t, s0, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
 		),
 	)
 
@@ -250,8 +249,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(
-			ctx, t, tc, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
+		ptutil.VerifyProtectionTimestampExistsOnSpans(
+			ctx, t, s0, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
 		),
 	)
 
@@ -279,39 +278,4 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)
 	require.Equal(t, int(state.NumRecords), len(state.Records))
-}
-
-// verifyProtectionTimestampExistsOnSpans refreshes the PTS state in KV and
-// ensures a protection at the given protectionTimestamp exists for all the
-// supplied spans.
-func verifyProtectionTimestampExistsOnSpans(
-	ctx context.Context,
-	t *testing.T,
-	tc *testcluster.TestCluster,
-	ptsReader spanconfig.ProtectedTSReader,
-	protectionTimestamp hlc.Timestamp,
-	spans roachpb.Spans,
-) error {
-	if err := spanconfigptsreader.TestingRefreshPTSState(
-		ctx, t, ptsReader, tc.Server(0).Clock().Now(),
-	); err != nil {
-		return err
-	}
-	for _, sp := range spans {
-		timestamps, _, err := ptsReader.GetProtectionTimestamps(ctx, sp)
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, ts := range timestamps {
-			if ts.Equal(protectionTimestamp) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.Newf("protection timestamp %s does not exist on span %s", protectionTimestamp, sp)
-		}
-	}
-	return nil
 }
