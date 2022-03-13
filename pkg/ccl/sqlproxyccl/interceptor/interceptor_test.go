@@ -10,6 +10,7 @@ package interceptor_test
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"testing"
 
@@ -202,4 +203,14 @@ func TestSimpleProxy(t *testing.T) {
 			require.Regexp(t, m2, string(m1))
 		}
 	})
+}
+
+func writeAsync(t *testing.T, w io.Writer, data []byte) <-chan error {
+	t.Helper()
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := w.Write(data)
+		errCh <- err
+	}()
+	return errCh
 }

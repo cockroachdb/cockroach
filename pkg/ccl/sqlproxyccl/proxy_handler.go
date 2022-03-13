@@ -96,6 +96,11 @@ type ProxyOptions struct {
 	// ThrottleBaseDelay is the initial exponential backoff triggered in
 	// response to the first connection failure.
 	ThrottleBaseDelay time.Duration
+
+	// Used for testing.
+	testingKnobs struct {
+		afterForward func(*forwarder) error
+	}
 }
 
 // proxyHandler is the default implementation of a proxy handler.
@@ -333,8 +338,22 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f := forward(ctx, conn, crdbConn)
+	f, err := forward(ctx, connector, handler.metrics, conn, crdbConn)
+	if err != nil {
+		// Don't send to the client here for the same reason below.
+		handler.metrics.updateForError(err)
+		return err
+	}
 	defer f.Close()
+
+	if handler.testingKnobs.afterForward != nil {
+		if err := handler.testingKnobs.afterForward(f); err != nil {
+			select {
+			case errConnection <- err: /* error reported */
+			default: /* the channel already contains an error */
+			}
+		}
+	}
 
 	// Block until an error is received, or when the stopper starts quiescing,
 	// whichever that happens first.

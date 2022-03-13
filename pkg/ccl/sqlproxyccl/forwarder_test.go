@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -34,11 +35,12 @@ func TestForward(t *testing.T) {
 	t.Run("closed_when_processors_error", func(t *testing.T) {
 		p1, p2 := net.Pipe()
 
+		f, err := forward(bgCtx, nil /* connector */, nil /* metrics */, p1, p2)
+		require.NoError(t, err)
+		defer f.Close()
+
 		// Close the connection right away to simulate processor error.
 		p1.Close()
-
-		f := forward(bgCtx, p1, p2)
-		defer f.Close()
 
 		// We have to wait for the goroutine to run. Once the forwarder stops,
 		// we're good.
@@ -54,35 +56,47 @@ func TestForward(t *testing.T) {
 		ctx, cancel := context.WithTimeout(bgCtx, 5*time.Second)
 		defer cancel()
 
-		// We don't close clientW and serverR here since we have no control
+		// We don't close client and server here since we have no control
 		// over those. The rest are handled by the forwarder.
-		clientW, clientR := net.Pipe()
-		serverW, serverR := net.Pipe()
+		clientProxy, client := net.Pipe()
+		serverProxy, server := net.Pipe()
 
-		f := forward(ctx, clientR, serverW)
+		f, err := forward(ctx, nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+		require.NoError(t, err)
 		defer f.Close()
 		require.Nil(t, f.ctx.Err())
+
+		f.mu.Lock()
+		requestProc := f.mu.request
+		f.mu.Unlock()
+
+		initialClock := requestProc.logicalClockFn()
+		barrier := make(chan struct{})
+		requestProc.testingKnobs.beforeForwardMsg = func() {
+			<-barrier
+		}
+
+		requestProc.mu.Lock()
+		require.True(t, requestProc.mu.resumed)
+		requestProc.mu.Unlock()
 
 		// Client writes some pgwire messages.
 		errChan := make(chan error, 1)
 		go func() {
-			_, err := clientW.Write((&pgproto3.Query{
+			if _, err := client.Write((&pgproto3.Query{
 				String: "SELECT 1",
-			}).Encode(nil))
-			if err != nil {
+			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
-
-			if _, err := clientW.Write((&pgproto3.Execute{
+			if _, err := client.Write((&pgproto3.Execute{
 				Portal:  "foobar",
 				MaxRows: 42,
 			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
-
-			if _, err := clientW.Write((&pgproto3.Close{
+			if _, err := client.Write((&pgproto3.Close{
 				ObjectType: 'P',
 			}).Encode(nil)); err != nil {
 				errChan <- err
@@ -91,14 +105,21 @@ func TestForward(t *testing.T) {
 		}()
 
 		// Server should receive messages in order.
-		backend := pgproto3.NewBackend(pgproto3.NewChunkReader(serverR), serverR)
+		backend := pgproto3.NewBackend(pgproto3.NewChunkReader(server), server)
 
+		barrier <- struct{}{}
 		msg, err := backend.Receive()
 		require.NoError(t, err)
 		m1, ok := msg.(*pgproto3.Query)
 		require.True(t, ok)
 		require.Equal(t, "SELECT 1", m1.String)
 
+		requestProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), requestProc.mu.lastMessageType)
+		require.Equal(t, initialClock+1, requestProc.mu.lastMessageTransferredAt)
+		requestProc.mu.Unlock()
+
+		barrier <- struct{}{}
 		msg, err = backend.Receive()
 		require.NoError(t, err)
 		m2, ok := msg.(*pgproto3.Execute)
@@ -106,11 +127,22 @@ func TestForward(t *testing.T) {
 		require.Equal(t, "foobar", m2.Portal)
 		require.Equal(t, uint32(42), m2.MaxRows)
 
+		requestProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ClientMsgExecute), requestProc.mu.lastMessageType)
+		require.Equal(t, initialClock+2, requestProc.mu.lastMessageTransferredAt)
+		requestProc.mu.Unlock()
+
+		barrier <- struct{}{}
 		msg, err = backend.Receive()
 		require.NoError(t, err)
 		m3, ok := msg.(*pgproto3.Close)
 		require.True(t, ok)
 		require.Equal(t, byte('P'), m3.ObjectType)
+
+		requestProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ClientMsgClose), requestProc.mu.lastMessageType)
+		require.Equal(t, initialClock+3, requestProc.mu.lastMessageTransferredAt)
+		requestProc.mu.Unlock()
 
 		select {
 		case err = <-errChan:
@@ -123,27 +155,41 @@ func TestForward(t *testing.T) {
 		ctx, cancel := context.WithTimeout(bgCtx, 5*time.Second)
 		defer cancel()
 
-		// We don't close clientW and serverR here since we have no control
+		// We don't close client and server here since we have no control
 		// over those. The rest are handled by the forwarder.
-		clientW, clientR := net.Pipe()
-		serverW, serverR := net.Pipe()
+		clientProxy, client := net.Pipe()
+		serverProxy, server := net.Pipe()
 
-		f := forward(ctx, clientR, serverW)
+		f, err := forward(ctx, nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+		require.NoError(t, err)
 		defer f.Close()
 		require.Nil(t, f.ctx.Err())
+
+		f.mu.Lock()
+		responseProc := f.mu.response
+		f.mu.Unlock()
+
+		initialClock := responseProc.logicalClockFn()
+		barrier := make(chan struct{})
+		responseProc.testingKnobs.beforeForwardMsg = func() {
+			<-barrier
+		}
+
+		responseProc.mu.Lock()
+		require.True(t, responseProc.mu.resumed)
+		responseProc.mu.Unlock()
 
 		// Server writes some pgwire messages.
 		errChan := make(chan error, 1)
 		go func() {
-			if _, err := serverR.Write((&pgproto3.ErrorResponse{
+			if _, err := server.Write((&pgproto3.ErrorResponse{
 				Code:    "100",
 				Message: "foobarbaz",
 			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
-
-			if _, err := serverR.Write((&pgproto3.ReadyForQuery{
+			if _, err := server.Write((&pgproto3.ReadyForQuery{
 				TxStatus: 'I',
 			}).Encode(nil)); err != nil {
 				errChan <- err
@@ -152,8 +198,9 @@ func TestForward(t *testing.T) {
 		}()
 
 		// Client should receive messages in order.
-		frontend := pgproto3.NewFrontend(pgproto3.NewChunkReader(clientW), clientW)
+		frontend := pgproto3.NewFrontend(pgproto3.NewChunkReader(client), client)
 
+		barrier <- struct{}{}
 		msg, err := frontend.Receive()
 		require.NoError(t, err)
 		m1, ok := msg.(*pgproto3.ErrorResponse)
@@ -161,11 +208,22 @@ func TestForward(t *testing.T) {
 		require.Equal(t, "100", m1.Code)
 		require.Equal(t, "foobarbaz", m1.Message)
 
+		responseProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ServerMsgErrorResponse), responseProc.mu.lastMessageType)
+		require.Equal(t, initialClock+1, responseProc.mu.lastMessageTransferredAt)
+		responseProc.mu.Unlock()
+
+		barrier <- struct{}{}
 		msg, err = frontend.Receive()
 		require.NoError(t, err)
 		m2, ok := msg.(*pgproto3.ReadyForQuery)
 		require.True(t, ok)
 		require.Equal(t, byte('I'), m2.TxStatus)
+
+		responseProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ServerMsgReady), responseProc.mu.lastMessageType)
+		require.Equal(t, initialClock+2, responseProc.mu.lastMessageTransferredAt)
+		responseProc.mu.Unlock()
 
 		select {
 		case err = <-errChan:
@@ -180,7 +238,8 @@ func TestForwarder_Close(t *testing.T) {
 
 	p1, p2 := net.Pipe()
 
-	f := forward(context.Background(), p1, p2)
+	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, p1, p2)
+	require.NoError(t, err)
 	defer f.Close()
 	require.Nil(t, f.ctx.Err())
 
@@ -193,7 +252,8 @@ func TestForwarder_tryReportError(t *testing.T) {
 
 	p1, p2 := net.Pipe()
 
-	f := forward(context.Background(), p1, p2)
+	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, p1, p2)
+	require.NoError(t, err)
 	defer f.Close()
 
 	select {
@@ -214,9 +274,49 @@ func TestForwarder_tryReportError(t *testing.T) {
 	}
 
 	// Forwarder should be closed.
-	_, err := p1.Write([]byte("foobarbaz"))
+	_, err = p1.Write([]byte("foobarbaz"))
 	require.Regexp(t, "closed pipe", err)
 	require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+}
+
+func TestForwarder_replaceServerConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	clientProxy, client := net.Pipe()
+	serverProxy, server := net.Pipe()
+
+	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+	require.NoError(t, err)
+	defer f.Close()
+
+	c, s := f.getConns()
+	require.Equal(t, clientProxy, c.Conn)
+	require.Equal(t, serverProxy, s.Conn)
+
+	req, res := f.getProcessors()
+	require.NoError(t, req.suspend(ctx))
+	require.NoError(t, res.suspend(ctx))
+
+	newServerProxy, newServer := net.Pipe()
+	f.replaceServerConn(interceptor.NewPGConn(newServerProxy))
+	require.NoError(t, f.resumeProcessors())
+
+	// Check that we can receive messages from newServer.
+	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
+	go func() {
+		_, _ = newServer.Write(q)
+	}()
+	frontend := interceptor.NewFrontendConn(client)
+	msg, err := frontend.ReadMsg()
+	require.NoError(t, err)
+	rmsg, ok := msg.(*pgproto3.ReadyForQuery)
+	require.True(t, ok)
+	require.Equal(t, byte('I'), rmsg.TxStatus)
+
+	// Check that old connection was closed.
+	_, err = server.Write([]byte("foobarbaz"))
+	require.Regexp(t, "closed pipe", err)
 }
 
 func TestWrapClientToServerError(t *testing.T) {
@@ -275,6 +375,32 @@ func TestWrapServerToClientError(t *testing.T) {
 	}
 }
 
+func TestMakeLogicalClockFn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	clockFn := makeLogicalClockFn()
+
+	require.Equal(t, uint64(1), clockFn())
+	require.Equal(t, uint64(2), clockFn())
+	require.Equal(t, uint64(3), clockFn())
+
+	const concurrency = 200
+	for i := 0; i < concurrency; i++ {
+		go clockFn()
+	}
+
+	// Allow some time for the goroutines to complete.
+	expected := uint64(3 + concurrency)
+	testutils.SucceedsSoon(t, func() error {
+		expected++
+		clock := clockFn()
+		if expected == clock {
+			return nil
+		}
+		return errors.Newf("require clock=%d, but got %d", expected, clock)
+	})
+}
+
 func TestSuspendResumeProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -287,6 +413,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		defer serverProxy.Close()
 
 		p := newProcessor(
+			makeLogicalClockFn(),
 			interceptor.NewPGConn(clientProxy),
 			interceptor.NewPGConn(serverProxy),
 		)
@@ -297,6 +424,46 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		p.mu.resumed = true
 		p.mu.Unlock()
 		require.EqualError(t, p.suspend(ctx), context.Canceled.Error())
+	})
+
+	t.Run("wait_for_resumed", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		clientProxy, serverProxy := net.Pipe()
+		defer clientProxy.Close()
+		defer serverProxy.Close()
+
+		p := newProcessor(
+			makeLogicalClockFn(),
+			interceptor.NewPGConn(clientProxy),
+			interceptor.NewPGConn(serverProxy),
+		)
+
+		errCh := make(chan error)
+		go func() {
+			errCh <- p.waitResumed(ctx)
+		}()
+
+		select {
+		case <-errCh:
+			t.Fatal("expected not resumed")
+		default:
+			// We're good.
+		}
+
+		go func() { _ = p.resume(ctx) }()
+
+		var lastErr error
+		require.Eventually(t, func() bool {
+			select {
+			case lastErr = <-errCh:
+				return true
+			default:
+				return false
+			}
+		}, 10*time.Second, 100*time.Millisecond)
+		require.NoError(t, lastErr)
 	})
 
 	// This tests that resume() and suspend() can be called multiple times.
@@ -311,6 +478,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		defer serverProxy.Close()
 
 		p := newProcessor(
+			makeLogicalClockFn(),
 			interceptor.NewPGConn(clientProxy),
 			interceptor.NewPGConn(serverProxy),
 		)
@@ -326,6 +494,8 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		require.EqualError(t, err, errProcessorResumed.Error())
 
 		// Suspend the last goroutine.
+		err = p.waitResumed(ctx)
+		require.NoError(t, err)
 		err = p.suspend(ctx)
 		require.NoError(t, err)
 
@@ -364,6 +534,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		defer server.Close()
 
 		p := newProcessor(
+			makeLogicalClockFn(),
 			interceptor.NewPGConn(clientProxy),
 			interceptor.NewPGConn(serverProxy),
 		)
@@ -459,6 +630,9 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		// have been forwarded.
 		go func(p *processor) { _ = p.resume(ctx) }(p)
 
+		err := p.waitResumed(ctx)
+		require.NoError(t, err)
+
 		// Now read all the messages on the server for correctness.
 		for i := 0; i < queryCount; i++ {
 			msg := <-msgCh
@@ -472,7 +646,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		}
 
 		// Suspend the final goroutine.
-		err := p.suspend(ctx)
+		err = p.suspend(ctx)
 		require.NoError(t, err)
 	})
 }
