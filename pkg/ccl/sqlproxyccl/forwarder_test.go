@@ -71,9 +71,12 @@ func TestForward(t *testing.T) {
 		f.mu.Unlock()
 
 		initialClock := requestProc.logicalClockFn()
-		barrier := make(chan struct{})
+		barrierStart, barrierEnd := make(chan struct{}), make(chan struct{})
 		requestProc.testingKnobs.beforeForwardMsg = func() {
-			<-barrier
+			// Use two barriers here to ensure that we don't get a race when
+			// asserting the last message.
+			<-barrierStart
+			<-barrierEnd
 		}
 
 		requestProc.mu.Lock()
@@ -107,19 +110,26 @@ func TestForward(t *testing.T) {
 		// Server should receive messages in order.
 		backend := pgproto3.NewBackend(pgproto3.NewChunkReader(server), server)
 
-		barrier <- struct{}{}
+		barrierStart <- struct{}{}
+		requestProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), requestProc.mu.lastMessageType)
+		require.Equal(t, initialClock+1, requestProc.mu.lastMessageTransferredAt)
+		requestProc.mu.Unlock()
+		barrierEnd <- struct{}{}
+
 		msg, err := backend.Receive()
 		require.NoError(t, err)
 		m1, ok := msg.(*pgproto3.Query)
 		require.True(t, ok)
 		require.Equal(t, "SELECT 1", m1.String)
 
+		barrierStart <- struct{}{}
 		requestProc.mu.Lock()
-		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), requestProc.mu.lastMessageType)
-		require.Equal(t, initialClock+1, requestProc.mu.lastMessageTransferredAt)
+		require.Equal(t, byte(pgwirebase.ClientMsgExecute), requestProc.mu.lastMessageType)
+		require.Equal(t, initialClock+2, requestProc.mu.lastMessageTransferredAt)
 		requestProc.mu.Unlock()
+		barrierEnd <- struct{}{}
 
-		barrier <- struct{}{}
 		msg, err = backend.Receive()
 		require.NoError(t, err)
 		m2, ok := msg.(*pgproto3.Execute)
@@ -127,22 +137,18 @@ func TestForward(t *testing.T) {
 		require.Equal(t, "foobar", m2.Portal)
 		require.Equal(t, uint32(42), m2.MaxRows)
 
+		barrierStart <- struct{}{}
 		requestProc.mu.Lock()
-		require.Equal(t, byte(pgwirebase.ClientMsgExecute), requestProc.mu.lastMessageType)
-		require.Equal(t, initialClock+2, requestProc.mu.lastMessageTransferredAt)
+		require.Equal(t, byte(pgwirebase.ClientMsgClose), requestProc.mu.lastMessageType)
+		require.Equal(t, initialClock+3, requestProc.mu.lastMessageTransferredAt)
 		requestProc.mu.Unlock()
+		barrierEnd <- struct{}{}
 
-		barrier <- struct{}{}
 		msg, err = backend.Receive()
 		require.NoError(t, err)
 		m3, ok := msg.(*pgproto3.Close)
 		require.True(t, ok)
 		require.Equal(t, byte('P'), m3.ObjectType)
-
-		requestProc.mu.Lock()
-		require.Equal(t, byte(pgwirebase.ClientMsgClose), requestProc.mu.lastMessageType)
-		require.Equal(t, initialClock+3, requestProc.mu.lastMessageTransferredAt)
-		requestProc.mu.Unlock()
 
 		select {
 		case err = <-errChan:
@@ -170,9 +176,12 @@ func TestForward(t *testing.T) {
 		f.mu.Unlock()
 
 		initialClock := responseProc.logicalClockFn()
-		barrier := make(chan struct{})
+		barrierStart, barrierEnd := make(chan struct{}), make(chan struct{})
 		responseProc.testingKnobs.beforeForwardMsg = func() {
-			<-barrier
+			// Use two barriers here to ensure that we don't get a race when
+			// asserting the last message.
+			<-barrierStart
+			<-barrierEnd
 		}
 
 		responseProc.mu.Lock()
@@ -200,7 +209,13 @@ func TestForward(t *testing.T) {
 		// Client should receive messages in order.
 		frontend := pgproto3.NewFrontend(pgproto3.NewChunkReader(client), client)
 
-		barrier <- struct{}{}
+		barrierStart <- struct{}{}
+		responseProc.mu.Lock()
+		require.Equal(t, byte(pgwirebase.ServerMsgErrorResponse), responseProc.mu.lastMessageType)
+		require.Equal(t, initialClock+1, responseProc.mu.lastMessageTransferredAt)
+		responseProc.mu.Unlock()
+		barrierEnd <- struct{}{}
+
 		msg, err := frontend.Receive()
 		require.NoError(t, err)
 		m1, ok := msg.(*pgproto3.ErrorResponse)
@@ -208,22 +223,18 @@ func TestForward(t *testing.T) {
 		require.Equal(t, "100", m1.Code)
 		require.Equal(t, "foobarbaz", m1.Message)
 
+		barrierStart <- struct{}{}
 		responseProc.mu.Lock()
-		require.Equal(t, byte(pgwirebase.ServerMsgErrorResponse), responseProc.mu.lastMessageType)
-		require.Equal(t, initialClock+1, responseProc.mu.lastMessageTransferredAt)
+		require.Equal(t, byte(pgwirebase.ServerMsgReady), responseProc.mu.lastMessageType)
+		require.Equal(t, initialClock+2, responseProc.mu.lastMessageTransferredAt)
 		responseProc.mu.Unlock()
+		barrierEnd <- struct{}{}
 
-		barrier <- struct{}{}
 		msg, err = frontend.Receive()
 		require.NoError(t, err)
 		m2, ok := msg.(*pgproto3.ReadyForQuery)
 		require.True(t, ok)
 		require.Equal(t, byte('I'), m2.TxStatus)
-
-		responseProc.mu.Lock()
-		require.Equal(t, byte(pgwirebase.ServerMsgReady), responseProc.mu.lastMessageType)
-		require.Equal(t, initialClock+2, responseProc.mu.lastMessageTransferredAt)
-		responseProc.mu.Unlock()
 
 		select {
 		case err = <-errChan:
@@ -619,10 +630,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		// Wait until all initial suspend calls have returned.
 		for i := 0; i < concurrency; i++ {
 			err := <-errSuspendCh
-			// If error is not nil, it has to be a suspend in-progress error.
-			if err != nil {
-				require.EqualError(t, err, errSuspendInProgress.Error())
-			}
+			require.NoError(t, err)
 		}
 
 		// At this point, we know that all pending resume and suspend calls

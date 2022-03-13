@@ -272,10 +272,7 @@ func makeLogicalClockFn() func() uint64 {
 // cancellation of dials.
 var aLongTimeAgo = timeutil.Unix(1, 0)
 
-var (
-	errProcessorResumed  = errors.New("processor has already been resumed")
-	errSuspendInProgress = errors.New("suspension is already in progress")
-)
+var errProcessorResumed = errors.New("processor has already been resumed")
 
 // processor must always be constructed through newProcessor.
 type processor struct {
@@ -330,21 +327,54 @@ func (p *processor) resume(ctx context.Context) error {
 		p.mu.resumed = false
 		p.mu.cond.Broadcast()
 	}
-	enterPeek := func() (terminate bool) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		// Suspend has been requested. Suspend now before blocking.
-		if p.mu.suspendReq {
-			return true
+	prepareNextMessage := func() (terminate bool, err error) {
+		// If suspend was requested, or a transfer has been started, we
+		// terminate to avoid blocking on PeekMsg as an optimization.
+		if terminate := func() bool {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			// Suspend has been requested. Suspend now before blocking.
+			if p.mu.suspendReq {
+				return true
+			}
+			p.mu.inPeek = true
+			return false
+		}(); terminate {
+			return true, nil
 		}
-		p.mu.inPeek = true
-		return false
-	}
-	exitPeek := func() (suspendReq bool) {
+
+		// Always peek the message to ensure that we're blocked on reading the
+		// header, rather than when forwarding during idle periods.
+		typ, _, peekErr := p.src.PeekMsg()
+
+		// Update peek state, and check for suspension.
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.mu.inPeek = false
-		return p.mu.suspendReq
+
+		// If suspend was requested, there are two cases where we terminate:
+		//   1. peekErr == nil, where we read a header. In that case, suspension
+		//      gets priority.
+		//   2. peekErr != nil, where the error was due to a timeout. Connection
+		//      was likely idle here.
+		//
+		// When suspending, we return nil so that the processor can be resumed
+		// in the future.
+		var netErr net.Error
+		switch {
+		case p.mu.suspendReq && peekErr == nil:
+			return true, nil
+		case p.mu.suspendReq && errors.As(peekErr, &netErr) && netErr.Timeout():
+			return true, nil
+		case peekErr != nil:
+			return false, errors.Wrap(peekErr, "peeking message")
+		}
+
+		// Update last message. Once we prepare the next message, we must
+		// forward that message.
+		p.mu.lastMessageType = typ
+		p.mu.lastMessageTransferredAt = p.logicalClockFn()
+		return false, nil
 	}
 
 	if err := enterResume(); err != nil {
@@ -353,44 +383,12 @@ func (p *processor) resume(ctx context.Context) error {
 	defer exitResume()
 
 	for ctx.Err() == nil {
-		// If suspend was requested, we terminate to avoid blocking on PeekMsg
-		// as an optimization.
-		if terminate := enterPeek(); terminate {
-			return nil
+		if terminate, err := prepareNextMessage(); err != nil || terminate {
+			return err
 		}
-
-		// Always peek the message to ensure that we're blocked on reading the
-		// header, rather than when forwarding during idle periods.
-		typ, _, peekErr := p.src.PeekMsg()
-
-		suspendReq := exitPeek()
-
-		// If suspend was requested, there are two cases where we terminate:
-		//   1. peekErr == nil, where we read a header. In that case, suspension
-		//      gets priority.
-		//   2. peekErr != nil, where the error was due to a timeout. Connection
-		//      was likely idle here.
-		if peekErr != nil {
-			if netErr := (net.Error)(nil); errors.As(peekErr, &netErr) && suspendReq && netErr.Timeout() {
-				// Return nil so that the processor can be resumed in the future.
-				peekErr = nil
-			} else {
-				peekErr = errors.Wrap(peekErr, "peeking message")
-			}
-		}
-		if peekErr != nil || suspendReq {
-			return peekErr
-		}
-
 		if p.testingKnobs.beforeForwardMsg != nil {
 			p.testingKnobs.beforeForwardMsg()
 		}
-
-		// Update last message that is set to be forwarded.
-		p.mu.Lock()
-		p.mu.lastMessageType = typ
-		p.mu.lastMessageTransferredAt = p.logicalClockFn()
-		p.mu.Unlock()
 		if _, err := p.src.ForwardMsg(p.dst); err != nil {
 			return errors.Wrap(err, "forwarding message")
 		}
@@ -421,20 +419,18 @@ func (p *processor) suspend(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.mu.suspendReq {
-		return errSuspendInProgress
-	}
-
-	p.mu.suspendReq = true
 	defer func() {
-		p.mu.suspendReq = false
-		_ = p.src.SetReadDeadline(time.Time{})
+		if p.mu.suspendReq {
+			p.mu.suspendReq = false
+			_ = p.src.SetReadDeadline(time.Time{})
+		}
 	}()
 
 	for p.mu.resumed {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		p.mu.suspendReq = true
 		if p.mu.inPeek {
 			if err := p.src.SetReadDeadline(aLongTimeAgo); err != nil {
 				return err
