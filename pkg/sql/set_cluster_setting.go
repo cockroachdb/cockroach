@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -197,6 +196,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 
 	expectedEncodedValue, err := writeSettingInternal(
 		params.ctx,
+		localSettingWriter{},
 		params.extendedEvalCtx.ExecCfg,
 		n.setting, n.name,
 		params.p.User(),
@@ -204,7 +204,14 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		n.value,
 		params.p.EvalContext(),
 		params.extendedEvalCtx.Codec.ForSystemTenant(),
-		params.p.logEvent,
+		func(ctx context.Context, settingName, reportedValue string) error {
+			return params.p.logEvent(ctx,
+				0, /* no target */
+				&eventpb.SetClusterSetting{
+					SettingName: settingName,
+					Value:       reportedValue,
+				})
+		},
 	)
 	if err != nil {
 		return err
@@ -275,6 +282,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 
 func writeSettingInternal(
 	ctx context.Context,
+	w settingWriter,
 	execCfg *ExecutorConfig,
 	setting settings.NonMaskedSetting,
 	name string,
@@ -283,14 +291,14 @@ func writeSettingInternal(
 	value tree.TypedExpr,
 	evalCtx *tree.EvalContext,
 	forSystemTenant bool,
-	logFn func(context.Context, descpb.ID, eventpb.EventPayload) error,
+	logFn func(ctx context.Context, settingName, reportedValue string) error,
 ) (expectedEncodedValue string, err error) {
-	err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err = w.txn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn) error {
 		var reportedValue string
 		if value == nil {
 			// This code is doing work for RESET CLUSTER SETTING.
 			var err error
-			reportedValue, expectedEncodedValue, err = writeDefaultSettingValue(ctx, execCfg, setting, name, txn)
+			reportedValue, expectedEncodedValue, err = writeDefaultSettingValue(ctx, w, execCfg, setting, name, txn)
 			if err != nil {
 				return err
 			}
@@ -301,7 +309,7 @@ func writeSettingInternal(
 				return err
 			}
 			reportedValue, expectedEncodedValue, err = writeNonDefaultSettingValue(
-				ctx, execCfg, setting, name, txn,
+				ctx, w, execCfg, setting, name, txn,
 				user, st, value, forSystemTenant,
 			)
 			if err != nil {
@@ -309,12 +317,7 @@ func writeSettingInternal(
 			}
 		}
 
-		return logFn(ctx,
-			0, /* no target */
-			&eventpb.SetClusterSetting{
-				SettingName: name,
-				Value:       reportedValue,
-			})
+		return logFn(ctx, name, reportedValue)
 	})
 	return expectedEncodedValue, err
 }
@@ -324,6 +327,7 @@ func writeSettingInternal(
 // to DEFAULT.
 func writeDefaultSettingValue(
 	ctx context.Context,
+	w settingWriter,
 	execCfg *ExecutorConfig,
 	setting settings.NonMaskedSetting,
 	name string,
@@ -331,11 +335,7 @@ func writeDefaultSettingValue(
 ) (reportedValue string, expectedEncodedValue string, err error) {
 	reportedValue = "DEFAULT"
 	expectedEncodedValue = setting.EncodedDefault()
-	_, err = execCfg.InternalExecutor.ExecEx(
-		ctx, "reset-setting", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"DELETE FROM system.settings WHERE name = $1", name,
-	)
+	err = w.deleteSetting(ctx, execCfg, txn, name)
 	return reportedValue, expectedEncodedValue, err
 }
 
@@ -343,6 +343,7 @@ func writeDefaultSettingValue(
 // setting to a non-DEFAULT value.
 func writeNonDefaultSettingValue(
 	ctx context.Context,
+	w settingWriter,
 	execCfg *ExecutorConfig,
 	setting settings.NonMaskedSetting,
 	name string,
@@ -365,29 +366,18 @@ func writeNonDefaultSettingValue(
 	verSetting, isSetVersion := setting.(*settings.VersionSetting)
 	if isSetVersion {
 		if err := setVersionSetting(
-			ctx, execCfg, verSetting, name, txn, user, st, value, encoded, forSystemTenant); err != nil {
+			ctx, w, execCfg, verSetting, name, txn, user, st, value, encoded, forSystemTenant); err != nil {
 			return reportedValue, expectedEncodedValue, err
 		}
 	} else {
 		// Modifying another setting than the version.
-		if _, err = execCfg.InternalExecutor.ExecEx(
-			ctx, "update-setting", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-			name, encoded, setting.Typ(),
-		); err != nil {
+		if err := w.upsertSetting(ctx, execCfg, txn, name, encoded, setting.Typ()); err != nil {
 			return reportedValue, expectedEncodedValue, err
 		}
 	}
 
-	if knobs := execCfg.TenantTestingKnobs; knobs != nil && knobs.ClusterSettingsUpdater != nil {
-		encVal := settings.EncodedValue{
-			Value: encoded,
-			Type:  setting.Typ(),
-		}
-		if err := execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, name, encVal); err != nil {
-			return reportedValue, expectedEncodedValue, err
-		}
+	if err := w.postChangeTestingNotify(ctx, execCfg, setting, name, encoded); err != nil {
+		return reportedValue, expectedEncodedValue, err
 	}
 	return reportedValue, expectedEncodedValue, nil
 }
@@ -396,6 +386,7 @@ func writeNonDefaultSettingValue(
 // cluster setting.
 func setVersionSetting(
 	ctx context.Context,
+	w settingWriter,
 	execCfg *ExecutorConfig,
 	setting *settings.VersionSetting,
 	name string,
@@ -409,11 +400,7 @@ func setVersionSetting(
 	// In the special case of the 'version' cluster setting,
 	// we must first read the previous value to validate that the
 	// value change is valid.
-	datums, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "retrieve-prev-setting", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"SELECT value FROM system.settings WHERE name = $1", name,
-	)
+	datums, err := w.getSetting(ctx, execCfg, txn, name)
 	if err != nil {
 		return err
 	}
@@ -461,13 +448,9 @@ func setVersionSetting(
 		if err != nil {
 			return err
 		}
-		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return w.txn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn) error {
 			// Confirm if the version has actually changed on us.
-			datums, err := execCfg.InternalExecutor.QueryRowEx(
-				ctx, "retrieve-prev-setting", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				"SELECT value FROM system.settings WHERE name = $1", name,
-			)
+			datums, err := w.getSetting(ctx, execCfg, txn, name)
 			versionIsDifferent := true
 			if len(datums) > 0 {
 				dStr, ok := datums[0].(*tree.DString)
@@ -479,19 +462,14 @@ func setVersionSetting(
 			}
 			// Only if the version has changed alter the setting.
 			if versionIsDifferent {
-				_, err = execCfg.InternalExecutor.ExecEx(
-					ctx, "update-setting", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-					`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-					name, string(rawValue), setting.Typ(),
-				)
+				err = w.upsertSetting(ctx, execCfg, txn, name, string(rawValue), setting.Typ())
 			}
 			return err
 		})
 	}
 
 	return runMigrationsAndUpgradeVersion(
-		ctx, execCfg, user, prev, value, updateVersionSystemSetting,
+		ctx, w, execCfg, user, prev, value, updateVersionSystemSetting,
 	)
 }
 
@@ -535,6 +513,7 @@ func waitForSettingUpdate(
 // the system table.
 func runMigrationsAndUpgradeVersion(
 	ctx context.Context,
+	w settingWriter,
 	execCfg *ExecutorConfig,
 	user security.SQLUsername,
 	prev tree.Datum,
@@ -554,7 +533,7 @@ func runMigrationsAndUpgradeVersion(
 	// toSettingString already validated the input, and checked to
 	// see that we are allowed to transition. Let's call into our
 	// upgrade hook to run migrations, if any.
-	if err := execCfg.VersionUpgradeHook(ctx, user, from, to, updateVersionSystemSetting); err != nil {
+	if err := w.versionUpgradeHook(ctx, execCfg, user, from, to, updateVersionSystemSetting); err != nil {
 		return err
 	}
 	return nil
@@ -668,4 +647,108 @@ func toSettingString(
 	default:
 		return "", errors.Errorf("unsupported setting type %T", setting)
 	}
+}
+
+// settingWriter is an interface that abstracts the setting change logic
+// over local and remote changes.
+type settingWriter interface {
+	// runs the given closure into a txn suitable for updating a cluster
+	// setting. This should be a sub-txn when updating a setting for the
+	// current tenant, and the current sql txn when updating a setting
+	// for another tenant.
+	txn(ctx context.Context, execCfg *ExecutorConfig, f func(ctx context.Context, txn *kv.Txn) error) error
+	// deleteSetting removes the customization from storage.
+	deleteSetting(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, name string) error
+	// getSetting retrieves the current customization from storage.
+	getSetting(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, name string) ([]tree.Datum, error)
+	// upsetSetting adds or replaces a customization in storage.
+	upsertSetting(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, name string, encoded, typ string) error
+	// postChangeTestingNotify is called after a setting is updated.
+	// This should run testing knobs if any are defined.
+	postChangeTestingNotify(ctx context.Context, execCfg *ExecutorConfig, setting settings.NonMaskedSetting, name string, encoded string) error
+	// versionUpgradeHook is called after the version setting is validated, but
+	// before it is written. The callback updateSystemVersionSetting is
+	// responsible for effectively writing the new version customization in storage;
+	// the versionUpgradeHook is responsible for coordinating that update
+	// with the execution of SQL migrations for the target tenant.
+	// See also: https://github.com/cockroachdb/cockroach/issues/77733
+	versionUpgradeHook(ctx context.Context,
+		execCfg *ExecutorConfig,
+		user security.SQLUsername,
+		from, to clusterversion.ClusterVersion,
+		updateSystemVersionSetting UpdateVersionSystemSettingHook) error
+}
+
+var _ settingWriter = localSettingWriter{}
+
+// localSettingWriter is a settingWriter that writes directly to system.settings
+// and runs migrations before updating the version setting.
+type localSettingWriter struct{}
+
+func (localSettingWriter) txn(
+	ctx context.Context, execCfg *ExecutorConfig, f func(ctx context.Context, txn *kv.Txn) error,
+) error {
+	return execCfg.DB.Txn(ctx, f)
+}
+
+func (localSettingWriter) versionUpgradeHook(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+	updateSystemVersionSetting UpdateVersionSystemSettingHook,
+) error {
+	return execCfg.VersionUpgradeHook(ctx, user, from, to, updateSystemVersionSetting)
+}
+
+func (localSettingWriter) deleteSetting(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, name string,
+) error {
+	_, err := execCfg.InternalExecutor.ExecEx(
+		ctx, "reset-setting", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"DELETE FROM system.settings WHERE name = $1", name,
+	)
+	return err
+}
+
+func (localSettingWriter) getSetting(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, name string,
+) ([]tree.Datum, error) {
+	return execCfg.InternalExecutor.QueryRowEx(
+		ctx, "retrieve-prev-setting", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"SELECT value FROM system.settings WHERE name = $1", name,
+	)
+}
+
+func (localSettingWriter) upsertSetting(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, name string, encoded, typ string,
+) error {
+	_, err := execCfg.InternalExecutor.ExecEx(
+		ctx, "update-setting", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+		name, encoded, typ,
+	)
+	return err
+}
+
+func (localSettingWriter) postChangeTestingNotify(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	setting settings.NonMaskedSetting,
+	name string,
+	encoded string,
+) error {
+	if knobs := execCfg.TenantTestingKnobs; knobs != nil && knobs.ClusterSettingsUpdater != nil {
+		encVal := settings.EncodedValue{
+			Value: encoded,
+			Type:  setting.Typ(),
+		}
+		if err := execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, name, encVal); err != nil {
+			return err
+		}
+	}
+	return nil
 }
