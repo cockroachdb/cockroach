@@ -27,8 +27,8 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func()) {
-	certsDir, cleanup = tempDir(t)
+func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
+	certsDir = t.TempDir()
 
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
@@ -62,7 +62,7 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 
 	// Also check that the tenant signing cert gets created.
 	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenant))
-	return certsDir, cleanup
+	return certsDir
 }
 
 // TestTenantCertificates creates a tenant CA and from it client certificates
@@ -93,9 +93,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		security.ResetAssetLoader()
 		defer ResetTest()
 		tenant = uint64(rand.Int63())
-		var cleanup func()
-		certsDir, cleanup = makeTenantCerts(t, tenant)
-		defer cleanup()
+		certsDir = makeTenantCerts(t, tenant)
 	} else {
 		certsDir = security.EmbeddedCertsDir
 		tenant = security.EmbeddedTenantIDs()[0]

@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"strconv"
 	"testing"
@@ -35,8 +34,7 @@ func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	dir, err := ioutil.TempDir("", t.Name())
-	require.NoError(t, err)
+	dir := t.TempDir()
 	ctx := context.Background()
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t,

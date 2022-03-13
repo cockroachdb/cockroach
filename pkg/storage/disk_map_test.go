@@ -14,9 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"strings"
 	"testing"
 
@@ -309,15 +307,7 @@ func TestPebbleMapClose(t *testing.T) {
 }
 
 func BenchmarkPebbleMapWrite(b *testing.B) {
-	dir, err := ioutil.TempDir("", "BenchmarkPebbleMapWrite")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			b.Fatal(err)
-		}
-	}()
+	dir := b.TempDir()
 	ctx := context.Background()
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {
@@ -355,15 +345,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 
 func BenchmarkPebbleMapIteration(b *testing.B) {
 	skip.UnderShort(b)
-	dir, err := ioutil.TempDir("", "BenchmarkPebbleMapIteration")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			b.Fatal(err)
-		}
-	}()
+	dir := b.TempDir()
 	ctx := context.Background()
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {

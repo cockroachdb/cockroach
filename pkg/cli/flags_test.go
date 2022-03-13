@@ -16,7 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -233,19 +232,13 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	defer initCLIDefaults()
 
 	// Prepare a dummy default certificate directory.
-	defCertsDirPath, err := ioutil.TempDir("", "defCerts")
-	if err != nil {
-		t.Fatal(err)
-	}
+	defCertsDirPath := t.TempDir()
 	defCertsDirPath, _ = filepath.Abs(defCertsDirPath)
 	cleanup := securitytest.CreateTestCerts(defCertsDirPath)
 	defer func() { _ = cleanup() }()
 
 	// Prepare a custom certificate directory.
-	testCertsDirPath, err := ioutil.TempDir("", "customCerts")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testCertsDirPath := t.TempDir()
 	testCertsDirPath, _ = filepath.Abs(testCertsDirPath)
 	cleanup2 := securitytest.CreateTestCerts(testCertsDirPath)
 	defer func() { _ = cleanup2() }()
