@@ -2933,11 +2933,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.cluster_name"></a><code>crdb_internal.cluster_name() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the cluster name.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.cluster_setting_encoded_default"></a><code>crdb_internal.cluster_setting_encoded_default(setting: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the encoded default value of the given cluster setting.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.completed_migrations"></a><code>crdb_internal.completed_migrations() &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.create_join_token"></a><code>crdb_internal.create_join_token() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Creates a join token for use when adding a new node to a secure cluster.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.create_session_revival_token"></a><code>crdb_internal.create_session_revival_token() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate a token that can be used to create a new session for the current user.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.decode_cluster_setting"></a><code>crdb_internal.decode_cluster_setting(setting: <a href="string.html">string</a>, value: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decodes the given encoded value for a cluster setting.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.deserialize_session"></a><code>crdb_internal.deserialize_session(session: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function deserializes the serialized variables into the current session.</p>
 </span></td></tr>

@@ -60,6 +60,15 @@ func (d *DurationSetting) EncodedDefault() string {
 	return EncodeDuration(d.defaultValue)
 }
 
+// DecodeToString decodes and renders an encoded value.
+func (d *DurationSetting) DecodeToString(encoded string) (string, error) {
+	v, err := time.ParseDuration(encoded)
+	if err != nil {
+		return "", err
+	}
+	return EncodeDuration(v), nil
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*DurationSetting) Typ() string {
 	return "d"

@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -4607,6 +4608,78 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info:       "Returns the value of the specified locality key.",
 			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"crdb_internal.cluster_setting_encoded_default": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+				if !ok {
+					return nil, errors.Newf("unknown cluster setting '%s'", name)
+				}
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					// If we arrive here, this means Lookup() did not properly
+					// ignore the masked setting, which is a bug in Lookup().
+					return nil, errors.AssertionFailedf("setting '%s' is masked", name)
+				}
+
+				return tree.NewDString(setting.EncodedDefault()), nil
+			},
+			Info:       "Returns the encoded default value of the given cluster setting.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"crdb_internal.decode_cluster_setting": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"setting", types.String},
+				{"value", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
+				}
+				encoded, ok := tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[1])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+				if !ok {
+					return nil, errors.Newf("unknown cluster setting '%s'", name)
+				}
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					// If we arrive here, this means Lookup() did not properly
+					// ignore the masked setting, which is a bug in Lookup().
+					return nil, errors.AssertionFailedf("setting '%s' is masked", name)
+				}
+				repr, err := setting.DecodeToString(string(encoded))
+				if err != nil {
+					return nil, errors.Wrapf(err, "%v", name)
+				}
+				return tree.NewDString(repr), nil
+			},
+			Info:       "Decodes the given encoded value for a cluster setting.",
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
