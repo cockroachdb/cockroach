@@ -218,7 +218,10 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 				ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress,
 			)
 		} else {
-			expired, earliestDeadline = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
+			expired, earliestDeadline, err = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
+			if err != nil {
+				return err
+			}
 		}
 		timerDuration := time.Until(earliestDeadline)
 
