@@ -46,6 +46,11 @@ func (i *IntSetting) EncodedDefault() string {
 	return EncodeInt(i.defaultValue)
 }
 
+// DefaultAsString returns the default value of the setting.
+func (i *IntSetting) DefaultAsString() (string, bool) {
+	return EncodeInt(i.defaultValue), true
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*IntSetting) Typ() string {
 	return "i"

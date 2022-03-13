@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -4554,6 +4555,38 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DNull, nil
 			},
 			Info:       "Returns the value of the specified locality key.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"crdb_internal.cluster_setting_default": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					return nil, errors.Newf("setting is masked")
+				}
+
+				repr, ok := setting.DefaultAsString()
+				if !ok {
+					// No default.
+					return tree.DNull, nil
+				}
+				return tree.NewDString(repr), nil
+			},
+			Info:       "Returns the default value of the given cluster setting.",
 			Volatility: tree.VolatilityStable,
 		},
 	),

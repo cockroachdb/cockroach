@@ -33,6 +33,11 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 	return string(humanizeutil.IBytes(b.Get(sv)))
 }
 
+// DefaultAsString returns the default value of the setting.
+func (b *ByteSizeSetting) DefaultAsString() (string, bool) {
+	return string(humanizeutil.IBytes(b.defaultValue)), true
+}
+
 // WithPublic sets public visibility and can be chained.
 func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
 	b.SetVisibility(Public)

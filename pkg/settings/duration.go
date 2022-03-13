@@ -60,6 +60,11 @@ func (d *DurationSetting) EncodedDefault() string {
 	return EncodeDuration(d.defaultValue)
 }
 
+// DefaultAsString returns the default value of the setting.
+func (d *DurationSetting) DefaultAsString() (string, bool) {
+	return EncodeDuration(d.defaultValue), true
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*DurationSetting) Typ() string {
 	return "d"

@@ -41,6 +41,11 @@ func (b *BoolSetting) EncodedDefault() string {
 	return EncodeBool(b.defaultValue)
 }
 
+// DefaultAsString returns the default value of the setting.
+func (b *BoolSetting) DefaultAsString() (string, bool) {
+	return EncodeBool(b.defaultValue), true
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*BoolSetting) Typ() string {
 	return "b"

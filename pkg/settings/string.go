@@ -41,6 +41,11 @@ func (s *StringSetting) EncodedDefault() string {
 	return s.defaultValue
 }
 
+// DefaultAsString returns the default value of the setting.
+func (s *StringSetting) DefaultAsString() (string, bool) {
+	return s.defaultValue, true
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*StringSetting) Typ() string {
 	return "s"

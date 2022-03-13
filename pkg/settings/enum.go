@@ -43,6 +43,14 @@ func (e *EnumSetting) String(sv *Values) string {
 	return fmt.Sprintf("unknown(%d)", enumID)
 }
 
+// DefaultAsString returns the default value of the setting.
+func (e *EnumSetting) DefaultAsString() (string, bool) {
+	if str, ok := e.enumValues[e.defaultValue]; ok {
+		return str, true
+	}
+	return e.IntSetting.DefaultAsString()
+}
+
 // ParseEnum returns the enum value, and a boolean that indicates if it was parseable.
 func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	rawLower := strings.ToLower(raw)

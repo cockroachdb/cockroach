@@ -58,6 +58,10 @@ type NonMaskedSetting interface {
 	// the setting.
 	EncodedDefault() string
 
+	// DefaultAsString returns the string representation of the default value,
+	// or a false boolean return if there is no default.
+	DefaultAsString() (repr string, ok bool)
+
 	// SetOnChange installs a callback to be called when a setting's value
 	// changes. `fn` should avoid doing long-running or blocking work as it is
 	// called on the goroutine which handles all settings updates.

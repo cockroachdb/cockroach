@@ -129,6 +129,11 @@ func (v *VersionSetting) EncodedDefault() string {
 	return "unsupported"
 }
 
+// DefaultAsString returns the default value of the setting.
+func (v *VersionSetting) DefaultAsString() (string, bool) {
+	return "", false
+}
+
 // Get retrieves the encoded value (in string form) in the setting. It panics if
 // set() has not been previously called.
 //

@@ -47,6 +47,11 @@ func (f *FloatSetting) EncodedDefault() string {
 	return EncodeFloat(f.defaultValue)
 }
 
+// DefaultAsString returns the default value of the setting.
+func (f *FloatSetting) DefaultAsString() (string, bool) {
+	return EncodeFloat(f.defaultValue), true
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*FloatSetting) Typ() string {
 	return "f"
