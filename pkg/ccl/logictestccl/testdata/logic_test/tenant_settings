@@ -23,6 +23,11 @@ user host-cluster-root
 statement ok
 ALTER TENANT 10 RESET CLUSTER SETTING sql.notices.enabled
 
+query T
+SELECT value FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true
+
 user root
 
 query B retry
@@ -36,6 +41,11 @@ user host-cluster-root
 statement ok
 ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false
 
+query T
+SELECT value FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+false
+
 user root
 
 query B retry
@@ -48,6 +58,11 @@ user host-cluster-root
 # Now set a tenant-specific override which takes precedence.
 statement ok
 ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = true
+
+query T
+SELECT value FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true
 
 user root
 
@@ -68,6 +83,11 @@ user host-cluster-root
 # Remove the all-tenant override; should make no difference.
 statement ok
 ALTER TENANT ALL RESET CLUSTER SETTING sql.notices.enabled
+
+query T
+SELECT value FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true
 
 user root
 
