@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -194,7 +195,17 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
 	}
 
-	expectedEncodedValue, err := n.writeSettingInternal(params)
+	expectedEncodedValue, err := writeSettingInternal(
+		params.ctx,
+		params.extendedEvalCtx.ExecCfg,
+		n.setting, n.name,
+		params.p.User(),
+		n.st,
+		n.value,
+		params.p.EvalContext(),
+		params.extendedEvalCtx.Codec.ForSystemTenant(),
+		params.p.logEvent,
+	)
 	if err != nil {
 		return err
 	}
@@ -262,39 +273,46 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		n.setting, n.value == nil /* reset */, n.name, expectedEncodedValue)
 }
 
-func (n *setClusterSettingNode) writeSettingInternal(
-	params runParams,
+func writeSettingInternal(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	setting settings.NonMaskedSetting,
+	name string,
+	user security.SQLUsername,
+	st *cluster.Settings,
+	value tree.TypedExpr,
+	evalCtx *tree.EvalContext,
+	forSystemTenant bool,
+	logFn func(context.Context, descpb.ID, eventpb.EventPayload) error,
 ) (expectedEncodedValue string, err error) {
-	execCfg := params.extendedEvalCtx.ExecCfg
-	err = execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var reportedValue string
-		if n.value == nil {
+		if value == nil {
 			// This code is doing work for RESET CLUSTER SETTING.
 			var err error
-			reportedValue, expectedEncodedValue, err = writeDefaultSettingValue(ctx, execCfg, n.setting, n.name, txn)
+			reportedValue, expectedEncodedValue, err = writeDefaultSettingValue(ctx, execCfg, setting, name, txn)
 			if err != nil {
 				return err
 			}
 		} else {
 			// Setting a non-DEFAULT value.
-			value, err := n.value.Eval(params.p.EvalContext())
+			value, err := value.Eval(evalCtx)
 			if err != nil {
 				return err
 			}
 			reportedValue, expectedEncodedValue, err = writeNonDefaultSettingValue(
-				ctx, execCfg, n.setting, n.name, txn,
-				params.p.User(), n.st, value,
-				params.extendedEvalCtx.Codec.ForSystemTenant(),
+				ctx, execCfg, setting, name, txn,
+				user, st, value, forSystemTenant,
 			)
 			if err != nil {
 				return err
 			}
 		}
 
-		return params.p.logEvent(ctx,
+		return logFn(ctx,
 			0, /* no target */
 			&eventpb.SetClusterSetting{
-				SettingName: n.name,
+				SettingName: name,
 				Value:       reportedValue,
 			})
 	})
