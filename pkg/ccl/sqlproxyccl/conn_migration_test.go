@@ -66,14 +66,16 @@ func TestForwarder_tryBeginTransfer(t *testing.T) {
 		require.Nil(t, cleanupFn)
 	})
 
-	t.Run("isSafeTransferPoint=false", func(t *testing.T) {
-		defer testutils.TestingHook(&isSafeTransferPoint,
+	t.Run("isSafeTransferPointLocked=false", func(t *testing.T) {
+		defer testutils.TestingHook(&isSafeTransferPointLocked,
 			func(req *processor, res *processor) bool {
 				return false
 			},
 		)()
 
 		f := &forwarder{}
+		f.mu.request = &processor{}
+		f.mu.response = &processor{}
 
 		started, cleanupFn := f.tryBeginTransfer()
 		require.False(t, started)
@@ -81,13 +83,15 @@ func TestForwarder_tryBeginTransfer(t *testing.T) {
 	})
 
 	t.Run("successful", func(t *testing.T) {
-		defer testutils.TestingHook(&isSafeTransferPoint,
+		defer testutils.TestingHook(&isSafeTransferPointLocked,
 			func(req *processor, res *processor) bool {
 				return true
 			},
 		)()
 
 		f := &forwarder{}
+		f.mu.request = &processor{}
+		f.mu.response = &processor{}
 
 		started, cleanupFn := f.tryBeginTransfer()
 		require.True(t, started)
@@ -399,7 +403,7 @@ func TestTransferConnection(t *testing.T) {
 	})
 }
 
-func TestIsSafeTransferPoint(t *testing.T) {
+func TestIsSafeTransferPointLocked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	makeProc := func(typ byte, transferredAt int) *processor {
@@ -436,7 +440,7 @@ func TestIsSafeTransferPoint(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := makeProc(byte(tc.reqType), tc.reqTransferredAt)
 			res := makeProc(byte(tc.resType), tc.resTransferredAt)
-			safe := isSafeTransferPoint(req, res)
+			safe := isSafeTransferPointLocked(req, res)
 			if tc.expected {
 				require.True(t, safe)
 			} else {
