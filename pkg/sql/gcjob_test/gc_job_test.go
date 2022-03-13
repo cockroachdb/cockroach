@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -338,96 +337,6 @@ SELECT job_id, status, running_status
 			return errors.Errorf("job status %v != %v", status, jobs.StatusSucceeded)
 		}
 		return nil
-	})
-}
-
-// TestGCTenant is lightweight test that tests the branching logic in Resume
-// depending if the job is GC for tenant or tables/indexes and also the GC
-// logic for GC-ing tenant.
-func TestGCResumer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer jobs.ResetConstructors()()
-	gcjob.SetSmallMaxGCIntervalForTest()
-
-	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
-	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
-	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
-	jobRegistry := execCfg.JobRegistry
-	defer srv.Stopper().Stop(ctx)
-
-	t.Run("tenant GC job past", func(t *testing.T) {
-		const tenID = 10
-		record := jobs.Record{
-			Details: jobspb.SchemaChangeGCDetails{
-				Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
-					ID:       tenID,
-					DropTime: 1, // guarantees the tenant will expire immediately.
-				},
-			},
-			Progress: jobspb.SchemaChangeGCProgress{},
-		}
-
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
-		require.NoError(t, err)
-		require.NoError(t, sj.AwaitCompletion(ctx))
-		job, err := jobRegistry.LoadJob(ctx, sj.ID())
-		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
-		require.EqualError(t, err, `tenant "10" does not exist`)
-		progress := job.Progress()
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
-	})
-
-	t.Run("tenant GC job soon", func(t *testing.T) {
-		const tenID = 10
-		record := jobs.Record{
-			Details: jobspb.SchemaChangeGCDetails{
-				Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
-					ID:       tenID,
-					DropTime: timeutil.Now().UnixNano(),
-				},
-			},
-			Progress: jobspb.SchemaChangeGCProgress{},
-		}
-
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
-		require.NoError(t, err)
-
-		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
-		require.NoError(t, err)
-		require.NoError(t, sj.AwaitCompletion(ctx))
-
-		job, err := jobRegistry.LoadJob(ctx, sj.ID())
-		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
-		require.EqualError(t, err, `tenant "10" does not exist`)
-		progress := job.Progress()
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
-	})
-
-	t.Run("no tenant and tables in same GC job", func(t *testing.T) {
-		gcDetails := jobspb.SchemaChangeGCDetails{
-			Tenant: &jobspb.SchemaChangeGCDetails_DroppedTenant{
-				ID:       10,
-				DropTime: 1, // guarantees the tenant will expire immediately.
-			},
-		}
-		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{
-			ID:       100,
-			DropTime: 1,
-		})
-		record := jobs.Record{
-			Details:  gcDetails,
-			Progress: jobspb.SchemaChangeGCProgress{},
-		}
-
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
-		require.NoError(t, err)
-		require.Error(t, sj.AwaitCompletion(ctx))
 	})
 }
 
