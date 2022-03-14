@@ -17,7 +17,7 @@ import {
   PlanHashStats,
 } from "./plansTable";
 import { Button } from "../../button";
-import { SqlBox } from "../../sql";
+import { SqlBox, SqlBoxSize } from "../../sql";
 
 interface PlanDetailsProps {
   plans: PlanHashStats[];
@@ -70,7 +70,7 @@ function renderExplainPlan(
       >
         All Plans
       </Button>
-      <SqlBox value={plan.explain_plan} />
+      <SqlBox value={plan.explain_plan} size={SqlBoxSize.large} />
     </div>
   );
 }

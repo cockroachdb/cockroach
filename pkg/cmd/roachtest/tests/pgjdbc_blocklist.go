@@ -411,7 +411,6 @@ var pgjdbcBlockList22_1 = blocklist{
 	"org.postgresql.test.jdbc2.ResultSetTest.testRowResultPositioning":                                                                                                         "unknown",
 	"org.postgresql.test.jdbc2.ResultSetTest.testgetBadBoolean":                                                                                                                "32552",
 	"org.postgresql.test.jdbc2.SearchPathLookupTest.testSearchPathNormalLookup":                                                                                                "unknown",
-	"org.postgresql.test.jdbc2.ServerCursorTest.testBasicFetch":                                                                                                                "41412",
 	"org.postgresql.test.jdbc2.ServerCursorTest.testBinaryFetch":                                                                                                               "41412",
 	"org.postgresql.test.jdbc2.ServerErrorTest.testCheckConstraint":                                                                                                            "27796",
 	"org.postgresql.test.jdbc2.ServerErrorTest.testColumn":                                                                                                                     "27796",
