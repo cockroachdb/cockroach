@@ -129,7 +129,12 @@ func (p *planner) ShowClusterSetting(
 		return nil, errors.AssertionFailedf("setting is masked: %v", name)
 	}
 
-	return planShowClusterSetting(setting, name,
+	columns, err := getShowClusterSettingPlanColumns(setting, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return planShowClusterSetting(setting, name, columns,
 		func(ctx context.Context, p *planner) (string, error) {
 			if verSetting, ok := setting.(*settings.VersionSetting); ok {
 				return p.getCurrentEncodedVersionSettingValue(ctx, verSetting, name)
@@ -139,11 +144,9 @@ func (p *planner) ShowClusterSetting(
 	)
 }
 
-func planShowClusterSetting(
-	val settings.NonMaskedSetting,
-	name string,
-	getEncodedValue func(ctx context.Context, p *planner) (string, error),
-) (planNode, error) {
+func getShowClusterSettingPlanColumns(
+	val settings.NonMaskedSetting, name string,
+) (colinfo.ResultColumns, error) {
 	var dType *types.T
 	switch val.(type) {
 	case *settings.IntSetting:
@@ -161,8 +164,15 @@ func planShowClusterSetting(
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
+	return colinfo.ResultColumns{{Name: name, Typ: dType}}, nil
+}
 
-	columns := colinfo.ResultColumns{{Name: name, Typ: dType}}
+func planShowClusterSetting(
+	val settings.NonMaskedSetting,
+	name string,
+	columns colinfo.ResultColumns,
+	getEncodedValue func(ctx context.Context, p *planner) (string, error),
+) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,

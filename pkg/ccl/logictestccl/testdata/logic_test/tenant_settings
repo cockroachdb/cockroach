@@ -15,6 +15,11 @@ SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable =
 ----
 false  per-tenant-override
 
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+false
+
 user root
 
 query B retry
@@ -32,6 +37,9 @@ query TT
 SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
 ----
 NULL  unsupported - see issue #77935
+
+query error unable to view tenant customization - see issue #77935
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
 
 user root
 
@@ -51,6 +59,11 @@ SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable =
 ----
 false  all-tenants-override
 
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+false
+
 user root
 
 query B retry
@@ -68,6 +81,11 @@ query TT
 SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
 ----
 true  per-tenant-override
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+true
 
 user root
 
@@ -93,6 +111,11 @@ query TT
 SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
 ----
 true  per-tenant-override
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+true
 
 user root
 
@@ -129,6 +152,11 @@ query TT
 SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'kv.protectedts.reconciliation.interval'
 ----
 45s  per-tenant-override
+
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval FOR TENANT 10
+----
+00:00:45
 
 user root
 
