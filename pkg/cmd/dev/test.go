@@ -95,6 +95,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
 	)
+	if rewrite != "" {
+		ignoreCache = true
+	}
 
 	// Enumerate all tests to run.
 	if len(pkgs) == 0 {
