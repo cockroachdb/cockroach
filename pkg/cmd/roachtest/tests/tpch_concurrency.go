@@ -31,8 +31,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		ctx context.Context,
 		t test.Test,
 		c cluster.Cluster,
-		disableTxnStatsSampling bool,
-		disableAdmissionControl bool,
 	) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
@@ -47,12 +45,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		if _, err := conn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-		if disableTxnStatsSampling {
-			if _, err := conn.Exec("SET CLUSTER SETTING sql.txn_stats.sample_rate = 0;"); err != nil {
-				t.Fatal(err)
-			}
-		}
-		SetAdmissionControl(ctx, t, c, !disableAdmissionControl)
 
 		if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)), c.Range(1, numNodes-1)); err != nil {
 			t.Fatal(err)
@@ -158,10 +150,8 @@ func registerTPCHConcurrency(r registry.Registry) {
 		ctx context.Context,
 		t test.Test,
 		c cluster.Cluster,
-		disableTxnStatsSampling bool,
-		disableAdmissionControl bool,
 	) {
-		setupCluster(ctx, t, c, disableTxnStatsSampling, disableAdmissionControl)
+		setupCluster(ctx, t, c)
 		// TODO(yuzefovich): once we have a good grasp on the expected value for
 		// max supported concurrency, we should use search.Searcher instead of
 		// the binary search here. Additionally, we should introduce an
@@ -194,34 +184,18 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c.Run(ctx, c.Node(numNodes), cmd)
 	}
 
-	// TODO(yuzefovich): re-evaluate whether we need these options at all.
-	for _, disableTxnStatsSampling := range []bool{false, true} {
-		for _, disableAdmissionControl := range []bool{false, true} {
-			if disableTxnStatsSampling && disableAdmissionControl {
-				// Skip the config of disabling both settings.
-				continue
-			}
-			name := "tpch_concurrency"
-			if disableTxnStatsSampling {
-				name += "/no_sampling"
-			}
-			if disableAdmissionControl {
-				name += "/no_admission"
-			}
-			r.Add(registry.TestSpec{
-				Name:    name,
-				Owner:   registry.OwnerSQLQueries,
-				Cluster: r.MakeClusterSpec(numNodes),
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runTPCHConcurrency(ctx, t, c, disableTxnStatsSampling, disableAdmissionControl)
-				},
-				// By default, the timeout is 10 hours which might not be
-				// sufficient given that a single iteration of checkConcurrency
-				// might take on the order of one hour, so in order to let each
-				// test run to complete we'll give it 18 hours. Successful runs
-				// typically take a lot less, around six hours.
-				Timeout: 18 * time.Hour,
-			})
-		}
-	}
+	r.Add(registry.TestSpec{
+		Name:    "tpch_concurrency",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCHConcurrency(ctx, t, c)
+		},
+		// By default, the timeout is 10 hours which might not be sufficient
+		// given that a single iteration of checkConcurrency might take on the
+		// order of one hour, so in order to let each test run to complete we'll
+		// give it 18 hours. Successful runs typically take a lot less, around
+		// six hours.
+		Timeout: 18 * time.Hour,
+	})
 }
