@@ -3309,13 +3309,34 @@ func (r *Replica) adminScatter(
 		MaxRetries:     5,
 	}
 
-	// Loop until the replicate queue decides there is nothing left to do for the
-	// range. Note that we disable lease transfers until the final step as
-	// transferring the lease prevents any further action on this node.
+	// On every `processOneChange` call with the `scatter` option set, stores in
+	// the cluster are essentially randomly categorized as "overfull" or
+	// "underfull" (replicas on overfull stores are then rebalanced to the
+	// underfull ones). Since each existing replica will be on a store categorized
+	// as either underfull or overfull, it can be expected to be rebalanced with a
+	// probability of 0.5. This means that, roughly speaking, for N replicas,
+	// probability of a successful rebalance is (1 - (0.5)^N). Thus, we limit the
+	// number of times we try to scatter a particular range to its replication
+	// factor.
+	maxAttempts := len(r.Desc().Replicas().Descriptors())
+	currentAttempt := 0
+
+	// Loop until the replicate queue decides there is nothing left to do or until
+	// we hit `maxAttempts` for the range. Note that we disable lease transfers
+	// until the final step as transferring the lease prevents any further action
+	// on this node.
 	var allowLeaseTransfer bool
+	var err error
+	requeue := true
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(
+		if currentAttempt == maxAttempts {
+			break
+		}
+		if currentAttempt == maxAttempts-1 || !requeue {
+			allowLeaseTransfer = true
+		}
+		requeue, err = rq.processOneChange(
 			ctx, r, canTransferLease, true /* scatter */, false, /* dryRun */
 		)
 		if err != nil {
@@ -3325,12 +3346,7 @@ func (r *Replica) adminScatter(
 			}
 			break
 		}
-		if !requeue {
-			if allowLeaseTransfer {
-				break
-			}
-			allowLeaseTransfer = true
-		}
+		currentAttempt++
 		re.Reset()
 	}
 
