@@ -138,6 +138,21 @@ func (s ColSet) ToList() ColList {
 	return res
 }
 
+// CopyAndRemap looks up each ColumnID from s in the colMap and adds the mapped
+// ColumnID to a new ColSet, which is returned to the caller. Panics if a
+// ColumnID is not found as a key in colMap.
+func (s ColSet) CopyAndRemap(colMap ColMap) ColSet {
+	newCols := ColSet{}
+	for srcCol, ok := s.Next(0); ok; srcCol, ok = s.Next(srcCol + 1) {
+		if newColID, ok := colMap.Get(int(srcCol)); ok {
+			newCols.Add(ColumnID(newColID))
+		} else {
+			panic(errors.AssertionFailedf("column %d not in mapping %s\n", srcCol, colMap))
+		}
+	}
+	return newCols
+}
+
 // TranslateColSet is used to translate a ColSet from one set of column IDs
 // to an equivalent set. This is relevant for set operations such as UNION,
 // INTERSECT and EXCEPT, and can be used to map a ColSet defined on the left

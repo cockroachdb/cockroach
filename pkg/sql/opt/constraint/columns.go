@@ -143,6 +143,20 @@ func (c *Columns) RemapColumns(from, to opt.TableID) Columns {
 	return newColumns
 }
 
+// CopyAndMaybeRemapColumnsWithColMap copies ordering columns in c and
+// conditionally remaps them according to a colMap if they can be found in the
+// colMap. If a column is mapped, the original OrderingColumn is not mutated, a
+// new mapped OrderingColumn is built.
+func (c *Columns) CopyAndMaybeRemapColumnsWithColMap(colMap opt.ColMap) Columns {
+	var newColumns Columns
+	newColumns.firstCol = c.firstCol.CopyAndMaybeRemapColumnWithColMap(colMap)
+	newColumns.otherCols = make([]opt.OrderingColumn, len(c.otherCols))
+	for i := range c.otherCols {
+		newColumns.otherCols[i] = c.otherCols[i].CopyAndMaybeRemapColumnWithColMap(colMap)
+	}
+	return newColumns
+}
+
 // ColSet returns the columns as a ColSet.
 func (c *Columns) ColSet() opt.ColSet {
 	var r opt.ColSet

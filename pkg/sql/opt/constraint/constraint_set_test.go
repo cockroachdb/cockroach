@@ -19,6 +19,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+func testConstraintSetCopyRemap(t *testing.T, set *Set, evalCtx *tree.EvalContext) {
+	var colMap opt.ColMap
+	var reverseMap opt.ColMap
+	const maxColID = 150
+	for i := 1; i <= maxColID; i++ {
+		colMap.Set(i, i+maxColID)
+		reverseMap.Set(i+maxColID, i)
+	}
+	setRemapped := set.CopyAndMaybeRemapConstraintSetWithColMap(colMap)
+	setReRemapped := setRemapped.CopyAndMaybeRemapConstraintSetWithColMap(reverseMap)
+	if !set.Equals(setReRemapped, evalCtx) || !setReRemapped.Equals(set, evalCtx) {
+		t.Errorf("Sets not equal. set: %v, setReRemapped: %v", set, setReRemapped)
+	}
+}
+
 func TestConstraintSetIntersect(t *testing.T) {
 	kc1 := testKeyContext(1)
 	kc2 := testKeyContext(2)
@@ -265,6 +280,7 @@ func TestExtractCols(t *testing.T) {
 			constraint := ParseConstraint(evalCtx, constraint)
 			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
 		}
+		testConstraintSetCopyRemap(t, cs, evalCtx)
 		cols := cs.ExtractCols()
 		if !tc.expected.Equals(cols) {
 			t.Errorf("expected constant columns from %s to be %s, was %s", cs, tc.expected, cols)
@@ -329,6 +345,7 @@ func TestExtractConstColsForSet(t *testing.T) {
 			constraint := ParseConstraint(evalCtx, constraint)
 			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
 		}
+		testConstraintSetCopyRemap(t, cs, evalCtx)
 		cols := cs.ExtractConstCols(evalCtx)
 		var expCols opt.ColSet
 		for col := range tc.expected {
@@ -398,6 +415,7 @@ func TestHasSingleColumnConstValues(t *testing.T) {
 			constraint := ParseConstraint(evalCtx, constraint)
 			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
 		}
+		testConstraintSetCopyRemap(t, cs, evalCtx)
 		col, vals, _ := cs.HasSingleColumnConstValues(evalCtx)
 		var intVals []int
 		for _, val := range vals {
@@ -447,4 +465,84 @@ func newSpanTestData() *spanTestData {
 	data.spGe1015.Init(key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	return data
+}
+
+func TestEqualsNegative(t *testing.T) {
+	type testCase struct {
+		constraints []string
+		expected    opt.ColSet
+	}
+
+	cols := opt.MakeColSet
+
+	cases := []testCase{
+		{
+			[]string{
+				`/1/-3: [/1/13 - /1/7]`,
+			},
+			cols(1, 2, 3),
+		},
+		{
+			[]string{
+				`/1/2: [/10/4 - /10/5] [/12/4 - /12/5]`,
+			},
+			cols(1, 2),
+		},
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	var colMap opt.ColMap
+	for _, tc := range cases {
+		var cs *Set
+		for i, constraint := range tc.constraints {
+			constraint := ParseConstraint(evalCtx, constraint)
+			constraint.Spans.makeImmutable()
+			if i == 0 {
+				cs = SingleConstraint(&constraint)
+			} else {
+				cs = cs.Union(evalCtx, SingleConstraint(&constraint))
+			}
+		}
+		csRemapped := cs.CopyAndMaybeRemapConstraintSetWithColMap(colMap)
+		if !csRemapped.Equals(cs, evalCtx) || !cs.Equals(csRemapped, evalCtx) {
+			t.Errorf("Constraint Sets expected to match. cs: %v: csRemapped: %v", cs, csRemapped)
+		}
+		// Make a copy of the constraint Set with a firstConstraint Spans that has
+		// the immutable flag unset.
+		spans := csRemapped.firstConstraint.Spans
+		spansCopy := Spans{}
+		spansCopy.InitSingleSpan(spans.Get(0))
+		spansCopy.Alloc(int(spans.numSpans))
+
+		for i := 1; i < int(spans.numSpans); i++ {
+			spansCopy.Alloc(csRemapped.Length())
+			spansCopy.Append(spans.Get(i))
+		}
+		csRemapped.firstConstraint.Spans = spansCopy
+
+		if csRemapped.Equals(cs, evalCtx) || cs.Equals(csRemapped, evalCtx) {
+			t.Errorf("Constraint Sets expected to be unequal. cs: %v: csRemapped: %v", cs, csRemapped)
+		}
+		csRemapped.firstConstraint.Spans.makeImmutable()
+
+		// Now they should match since Equals checks if Spans are immutable.
+		if !csRemapped.Equals(cs, evalCtx) || !cs.Equals(csRemapped, evalCtx) {
+			t.Errorf("Constraint Sets expected to be unequal. cs: %v: csRemapped: %v", cs, csRemapped)
+		}
+	}
+}
+
+func TestEqualsTrival(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	if !Unconstrained.Equals(Unconstrained, evalCtx) {
+		t.Errorf("Constraint Sets expected to be equal.")
+	}
+	if !Contradiction.Equals(Contradiction, evalCtx) {
+		t.Errorf("Constraint Sets expected to be equal.")
+	}
+	if Contradiction.Equals(Unconstrained, evalCtx) {
+		t.Errorf("Constraint Sets expected to be unequal.")
+	}
 }

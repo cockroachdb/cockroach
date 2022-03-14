@@ -569,6 +569,24 @@ func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, fromCols, toCols opt.ColList) 
 	f.key = opt.TranslateColSetStrict(f.key, fromCols, toCols)
 }
 
+// CopyAndRemap copies f, remapping column IDs according to the colMap. Panics
+// if any ColumnIDs cannot be remapped.
+func (f *FuncDepSet) CopyAndRemap(colMap opt.ColMap) FuncDepSet {
+	newFuncDepSet := FuncDepSet{}
+	if f.deps != nil {
+		newFuncDepSet.deps = make([]funcDep, len(f.deps))
+	}
+	for i := range f.deps {
+		newFuncDepSet.deps[i].from = f.deps[i].from.CopyAndRemap(colMap)
+		newFuncDepSet.deps[i].to = f.deps[i].to.CopyAndRemap(colMap)
+		newFuncDepSet.deps[i].strict = f.deps[i].strict
+		newFuncDepSet.deps[i].equiv = f.deps[i].equiv
+	}
+	newFuncDepSet.hasKey = f.hasKey
+	newFuncDepSet.key = f.key.CopyAndRemap(colMap)
+	return newFuncDepSet
+}
+
 // ColsAreStrictKey returns true if the given columns contain a strict key for the
 // relation. This means that any two rows in the relation will never have the
 // same values for this set of columns. If the columns are nullable, then at
@@ -1990,6 +2008,28 @@ func (f *FuncDepSet) makeEquivMap(from, to opt.ColSet) map[opt.ColumnID]opt.Colu
 	return equivMap
 }
 
+// Equals tests if two FuncDepSets are identical.
+func (f *FuncDepSet) Equals(other *FuncDepSet) bool {
+	if other == nil {
+		return false
+	}
+	if len(f.deps) != len(other.deps) {
+		return false
+	}
+	for i := range f.deps {
+		if !f.deps[i].Equals(&other.deps[i]) {
+			return false
+		}
+	}
+	if f.hasKey != other.hasKey {
+		return false
+	}
+	if !f.key.Equals(other.key) {
+		return false
+	}
+	return true
+}
+
 // isConstant returns true if this FD contains the set of constant columns. If
 // it exists, it must always be the first FD in the set.
 func (f *funcDep) isConstant() bool {
@@ -2019,6 +2059,26 @@ func (f *funcDep) removeFromCols(remove opt.ColSet) bool {
 	}
 	return !f.isConstant()
 
+}
+
+// Equals tests if two funcDeps are identical.
+func (f *funcDep) Equals(other *funcDep) bool {
+	if other == nil {
+		return false
+	}
+	if f.equiv != other.equiv {
+		return false
+	}
+	if f.strict != other.strict {
+		return false
+	}
+	if !f.to.Equals(other.to) {
+		return false
+	}
+	if !f.from.Equals(other.from) {
+		return false
+	}
+	return true
 }
 
 // removeToCols removes columns in the given set from this FD's dependant set.

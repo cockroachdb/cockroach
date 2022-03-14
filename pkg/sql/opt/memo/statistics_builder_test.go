@@ -131,6 +131,21 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		testStats(t, s, expectedStats)
 	}
 
+	testConstraintSetCopyRemap := func(t *testing.T, set *constraint.Set, evalCtx *tree.EvalContext) {
+		var colMap opt.ColMap
+		var reverseMap opt.ColMap
+		const maxColID = 150
+		for i := 1; i <= maxColID; i++ {
+			colMap.Set(i, i+maxColID)
+			reverseMap.Set(i+maxColID, i)
+		}
+		setRemapped := set.CopyAndMaybeRemapConstraintSetWithColMap(colMap)
+		setReRemapped := setRemapped.CopyAndMaybeRemapConstraintSetWithColMap(reverseMap)
+		if !set.Equals(setReRemapped, evalCtx) || !setReRemapped.Equals(set, evalCtx) {
+			t.Errorf("Sets not equal. set: %v, setReRemapped: %v", set, setReRemapped)
+		}
+	}
+
 	c1 := constraint.ParseConstraint(&evalCtx, "/1: [/2 - /5] [/8 - /10]")
 	c2 := constraint.ParseConstraint(&evalCtx, "/2: [/3 - ]")
 	c3 := constraint.ParseConstraint(&evalCtx, "/3: [/6 - /6]")
@@ -157,78 +172,91 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		cs1,
 		"[rows=1.4e+08, distinct(1)=7, null(1)=0, avgsize(1)=4]",
 	)
+	testConstraintSetCopyRemap(t, cs1, &evalCtx)
 
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc(
 		cs2,
 		"[rows=3.333333e+09, distinct(2)=166.667, null(2)=0, avgsize(2)=4]",
 	)
+	testConstraintSetCopyRemap(t, cs2, &evalCtx)
 
 	cs3 := constraint.SingleConstraint(&c3)
 	statsFunc(
 		cs3,
 		"[rows=2e+07, distinct(3)=1, null(3)=0, avgsize(3)=4]",
 	)
+	testConstraintSetCopyRemap(t, cs3, &evalCtx)
 
 	cs12 := constraint.SingleConstraint(&c12)
 	statsFunc(
 		cs12,
 		"[rows=2e+07, distinct(1)=1, null(1)=0, avgsize(1)=4]",
 	)
+	testConstraintSetCopyRemap(t, cs12, &evalCtx)
 
 	cs123 := constraint.SingleConstraint(&c123)
 	statsFunc(
 		cs123,
 		"[rows=400, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=5, null(1-3)=0, avgsize(1-3)=12]",
 	)
+	testConstraintSetCopyRemap(t, cs123, &evalCtx)
 
 	cs123n := constraint.SingleConstraint(&c123n)
 	statsFunc(
 		cs123n,
 		"[rows=40000, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]",
 	)
+	testConstraintSetCopyRemap(t, cs123n, &evalCtx)
 
 	cs32 := constraint.SingleConstraint(&c32)
 	statsFunc(
 		cs32,
 		"[rows=80000, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(2,3)=2, null(2,3)=0, avgsize(2,3)=8]",
 	)
+	testConstraintSetCopyRemap(t, cs32, &evalCtx)
 
 	cs321 := constraint.SingleConstraint(&c321)
 	statsFunc(
 		cs321,
 		"[rows=160000, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(2,3)=4, null(2,3)=0, avgsize(2,3)=8]",
 	)
+	testConstraintSetCopyRemap(t, cs321, &evalCtx)
 
 	cs312 := constraint.SingleConstraint(&c312)
 	statsFunc(
 		cs312,
 		"[rows=2.449065e+07, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(1-3)=26.9395, null(1-3)=0, avgsize(1-3)=12]",
 	)
+	testConstraintSetCopyRemap(t, cs312, &evalCtx)
 
 	cs312n := constraint.SingleConstraint(&c312n)
 	statsFunc(
 		cs312n,
 		"[rows=160000, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(1,3)=4, null(1,3)=0, avgsize(1,3)=8]",
 	)
+	testConstraintSetCopyRemap(t, cs312n, &evalCtx)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
 	statsFunc(
 		cs,
 		"[rows=909098.9, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]",
 	)
+	testConstraintSetCopyRemap(t, cs, &evalCtx)
 
 	cs = cs32.Intersect(&evalCtx, cs123)
 	statsFunc(
 		cs,
 		"[rows=909098.9, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]",
 	)
+	testConstraintSetCopyRemap(t, cs32, &evalCtx)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc(
 		cs45,
 		"[rows=1e+09, distinct(4)=1, null(4)=0, avgsize(4)=4]",
 	)
+	testConstraintSetCopyRemap(t, cs45, &evalCtx)
 }
 
 func testStats(t *testing.T, s *props.Statistics, expectedStats string) {
