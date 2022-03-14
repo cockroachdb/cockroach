@@ -55,6 +55,19 @@ func (c OrderingColumn) RemapColumn(from, to TableID) OrderingColumn {
 	return MakeOrderingColumn(newColID, c.Descending())
 }
 
+// RemapColumnWithColMap remaps an OrderingColumn c according to a colMap.
+func (c OrderingColumn) RemapColumnWithColMap(colMap ColMap) OrderingColumn {
+	var dstCol int
+	var remappedCol ColumnID
+	var ok bool
+	if dstCol, ok = colMap.Get(int(c.ID())); !ok {
+		remappedCol = c.ID()
+	} else {
+		remappedCol = ColumnID(dstCol)
+	}
+	return MakeOrderingColumn(remappedCol, c.Descending())
+}
+
 func (c OrderingColumn) String() string {
 	var buf bytes.Buffer
 	c.Format(&buf)

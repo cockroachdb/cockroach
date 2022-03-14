@@ -83,6 +83,23 @@ func (c *Constraint) IsUnconstrained() bool {
 	return c.Spans.Count() == 1 && c.Spans.Get(0).IsUnconstrained()
 }
 
+// Immutable indicates if this Constraint has been marked as immutable.
+func (c *Constraint) Immutable() bool {
+	return c.Spans.Immutable()
+}
+
+// Equals returns true if the two Constraints are identical.
+func (c *Constraint) Equals(other *Constraint, evalCtx *tree.EvalContext) bool {
+	if other == nil {
+		return false
+	}
+	if !c.Columns.Equals(&other.Columns) {
+		return false
+	}
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	return c.Spans.Equals(&other.Spans, &keyCtx)
+}
+
 // UnionWith merges the spans of the given constraint into this constraint.  The
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
