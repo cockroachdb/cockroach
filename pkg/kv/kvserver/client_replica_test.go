@@ -3656,17 +3656,18 @@ func TestStrictGCEnforcement(t *testing.T) {
 	t.Run("protected timestamps are respected", func(t *testing.T) {
 		// Block the KVSubscriber rangefeed from progressing.
 		blockKVSubscriberCh := make(chan struct{})
-		var isBlocked bool
+		var isBlocked syncutil.AtomicBool
+		isBlocked.Set(false)
 		mu.Lock()
 		mu.blockOnTimestampUpdate = func() {
-			isBlocked = true
+			isBlocked.Set(true)
 			<-blockKVSubscriberCh
 		}
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.
 		testutils.SucceedsSoon(t, func() error {
-			if !isBlocked {
+			if !isBlocked.Get() {
 				return errors.New("kvsubscriber not blocked yet")
 			}
 			return nil
