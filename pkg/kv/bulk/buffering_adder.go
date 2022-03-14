@@ -38,18 +38,12 @@ type BufferingAdder struct {
 	// timestamp applied to mvcc keys created from keys during SST construction.
 	timestamp hlc.Timestamp
 
-	// threshold at which buffered entries will be flushed to SSTBatcher.
-	curBufferSize int64
-
-	// ceiling till which we can grow curBufferSize if bulkMon permits.
-	maxBufferSize func() int64
-
-	// unit by which we increment the curBufferSize.
-	incrementBufferSize int64
+	// maxBufferLimit returns the size above which we will not request increases
+	// to curBufferLimit from the monitor.
+	maxBufferLimit func() int64
 
 	// currently buffered kvs.
 	curBuf kvBuf
-	kvSize sz
 
 	sorted bool
 
@@ -71,6 +65,9 @@ type BufferingAdder struct {
 	memAcc  mon.BoundAccount
 
 	onFlush func(summary roachpb.BulkOpSummary)
+	// underfill tracks how much capacity was remaining in curBuf when it was
+	// flushed due to size, e.g. how much its mis-allocated entries vs slab.
+	underfill sz
 }
 
 var _ kvserverbase.BulkAdder = &BufferingAdder{}
@@ -94,9 +91,6 @@ func MakeBulkAdder(
 	if opts.MaxBufferSize == nil {
 		opts.MaxBufferSize = func() int64 { return 128 << 20 }
 	}
-	if opts.StepBufferSize == 0 {
-		opts.StepBufferSize = 32 << 20
-	}
 
 	b := &BufferingAdder{
 		name: opts.Name,
@@ -109,20 +103,12 @@ func MakeBulkAdder(
 			batchTS:                opts.BatchTimestamp,
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 		},
-		timestamp:           timestamp,
-		curBufferSize:       opts.MinBufferSize,
-		maxBufferSize:       opts.MaxBufferSize,
-		incrementBufferSize: opts.StepBufferSize,
-		bulkMon:             bulkMon,
-		sorted:              true,
-		initialSplits:       opts.InitialSplitsIfUnordered,
-		lastFlush:           timeutil.Now(),
-	}
-
-	// If no monitor is attached to the instance of a bulk adder, we do not
-	// control its memory usage.
-	if bulkMon == nil {
-		return b, nil
+		timestamp:      timestamp,
+		maxBufferLimit: opts.MaxBufferSize,
+		bulkMon:        bulkMon,
+		sorted:         true,
+		initialSplits:  opts.InitialSplitsIfUnordered,
+		lastFlush:      timeutil.Now(),
 	}
 
 	// At minimum a bulk adder needs enough space to store a buffer of
@@ -132,12 +118,13 @@ func MakeBulkAdder(
 	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
 	// it will store in-memory before sending it to RocksDB.
 	b.memAcc = bulkMon.MakeBoundAccount()
-	if err := b.memAcc.Grow(ctx, b.curBufferSize); err != nil {
-		return nil, errors.WithHint(
-			errors.Wrap(err, "not enough memory available to create a BulkAdder"),
-			"Try setting a higher --max-sql-memory.")
+	if opts.MinBufferSize > 0 {
+		if err := b.memAcc.Reserve(ctx, int64(opts.MinBufferSize)); err != nil {
+			return nil, errors.WithHint(
+				errors.Wrap(err, "not enough memory available to create a BulkAdder"),
+				"Try setting a higher --max-sql-memory.")
+		}
 	}
-
 	return b, nil
 }
 
@@ -187,30 +174,37 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 			b.sorted = false
 		}
 	}
-	if err := b.curBuf.append(key, value); err != nil {
+
+	need := sz(len(key) + len(value))
+	// Check if this KV can fit in the buffer resizing it if needed and able.
+	if b.curBuf.fits(ctx, need, sz(b.maxBufferLimit()), &b.memAcc) {
+		return b.curBuf.append(key, value)
+	}
+
+	b.flushCounts.bufferSize++
+	log.VEventf(ctx, 3, "%s adder triggering flush of %s of KVs in %s buffer",
+		b.name, b.curBuf.KVSize(), b.bufferedMemSize(), b.curBuf.MemSize())
+
+	unusedEntries, unusedSlab := b.curBuf.unusedCap()
+	b.underfill += unusedEntries + unusedSlab
+
+	if err := b.doFlush(ctx, true); err != nil {
 		return err
 	}
-	b.kvSize += sz(len(key) + len(value))
 
-	if b.curBuf.MemSize > sz(b.curBufferSize) {
-		// This is an optimization to try and increase the current buffer size if
-		// our memory account permits it. This would lead to creation of a fewer
-		// number of SSTs.
-		//
-		// To prevent a single import from growing its buffer indefinitely we check
-		// if it has exceeded its upper bound.
-		if b.bulkMon != nil && b.curBufferSize < b.maxBufferSize() {
-			if err := b.memAcc.Grow(ctx, b.incrementBufferSize); err != nil {
-				// If we are unable to reserve the additional memory then flush the
-				// buffer, and continue as normal.
-				return b.sizeFlush(ctx)
-			}
-			b.curBufferSize += b.incrementBufferSize
-		} else {
-			return b.sizeFlush(ctx)
-		}
+	// If the budget allocation between the slab and entries capacity is skewed vs
+	// actual usage -- say, if early keys were tiny so we grew entries cap, but
+	// now the keys are big, so we need slab cap but our budget is still all used
+	// by unused entries cap -- reset both. We'll take a slight hit re-alloc'ing
+	// but will hopefully waste less buffer space.
+	if b.underfill > 1<<30 {
+		b.memAcc.Shrink(ctx, int64(b.curBuf.MemSize()))
+		b.curBuf.entries = nil
+		b.curBuf.slab = nil
+		b.underfill = 0
 	}
-	return nil
+
+	return b.curBuf.append(key, value)
 }
 
 func (b *BufferingAdder) bufferedKeys() int {
@@ -218,24 +212,17 @@ func (b *BufferingAdder) bufferedKeys() int {
 }
 
 func (b *BufferingAdder) bufferedMemSize() sz {
-	return b.curBuf.MemSize
+	return b.curBuf.MemSize()
 }
 
 // CurrentBufferFill returns the current buffer fill percentage.
 func (b *BufferingAdder) CurrentBufferFill() float32 {
-	return float32(b.curBuf.MemSize) / float32(b.curBufferSize)
+	return float32(b.curBuf.KVSize()) / float32(b.curBuf.MemSize())
 }
 
 // IsEmpty returns true if the adder has no un-flushed data in its buffer.
 func (b *BufferingAdder) IsEmpty() bool {
 	return b.curBuf.Len() == 0
-}
-
-func (b *BufferingAdder) sizeFlush(ctx context.Context) error {
-	b.flushCounts.bufferSize++
-	log.VEventf(ctx, 2, "%s adder triggering flush of %s of KVs in %s buffer",
-		b.name, b.kvSize, b.bufferedMemSize())
-	return b.doFlush(ctx, true)
 }
 
 // Flush flushes any buffered kvs to the batcher.
@@ -303,9 +290,9 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		log.Infof(ctx,
 			"%s adder flushing %s (%s buffered/%0.2gx) wrote %d SSTs (avg: %s) with %d for splits, %d for size, took %v",
 			b.name,
-			b.kvSize,
-			b.curBuf.MemSize,
-			float64(b.kvSize)/float64(b.curBuf.MemSize),
+			b.curBuf.KVSize(),
+			b.curBuf.MemSize(),
+			float64(b.curBuf.KVSize())/float64(b.curBuf.MemSize()),
 			files,
 			sz(written/int64(files)),
 			dueToSplits,
@@ -348,14 +335,13 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		b.onFlush(b.sink.GetBatchSummary())
 	}
 	b.curBuf.Reset()
-	b.kvSize = 0
 	b.lastFlush = timeutil.Now()
 	return nil
 }
 
 func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	log.Infof(ctx, "%s adder creating up to %d initial splits from %d KVs in %s buffer",
-		b.name, b.initialSplits, b.curBuf.Len(), b.curBuf.MemSize)
+		b.name, b.initialSplits, b.curBuf.Len(), b.curBuf.KVSize())
 
 	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
 	before := timeutil.Now()
@@ -425,7 +411,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	}
 
 	log.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
-		b.name, created, timing(timeutil.Since(before)), b.curBuf.Len(), b.curBuf.MemSize)
+		b.name, created, timing(timeutil.Since(before)), b.curBuf.Len(), b.curBuf.KVSize())
 
 	b.sink.initialSplitDone = true
 	return nil

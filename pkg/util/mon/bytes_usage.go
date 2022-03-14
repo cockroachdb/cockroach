@@ -497,6 +497,8 @@ type BoundAccount struct {
 	reserved int64
 	mon      *BytesMonitor
 
+	earmark int64
+
 	// Mu, if non-nil, is used in some methods such as Grow and Shrink.
 	Mu *syncutil.Mutex
 }
@@ -549,6 +551,30 @@ func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 		log.Fatalf(ctx, "trying to re-initialize non-empty account")
 	}
 	b.mon = mon
+}
+
+// Reserve requests an allocation of some amount from the monitor just like Grow
+// but does not mark it as used immediately, instead keeping it in the local
+// reservation by use by future Grow() calls, and configuring the account to
+// consider that amount "earmarked" for this account, meaning that that Shrink()
+// calls will not release it back to the parent monitor.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
+func (b *BoundAccount) Reserve(ctx context.Context, x int64) error {
+	if b == nil {
+		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
+	}
+	minExtra := b.mon.roundSize(x)
+	if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
+		return err
+	}
+	b.reserved += minExtra
+	b.earmark = x
+	return nil
 }
 
 // Empty shrinks the account to use 0 bytes. Previously used memory is returned
@@ -657,7 +683,7 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 		defer b.Mu.Unlock()
 	}
 	if b.reserved < x {
-		minExtra := b.mon.roundSize(x)
+		minExtra := b.mon.roundSize(x - b.reserved)
 		if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
 			return err
 		}
@@ -687,7 +713,7 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	}
 	b.used -= delta
 	b.reserved += delta
-	if b.reserved > b.mon.poolAllocationSize {
+	if b.reserved > b.mon.poolAllocationSize && (b.earmark == 0 || b.used+b.mon.poolAllocationSize > b.earmark) {
 		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
 		b.reserved = b.mon.poolAllocationSize
 	}
