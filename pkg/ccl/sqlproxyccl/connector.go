@@ -318,13 +318,18 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 	// First try to lookup tenant in the directory (if available).
 	if c.Directory != nil {
 		addr, err := c.Directory.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
-		if err != nil {
-			if status.Code(err) != codes.NotFound {
-				return "", markAsRetriableConnectorError(err)
-			}
-			// Fallback to old resolution rule.
-		} else {
+		switch {
+		case err == nil:
 			return addr, nil
+		case status.Code(err) == codes.FailedPrecondition:
+			if st, ok := status.FromError(err); ok {
+				return "", newErrorf(codeUnavailable, "%v", st.Message())
+			}
+			return "", newErrorf(codeUnavailable, "unavailable")
+		case status.Code(err) != codes.NotFound:
+			return "", markAsRetriableConnectorError(err)
+		default:
+			// Fallback to old resolution rule.
 		}
 	}
 

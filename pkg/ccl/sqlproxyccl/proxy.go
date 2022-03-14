@@ -41,7 +41,8 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 			codeBackendDisconnected,
 			codeAuthFailed,
 			codeProxyRefusedConnection,
-			codeIdleDisconnect:
+			codeIdleDisconnect,
+			codeUnavailable:
 			msg = codeErr.Error()
 		// The rest - the message sent back is sanitized.
 		case codeUnexpectedInsecureStartupMessage:

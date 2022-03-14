@@ -9,32 +9,46 @@
 package sqlproxyccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
 type metrics struct {
-	BackendDisconnectCount             *metric.Counter
-	IdleDisconnectCount                *metric.Counter
-	BackendDownCount                   *metric.Counter
-	ClientDisconnectCount              *metric.Counter
-	CurConnCount                       *metric.Gauge
-	RoutingErrCount                    *metric.Counter
-	RefusedConnCount                   *metric.Counter
-	SuccessfulConnCount                *metric.Counter
-	AuthFailedCount                    *metric.Counter
-	ExpiredClientConnCount             *metric.Counter
-	ConnMigrationSuccessCount          *metric.Counter
-	ConnMigrationErrorFatalCount       *metric.Counter
-	ConnMigrationErrorRecoverableCount *metric.Counter
-	ConnMigrationAttemptedCount        *metric.Counter
+	BackendDisconnectCount *metric.Counter
+	IdleDisconnectCount    *metric.Counter
+	BackendDownCount       *metric.Counter
+	ClientDisconnectCount  *metric.Counter
+	CurConnCount           *metric.Gauge
+	RoutingErrCount        *metric.Counter
+	RefusedConnCount       *metric.Counter
+	SuccessfulConnCount    *metric.Counter
+	AuthFailedCount        *metric.Counter
+	ExpiredClientConnCount *metric.Counter
+
+	ConnMigrationSuccessCount                *metric.Counter
+	ConnMigrationErrorFatalCount             *metric.Counter
+	ConnMigrationErrorRecoverableCount       *metric.Counter
+	ConnMigrationAttemptedCount              *metric.Counter
+	ConnMigrationAttemptedLatency            *metric.Histogram
+	ConnMigrationTransferResponseMessageSize *metric.Histogram
 }
 
 // MetricStruct implements the metrics.Struct interface.
 func (metrics) MetricStruct() {}
 
 var _ metric.Struct = metrics{}
+
+const (
+	// maxExpectedTransferResponseMessageSize corresponds to maximum expected
+	// response message size for the SHOW TRANSFER STATE query. We choose 16MB
+	// here to match the defaultMaxReadBufferSize used for ingesting SQL
+	// statements in the SQL server (see pkg/sql/pgwire/pgwirebase/encoding.go).
+	//
+	// This will be used to tune sql.session_transfer.max_session_size.
+	maxExpectedTransferResponseMessageSize = 1 << 24 // 16MB
+)
 
 var (
 	metaCurConnCount = metric.Metadata{
@@ -100,12 +114,6 @@ var (
 	// Connection migration metrics.
 	//
 	// attempted = success + error_fatal + error_recoverable
-	metaConnMigrationAttemptedCount = metric.Metadata{
-		Name:        "proxy.conn_migration.attempted",
-		Help:        "Number of attempted connection migrations",
-		Measurement: "Connection Migrations",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaConnMigrationSuccessCount = metric.Metadata{
 		Name:        "proxy.conn_migration.success",
 		Help:        "Number of successful connection migrations",
@@ -125,6 +133,24 @@ var (
 		Help:        "Number of failed connection migrations that were recoverable",
 		Measurement: "Connection Migrations",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationAttemptedCount = metric.Metadata{
+		Name:        "proxy.conn_migration.attempted",
+		Help:        "Number of attempted connection migrations",
+		Measurement: "Connection Migrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConnMigrationAttemptedLatency = metric.Metadata{
+		Name:        "proxy.conn_migration.attempted.latency",
+		Help:        "Latency histogram for attempted connection migrations",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaConnMigrationTransferResponseMessageSize = metric.Metadata{
+		Name:        "proxy.conn_migration.transfer_response.message_size",
+		Help:        "Message size for the SHOW TRANSFER STATE response",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
 	}
 )
 
@@ -146,6 +172,16 @@ func makeProxyMetrics() metrics {
 		ConnMigrationErrorFatalCount:       metric.NewCounter(metaConnMigrationErrorFatalCount),
 		ConnMigrationErrorRecoverableCount: metric.NewCounter(metaConnMigrationErrorRecoverableCount),
 		ConnMigrationAttemptedCount:        metric.NewCounter(metaConnMigrationAttemptedCount),
+		ConnMigrationAttemptedLatency: metric.NewLatency(
+			metaConnMigrationAttemptedLatency,
+			base.DefaultHistogramWindowInterval(),
+		),
+		ConnMigrationTransferResponseMessageSize: metric.NewHistogram(
+			metaConnMigrationTransferResponseMessageSize,
+			base.DefaultHistogramWindowInterval(),
+			maxExpectedTransferResponseMessageSize,
+			1,
+		),
 	}
 }
 
@@ -169,7 +205,7 @@ func (metrics *metrics) updateForError(err error) {
 		case codeProxyRefusedConnection:
 			metrics.RefusedConnCount.Inc(1)
 			metrics.BackendDownCount.Inc(1)
-		case codeParamsRoutingFailed:
+		case codeParamsRoutingFailed, codeUnavailable:
 			metrics.RoutingErrCount.Inc(1)
 			metrics.BackendDownCount.Inc(1)
 		case codeBackendDown:

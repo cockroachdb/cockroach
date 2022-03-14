@@ -80,6 +80,10 @@ const (
 	// codeIdleDisconnect indicates that the connection was disconnected for
 	// being idle for longer than the specified timeout.
 	codeIdleDisconnect
+
+	// codeUnavailable indicates that the backend SQL server exists but is not
+	// accepting connections. For example, a tenant cluster that has maxPods set to 0.
+	codeUnavailable
 )
 
 // codeError is combines an error with one of the above codes to ease

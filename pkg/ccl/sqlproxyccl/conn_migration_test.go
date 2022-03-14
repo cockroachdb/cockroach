@@ -110,7 +110,7 @@ func TestTransferConnection(t *testing.T) {
 		ctx, cancel := newTransferContext(context.Background())
 		cancel()
 
-		conn, err := transferConnection(ctx, nil, nil, nil)
+		conn, err := transferConnection(ctx, nil, nil, nil, nil)
 		require.EqualError(t, err, context.Canceled.Error())
 		require.Nil(t, conn)
 		require.True(t, ctx.isRecoverable())
@@ -130,6 +130,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
@@ -157,6 +158,7 @@ func TestTransferConnection(t *testing.T) {
 				serverConn *interceptor.FrontendConn,
 				clientConn io.Writer,
 				transferKey string,
+				_ *metrics,
 			) (string, string, string, error) {
 				require.Equal(t, ctx, tCtx)
 				require.NotNil(t, serverConn)
@@ -168,6 +170,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
@@ -195,6 +198,7 @@ func TestTransferConnection(t *testing.T) {
 				serverConn *interceptor.FrontendConn,
 				clientConn io.Writer,
 				transferKey string,
+				_ *metrics,
 			) (string, string, string, error) {
 				require.Equal(t, ctx, tCtx)
 				require.NotNil(t, serverConn)
@@ -206,6 +210,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
@@ -233,6 +238,7 @@ func TestTransferConnection(t *testing.T) {
 				serverConn *interceptor.FrontendConn,
 				clientConn io.Writer,
 				transferKey string,
+				_ *metrics,
 			) (string, string, string, error) {
 				require.Equal(t, ctx, tCtx)
 				require.NotNil(t, serverConn)
@@ -256,6 +262,7 @@ func TestTransferConnection(t *testing.T) {
 		conn, err := transferConnection(
 			ctx,
 			&connector{},
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
 		)
@@ -282,6 +289,7 @@ func TestTransferConnection(t *testing.T) {
 				serverConn *interceptor.FrontendConn,
 				clientConn io.Writer,
 				transferKey string,
+				_ *metrics,
 			) (string, string, string, error) {
 				require.Equal(t, ctx, tCtx)
 				require.NotNil(t, serverConn)
@@ -321,6 +329,7 @@ func TestTransferConnection(t *testing.T) {
 		conn, err := transferConnection(
 			ctx,
 			&connector{},
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
 		)
@@ -351,6 +360,7 @@ func TestTransferConnection(t *testing.T) {
 				serverConn *interceptor.FrontendConn,
 				clientConn io.Writer,
 				transferKey string,
+				_ *metrics,
 			) (string, string, string, error) {
 				require.Equal(t, ctx, tCtx)
 				require.NotNil(t, serverConn)
@@ -390,6 +400,7 @@ func TestTransferConnection(t *testing.T) {
 		conn, err := transferConnection(
 			ctx,
 			&connector{},
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
 		)
@@ -476,7 +487,7 @@ func TestWaitForShowTransferState(t *testing.T) {
 		tCtx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		transferErr, state, token, err := waitForShowTransferState(tCtx, nil, nil, "")
+		transferErr, state, token, err := waitForShowTransferState(tCtx, nil, nil, "", nil)
 		require.True(t, errors.Is(err, context.Canceled))
 		require.Equal(t, "", transferErr)
 		require.Equal(t, "", state)
@@ -753,6 +764,7 @@ func TestWaitForShowTransferState(t *testing.T) {
 				interceptor.NewFrontendConn(serverProxy),
 				clientProxy,
 				"foo-transfer-key",
+				nil,
 			)
 			if tc.err == "" {
 				require.NoError(t, err)
@@ -1069,7 +1081,7 @@ func TestExpectDataRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	falseValidateFn := func(m *pgproto3.DataRow) bool { return false }
+	falseValidateFn := func(m *pgproto3.DataRow, s int) bool { return false }
 
 	t.Run("context_cancelled", func(t *testing.T) {
 		tCtx, cancel := context.WithCancel(ctx)
@@ -1085,7 +1097,7 @@ func TestExpectDataRow(t *testing.T) {
 		w.Close()
 
 		err := expectDataRow(ctx, interceptor.NewFrontendConn(r), falseValidateFn)
-		require.Regexp(t, "reading message", err)
+		require.Regexp(t, "peeking message", err)
 	})
 
 	t.Run("type_mismatch", func(t *testing.T) {
@@ -1119,15 +1131,18 @@ func TestExpectDataRow(t *testing.T) {
 		defer r.Close()
 		defer w.Close()
 
+		msg := &pgproto3.DataRow{Values: [][]byte{[]byte("foo")}}
 		go func() {
-			writeServerMsg(w, &pgproto3.DataRow{Values: [][]byte{[]byte("foo")}})
+			writeServerMsg(w, msg)
 		}()
 
 		err := expectDataRow(
 			ctx,
 			interceptor.NewFrontendConn(r),
-			func(m *pgproto3.DataRow) bool {
-				return len(m.Values) == 1 && string(m.Values[0]) == "foo"
+			func(m *pgproto3.DataRow, size int) bool {
+				return len(m.Values) == 1 &&
+					string(m.Values[0]) == "foo" &&
+					len(msg.Encode(nil)) == size
 			},
 		)
 		require.Nil(t, err)
