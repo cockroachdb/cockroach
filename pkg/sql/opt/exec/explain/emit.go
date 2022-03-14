@@ -926,7 +926,7 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 	}
 
-	sp := &scanParams.IndexConstraint.Spans
+	sp := scanParams.IndexConstraint.Spans
 	// Show up to 4 logical spans.
 	if maxSpans := 4; sp.Count() > maxSpans {
 		trunc := &constraint.Spans{}

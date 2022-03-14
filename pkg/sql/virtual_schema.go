@@ -649,7 +649,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		// Fall back to a full scan of the table, using the remaining filters
 		// that weren't able to be used as constraints.
 		newConstraint := *idxConstraint
-		newConstraint.Spans = constraint.Spans{}
+		newConstraint.Spans = &constraint.Spans{}
 		nSpans := idxConstraint.Spans.Count() - currentSpan
 		newConstraint.Spans.Alloc(nSpans)
 		for ; currentSpan < idxConstraint.Spans.Count(); currentSpan++ {

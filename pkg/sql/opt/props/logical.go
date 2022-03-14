@@ -13,6 +13,7 @@ package props
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // AvailableRuleProps is a bit set that indicates when lazily-populated Rule
@@ -338,6 +339,51 @@ type Scalar struct {
 		// been set.
 		HasHoistableSubquery bool
 	}
+}
+
+// Equals returns true if the shared properties in s are identical to those in
+// "other". The Rule.WithUses map is not compared, as it is lazily populated.
+func (s *Shared) Equals(other *Shared) bool {
+	if other == nil {
+		return false
+	}
+	if s.Populated != other.Populated ||
+		s.HasSubquery != other.HasSubquery ||
+		s.HasCorrelatedSubquery != other.HasCorrelatedSubquery ||
+		s.VolatilitySet != other.VolatilitySet ||
+		s.CanMutate != other.CanMutate ||
+		s.HasPlaceholder != other.HasPlaceholder ||
+		!s.OuterCols.Equals(other.OuterCols) {
+		return false
+	}
+	return true
+}
+
+// Equals returns true if the scalar properties in s are identical to those in
+// "other", including Shared properties.
+func (s *Scalar) Equals(other *Scalar, evalCtx *tree.EvalContext) bool {
+	if other == nil {
+		return false
+	}
+	if !s.Shared.Equals(&other.Shared) {
+		return false
+	}
+	if !s.Constraints.Equals(other.Constraints, evalCtx) {
+		return false
+	}
+	if !s.FuncDeps.Equals(&other.FuncDeps) {
+		return false
+	}
+	if s.TightConstraints != other.TightConstraints {
+		return false
+	}
+	if s.Rule.HasHoistableSubquery != other.Rule.HasHoistableSubquery {
+		return false
+	}
+	if s.Rule.Available != other.Rule.Available {
+		return false
+	}
+	return true
 }
 
 // IsAvailable returns true if the specified rule property has been populated

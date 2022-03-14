@@ -39,14 +39,14 @@ func ParseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
 
 // parseSpans parses a list of spans with integer values like:
 //   "[/1 - /2] [/5 - /6]".
-func parseSpans(evalCtx *tree.EvalContext, str string) Spans {
+func parseSpans(evalCtx *tree.EvalContext, str string) *Spans {
 	if str == "" || str == "contradiction" {
-		return Spans{}
+		return &Spans{}
 	}
 	if str == "unconstrained" {
 		s := Spans{}
 		s.InitSingleSpan(&UnconstrainedSpan)
-		return s
+		return &s
 	}
 	s := strings.Split(str, " ")
 	// Each span has three pieces.
@@ -58,7 +58,7 @@ func parseSpans(evalCtx *tree.EvalContext, str string) Spans {
 		sp := ParseSpan(evalCtx, strings.Join(s[i*3:i*3+3], " "))
 		result.Append(&sp)
 	}
-	return result
+	return &result
 }
 
 // ParseSpan parses a span in the format of Span.String, e.g: [/1 - /2].
