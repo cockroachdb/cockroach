@@ -390,7 +390,7 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 	start := startKey.Value(prefixLength - 1)
 	end := endKey.Value(prefixLength - 1)
 
-	if keyCtx.Columns.Get(prefixLength - 1).Descending() {
+	if keyCtx.Columns.Count() >= prefixLength && keyCtx.Columns.Get(prefixLength-1).Descending() {
 		// Normalize delta according to the key ordering.
 		start, end = end, start
 	}

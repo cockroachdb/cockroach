@@ -143,6 +143,17 @@ func (c *Columns) RemapColumns(from, to opt.TableID) Columns {
 	return newColumns
 }
 
+// RemapColumnsWithColMap remaps ordering columns in c according to a colMap.
+func (c *Columns) RemapColumnsWithColMap(colMap opt.ColMap) Columns {
+	var newColumns Columns
+	newColumns.firstCol = c.firstCol.RemapColumnWithColMap(colMap)
+	newColumns.otherCols = make([]opt.OrderingColumn, len(c.otherCols))
+	for i := range c.otherCols {
+		newColumns.otherCols[i] = c.otherCols[i].RemapColumnWithColMap(colMap)
+	}
+	return newColumns
+}
+
 // ColSet returns the columns as a ColSet.
 func (c *Columns) ColSet() opt.ColSet {
 	var r opt.ColSet

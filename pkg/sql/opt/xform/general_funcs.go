@@ -598,7 +598,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	// Map from cons Columns to new columns.
 	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
 		Columns: cons.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
-		Spans:   noLimitSpans,
+		Spans:   &noLimitSpans,
 	})
 	newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 	if !filters.IsTrue() {
@@ -672,6 +672,7 @@ func (c *CustomFuncs) wrapScanInLimitedSelect(
 		scan,
 		c.RemapScanColsInFilter(filters, originalScanPrivate, newScanPrivate),
 	)
+
 	if limit != 0 {
 		limitedSelect = c.e.f.ConstructLimit(
 			limitedSelect,
@@ -766,7 +767,7 @@ func (c *CustomFuncs) makeNewScanPrivate(
 	newSpans.InitSingleSpan(span)
 	newConstraint := &constraint.Constraint{
 		Columns: columns.RemapColumns(sp.Table, newScanPrivate.Table),
-		Spans:   newSpans,
+		Spans:   &newSpans,
 	}
 	newScanPrivate.SetConstraint(c.e.evalCtx, newConstraint)
 
