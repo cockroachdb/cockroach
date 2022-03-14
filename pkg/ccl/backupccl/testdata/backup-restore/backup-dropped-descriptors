@@ -1,4 +1,4 @@
-# backup-dropped-desctiprors tests backup and restore interaction with database, schema
+# backup-dropped-descriptors tests backup and restore interaction with database, schema
 # and type descriptors in the DROP state.
 subtest dropped-database-descriptors
 

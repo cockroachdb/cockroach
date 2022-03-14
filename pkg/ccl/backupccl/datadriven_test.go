@@ -96,18 +96,23 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 	d.noticeBuffer = nil
 }
 
-func (d *datadrivenTestState) addServer(
-	t *testing.T,
-	name, iodir, tempCleanupFrequency string,
-	ioConf base.ExternalIODirConfig,
-	localities string,
-) error {
+type serverCfg struct {
+	name                 string
+	iodir                string
+	tempCleanupFrequency string
+	nodes                int
+	splits               int
+	ioConf               base.ExternalIODirConfig
+	localities           string
+}
+
+func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
 	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODirConfig = ioConf
-	if tempCleanupFrequency != "" {
-		duration, err := time.ParseDuration(tempCleanupFrequency)
+	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
+	if cfg.tempCleanupFrequency != "" {
+		duration, err := time.ParseDuration(cfg.tempCleanupFrequency)
 		if err != nil {
 			return errors.New("unable to parse tempCleanupFrequency during server creation")
 		}
@@ -119,8 +124,8 @@ func (d *datadrivenTestState) addServer(
 
 	clusterSize := singleNode
 
-	if localities != "" {
-		cfgs := strings.Split(localities, ",")
+	if cfg.localities != "" {
+		cfgs := strings.Split(cfg.localities, ",")
 		clusterSize = len(cfgs)
 		serverArgsPerNode := make(map[int]base.TestServerArgs)
 		for i, cfg := range cfgs {
@@ -130,13 +135,15 @@ func (d *datadrivenTestState) addServer(
 		}
 		params.ServerArgsPerNode = serverArgsPerNode
 	}
-	if iodir == "" {
-		tc, _, iodir, cleanup = backupRestoreTestSetupWithParams(t, clusterSize, 0, InitManualReplication, params)
+	if cfg.iodir == "" {
+		tc, _, cfg.iodir, cleanup = backupRestoreTestSetupWithParams(t, clusterSize, cfg.splits,
+			InitManualReplication, params)
 	} else {
-		tc, _, cleanup = backupRestoreTestSetupEmptyWithParams(t, clusterSize, iodir, InitManualReplication, params)
+		tc, _, cleanup = backupRestoreTestSetupEmptyWithParams(t, clusterSize, cfg.iodir,
+			InitManualReplication, params)
 	}
-	d.servers[name] = tc.Server(0)
-	d.dataDirs[name] = iodir
+	d.servers[cfg.name] = tc.Server(0)
+	d.dataDirs[cfg.name] = cfg.iodir
 	d.cleanupFns = append(d.cleanupFns, cleanup)
 
 	return nil
@@ -181,19 +188,41 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 // commands. The test files are in testdata/backup-restore. The following
 // syntax is provided:
 //
-// - "new-server name=<name> [share-io-dir=<name>]"
-//   Create a new server with the input name. It takes in an optional
-//   share-io-dir argument to share an IO directory with an existing server.
-//   This is useful when restoring from a backup taken in another server.
+// - "new-server name=<name> [args]"
+//   Create a new server with the input name.
 //
-// - "exec-sql server=<name>"
+//   Supported arguments:
+//
+//   - share-io-dir: can be specified to share an IO directory with an existing
+//   server. This is useful when restoring from a backup taken in another
+//   server.
+//
+//   - allow-implicit-access: can be specified to set
+//   `EnableNonAdminImplicitAndArbitraryOutbound` to true
+//
+//   - disable-http: disables use of external HTTP endpoints.
+//
+//   - temp-cleanup-freq: specifies the frequency with which the temporaru table
+//   cleanup reconciliation job runs
+//
+//   - localities: specifies the localities that will be used when starting up
+//   the test cluster. The cluster will have len(localities) nodes, with each
+//   node assigned a locality config corresponding to the locality. Please
+//   update the `localityCfgs` map when adding new localities.
+//
+//   - nodes: specifies the number of nodes in the test cluster.
+//
+// - "exec-sql server=<name> [args]"
 //   Executes the input SQL query on the target server. By default, server is
 //   the last created server.
 //
-//   Supported options:
-//   - expect-pausepoint
-//     Expects the executed job to return a pause point error that will be
-//     printed to output.
+//   Supported arguments:
+//
+//   - expect-pausepoint: expects the executed job to return a pause point error
+//   that will be printed to output.
+//
+//   - expect-error-ignore: expects the query to return an error, but we will
+//   ignore it.
 //
 // - "query-sql server=<name>"
 //   Executes the input SQL query and print the results.
@@ -231,6 +260,7 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "new-server":
 				var name, shareDirWith, iodir, tempCleanupFrequency, localities string
+				var nodes, splits int
 				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
@@ -251,8 +281,23 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("localities") {
 					d.ScanArgs(t, "localities", &localities)
 				}
+				if d.HasArg("nodes") {
+					d.ScanArgs(t, "nodes", &nodes)
+				}
+				if d.HasArg("splits") {
+					d.ScanArgs(t, "splits", &splits)
+				}
 				lastCreatedServer = name
-				err := ds.addServer(t, name, iodir, tempCleanupFrequency, io, localities)
+				cfg := serverCfg{
+					name:                 name,
+					iodir:                iodir,
+					tempCleanupFrequency: tempCleanupFrequency,
+					nodes:                nodes,
+					splits:               splits,
+					ioConf:               io,
+					localities:           localities,
+				}
+				err := ds.addServer(t, cfg)
 				if err != nil {
 					return err.Error()
 				}
@@ -282,6 +327,13 @@ func TestDataDriven(t *testing.T) {
 						t.Fatalf("expected pause point error but got %s", errMsg)
 					}
 					ret = append(ret, "")
+					return strings.Join(ret, "\n")
+				}
+
+				// Check if we are expecting an error, and want to ignore outputting it.
+				if d.HasArg("expect-error-ignore") {
+					require.NotNilf(t, err, "expected error")
+					ret = append(ret, "ignoring expected error")
 					return strings.Join(ret, "\n")
 				}
 
