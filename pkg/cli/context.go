@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"io"
 	"os"
 	"strconv"
@@ -200,6 +201,12 @@ type cliContext struct {
 
 	// For `cockroach version --build-tag`.
 	showVersionUsingOnlyBuildTag bool
+
+	// This is set when the command being run is debug zip.
+	debugZip bool
+
+	// This is set while executing a command against a tenant.
+	tenantID roachpb.TenantID
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.

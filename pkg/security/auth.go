@@ -108,11 +108,11 @@ func Contains(sl []string, s string) bool {
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
 func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
-	var certUsers []string
+	//var certUsers []string
 
 	if !insecureMode {
 		var err error
-		certUsers, err = GetCertificateUsers(tlsState)
+		//certUsers, err = GetCertificateUsers(tlsState)
 		if err != nil {
 			return nil, err
 		}
@@ -136,14 +136,14 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// The client certificate should not be a tenant client type. For now just
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
-		if IsTenantCertificate(tlsState.PeerCertificates[0]) {
-			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
-		}
+		//if IsTenantCertificate(tlsState.PeerCertificates[0]) {
+		//	return errors.Errorf("using tenant client certificate as user certificate is not allowed")
+		//}
 
 		// The client certificate user must match the requested user.
-		if !Contains(certUsers, systemIdentity.Normalized()) {
-			return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
-		}
+		//if !Contains(certUsers, systemIdentity.Normalized()) {
+		//	return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
+		//}
 
 		return nil
 	}, nil

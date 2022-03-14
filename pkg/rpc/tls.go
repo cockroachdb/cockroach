@@ -59,7 +59,10 @@ type SecurityContext struct {
 	security.TLSSettings
 	config *base.Config
 	tenID  roachpb.TenantID
-	lazy   struct {
+	// This is set to true to indicate the SecurityContext
+	// is being initialized for a debug zip
+	debugZip bool
+	lazy     struct {
 		// The certificate manager. Must be accessed through GetCertificateManager.
 		certificateManager lazyCertificateManager
 		// httpClient uses the client TLS config. It is initialized lazily.
@@ -81,6 +84,22 @@ func MakeSecurityContext(
 		TLSSettings:  tlsSettings,
 		config:       cfg,
 		tenID:        tenID,
+	}
+}
+
+// MakeSecurityContextForDebugZip makes a SecurityContext.
+func MakeSecurityContextForDebugZip(
+	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
+) SecurityContext {
+	if tenID.ToUint64() == 0 {
+		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
+	}
+	return SecurityContext{
+		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
+		TLSSettings:  tlsSettings,
+		config:       cfg,
+		tenID:        tenID,
+		debugZip:     true,
 	}
 }
 

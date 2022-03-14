@@ -102,6 +102,21 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 			}
 		}
 
+		// If the command is debug zip, attempt to use the tenant
+		// certificate in place of the root user's certificate.
+		// This is a stop-gap solution until we have a secure
+		// way to provide client certs for multitenant setup.
+		if missing && ctx.debugZip {
+			missing = false
+			certPath = ctx.TenantCertPath(ctx.tenID.String())
+			keyPath = ctx.TenantKeyPath(ctx.tenID.String())
+			_, err1 = loader.Stat(certPath)
+			_, err2 = loader.Stat(keyPath)
+			if err1 != nil || err2 != nil {
+				missing = true
+			}
+		}
+
 		// If we found some certs, add them to the URL authentication
 		// method.
 		if !missing {

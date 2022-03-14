@@ -360,7 +360,12 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 		userName = security.RootUserName()
 	}
 
-	sCtx := rpc.MakeSecurityContext(cliCtx.Config, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	var sCtx rpc.SecurityContext
+	if cliCtx.debugZip {
+		sCtx = rpc.MakeSecurityContextForDebugZip(cliCtx.Config, security.CommandTLSSettings{}, cliCtx.tenantID)
+	} else {
+		sCtx = rpc.MakeSecurityContext(cliCtx.Config, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	}
 	if err := sCtx.LoadSecurityOptions(purl, userName); err != nil {
 		return nil, err
 	}

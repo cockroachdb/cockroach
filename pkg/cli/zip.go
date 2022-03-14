@@ -166,6 +166,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	zr := zipCtx.newZipReporter("cluster")
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
+	serverCfg.TenantID = roachpb.MakeTenantID(123)
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return s.fail(err)
@@ -199,6 +200,8 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	// We're going to use the SQL code, but in non-interactive mode.
 	// Override whatever terminal-driven defaults there may be out there.
 	cliCtx.IsInteractive = false
+	cliCtx.debugZip = true
+	cliCtx.tenantID = serverCfg.TenantID
 	sqlExecCtx.TerminalOutput = false
 	sqlExecCtx.ShowTimes = false
 	// Use a streaming format to avoid accumulating all rows in RAM.

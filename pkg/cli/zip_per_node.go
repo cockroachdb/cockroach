@@ -13,6 +13,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"net"
 	"net/url"
 	"os"
 	"sort"
@@ -577,11 +579,26 @@ func (zc *debugZipContext) collectPerNodeData(
 	return nil
 }
 
-func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
+func guessNodeURL1(workingURL string, hostport string) clisqlclient.Conn {
 	u, err := url.Parse(workingURL)
 	if err != nil {
 		u = &url.URL{Host: "invalid"}
 	}
 	u.Host = hostport
 	return sqlConnCtx.MakeSQLConn(os.Stdout, stderr, u.String())
+}
+
+func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
+	cliCtx.clientConnHost, cliCtx.clientConnPort, _ = net.SplitHostPort(hostport)
+
+	// We're going to use the SQL code, but in non-interactive mode.
+	// Override whatever terminal-driven defaults there may be out there.
+	cliCtx.IsInteractive = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
+	// Use a streaming format to avoid accumulating all rows in RAM.
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+
+	sqlConn, _ := makeSQLClient("cockroach zip", useSystemDb)
+	return sqlConn
 }
