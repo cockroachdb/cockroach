@@ -132,7 +132,7 @@ func (s *sqlSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	defer alloc.Release(ctx)
-	defer s.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	topic := s.targetNames[topicDescr.GetID()]
 	if _, ok := s.topics[topic]; !ok {

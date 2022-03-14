@@ -112,12 +112,19 @@ exec-sql tenant=10
 CREATE DATABASE db;
 CREATE TABLE db.t1();
 CREATE TABLE db.t2();
+CREATE SCHEMA db.sc;
+CREATE TYPE typ AS ENUM();
+CREATE VIEW v AS SELECT 1;
+CREATE SEQUENCE db.seq;
+CREATE MATERIALIZED VIEW mv AS SELECT 1;
 ----
 
 mutations tenant=10
 ----
 upsert /Tenant/10/Table/10{6-7}            range default
 upsert /Tenant/10/Table/10{7-8}            range default
+upsert /Tenant/10/Table/11{2-3}            range default
+upsert /Tenant/10/Table/11{3-4}            range default
 
 state offset=81
 ----
@@ -125,4 +132,6 @@ state offset=81
 /Tenant/10/Table/4{6-7}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   range default
 /Tenant/10/Table/10{7-8}                   range default
+/Tenant/10/Table/11{2-3}                   range default
+/Tenant/10/Table/11{3-4}                   range default
 /Tenant/11{-"\x00"}                        database system (tenant)

@@ -238,7 +238,13 @@ func (s *SQLTranslator) generateSpanConfigurations(
 		)
 	}
 
-	return s.generateSpanConfigurationsForTable(ctx, txn, desc, ptsStateReader)
+	table, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return nil, errors.AssertionFailedf(
+			"can only generate span configurations for tables, but got %s", desc.DescriptorType(),
+		)
+	}
+	return s.generateSpanConfigurationsForTable(ctx, txn, table, ptsStateReader)
 }
 
 // generateSpanConfigurationsForNamedZone expects an ID corresponding to a named
@@ -312,21 +318,23 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	ctx context.Context,
 	txn *kv.Txn,
-	desc catalog.Descriptor,
+	table catalog.TableDescriptor,
 	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
 ) ([]spanconfig.Record, error) {
-	if desc.DescriptorType() != catalog.Table {
-		return nil, errors.AssertionFailedf(
-			"expected table descriptor, but got descriptor of type %s", desc.DescriptorType(),
-		)
+	// We don't want to create a record (and in-turn a split point) for a table
+	// descriptor that doesn't correspond to a physical table, as no data is
+	// stored in KV for such a table descriptor.
+	if !table.IsPhysicalTable() {
+		return nil, nil
 	}
-	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.codec, desc.GetID())
+
+	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.codec, table.GetID())
 	if err != nil {
 		return nil, err
 	}
 
-	isSystemDesc := catalog.IsSystemDescriptor(desc)
-	tableStartKey := s.codec.TablePrefix(uint32(desc.GetID()))
+	isSystemDesc := catalog.IsSystemDescriptor(table)
+	tableStartKey := s.codec.TablePrefix(uint32(table.GetID()))
 	tableEndKey := tableStartKey.PrefixEnd()
 	tableSpanConfig := zone.AsSpanConfig()
 	if isSystemDesc {
@@ -341,15 +349,15 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	// Set the ProtectionPolicies on the table's SpanConfig to include protected
 	// timestamps that apply to the table, and its parent database.
 	tableSpanConfig.GCPolicy.ProtectionPolicies = append(
-		ptsStateReader.GetProtectionPoliciesForSchemaObject(desc.GetID()),
-		ptsStateReader.GetProtectionPoliciesForSchemaObject(desc.GetParentID())...)
+		ptsStateReader.GetProtectionPoliciesForSchemaObject(table.GetID()),
+		ptsStateReader.GetProtectionPoliciesForSchemaObject(table.GetParentID())...)
 
 	// Set whether the table's row data has been marked to be excluded from
 	// backups.
-	tableSpanConfig.ExcludeDataFromBackup = desc.(catalog.TableDescriptor).GetExcludeDataFromBackup()
+	tableSpanConfig.ExcludeDataFromBackup = table.GetExcludeDataFromBackup()
 
 	records := make([]spanconfig.Record, 0)
-	if desc.GetID() == keys.DescriptorTableID {
+	if table.GetID() == keys.DescriptorTableID {
 		// We have some special handling for `system.descriptor` on account of
 		// it being the first non-empty table in every tenant's keyspace.
 		if !s.codec.ForSystemTenant() {
@@ -426,8 +434,8 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		// variable, would be buggy -- the underlying buffer gets mutated by the
 		// append, throwing everything else off below.
 		span := roachpb.Span{
-			Key:    append(s.codec.TablePrefix(uint32(desc.GetID())), zone.SubzoneSpans[i].Key...),
-			EndKey: append(s.codec.TablePrefix(uint32(desc.GetID())), zone.SubzoneSpans[i].EndKey...),
+			Key:    append(s.codec.TablePrefix(uint32(table.GetID())), zone.SubzoneSpans[i].Key...),
+			EndKey: append(s.codec.TablePrefix(uint32(table.GetID())), zone.SubzoneSpans[i].EndKey...),
 		}
 
 		{

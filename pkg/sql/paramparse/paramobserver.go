@@ -355,6 +355,23 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_label_metrics`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			val, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.LabelMetrics = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL.LabelMetrics = false
+			return nil
+		},
+	},
 	`ttl_job_cron`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {

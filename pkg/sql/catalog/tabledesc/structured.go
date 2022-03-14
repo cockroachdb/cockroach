@@ -2558,6 +2558,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 		if p := ttl.RowStatsPollInterval; p != 0 {
 			appendStorageParam(`ttl_row_stats_poll_interval`, fmt.Sprintf(`'%s'`, p.String()))
 		}
+		if labelMetrics := ttl.LabelMetrics; labelMetrics {
+			appendStorageParam(`ttl_label_metrics`, fmt.Sprintf(`%t`, labelMetrics))
+		}
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		appendStorageParam(`exclude_data_from_backup`, `true`)

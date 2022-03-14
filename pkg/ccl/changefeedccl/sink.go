@@ -322,7 +322,7 @@ func (s *bufferSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-	defer s.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -417,7 +417,7 @@ func (n *nullSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-	defer n.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer n.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
 	if err := n.pace(ctx); err != nil {
 		return err
 	}

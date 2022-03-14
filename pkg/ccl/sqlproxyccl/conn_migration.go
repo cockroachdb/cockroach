@@ -79,11 +79,22 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 		return false, nil
 	}
 
-	if !isSafeTransferPoint(f.mu.request, f.mu.response) {
+	request, response := f.mu.request, f.mu.response
+	request.mu.Lock()
+	response.mu.Lock()
+	defer request.mu.Unlock()
+	defer response.mu.Unlock()
+
+	if !isSafeTransferPointLocked(request, response) {
 		return false, nil
 	}
 
+	// Once we mark the forwarder as transferring, attempt to suspend right
+	// away before unlocking, but without blocking. This ensures that no other
+	// messages are forwarded.
 	f.mu.isTransferring = true
+	request.mu.suspendReq = true
+	response.mu.suspendReq = true
 
 	return true, func() {
 		f.mu.Lock()
@@ -257,14 +268,9 @@ func transferConnection(
 	return newServerConn, nil
 }
 
-// isSafeTransferPoint returns true if we're at a point where we're safe to
-// transfer, and false otherwise.
-var isSafeTransferPoint = func(request *processor, response *processor) bool {
-	request.mu.Lock()
-	response.mu.Lock()
-	defer request.mu.Unlock()
-	defer response.mu.Unlock()
-
+// isSafeTransferPointLocked returns true if we're at a point where we're safe
+// to transfer, and false otherwise.
+var isSafeTransferPointLocked = func(request *processor, response *processor) bool {
 	// Three conditions when evaluating a safe transfer point:
 	//   1. The last message sent to the SQL pod was a Sync(S) or SimpleQuery(Q),
 	//      and a ReadyForQuery(Z) has been received after.
