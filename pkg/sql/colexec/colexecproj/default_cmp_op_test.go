@@ -110,8 +110,7 @@ func TestDefaultCmpProjOps(t *testing.T) {
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, colexectestutils.OrderedVerifier,
 				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return colexectestutils.CreateTestProjectingOperator(
-						ctx, flowCtx, input[0], c.inputTypes,
-						c.cmpExpr, false /* canFallbackToRowexec */, testMemAcc,
+						ctx, flowCtx, input[0], c.inputTypes, c.cmpExpr, testMemAcc,
 					)
 				})
 		})
@@ -137,7 +136,7 @@ func BenchmarkDefaultCmpProjOp(b *testing.B) {
 			benchmarkProjOp(b, name, func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, source, inputTypes,
-					"@1 IS DISTINCT FROM @2", false /* canFallbackToRowexec */, testMemAcc,
+					"@1 IS DISTINCT FROM @2", testMemAcc,
 				)
 			}, inputTypes, useSel, hasNulls)
 		}
