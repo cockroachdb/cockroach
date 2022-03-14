@@ -92,32 +92,32 @@ func (u updater) Set(ctx context.Context, key string, value EncodedValue) error 
 	case *StringSetting:
 		return setting.set(ctx, u.sv, value.Value)
 	case *BoolSetting:
-		b, err := strconv.ParseBool(value.Value)
+		b, err := setting.DecodeValue(value.Value)
 		if err != nil {
 			return err
 		}
 		setting.set(ctx, u.sv, b)
 		return nil
 	case numericSetting:
-		i, err := setting.decodeNum(value.Value)
+		i, err := setting.DecodeValue(value.Value)
 		if err != nil {
 			return err
 		}
 		return setting.set(ctx, u.sv, i)
 	case *FloatSetting:
-		f, err := strconv.ParseFloat(value.Value, 64)
+		f, err := setting.DecodeValue(value.Value)
 		if err != nil {
 			return err
 		}
 		return setting.set(ctx, u.sv, f)
 	case *DurationSetting:
-		d, err := time.ParseDuration(value.Value)
+		d, err := setting.DecodeValue(value.Value)
 		if err != nil {
 			return err
 		}
 		return setting.set(ctx, u.sv, d)
 	case *DurationSettingWithExplicitUnit:
-		d, err := time.ParseDuration(value.Value)
+		d, err := setting.DecodeValue(value.Value)
 		if err != nil {
 			return err
 		}
