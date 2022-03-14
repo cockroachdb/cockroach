@@ -1770,9 +1770,6 @@ func planSelectionOperators(
 	releasables *[]execinfra.Releasable,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	switch t := expr.(type) {
-	case *tree.IndexedVar:
-		op, err = colexecutils.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
-		return op, -1, columnTypes, err
 	case *tree.AndExpr:
 		// AND expressions are handled by an implicit AND'ing of selection
 		// vectors. First we select out the tuples that are true on the left
@@ -1789,35 +1786,6 @@ func planSelectionOperators(
 			ctx, evalCtx, t.TypedRight(), typs, leftOp, acc, factory, releasables,
 		)
 		return rightOp, resultIdx, typs, err
-	case *tree.OrExpr:
-		// OR expressions are handled by converting them to an equivalent CASE
-		// statement. Since CASE statements don't have a selection form, plan a
-		// projection and then convert the resulting boolean to a selection
-		// vector.
-		//
-		// Rewrite the OR expression as an equivalent CASE expression. "a OR b"
-		// becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END". This
-		// way we can take advantage of the short-circuiting logic built into
-		// the CASE operator. (b should not be evaluated if a is true.)
-		caseExpr, err := tree.NewTypedCaseExpr(
-			nil, /* expr */
-			[]*tree.When{
-				{Cond: t.Left, Val: tree.DBoolTrue},
-				{Cond: t.Right, Val: tree.DBoolTrue},
-			},
-			tree.DBoolFalse,
-			types.Bool)
-		if err != nil {
-			return nil, resultIdx, typs, err
-		}
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return nil, resultIdx, typs, err
-		}
-		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
-		return op, resultIdx, typs, err
 	case *tree.CaseExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
 			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
@@ -1826,37 +1794,6 @@ func planSelectionOperators(
 			return op, resultIdx, typs, err
 		}
 		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
-		return op, resultIdx, typs, err
-	case *tree.IsNullExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		op = colexec.NewIsNullSelOp(
-			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
-		)
-		return op, resultIdx, typs, err
-	case *tree.IsNotNullExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		op = colexec.NewIsNullSelOp(
-			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
-		)
-		return op, resultIdx, typs, err
-	case *tree.NotExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		op, err = colexec.NewNotExprSelOp(t.TypedInnerExpr().ResolvedType().Family(), op, resultIdx)
 		return op, resultIdx, typs, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
@@ -1920,6 +1857,69 @@ func planSelectionOperators(
 			*releasables = append(*releasables, r)
 		}
 		return op, resultIdx, ct, err
+	case *tree.IndexedVar:
+		op, err = colexecutils.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
+		return op, -1, columnTypes, err
+	case *tree.IsNotNullExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewIsNullSelOp(
+			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
+		)
+		return op, resultIdx, typs, err
+	case *tree.IsNullExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewIsNullSelOp(
+			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
+		)
+		return op, resultIdx, typs, err
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op, err = colexec.NewNotExprSelOp(t.TypedInnerExpr().ResolvedType().Family(), op, resultIdx)
+		return op, resultIdx, typs, err
+	case *tree.OrExpr:
+		// OR expressions are handled by converting them to an equivalent CASE
+		// statement. Since CASE statements don't have a selection form, plan a
+		// projection and then convert the resulting boolean to a selection
+		// vector.
+		//
+		// Rewrite the OR expression as an equivalent CASE expression. "a OR b"
+		// becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END". This
+		// way we can take advantage of the short-circuiting logic built into
+		// the CASE operator. (b should not be evaluated if a is true.)
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			[]*tree.When{
+				{Cond: t.Left, Val: tree.DBoolTrue},
+				{Cond: t.Right, Val: tree.DBoolTrue},
+			},
+			tree.DBoolFalse,
+			types.Bool)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
+		return op, resultIdx, typs, err
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
 	}
@@ -1975,13 +1975,8 @@ func planProjectionOperators(
 	}
 	resultIdx = -1
 	switch t := expr.(type) {
-	case *tree.IndexedVar:
-		return input, t.Idx, columnTypes, nil
-	case *tree.ComparisonExpr:
-		return planProjectionExpr(
-			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
-		)
+	case *tree.AndExpr:
+		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables)
 	case *tree.BinaryExpr:
 		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
 			return op, resultIdx, typs, err
@@ -1990,93 +1985,6 @@ func planProjectionOperators(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
 			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, releasables,
 		)
-	case *tree.IsNullExpr:
-		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
-	case *tree.IsNotNullExpr:
-		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
-	case *tree.NotExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		outputIdx, allocator := len(typs), colmem.NewAllocator(ctx, acc, factory)
-		op, err = colexec.NewNotExprProjOp(
-			t.TypedInnerExpr().ResolvedType().Family(), allocator, op, resultIdx, outputIdx,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		typs = appendOneType(typs, t.ResolvedType())
-		return op, outputIdx, typs, nil
-	case *tree.CastExpr:
-		expr := t.Expr.(tree.TypedExpr)
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
-		return op, resultIdx, typs, err
-	case *tree.FuncExpr:
-		var inputCols []int
-		typs = make([]*types.T, len(columnTypes))
-		copy(typs, columnTypes)
-		op = input
-		for _, e := range t.Exprs {
-			var err error
-			// TODO(rohany): This could be done better, especially in the case
-			// of constant arguments, because the vectorized engine right now
-			// creates a new column full of the constant value.
-			op, resultIdx, typs, err = planProjectionOperators(
-				ctx, evalCtx, e.(tree.TypedExpr), typs, op, acc, factory, releasables,
-			)
-			if err != nil {
-				return nil, resultIdx, nil, err
-			}
-			inputCols = append(inputCols, resultIdx)
-		}
-		resultIdx = len(typs)
-		op, err = colexec.NewBuiltinFunctionOperator(
-			colmem.NewAllocator(ctx, acc, factory), evalCtx, t, typs, inputCols, resultIdx, op,
-		)
-		if r, ok := op.(execinfra.Releasable); ok {
-			*releasables = append(*releasables, r)
-		}
-		typs = appendOneType(typs, t.ResolvedType())
-		return op, resultIdx, typs, err
-	case tree.Datum:
-		op, err = projectDatum(t)
-		return op, resultIdx, typs, err
-	case *tree.Tuple:
-		tuple, isConstTuple := evalTupleIfConst(evalCtx, t)
-		if isConstTuple {
-			// Tuple expression is a constant, so we can just project the
-			// resulting datum.
-			op, err = projectDatum(tuple)
-			return op, resultIdx, typs, err
-		}
-		outputType := t.ResolvedType()
-		typs = make([]*types.T, len(columnTypes))
-		copy(typs, columnTypes)
-		tupleContentsIdxs := make([]int, len(t.Exprs))
-		for i, expr := range t.Exprs {
-			input, tupleContentsIdxs[i], typs, err = planProjectionOperators(
-				ctx, evalCtx, expr.(tree.TypedExpr), typs, input, acc, factory, releasables,
-			)
-			if err != nil {
-				return nil, resultIdx, typs, err
-			}
-		}
-		resultIdx = len(typs)
-		op = colexec.NewTupleProjOp(
-			colmem.NewAllocator(ctx, acc, factory), typs, tupleContentsIdxs, outputType, input, resultIdx,
-		)
-		*releasables = append(*releasables, op.(execinfra.Releasable))
-		typs = appendOneType(typs, outputType)
-		return op, resultIdx, typs, err
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
 		caseOutputType := t.ResolvedType()
@@ -2183,10 +2091,104 @@ func planProjectionOperators(
 		}
 
 		schemaEnforcer.SetTypes(typs)
-		op := colexec.NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+		op = colexec.NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		return op, caseOutputIdx, typs, err
-	case *tree.AndExpr, *tree.OrExpr:
+	case *tree.CastExpr:
+		expr := t.Expr.(tree.TypedExpr)
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
+		return op, resultIdx, typs, err
+	case *tree.ComparisonExpr:
+		return planProjectionExpr(
+			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
+			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
+		)
+	case tree.Datum:
+		op, err = projectDatum(t)
+		return op, resultIdx, typs, err
+	case *tree.FuncExpr:
+		var inputCols []int
+		typs = make([]*types.T, len(columnTypes))
+		copy(typs, columnTypes)
+		op = input
+		for _, e := range t.Exprs {
+			var err error
+			// TODO(rohany): This could be done better, especially in the case
+			// of constant arguments, because the vectorized engine right now
+			// creates a new column full of the constant value.
+			op, resultIdx, typs, err = planProjectionOperators(
+				ctx, evalCtx, e.(tree.TypedExpr), typs, op, acc, factory, releasables,
+			)
+			if err != nil {
+				return nil, resultIdx, nil, err
+			}
+			inputCols = append(inputCols, resultIdx)
+		}
+		resultIdx = len(typs)
+		op, err = colexec.NewBuiltinFunctionOperator(
+			colmem.NewAllocator(ctx, acc, factory), evalCtx, t, typs, inputCols, resultIdx, op,
+		)
+		if r, ok := op.(execinfra.Releasable); ok {
+			*releasables = append(*releasables, r)
+		}
+		typs = appendOneType(typs, t.ResolvedType())
+		return op, resultIdx, typs, err
+	case *tree.IndexedVar:
+		return input, t.Idx, columnTypes, nil
+	case *tree.IsNotNullExpr:
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
+	case *tree.IsNullExpr:
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		outputIdx, allocator := len(typs), colmem.NewAllocator(ctx, acc, factory)
+		op, err = colexec.NewNotExprProjOp(
+			t.TypedInnerExpr().ResolvedType().Family(), allocator, op, resultIdx, outputIdx,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		typs = appendOneType(typs, t.ResolvedType())
+		return op, outputIdx, typs, nil
+	case *tree.OrExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables)
+	case *tree.Tuple:
+		tuple, isConstTuple := evalTupleIfConst(evalCtx, t)
+		if isConstTuple {
+			// Tuple expression is a constant, so we can just project the
+			// resulting datum.
+			op, err = projectDatum(tuple)
+			return op, resultIdx, typs, err
+		}
+		outputType := t.ResolvedType()
+		typs = make([]*types.T, len(columnTypes))
+		copy(typs, columnTypes)
+		tupleContentsIdxs := make([]int, len(t.Exprs))
+		for i, expr := range t.Exprs {
+			input, tupleContentsIdxs[i], typs, err = planProjectionOperators(
+				ctx, evalCtx, expr.(tree.TypedExpr), typs, input, acc, factory, releasables,
+			)
+			if err != nil {
+				return nil, resultIdx, typs, err
+			}
+		}
+		resultIdx = len(typs)
+		op = colexec.NewTupleProjOp(
+			colmem.NewAllocator(ctx, acc, factory), typs, tupleContentsIdxs, outputType, input, resultIdx,
+		)
+		*releasables = append(*releasables, op.(execinfra.Releasable))
+		typs = appendOneType(typs, outputType)
+		return op, resultIdx, typs, err
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
