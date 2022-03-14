@@ -325,6 +325,7 @@ func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
 }
 
+// SpanID is part of the RegistrySpan interface.
 func (s *crdbSpan) SpanID() tracingpb.SpanID {
 	return s.spanID
 }
@@ -861,6 +862,11 @@ func (s *crdbSpan) SetRecordingType(to RecordingType) {
 	for _, child := range s.mu.openChildren {
 		child.SetRecordingType(to)
 	}
+}
+
+// RecordingType is part of the RegistrySpan interface.
+func (s *crdbSpan) RecordingType() RecordingType {
+	return s.recordingType()
 }
 
 // withLock calls f while holding s' lock.

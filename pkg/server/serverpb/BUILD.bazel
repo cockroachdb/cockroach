@@ -34,6 +34,7 @@ proto_library(
         "//pkg/util/hlc:hlc_proto",
         "//pkg/util/log/logpb:logpb_proto",
         "//pkg/util/metric:metric_proto",
+        "//pkg/util/tracing/tracingpb:tracingpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
@@ -73,6 +74,7 @@ go_proto_library(
         "//pkg/util/hlc",
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
         # NB: The grpc-gateway compiler injects a dependency on the descriptor

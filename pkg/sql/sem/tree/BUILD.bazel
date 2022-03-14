@@ -190,6 +190,7 @@ go_test(
     name = "tree_test",
     size = "small",
     srcs = [
+        "as_of_test.go",
         "cast_map_test.go",
         "cast_test.go",
         "col_types_test.go",

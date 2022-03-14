@@ -170,7 +170,7 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"trace.span_registry.enabled",
-	"if set, ongoing traces can be seen at https://<ui>/debug/tracez",
+	"if set, ongoing traces can be seen at https://<ui>/#/debug/tracez",
 	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
 ).WithPublic()
 
@@ -1374,8 +1374,11 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 
 // RegistrySpan is the interface used by clients of the active span registry.
 type RegistrySpan interface {
-	// TraceID returns an identifier for the trace that this span is part of.
+	// TraceID returns the id of the trace that this span is part of.
 	TraceID() tracingpb.TraceID
+
+	// SpanID returns the span's ID.
+	SpanID() tracingpb.SpanID
 
 	// GetFullRecording returns the recording of the trace rooted at this span.
 	//
@@ -1389,6 +1392,9 @@ type RegistrySpan interface {
 	// recursively. Setting it to RecordingOff disables further recording.
 	// Everything recorded so far remains in memory.
 	SetRecordingType(to RecordingType)
+
+	// RecordingType returns the span's current recording type.
+	RecordingType() RecordingType
 }
 
 var _ RegistrySpan = &crdbSpan{}
