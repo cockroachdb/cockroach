@@ -38,7 +38,7 @@ import {
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
-import { SqlBox } from "src/sql";
+import { SqlBox, SqlBoxSize } from "src/sql";
 import { SortSetting } from "src/sortedtable";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { PlanDetails } from "./planDetails";
@@ -541,7 +541,7 @@ export class StatementDetails extends React.Component<
         <TabPane tab="Overview" key="overview">
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
-              <SqlBox value={formatted_query} />
+              <SqlBox value={formatted_query} size={SqlBoxSize.small} />
             </Col>
           </Row>
           <Row gutter={24}>
@@ -777,7 +777,7 @@ export class StatementDetails extends React.Component<
         <TabPane tab="Explain Plan" key="explain-plan">
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
-              <SqlBox value={formatted_query} />
+              <SqlBox value={formatted_query} size={SqlBoxSize.small} />
             </Col>
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />

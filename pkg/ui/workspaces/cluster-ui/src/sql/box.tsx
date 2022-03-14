@@ -15,10 +15,16 @@ import classNames from "classnames/bind";
 import styles from "./sqlhighlight.module.scss";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
+export enum SqlBoxSize {
+  small = "small",
+  large = "large",
+}
+
 export interface SqlBoxProps {
   value: string;
   zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
   className?: string;
+  size?: SqlBoxSize;
 }
 
 const cx = classNames.bind(styles);
@@ -26,8 +32,9 @@ const cx = classNames.bind(styles);
 export class SqlBox extends React.Component<SqlBoxProps> {
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
   render() {
+    const sizeClass = this.props.size ? this.props.size : "";
     return (
-      <div className={cx("box-highlight", this.props.className)}>
+      <div className={cx("box-highlight", this.props.className, sizeClass)}>
         <Highlight {...this.props} />
       </div>
     );

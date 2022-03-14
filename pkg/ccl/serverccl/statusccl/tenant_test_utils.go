@@ -163,10 +163,14 @@ func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
 	return c.tenant(idx).tenantDB
 }
 
-func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx) *httpClient {
-	client, err := c.tenant(idx).tenant.GetAdminAuthenticatedHTTPClient()
+func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx, isAdmin bool) *httpClient {
+	client, err := c.tenant(idx).tenant.GetAuthenticatedHTTPClient(isAdmin)
 	require.NoError(t, err)
 	return &httpClient{t: t, client: client, baseURL: c[idx].tenant.AdminURL()}
+}
+
+func (c tenantCluster) tenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {
+	return c.tenantHTTPClient(t, idx, true /* isAdmin */)
 }
 
 func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {
@@ -209,8 +213,14 @@ func (c *httpClient) GetJSON(path string, response protoutil.Message) {
 }
 
 func (c *httpClient) PostJSON(path string, request protoutil.Message, response protoutil.Message) {
-	err := httputil.PostJSON(c.client, c.baseURL+path, request, response)
+	err := c.PostJSONChecked(path, request, response)
 	require.NoError(c.t, err)
+}
+
+func (c *httpClient) PostJSONChecked(
+	path string, request protoutil.Message, response protoutil.Message,
+) error {
+	return httputil.PostJSON(c.client, c.baseURL+path, request, response)
 }
 
 func (c *httpClient) Close() {
