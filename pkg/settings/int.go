@@ -49,14 +49,15 @@ func (i *IntSetting) EncodedDefault() string {
 
 // DecodeToString decodes and renders an encoded value.
 func (i *IntSetting) DecodeToString(encoded string) (string, error) {
-	iv, err := i.decodeNum(encoded)
+	iv, err := i.DecodeValue(encoded)
 	if err != nil {
 		return "", err
 	}
 	return EncodeInt(iv), nil
 }
 
-func (i *IntSetting) decodeNum(value string) (int64, error) {
+// DecodeValue decodes the value into an integer.
+func (i *IntSetting) DecodeValue(value string) (int64, error) {
 	return strconv.ParseInt(value, 10, 64)
 }
 
