@@ -320,6 +320,14 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			"expected table descriptor, but got descriptor of type %s", desc.DescriptorType(),
 		)
 	}
+
+	// Views aren't physical tables and the range corresponding to their
+	// descriptor ID doesn't contain any data. As such, we don't create a span
+	// config record (and in-turn a split point) for them.
+	if desc.(catalog.TableDescriptor).IsView() {
+		return nil, nil
+	}
+
 	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.codec, desc.GetID())
 	if err != nil {
 		return nil, err

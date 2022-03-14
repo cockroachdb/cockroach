@@ -5,7 +5,9 @@ exec-sql
 CREATE DATABASE db;
 CREATE SCHEMA sc;
 CREATE TYPE typ AS ENUM();
+CREATE VIEW v AS SELECT 1;
 CREATE TABLE db.t();
+CREATE SEQUENCE db.seq;
 ----
 
 # We expect only the following spans:
@@ -48,7 +50,8 @@ full-translate
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
 /Tenant/10/Table/4{6-7}                    database system (tenant)
-/Tenant/10/Table/109{-/PrefixEnd}          range default
+/Tenant/10/Table/11{0-1}                   range default
+/Tenant/10/Table/11{1-2}                   range default
 
 # We should expect the same for RANGE DEFAULT.
 translate named-zone=default
@@ -87,4 +90,5 @@ translate named-zone=default
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
 /Tenant/10/Table/4{6-7}                    database system (tenant)
-/Tenant/10/Table/109{-/PrefixEnd}          range default
+/Tenant/10/Table/11{0-1}                   range default
+/Tenant/10/Table/11{1-2}                   range default
