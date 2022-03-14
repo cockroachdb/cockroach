@@ -35,7 +35,7 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 
 // DecodeToString decodes and renders an encoded value.
 func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
-	iv, err := b.decodeNum(encoded)
+	iv, err := b.DecodeValue(encoded)
 	if err != nil {
 		return "", err
 	}
