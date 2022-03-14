@@ -46,11 +46,16 @@ func (b *BoolSetting) EncodedDefault() string {
 
 // DecodeToString decodes and renders an encoded value.
 func (b *BoolSetting) DecodeToString(encoded string) (string, error) {
-	bv, err := strconv.ParseBool(encoded)
+	bv, err := b.DecodeValue(encoded)
 	if err != nil {
 		return "", err
 	}
 	return EncodeBool(bv), nil
+}
+
+// DecodeValue decodes the value into a float.
+func (b *BoolSetting) DecodeValue(encoded string) (bool, error) {
+	return strconv.ParseBool(encoded)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
