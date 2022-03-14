@@ -2103,6 +2103,35 @@ func planProjectionOperators(
 		}
 		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
 		return op, resultIdx, typs, err
+	case *tree.CoalesceExpr:
+		// We handle CoalesceExpr by planning the equivalent CASE expression,
+		// namely
+		//   CASE
+		//     WHEN CoalesceExpr.Exprs[0] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[0]
+		//     WHEN CoalesceExpr.Exprs[1] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[1]
+		//     ...
+		//   END
+		whens := make([]*tree.When, len(t.Exprs))
+		for i := range whens {
+			whens[i] = &tree.When{
+				Cond: tree.NewTypedComparisonExpr(
+					treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom),
+					t.Exprs[i].(tree.TypedExpr),
+					tree.DNull,
+				),
+				Val: t.Exprs[i],
+			}
+		}
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			whens,
+			nil, /* elseStmt */
+			t.ResolvedType(),
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
 	case *tree.ComparisonExpr:
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
@@ -2138,6 +2167,19 @@ func planProjectionOperators(
 		}
 		typs = appendOneType(typs, t.ResolvedType())
 		return op, resultIdx, typs, err
+	case *tree.IfExpr:
+		// We handle IfExpr by planning the equivalent CASE expression, namely
+		//   CASE WHEN IfExpr.Cond THEN IfExpr.True ELSE IfExpr.Else END.
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			[]*tree.When{{Cond: t.Cond, Val: t.True}},
+			t.TypedElseExpr(),
+			t.ResolvedType(),
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, nil
 	case *tree.IsNotNullExpr:
@@ -2160,6 +2202,27 @@ func planProjectionOperators(
 		}
 		typs = appendOneType(typs, t.ResolvedType())
 		return op, outputIdx, typs, nil
+	case *tree.NullIfExpr:
+		// We handle NullIfExpr by planning the equivalent CASE expression,
+		// namely
+		//   CASE WHEN Expr1 == Expr2 THEN NULL ELSE Expr1 END.
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			[]*tree.When{{
+				Cond: tree.NewTypedComparisonExpr(
+					treecmp.MakeComparisonOperator(treecmp.EQ),
+					t.Expr1.(tree.TypedExpr),
+					t.Expr2.(tree.TypedExpr),
+				),
+				Val: tree.DNull,
+			}},
+			t.Expr1.(tree.TypedExpr),
+			t.ResolvedType(),
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
 	case *tree.OrExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables)
 	case *tree.Tuple:
@@ -2197,7 +2260,10 @@ func planProjectionOperators(
 func checkSupportedProjectionExpr(left, right tree.TypedExpr) error {
 	leftTyp := left.ResolvedType()
 	rightTyp := right.ResolvedType()
-	if leftTyp.Equivalent(rightTyp) {
+	if leftTyp.Equivalent(rightTyp) || leftTyp.Family() == types.UnknownFamily || rightTyp.Family() == types.UnknownFamily {
+		// If either type is of an Unknown family, then the corresponding vector
+		// will only contain NULL values, so we won't run into the mixed-type
+		// issues.
 		return nil
 	}
 
