@@ -278,6 +278,19 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed",
+				Metrics: []string{
+					"distsender.rangefeed.total_ranges",
+					"distsender.rangefeed.catchup_ranges",
+				},
+			},
+			{
+				Title: "Rangefeed Errors",
+				Metrics: []string{
+					"distsender.rangefeed.error_catchup_ranges",
+				},
+			},
+			{
 				Title: "RPCs",
 				Metrics: []string{
 					"distsender.rpc.sent.local",

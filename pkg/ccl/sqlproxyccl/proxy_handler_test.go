@@ -1055,7 +1055,7 @@ func TestConnectionMigration(t *testing.T) {
 	//
 	// There's no easy way to simulate pipelined queries. pgtest (that allows
 	// us to send individual pgwire messages) does not support authentication,
-	// which is what the proxy needs, so we will stub isSafeTransferPoint
+	// which is what the proxy needs, so we will stub isSafeTransferPointLocked
 	// instead.
 	t.Run("transfer_timeout_in_response", func(t *testing.T) {
 		tCtx, cancel := context.WithCancel(ctx)
@@ -1093,7 +1093,7 @@ func TestConnectionMigration(t *testing.T) {
 			prevTenant1 = true
 			return tenant1.SQLAddr(), nil
 		}
-		defer testutils.TestingHook(&isSafeTransferPoint, func(req *processor, res *processor) bool {
+		defer testutils.TestingHook(&isSafeTransferPointLocked, func(req *processor, res *processor) bool {
 			return true
 		})()
 		// Transfer timeout is 3s, and we'll run pg_sleep for 10s.

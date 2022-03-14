@@ -43,6 +43,7 @@ const defaultSLIScope = "default"
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
 	EmittedMessages       *aggmetric.AggCounter
+	MessageSize           *aggmetric.AggHistogram
 	EmittedBytes          *aggmetric.AggCounter
 	FlushedBytes          *aggmetric.AggCounter
 	BatchHistNanos        *aggmetric.AggHistogram
@@ -68,6 +69,7 @@ func (a *AggMetrics) MetricStruct() {}
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
 	EmittedMessages       *aggmetric.Counter
+	MessageSize           *aggmetric.Histogram
 	EmittedBytes          *aggmetric.Counter
 	FlushedBytes          *aggmetric.Counter
 	BatchHistNanos        *aggmetric.Histogram
@@ -85,16 +87,23 @@ type sliMetrics struct {
 // does not compress the data it emits.
 const sinkDoesNotCompress = -1
 
-type recordEmittedMessagesCallback func(numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
+type recordOneMessageCallback func(mvcc hlc.Timestamp, bytes int, compressedBytes int)
 
-func (m *sliMetrics) recordEmittedMessages() recordEmittedMessagesCallback {
+func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 	if m == nil {
-		return func(numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int) {}
+		return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {}
 	}
 
 	start := timeutil.Now()
-	return func(numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int) {
-		m.recordEmittedBatch(start, numMessages, mvcc, bytes, compressedBytes)
+	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		m.MessageSize.RecordValue(int64(bytes))
+		m.recordEmittedBatch(start, 1, mvcc, bytes, compressedBytes)
+	}
+}
+
+func (m *sliMetrics) recordMessageSize(sz int64) {
+	if m != nil {
+		m.MessageSize.RecordValue(sz)
 	}
 }
 
@@ -309,16 +318,23 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_COUNT,
 	}
-
+	metaMessageSize := metric.Metadata{
+		Name:        "changefeed.message_size_hist",
+		Help:        "Message size histogram",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
 	a := &AggMetrics{
 		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages: b.Counter(metaChangefeedEmittedMessages),
-		EmittedBytes:    b.Counter(metaChangefeedEmittedBytes),
-		FlushedBytes:    b.Counter(metaChangefeedFlushedBytes),
-		Flushes:         b.Counter(metaChangefeedFlushes),
+		MessageSize: b.Histogram(metaMessageSize,
+			histogramWindow, 10<<20 /* 10MB max message size */, 1),
+		EmittedBytes: b.Counter(metaChangefeedEmittedBytes),
+		FlushedBytes: b.Counter(metaChangefeedFlushedBytes),
+		Flushes:      b.Counter(metaChangefeedFlushes),
 
 		BatchHistNanos: b.Histogram(metaChangefeedBatchHistNanos,
 			histogramWindow, changefeedBatchHistMaxLatency.Nanoseconds(), 1),
@@ -376,6 +392,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 	sm := &sliMetrics{
 		EmittedMessages:       a.EmittedMessages.AddChild(scope),
+		MessageSize:           a.MessageSize.AddChild(scope),
 		EmittedBytes:          a.EmittedBytes.AddChild(scope),
 		FlushedBytes:          a.FlushedBytes.AddChild(scope),
 		BatchHistNanos:        a.BatchHistNanos.AddChild(scope),

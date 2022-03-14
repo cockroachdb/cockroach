@@ -5,7 +5,10 @@ exec-sql
 CREATE DATABASE db;
 CREATE SCHEMA sc;
 CREATE TYPE typ AS ENUM();
+CREATE VIEW v AS SELECT 1;
 CREATE TABLE db.t();
+CREATE SEQUENCE db.seq;
+CREATE MATERIALIZED VIEW mv AS SELECT 1;
 ----
 
 # We expect only the following spans:
@@ -17,7 +20,7 @@ CREATE TABLE db.t();
 # - Timeseries range
 # - All system tables (there should be no entry for pseudo IDs or IDs for which
 #   no table exist)
-# - The user created table
+# - The user created table, sequence, and materialized view.
 full-translate
 ----
 /{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
@@ -68,4 +71,6 @@ full-translate
 /Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/5{0-1}                              database system (host)
-/Table/109{-/PrefixEnd}                    range default
+/Table/11{0-1}                             range default
+/Table/11{1-2}                             range default
+/Table/11{2-3}                             range default
