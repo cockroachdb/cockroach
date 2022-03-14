@@ -589,7 +589,7 @@ func (b *Builder) buildScan(
 		private.Flags.NoZigzagJoin = true
 	}
 
-	b.addCheckConstraintsForTable(tabMeta)
+	b.AddCheckConstraintsForTable(tabMeta)
 	b.addComputedColsForTable(tabMeta)
 
 	outScope.expr = b.factory.ConstructScan(&private)
@@ -631,14 +631,14 @@ func (b *Builder) buildScan(
 	return outScope
 }
 
-// addCheckConstraintsForTable extracts filters from the check constraints that
+// AddCheckConstraintsForTable extracts filters from the check constraints that
 // apply to the table and adds them to the table metadata (see
 // TableMeta.Constraints). To do this, the scalar expressions of the check
 // constraints are built here.
 //
 // These expressions are used as "known truths" about table data; as such they
 // can only contain immutable operators.
-func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
+func (b *Builder) AddCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// Columns of a user defined type have a constraint to ensure
 	// enum values for that column belong to the UDT. We do not want to
 	// track view deps here, or else a view depending on a table with a

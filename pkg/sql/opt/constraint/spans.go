@@ -110,6 +110,11 @@ func (s *Spans) makeImmutable() {
 	s.immutable = true
 }
 
+// Immutable indicates if the Spans are immutable or not.
+func (s *Spans) Immutable() bool {
+	return s.immutable
+}
+
 // sortedAndMerged returns true if the collection of spans is strictly
 // ordered and no spans overlap.
 func (s *Spans) sortedAndMerged(keyCtx *KeyContext) bool {
@@ -149,6 +154,32 @@ func (s *Spans) SortAndMerge(keyCtx *KeyContext) {
 	}
 	*s.Get(n) = currentSpan
 	s.Truncate(n + 1)
+}
+
+// Equals indicates if two Spans are equal, given keyCtx describing the full
+// set of key columns. The caller must check that the number of columns and
+// column types of the keys covering the 2 sets of Spans match.
+func (s *Spans) Equals(other *Spans, keyCtx *KeyContext) bool {
+	if other == nil {
+		return false
+	}
+	if s.Count() != other.Count() {
+		return false
+	}
+	for i := 0; i < s.Count(); i++ {
+		thisSpan := s.Get(i)
+		thatSpan := other.Get(i)
+		if thisSpan.startBoundary != thatSpan.startBoundary {
+			return false
+		}
+		if thisSpan.endBoundary != thatSpan.endBoundary {
+			return false
+		}
+		if thisSpan.Compare(keyCtx, thatSpan) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 type spanSorter struct {

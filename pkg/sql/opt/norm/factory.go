@@ -464,6 +464,31 @@ func (f *Factory) ConstructConstFilter(col opt.ColumnID, values tree.Datums) mem
 	))
 }
 
+// copyReplaceFiltersExpr is similar to replaceFiltersExpr, except it
+// copy constructs FiltersItems to save processing overhead.
+func (f *Factory) copyReplaceFiltersExpr(
+	filters *memo.FiltersExpr, replace ReplaceFunc,
+) (_ *memo.FiltersExpr) {
+	list := *filters
+	var newList memo.FiltersExpr
+	for i := range list {
+		newFiltersItem := f.CopyConstructFiltersItem(&list[i], replace)
+		if &list[i] != newFiltersItem {
+			if newList == nil {
+				newList = make([]memo.FiltersItem, len(list))
+				copy(newList, list[:i])
+			}
+			newList[i] = *newFiltersItem
+		} else if newList != nil {
+			newList[i] = list[i]
+		}
+	}
+	if newList == nil {
+		return filters
+	}
+	return &newList
+}
+
 // ----------------------------------------------------------------------
 //
 // Convenience functions.
@@ -475,10 +500,17 @@ func (f *Factory) ConstructConstFilter(col opt.ColumnID, values tree.Datums) mem
 // encountered in the input ScalarExpr that are not keys in colMap, they are not
 // remapped.
 func (f *Factory) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
-	// Recursively walk the scalar sub-tree looking for references to columns
-	// that need to be replaced and then replace them appropriately.
+	replace := f.ColumnRemapFunction(colMap)
+	return replace(scalar).(opt.ScalarExpr)
+}
+
+// ColumnRemapFunction is the ReplaceFunc definition to use for remapping
+// columns in VariableExprs and the scalar properties of filters.
+func (f *Factory) ColumnRemapFunction(colMap opt.ColMap) ReplaceFunc {
 	var replace ReplaceFunc
 	replace = func(e opt.Expr) opt.Expr {
+		// Recursively walk the scalar sub-tree looking for references to columns
+		// that need to be replaced and then replace them appropriately.
 		switch t := e.(type) {
 		case *memo.VariableExpr:
 			dstCol, ok := colMap.Get(int(t.Col))
@@ -487,9 +519,61 @@ func (f *Factory) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.Scalar
 				return e
 			}
 			return f.ConstructVariable(opt.ColumnID(dstCol))
+		case *memo.FiltersItem:
+			// We may only get here by functions that call RemapCols directly on a
+			// FiltersExpr or FiltersItem. In flows which replace an entire expression
+			// tree via a call to Factory.Replace, a FiltersExpr is replaced via a
+			// call to replaceFiltersExpr, which only calls RemapCols on FiltersItem.Condition,
+			// so we can only get here by explicit calls to the replace function
+			// directly on a FiltersExpr or FiltersItem.
+			//
+			//, the FiltersExpr is handled by a
+			// call to replaceFiltersExpr which only calls RemapCols on
+			// FiltersItem.Condition and not the entire FiltersItem.
+			return maybeCopyAndMapFiltersItem(t, colMap, replace)
+		case *memo.FiltersExpr:
+			return f.copyReplaceFiltersExpr(t, replace)
 		}
 		return f.Replace(e, replace)
 	}
+	return replace
+}
 
-	return replace(scalar).(opt.ScalarExpr)
+// maybeCopyAndMapFiltersItem copies all elements of filter into a new
+// FiltersItem, remapping ColumnIDs, if required. If no remapping takes place,
+// and the filter is immutable, then the original filter is returned as-is.
+func maybeCopyAndMapFiltersItem(
+	filter *memo.FiltersItem, colMap opt.ColMap, replace ReplaceFunc,
+) *memo.FiltersItem {
+	newCondition := replace(filter.Condition).(opt.ScalarExpr)
+	constraints := filter.ScalarProps().Constraints
+	// If the replace function returned the Condition unmodified and the
+	// constraints are immutable, return the filter as-is.
+	if newCondition == filter.Condition && constraints != nil && constraints.Immutable() {
+		return filter
+	}
+	newFilters := &memo.FiltersItem{Condition: newCondition}
+	newFilters.ScalarProps().CopyFrom(filter.ScalarProps(), colMap)
+	return newFilters
+}
+
+// CopyConstructFiltersItem copies the Condition and ScalarProps from fromFilter
+// into a new FiltersItem, with any ColumnIDs or ColSets remapped using the
+// "replace" function. Spans in the Constraints of fromFilter are shared and
+// reused in the new FiltersItem. If fromFilter's Spans are mutable, the normal
+// ConstructFiltersItem function is used to build and map the new FiltersItem.
+func (f *Factory) CopyConstructFiltersItem(
+	fromFilter *memo.FiltersItem, replace ReplaceFunc,
+) *memo.FiltersItem {
+	// Only copy and share constraint Spans if the fromFilter is guaranteed not
+	// to change, otherwise construct a new FiltersItem from scratch.
+	constraints := fromFilter.ScalarProps().Constraints
+	if constraints != nil && !constraints.Immutable() {
+		newCondition := replace(fromFilter.Condition).(opt.ScalarExpr)
+		newFiltersItem := f.ConstructFiltersItem(newCondition)
+		return &newFiltersItem
+	}
+	// Remap Column IDs in the Constraints and ScalarProps.
+	item := replace(fromFilter).(*memo.FiltersItem)
+	return item
 }

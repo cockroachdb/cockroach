@@ -55,6 +55,18 @@ func (c OrderingColumn) RemapColumn(from, to TableID) OrderingColumn {
 	return MakeOrderingColumn(newColID, c.Descending())
 }
 
+// CopyAndMaybeRemapColumn copies an OrderingColumn c and conditionally remaps
+// it according to a colMap if c is found in the colMap.
+func (c OrderingColumn) CopyAndMaybeRemapColumn(colMap ColMap) OrderingColumn {
+	var remappedCol ColumnID
+	if dstCol, ok := colMap.Get(int(c.ID())); ok {
+		remappedCol = ColumnID(dstCol)
+	} else {
+		remappedCol = c.ID()
+	}
+	return MakeOrderingColumn(remappedCol, c.Descending())
+}
+
 func (c OrderingColumn) String() string {
 	var buf bytes.Buffer
 	c.Format(&buf)

@@ -717,6 +717,7 @@ func (c *CustomFuncs) wrapScanInLimitedSelect(
 		scan,
 		c.RemapScanColsInFilter(filters, originalScanPrivate, newScanPrivate),
 	)
+
 	if limit != 0 {
 		limitedSelect = c.e.f.ConstructLimit(
 			limitedSelect,

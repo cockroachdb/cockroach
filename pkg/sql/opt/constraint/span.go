@@ -337,10 +337,12 @@ func (sp *Span) CutFront(numCols int) {
 // prefixes of the start and end keys. Returns zero and false if the operation
 // is not possible. Requirements:
 //   1. The given prefix length must be at least 1.
-//   2. The boundaries must be inclusive.
-//   3. The start and end keys must have at least prefixLength values.
-//   4. The start and end keys be equal up to index [prefixLength-2].
-//   5. The datums at index [prefixLength-1] must be of the same type and:
+//   2. The given prefix length must not be greater than the number of key
+//      columns in keyCtx.
+//   3. The boundaries must be inclusive.
+//   4. The start and end keys must have at least prefixLength values.
+//   5. The start and end keys be equal up to index [prefixLength-2].
+//   6. The datums at index [prefixLength-1] must be of the same type and:
 //      a. countable, or
 //      b. have the same value (in which case the distinct count is 1).
 //
@@ -358,6 +360,11 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 	if prefixLength < 1 {
 		// The length must be at least one because distinct count is undefined for
 		// empty keys.
+		return 0, false
+	}
+
+	if prefixLength > keyCtx.Columns.Count() {
+		// Unable to examine a column not defined by keyCtx.
 		return 0, false
 	}
 
