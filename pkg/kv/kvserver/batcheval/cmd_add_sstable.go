@@ -47,6 +47,8 @@ var AddSSTableRewriteConcurrency = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
+
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
 func EvalAddSSTable(
@@ -77,8 +79,7 @@ func EvalAddSSTable(
 	// request timestamp. This ensures the writes comply with the timestamp cache
 	// and closed timestamp, i.e. by not writing to timestamps that have already
 	// been observed or closed.
-	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS ||
-		util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)) {
+	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS || forceRewrite) {
 		st := cArgs.EvalCtx.ClusterSettings()
 		// TODO(dt): use a quotapool.
 		conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
