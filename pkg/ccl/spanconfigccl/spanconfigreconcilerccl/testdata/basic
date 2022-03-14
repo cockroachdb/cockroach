@@ -62,12 +62,17 @@ CREATE TABLE db.t1();
 CREATE TABLE db.t2();
 CREATE SCHEMA db.sc;
 CREATE TYPE typ AS ENUM();
+CREATE VIEW v AS SELECT 1;
+CREATE SEQUENCE db.seq;
+CREATE MATERIALIZED VIEW mv AS SELECT 1;
 ----
 
 mutations
 ----
 upsert /Table/10{6-7}                      range default
 upsert /Table/10{7-8}                      range default
+upsert /Table/11{2-3}                      range default
+upsert /Table/11{3-4}                      range default
 
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
@@ -80,6 +85,8 @@ delete /Table/10{6-7}
 upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
 delete /Table/10{7-8}
 upsert /Table/10{7-8}                      num_replicas=7
+delete /Table/11{2-3}
+upsert /Table/11{2-3}                      num_replicas=7
 
 state offset=47
 ----
@@ -87,6 +94,8 @@ state offset=47
 /Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 /Table/10{7-8}                             num_replicas=7
+/Table/11{2-3}                             num_replicas=7
+/Table/11{3-4}                             range default
 
 exec-sql
 ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 100;
