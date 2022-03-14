@@ -754,6 +754,12 @@ message ChangefeedDetails {
   ];
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
+  // TODO(sherman): Now that we update the statement time in some situations
+  // while performing an initial scan on newly added targets, StatementTime is
+  // no longer a suitable name for this field. This is because the name
+  // StatementTime gives off an impression that the field indicates the creation
+  // time of the changefeed, which is no longer the case. We should rename this
+  // field to ScanTime instead.
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
   repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
