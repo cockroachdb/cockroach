@@ -76,6 +76,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 	)
+	if rewrite == "" {
+		ignoreCache = true
+	}
 
 	validChoices := []string{"base", "ccl", "opt"}
 	if len(choices) == 0 {
