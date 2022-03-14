@@ -140,11 +140,12 @@ type sstReader struct {
 // Close implements io.Closer.
 func (r *sstReader) Close() error {
 	r.pos = 0
-	r.ctx = nil
+	var err error
 	if r.body != nil {
-		return r.body.Close(r.ctx)
+		err = r.body.Close(r.ctx)
 	}
-	return nil
+	r.ctx = nil
+	return err
 }
 
 // Stat returns the size of the file.
