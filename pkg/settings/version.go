@@ -46,7 +46,7 @@ type VersionSettingImpl interface {
 	// Validate checks whether an version update is permitted. It takes in the
 	// old and the proposed new value (both in encoded form). This is called by
 	// SET CLUSTER SETTING.
-	Validate(ctx context.Context, sv *Values, oldV, newV []byte) ([]byte, error)
+	ValidateVersionUpgrade(ctx context.Context, sv *Values, oldV, newV []byte) error
 
 	// ValidateBinaryVersions is a subset of Validate. It only checks that the
 	// current binary supports the proposed version. This is called when the
@@ -90,10 +90,8 @@ func (v *VersionSetting) Decode(val []byte) (ClusterVersionImpl, error) {
 // Validate checks whether an version update is permitted. It takes in the
 // old and the proposed new value (both in encoded form). This is called by
 // SET CLUSTER SETTING.
-func (v *VersionSetting) Validate(
-	ctx context.Context, sv *Values, oldV, newV []byte,
-) ([]byte, error) {
-	return v.impl.Validate(ctx, sv, oldV, newV)
+func (v *VersionSetting) Validate(ctx context.Context, sv *Values, oldV, newV []byte) error {
+	return v.impl.ValidateVersionUpgrade(ctx, sv, oldV, newV)
 }
 
 // SettingsListDefault returns the value that should be presented by

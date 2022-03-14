@@ -124,7 +124,12 @@ export function getEventDescription(e: Event$Properties): string {
       }
       return `Cluster Setting Changed: User ${info.User} changed ${info.SettingName}`;
     case eventTypes.SET_ZONE_CONFIG:
-      return `Zone Config Changed: User ${info.User} set the zone config for ${info.Target} to ${info.Config}`;
+      if (info.Options && info.Options.length > 0) {
+        return `Zone Config Changed: User ${
+          info.User
+        } set the zone config for ${info.Target} to ${info.Options.join(", ")}`;
+      }
+      return `Zone Config Changed: User ${info.User} set the zone config for ${info.Target}`;
     case eventTypes.REMOVE_ZONE_CONFIG:
       return `Zone Config Removed: User ${info.User} removed the zone config for ${info.Target}`;
     case eventTypes.CREATE_STATISTICS:
@@ -213,7 +218,6 @@ export function getEventDescription(e: Event$Properties): string {
 // and the `info` field of the `server.serverpb.EventsResponse.Event` proto.
 export interface EventInfo {
   CascadeDroppedViews?: string[];
-  Config?: string;
   DatabaseName?: string;
   DescriptorType?: string;
   DescriptorName?: string;

@@ -1290,6 +1290,14 @@ message DatabaseDescriptor {
   // Next field is 13.
 }
 
+// SuperRegion stores a super region configuration.
+message SuperRegion {
+  option (gogoproto.equal) = true;
+
+  optional string super_region_name = 1 [(gogoproto.nullable)=false];
+  repeated string regions = 2 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+}
+
 // TypeDescriptor represents a user defined type and is stored in a structured
 // metadata key. The TypeDescriptor has a globally-unique ID shared with other
 // Descriptors.
@@ -1406,6 +1414,9 @@ message TypeDescriptor {
 
     // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
     optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+
+    // SuperRegions represents the super regions defined on the database.
+    repeated SuperRegion super_regions = 2 [(gogoproto.nullable) = false];
   }
 
   optional RegionConfig region_config = 16;

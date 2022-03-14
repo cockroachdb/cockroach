@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -255,6 +256,17 @@ func (desc *immutable) RegionNamesForValidation() (catpb.RegionNames, error) {
 		regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 	}
 	return regions, nil
+}
+
+// SuperRegions implements the TypeDescriptor interface.
+func (desc *immutable) SuperRegions() ([]descpb.SuperRegion, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+
+	return desc.RegionConfig.SuperRegions, nil
 }
 
 // RegionNamesIncludingTransitioning implements the TypeDescriptor interface.
@@ -709,11 +721,11 @@ func (desc *immutable) validateMultiRegion(
 			dbPrimaryRegion, primaryRegion))
 	}
 
+	regionNames, err := desc.RegionNames()
+	if err != nil {
+		vea.Report(err)
+	}
 	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
-		regionNames, err := desc.RegionNames()
-		if err != nil {
-			vea.Report(err)
-		}
 		if len(regionNames) < 3 {
 			vea.Report(
 				errors.AssertionFailedf(
@@ -723,6 +735,19 @@ func (desc *immutable) validateMultiRegion(
 				),
 			)
 		}
+	}
+
+	superRegions, err := desc.SuperRegions()
+	if err != nil {
+		vea.Report(err)
+	}
+
+	err = multiregion.ValidateSuperRegions(superRegions, dbDesc.GetRegionConfig().SurvivalGoal, regionNames, func(err error) error {
+		vea.Report(err)
+		return nil
+	})
+	if err != nil {
+		vea.Report(err)
 	}
 }
 

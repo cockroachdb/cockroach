@@ -732,6 +732,8 @@ type TypeDescriptor interface {
 	// TransitioningRegionNames returns regions which are transitioning to PUBLIC
 	// or are being removed.
 	TransitioningRegionNames() (catpb.RegionNames, error)
+	// SuperRegions returns the list of super regions.
+	SuperRegions() ([]descpb.SuperRegion, error)
 
 	// The following fields are set if the type is an enum or a multi-region enum.
 
