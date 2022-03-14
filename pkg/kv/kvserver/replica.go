@@ -93,9 +93,6 @@ const (
 	// MaxCommandSizeFloor is the minimum allowed value for the
 	// kv.raft.command.max_size cluster setting.
 	MaxCommandSizeFloor = 4 << 20 // 4MB
-	// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
-	// cluster setting.
-	MaxCommandSizeDefault = 64 << 20
 )
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
@@ -103,7 +100,7 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
-	MaxCommandSizeDefault,
+	kvserverbase.MaxCommandSizeDefault,
 	func(size int64) error {
 		if size < MaxCommandSizeFloor {
 			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
