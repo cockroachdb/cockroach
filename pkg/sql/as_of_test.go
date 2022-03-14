@@ -149,11 +149,11 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Verify queries with large exponents error properly.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "value out of range") {
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "greater than max int64") {
 		t.Fatal(err)
 	}
 	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.4"); !testutils.IsError(err,
-		`parsing argument: strconv.ParseInt: parsing "4000000000": value out of range`) {
+		`logical clock too large: 4000000000`) {
 		t.Fatal(err)
 	}
 

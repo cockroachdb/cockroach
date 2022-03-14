@@ -633,7 +633,7 @@ func TestWithRemoteParentFromTraceInfo(t *testing.T) {
 	ti := tracingpb.TraceInfo{
 		TraceID:       traceID,
 		ParentSpanID:  parentSpanID,
-		RecordingMode: tracingpb.TraceInfo_STRUCTURED,
+		RecordingMode: tracingpb.RecordingMode_STRUCTURED,
 		Otel: &tracingpb.TraceInfo_OtelInfo{
 			TraceID: otelTraceID[:],
 			SpanID:  otelSpanID[:],

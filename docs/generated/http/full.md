@@ -6716,3 +6716,329 @@ Support status: [reserved](#support-status)
 
 
 
+## ListTracingSnapshots
+
+`GET /_admin/v1/trace_snapshots`
+
+ListTracingSnapshots retrieves the list of snapshots of the Active Spans
+Registry that the node currently has in memory. A new snapshot can be
+captured with TakeTracingSnapshots.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshots | [SnapshotInfo](#cockroach.server.serverpb.ListTracingSnapshotsResponse-cockroach.server.serverpb.SnapshotInfo) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListTracingSnapshotsResponse-cockroach.server.serverpb.SnapshotInfo"></a>
+#### SnapshotInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.ListTracingSnapshotsResponse-int64) |  |  | [reserved](#support-status) |
+| captured_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListTracingSnapshotsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## TakeTracingSnapshot
+
+`POST /_admin/v1/trace_snapshots`
+
+TakeTracingSnapshot captures a new snapshot of the Active Spans Registry.
+The new snapshot is returned, and also made available through
+ListTracingSnapshots.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot | [SnapshotInfo](#cockroach.server.serverpb.TakeTracingSnapshotResponse-cockroach.server.serverpb.SnapshotInfo) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TakeTracingSnapshotResponse-cockroach.server.serverpb.SnapshotInfo"></a>
+#### SnapshotInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.TakeTracingSnapshotResponse-int64) |  |  | [reserved](#support-status) |
+| captured_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TakeTracingSnapshotResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## GetTracingSnapshot
+
+`GET /_admin/v1/trace_snapshots/{snapshot_id}`
+
+GetTracingSnapshot returns a snapshot of the tracing spans in the active
+spans registry previously generated through TakeTracingSnapshots.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.GetTracingSnapshotRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot | [TracingSnapshot](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSnapshot) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSnapshot"></a>
+#### TracingSnapshot
+
+TracingSnapshot represents a snapshot of the active spans registry, including
+all the spans that were open at the time when the snapshot was taken.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.GetTracingSnapshotResponse-int64) |  |  | [reserved](#support-status) |
+| captured_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.GetTracingSnapshotResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| spans | [TracingSpan](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSpan) | repeated |  | [reserved](#support-status) |
+| stacks | [TracingSnapshot.StacksEntry](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSnapshot.StacksEntry) | repeated | Ideally we'd use int64 to match the goroutine_id type but unfortunately, the way that grpc-gateway parses these objects into Javascript results in odd encodings of Long JS types that are difficult to interact with as map keys. Thus, we settle for string. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSpan"></a>
+#### TracingSpan
+
+TracingSpan represents a span, in a form slightly processed for the use of
+the tracing UI.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| operation | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| span_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| parent_span_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.GetTracingSnapshotResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| goroutine_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
+| processed_tags | [SpanTag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag"></a>
+#### SpanTag
+
+SpanTag represents a tag on a tracing span, in a form processed for the use
+of the tracing UI.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| val | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| caption | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| link | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
+| hidden | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| highlight | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| inherit | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| inherited | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| propagate_up | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+| copied_from_child | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.TracingSnapshot.StacksEntry"></a>
+#### TracingSnapshot.StacksEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  |  |
+
+
+
+
+
+
+## GetTrace
+
+`POST /_admin/v1/traces`
+
+GetTrace returns the trace with a specified ID. Depending on the request,
+the trace is returned either from a snapshot that was previously taken, or
+directly from the active spans registry.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+GetTrace represents the request of the GetTrace RPC.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.GetTraceRequest-int64) |  | If a snapshot is specified, the trace information is returned from that snapshot. If a snapshot is not specified, information about currently opened spans is returned from the active spans registry. | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.GetTraceRequest-uint64) |  |  | [reserved](#support-status) |
+| recording_type | [cockroach.util.tracing.tracingpb.RecordingMode](#cockroach.server.serverpb.GetTraceRequest-cockroach.util.tracing.tracingpb.RecordingMode) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+GetTrace represents the response to the GetTrace RPC.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot_id | [int64](#cockroach.server.serverpb.GetTraceResponse-int64) |  | snapshot_id identifies the snapshot that the trace was retrieved from. If 0, the trace was not retrieved from a registry, but directly from the active spans registry. | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.GetTraceResponse-uint64) |  |  | [reserved](#support-status) |
+| still_exists | [bool](#cockroach.server.serverpb.GetTraceResponse-bool) |  | still_exists is set if any spans from this trace are currently present in the active spans registry.<br><br>If snapshot_id is 0, still_exists is always set. | [reserved](#support-status) |
+| serialized_recording | [string](#cockroach.server.serverpb.GetTraceResponse-string) |  | serialized_recording represents the serialization of trace recording. We return the recording already serialized as formatted string for easy consumption in the browser. | [reserved](#support-status) |
+
+
+
+
+
+
+
+## SetTraceRecordingType
+
+`POST /_admin/v1/settracerecordingtype`
+
+SetTraceRecordingType sets the recording mode of all or some of the spans
+in a trace.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+SetTraceRecordingTypeRequest is the request for SetTraceRecordingType, which
+sets the recording mode of all or some of the spans in a trace.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| trace_id | [uint64](#cockroach.server.serverpb.SetTraceRecordingTypeRequest-uint64) |  | TraceID identifies the trace to toggle the recording of. It must always be specified. | [reserved](#support-status) |
+| span_id | [uint64](#cockroach.server.serverpb.SetTraceRecordingTypeRequest-uint64) |  | SpanID, if not zero, controls which spans in the trace get their recording mode set. If zero, all spans in the trace are updated. If not zero, only the respective span and its descendants get updated. | [reserved](#support-status) |
+| recording_mode | [cockroach.util.tracing.tracingpb.RecordingMode](#cockroach.server.serverpb.SetTraceRecordingTypeRequest-cockroach.util.tracing.tracingpb.RecordingMode) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+SetTraceRecordingTypeRequest is the response for SetTraceRecordingType.
+
+
+
+
+
+
+
+
