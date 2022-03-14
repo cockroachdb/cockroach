@@ -306,7 +306,7 @@ func TestTableEventFilter(t *testing.T) {
 			exp: false,
 		},
 		{
-			name: "don't filter end of add NULL-able computed column",
+			name: "don't filter end of add NULL-able visible computed column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
 				Before: func() catalog.TableDescriptor {
