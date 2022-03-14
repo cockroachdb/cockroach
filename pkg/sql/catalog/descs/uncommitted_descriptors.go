@@ -89,10 +89,10 @@ func (u uncommittedDescriptor) GetID() descpb.ID {
 
 // checkOut is how the mutable descriptor should be accessed.
 func (u *uncommittedDescriptor) checkOut() catalog.MutableDescriptor {
-	u.uncommittedDescriptorStatus = checkedOutAtLeastOnce
 	if u.mutable == nil {
 		return u.immutable.NewBuilder().BuildExistingMutable()
 	}
+	u.uncommittedDescriptorStatus = checkedOutAtLeastOnce
 	return u.mutable
 }
 
