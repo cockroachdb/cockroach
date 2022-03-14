@@ -70,7 +70,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying test binary (only applicable to certain tests)")
+	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying test binary (only applicable to certain tests). Implies --ignore-cache")
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 	testCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
@@ -95,6 +95,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
 	)
+	if rewrite != "" {
+		ignoreCache = true
+	}
 
 	// Enumerate all tests to run.
 	if len(pkgs) == 0 {
