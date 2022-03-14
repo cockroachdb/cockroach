@@ -89,10 +89,19 @@ func (u uncommittedDescriptor) GetID() descpb.ID {
 
 // checkOut is how the mutable descriptor should be accessed.
 func (u *uncommittedDescriptor) checkOut() catalog.MutableDescriptor {
-	u.uncommittedDescriptorStatus = checkedOutAtLeastOnce
 	if u.mutable == nil {
+		// This special case is allowed for certain system descriptors which
+		// for performance reasons are never actually read from storage, instead
+		// we use a copy of the descriptor hard-coded in the system schema used for
+		// bootstrapping a cluster.
+		//
+		// This implies that these descriptors never undergo any changes and
+		// therefore checking out a mutable descriptor is pointless for the most
+		// part. This may nonetheless legitimately happen during migrations
+		// which change all descriptors somehow, so we need to support this.
 		return u.immutable.NewBuilder().BuildExistingMutable()
 	}
+	u.uncommittedDescriptorStatus = checkedOutAtLeastOnce
 	return u.mutable
 }
 
