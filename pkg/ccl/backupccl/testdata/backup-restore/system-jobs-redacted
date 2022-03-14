@@ -1,0 +1,106 @@
+new-server name=s1 nodes=3
+----
+
+subtest backup-restore-system-jobs-redacted
+
+exec-sql
+BACKUP DATABASE data INTO '/full' IN 'userfile:///foo?AWS_SESSION_TOKEN=moreSecretsHere';
+----
+
+exec-sql
+SET DATABASE = data;
+----
+
+exec-sql
+BACKUP TABLE bank INTO '/inc' IN 'userfile:///foo?AWS_SESSION_TOKEN=secretCredentialHere';
+----
+
+# Ensure description is redacted, and descriptor IDs are what we expect.
+query-sql
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP';
+----
+BACKUP DATABASE data INTO '/full' IN 'userfile:///foo?AWS_SESSION_TOKEN=redacted'
+BACKUP TABLE bank INTO '/inc' IN 'userfile:///foo?AWS_SESSION_TOKEN=redacted'
+
+# Setup for restore.
+exec-sql
+CREATE DATABASE restoredb;
+----
+
+exec-sql
+RESTORE TABLE bank FROM LATEST IN 'userfile:///foo?AWS_SESSION_TOKEN=bogus' WITH into_db='restoredb';
+----
+
+# Ensure description is redacted, and descriptor IDs are what we expect.
+query-sql
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'RESTORE';
+----
+RESTORE TABLE bank FROM 'userfile:///foo/inc?AWS_SESSION_TOKEN=redacted' WITH into_db = 'restoredb'
+
+subtest end
+
+subtest backup-restore-system-jobs-kms-encrypted-redaction
+
+# Take an encrypted BACKUP.
+exec-sql expect-error-ignore
+BACKUP DATABASE data INTO '/full' IN 'userfile:///foo/x' WITH kms = 'aws:///some-key?AUTH=specified&AWS_ACCESS_KEY_ID=some-key&AWS_SECRET_ACCESS_KEY=should-not-see-this&REGION=some-region';
+----
+ignoring expected error
+
+# Check secret key is redacted.
+query-sql
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' ORDER BY created DESC LIMIT 1;
+----
+BACKUP DATABASE data INTO '/full' IN 'userfile:///foo/x' WITH kms = 'aws:///some-key?AUTH=specified&AWS_ACCESS_KEY_ID=some-key&AWS_SECRET_ACCESS_KEY=redacted&REGION=some-region'
+
+# Run an encrypted RESTORE.
+exec-sql
+CREATE DATABASE restoredb2;
+----
+
+exec-sql expect-error-ignore
+RESTORE TABLE data.bank FROM LATEST IN 'userfile:///foo/x' WITH into_db = 'restoredb2', kms = 'aws:///some-key?AUTH=specified&AWS_ACCESS_KEY_ID=some-key&AWS_SECRET_ACCESS_KEY=redacted&REGION=some-region';
+----
+ignoring expected error
+
+
+# Check secret key is redacted.
+query-sql
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1;
+----
+RESTORE TABLE bank FROM 'userfile:///foo/inc?AWS_SESSION_TOKEN=redacted' WITH into_db = 'restoredb'
+
+subtest end
+
+# Ensures that the system jobs entry for encrypted BACKUPs have the passphrase
+# or the KMS URI sanitized.
+subtest backup-restore-system-jobs-passphrase-encrypted-redaction
+
+# Take an encrypted BACKUP.
+exec-sql
+BACKUP DATABASE data INTO '/full' IN 'userfile:///foo/y' WITH encryption_passphrase = 'abcdefg';
+----
+
+# Check secret key is redacted.
+query-sql
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' ORDER BY created DESC LIMIT 1;
+----
+BACKUP DATABASE data INTO '/full' IN 'userfile:///foo/y' WITH encryption_passphrase = '*****'
+
+# Run an encrypted RESTORE.
+exec-sql
+CREATE DATABASE restoredb3;
+----
+
+exec-sql
+RESTORE TABLE data.bank FROM LATEST IN 'userfile:///foo/y' WITH into_db = 'restoredb3', encryption_passphrase = 'abcdefg';
+----
+
+
+# Check secret key is redacted.
+query-sql
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1;
+----
+RESTORE TABLE data.bank FROM 'userfile:///foo/y/full' WITH encryption_passphrase = 'redacted', into_db = 'restoredb3'
+
+subtest end
