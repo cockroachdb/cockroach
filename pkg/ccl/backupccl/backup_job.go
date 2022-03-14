@@ -53,6 +53,8 @@ import (
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
+var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
+
 func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
@@ -499,7 +501,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}()
 
-	if backupManifest == nil || util.ConstantWithMetamorphicTestBool("backup-read-manifest", false) {
+	if backupManifest == nil || forceReadBackupManifest {
 		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
 		if err != nil {
 			return err

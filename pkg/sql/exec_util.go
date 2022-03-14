@@ -711,6 +711,22 @@ var costScansWithDefaultColSize = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var enableSuperRegions = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.defaults.super_regions.enabled",
+	"default value for enable_super_regions; "+
+		"allows for the usage of super regions",
+	false,
+).WithPublic()
+
+var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.defaults.override_alter_primary_region_in_super_region.enabled",
+	"default value for override_multi_region_zone_config; "+
+		"allows for overriding the zone configs of a multi-region table or database",
+	false,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -3033,6 +3049,14 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
+}
+
+func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
+	m.data.EnableSuperRegions = val
+}
+
+func (m *sessionDataMutator) SetEnableOverrideAlterPrimaryRegionInSuperRegion(val bool) {
+	m.data.OverrideAlterPrimaryRegionInSuperRegion = val
 }
 
 // TODO(rytaft): remove this once unique without index constraints are fully
