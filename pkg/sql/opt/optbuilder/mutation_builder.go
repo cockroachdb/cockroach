@@ -1183,7 +1183,8 @@ func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) util.Fa
 }
 
 // getExplicitPrimaryKeyOrdinals returns the ordinals of the primary key
-// columns, excluding any implicit partitioning columns in the primary index.
+// columns, excluding any implicit partitioning or hash-shard columns in the
+// primary index.
 func getExplicitPrimaryKeyOrdinals(tab cat.Table) util.FastIntSet {
 	index := tab.Index(cat.PrimaryIndex)
 	skipCols := index.ImplicitColumnCount()

@@ -963,6 +963,11 @@ func (ti *Index) ImplicitColumnCount() int {
 	return 0
 }
 
+// ImplicitPartitioningColumnCount is part of the cat.Index interface.
+func (ti *Index) ImplicitPartitioningColumnCount() int {
+	return 0
+}
+
 // GeoConfig is part of the cat.Index interface.
 func (ti *Index) GeoConfig() *geoindex.Config {
 	return ti.geoConfig
