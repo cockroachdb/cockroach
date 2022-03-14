@@ -81,7 +81,7 @@ func (d *delegator) delegateShowTenantClusterSettingList(
 	// cannot evaluate it in the go code.
 	return parse(`
 WITH
-  tenant_id AS (SELECT (` + stmt.TenantID.String() + `) AS tenant_id),
+  tenant_id AS (SELECT (` + stmt.TenantID.String() + `):::INT AS tenant_id),
   isvalid AS (
     SELECT
       CASE

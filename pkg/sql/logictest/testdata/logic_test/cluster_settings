@@ -200,7 +200,7 @@ statement error ALTER TENANT can only be called by system operators
 ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant
-statement error cannot use ALTER TENANT to change cluster settings in system tenant
+statement error cannot use this statement to access cluster settings in system tenant
 ALTER TENANT 1 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant
@@ -223,9 +223,28 @@ skipif config 3node-tenant
 statement ok
 ALTER TENANT ALL RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
-skipif config 3node-tenant
-statement error unimplemented
+onlyif config 3node-tenant
+statement error SHOW CLUSTER SETTING FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
+
+skipif config 3node-tenant
+query error tenant ID must be non-zero
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 0
+
+
+skipif config 3node-tenant
+query error use SHOW CLUSTER SETTING to display a setting for the system tenant
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 1
+
+skipif config 3node-tenant
+query error no tenant found with ID 1111
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 1111
+
+skipif config 3node-tenant
+query T
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
+----
+NULL
 
 onlyif config 3node-tenant
 query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators

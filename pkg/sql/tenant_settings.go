@@ -118,11 +118,11 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		// tenant ID is non zero and refers to a tenant that exists in
 		// system.tenants.
 		var err error
-		tenantIDi, tenantID, err = resolveTenantID(params, n.tenantID)
+		tenantIDi, tenantID, err = resolveTenantID(params.p, n.tenantID)
 		if err != nil {
 			return err
 		}
-		if err := assertTenantExists(params, tenantID); err != nil {
+		if err := assertTenantExists(params.ctx, params.p, tenantID); err != nil {
 			return err
 		}
 	}
@@ -175,8 +175,8 @@ func (n *alterTenantSetClusterSettingNode) Next(_ runParams) (bool, error) { ret
 func (n *alterTenantSetClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *alterTenantSetClusterSettingNode) Close(_ context.Context)        {}
 
-func resolveTenantID(params runParams, expr tree.TypedExpr) (uint64, tree.Datum, error) {
-	tenantIDd, err := expr.Eval(params.p.EvalContext())
+func resolveTenantID(p *planner, expr tree.TypedExpr) (uint64, tree.Datum, error) {
+	tenantIDd, err := expr.Eval(p.EvalContext())
 	if err != nil {
 		return 0, nil, err
 	}
@@ -189,15 +189,15 @@ func resolveTenantID(params runParams, expr tree.TypedExpr) (uint64, tree.Datum,
 	}
 	if roachpb.MakeTenantID(uint64(*tenantID)) == roachpb.SystemTenantID {
 		return 0, nil, errors.WithHint(pgerror.Newf(pgcode.InvalidParameterValue,
-			"cannot use ALTER TENANT to change cluster settings in system tenant"),
-			"Use a regular SET CLUSTER SETTING statement.")
+			"cannot use this statement to access cluster settings in system tenant"),
+			"Use a regular SHOW/SET CLUSTER SETTING statement.")
 	}
 	return uint64(*tenantID), tenantIDd, nil
 }
 
-func assertTenantExists(params runParams, tenantID tree.Datum) error {
-	exists, err := params.p.ExecCfg().InternalExecutor.QueryRowEx(
-		params.ctx, "get-tenant", params.p.txn,
+func assertTenantExists(ctx context.Context, p *planner, tenantID tree.Datum) error {
+	exists, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+		ctx, "get-tenant", p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		`SELECT EXISTS(SELECT id FROM system.tenants WHERE id = $1)`, tenantID)
 	if err != nil {
@@ -214,6 +214,104 @@ func assertTenantExists(params runParams, tenantID tree.Datum) error {
 func (p *planner) ShowTenantClusterSetting(
 	ctx context.Context, n *tree.ShowTenantClusterSetting,
 ) (planNode, error) {
-	return nil, unimplemented.NewWithIssue(73857,
-		`unimplemented: tenant-level cluster settings not supported`)
+	// Viewing cluster settings for other tenants is a more
+	// privileged operation than viewing local cluster settings. So we
+	// shouldn't be allowing with just the role option
+	// VIEWCLUSTERSETTINGS.
+	//
+	// TODO(knz): Using admin authz for now; we may want to introduce a
+	// more specific role option later.
+	if err := p.RequireAdminRole(ctx, "view a tenant cluster setting"); err != nil {
+		return nil, err
+	}
+
+	name := strings.ToLower(n.Name)
+	val, ok := settings.Lookup(
+		name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
+	)
+	if !ok {
+		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	setting, ok := val.(settings.NonMaskedSetting)
+	if !ok {
+		// If we arrive here, this means Lookup() did not properly
+		// ignore the masked setting, which is a bug in Lookup().
+		return nil, errors.AssertionFailedf("setting is masked: %v", name)
+	}
+
+	// Error out if we're trying to call this from a non-system tenant or if
+	// we're trying to set a system-only variable.
+	if !p.execCfg.Codec.ForSystemTenant() {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"SHOW CLUSTER SETTING FOR TENANT can only be called by system operators")
+	}
+
+	columns, err := getShowClusterSettingPlanColumns(setting, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return planShowClusterSetting(
+		setting, name, columns,
+		func(ctx context.Context, p *planner) (bool, string, error) {
+			// NB: we evaluate + check the tenant ID inside SQL using
+			// the same pattern as used for SHOW CLUSTER SETTINGS FOR TENANT.
+			lookupEncodedTenantSetting := `
+WITH
+  tenant_id AS (SELECT (` + n.TenantID.String() + `):::INT AS tenant_id),
+  isvalid AS (
+    SELECT
+      CASE
+       WHEN tenant_id=0 THEN
+         crdb_internal.force_error('22023', 'tenant ID must be non-zero')
+       WHEN tenant_id=1 THEN
+         crdb_internal.force_error('22023', 'use SHOW CLUSTER SETTING to display a setting for the system tenant')
+       WHEN st.id IS NULL THEN
+         crdb_internal.force_error('22023', 'no tenant found with ID '||tenant_id)
+       ELSE 0
+      END AS ok
+    FROM      tenant_id
+    LEFT JOIN system.tenants st ON id = tenant_id.tenant_id
+  ),
+  tenantspecific AS (
+     SELECT t.name, t.value
+     FROM system.tenant_settings t, tenant_id
+     WHERE t.tenant_id = tenant_id.tenant_id
+  ),
+  setting AS (
+   SELECT $1 AS variable
+  )
+SELECT COALESCE(
+   tenantspecific.value,
+   overrideall.value,
+   -- NB: we can't compute the actual value here, see discussion on issue #77935.
+   NULL
+   )
+FROM
+  setting
+  LEFT JOIN tenantspecific
+         ON setting.variable = tenantspecific.name
+  LEFT JOIN system.tenant_settings AS overrideall
+         ON setting.variable = overrideall.name AND overrideall.tenant_id = 0`
+
+			datums, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+				ctx, "get-tenant-setting-value", p.txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				lookupEncodedTenantSetting,
+				name)
+			if err != nil {
+				return false, "", err
+			}
+			if len(datums) != 1 {
+				return false, "", errors.AssertionFailedf("expected 1 column, got %+v", datums)
+			}
+			if datums[0] == tree.DNull {
+				return false, "", nil
+			}
+			encoded, ok := tree.AsDString(datums[0])
+			if !ok {
+				return false, "", errors.AssertionFailedf("expected string value, got %T", datums[0])
+			}
+			return true, string(encoded), nil
+		})
 }
