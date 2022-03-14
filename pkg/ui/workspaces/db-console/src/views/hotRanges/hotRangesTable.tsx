@@ -104,15 +104,20 @@ const HotRangesTable = ({
       title: (
         <Tooltip
           placement="bottom"
-          title="The internal ID of the node where the range data is found."
+          title="The ID of each node where the range data is found."
         >
           Nodes
         </Tooltip>
       ),
       cell: val => (
-        <Link to={`/node/${val.replica_node_ids[0]}`}>
-          {val.replica_node_ids.join(", ")}
-        </Link>
+        <>
+          {val.replica_node_ids.map((nodeId, idx, arr) => (
+            <Link to={`/node/${nodeId}`}>
+              {nodeId}
+              {idx < arr.length - 1 && ", "}
+            </Link>
+          ))}
+        </>
       ),
       sort: val => val.replica_node_ids[0],
     },
