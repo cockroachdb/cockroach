@@ -1315,7 +1315,7 @@ var charts = []sectionDescription{
 				Metrics: []string{"requests.slow.lease"},
 			},
 			{
-				Title: "Succcess Rate",
+				Title: "Success Rate",
 				Metrics: []string{
 					"leases.error",
 					"leases.success",
@@ -1335,6 +1335,13 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"leases.transfers.error",
 					"leases.transfers.success",
+				},
+			},
+			{
+				Title: "Transfer Success Rate During Joint Configurations",
+				Metrics: []string{
+					"leases.transfers_during_joint_state.success",
+					"leases.transfers_during_joint_state.failure",
 				},
 			},
 		},

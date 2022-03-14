@@ -1251,15 +1251,18 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		log.VErrEventf(ctx, 5, "%v", err)
 		// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
 		// caller will retry. Note that the JOINT config isn't rolled back.
+		r.store.metrics.LeaseTransfersDuringJointStateFailures.Inc(1)
 		return err
 	}
 	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
 		" atomic replication change. Transferring lease to %v", r.String(), target)
 	err := r.store.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
 	if err != nil {
+		r.store.metrics.LeaseTransfersDuringJointStateFailures.Inc(1)
 		return err
 	}
 	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", target)
+	r.store.metrics.LeaseTransfersDuringJointStateSuccesses.Inc(1)
 	return nil
 }
 

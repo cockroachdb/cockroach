@@ -138,6 +138,18 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaseTransfersDuringJointStateSuccesses = metric.Metadata{
+		Name:        "leases.transfers_during_joint_state.success",
+		Help:        "Number of successful lease transfers during joint configurations",
+		Measurement: "Lease Transfer Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseTransfersDuringJointStateFailures = metric.Metadata{
+		Name:        "leases.transfers_during_joint_state.failure",
+		Help:        "Number of failed lease transfers during joint configurations",
+		Measurement: "Lease Transfer Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{
@@ -1326,12 +1338,14 @@ type StoreMetrics struct {
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
-	LeaseRequestSuccessCount  *metric.Counter
-	LeaseRequestErrorCount    *metric.Counter
-	LeaseTransferSuccessCount *metric.Counter
-	LeaseTransferErrorCount   *metric.Counter
-	LeaseExpirationCount      *metric.Gauge
-	LeaseEpochCount           *metric.Gauge
+	LeaseRequestSuccessCount                *metric.Counter
+	LeaseRequestErrorCount                  *metric.Counter
+	LeaseTransferSuccessCount               *metric.Counter
+	LeaseTransferErrorCount                 *metric.Counter
+	LeaseExpirationCount                    *metric.Gauge
+	LeaseEpochCount                         *metric.Gauge
+	LeaseTransfersDuringJointStateSuccesses *metric.Counter
+	LeaseTransfersDuringJointStateFailures  *metric.Counter
 
 	// Storage metrics.
 	ResolveCommitCount *metric.Counter
@@ -1766,12 +1780,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
 
 		// Lease request metrics.
-		LeaseRequestSuccessCount:  metric.NewCounter(metaLeaseRequestSuccessCount),
-		LeaseRequestErrorCount:    metric.NewCounter(metaLeaseRequestErrorCount),
-		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
-		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
-		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
-		LeaseEpochCount:           metric.NewGauge(metaLeaseEpochCount),
+		LeaseRequestSuccessCount:                metric.NewCounter(metaLeaseRequestSuccessCount),
+		LeaseRequestErrorCount:                  metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseTransferSuccessCount:               metric.NewCounter(metaLeaseTransferSuccessCount),
+		LeaseTransferErrorCount:                 metric.NewCounter(metaLeaseTransferErrorCount),
+		LeaseExpirationCount:                    metric.NewGauge(metaLeaseExpirationCount),
+		LeaseEpochCount:                         metric.NewGauge(metaLeaseEpochCount),
+		LeaseTransfersDuringJointStateSuccesses: metric.NewCounter(metaLeaseTransfersDuringJointStateSuccesses),
+		LeaseTransfersDuringJointStateFailures:  metric.NewCounter(metaLeaseTransfersDuringJointStateFailures),
 
 		// Intent resolution metrics.
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
