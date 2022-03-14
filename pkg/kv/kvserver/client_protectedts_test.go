@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -124,6 +125,13 @@ func TestProtectedTimestamps(t *testing.T) {
 		return startKey
 	}
 
+	getTableID := func() descpb.ID {
+		var tableID descpb.ID
+		require.NoError(t,
+			conn.QueryRow(`SELECT id FROM system.namespace WHERE name = 'foo'`).Scan(&tableID))
+		return tableID
+	}
+
 	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
 		startKey := getTableStartKey()
 		// Okay great now we have a key and can go find replicas and stores and what not.
@@ -176,17 +184,11 @@ func TestProtectedTimestamps(t *testing.T) {
 	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor),
 		nil /* knobs */)
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
-	startKey := getTableStartKey()
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
 		Mode:      ptpb.PROTECT_AFTER,
-		DeprecatedSpans: []roachpb.Span{
-			{
-				Key:    startKey,
-				EndKey: startKey.PrefixEnd(),
-			},
-		},
+		Target:    ptpb.MakeSchemaObjectsTarget([]descpb.ID{getTableID()}),
 	}
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &ptsRec))
 	upsertUntilBackpressure()

@@ -54,6 +54,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -3936,43 +3938,25 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
 		ptsInterval := 50 * time.Millisecond
 		changefeedbase.ProtectTimestampInterval.Override(
 			context.Background(), &f.Server().ClusterSettings().SV, ptsInterval)
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
 		defer closeFeed(t, foo)
 
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
-		ptsProvider := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 
-		var tableID int
-		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables `+
-			`WHERE name = 'foo' AND database_name = current_database()`).
-			Scan(&tableID)
-
-		getTablePtsRecord := func() *ptpb.Record {
-			var r *ptpb.Record
-			require.NoError(t, ptsProvider.Refresh(context.Background(), f.Server().Clock().Now()))
-			ptsProvider.Iterate(context.Background(), tableSpan.Key, tableSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
-				r = record
-				return false
-			})
-
-			expectedKeys := map[string]struct{}{
-				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
-				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
-			}
-			require.Equal(t, len(r.DeprecatedSpans), len(expectedKeys))
-			for _, s := range r.DeprecatedSpans {
-				require.Contains(t, expectedKeys, string(s.Key))
-			}
-			return r
-		}
+		ptp := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+		store, err := f.Server().GetStores().(*kvserver.Stores).GetStore(f.Server().GetFirstStoreID())
+		require.NoError(t, err)
+		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 
 		// Wait and return the next resolved timestamp after the wait time
 		waitAndDrainResolved := func(ts time.Duration) hlc.Timestamp {
@@ -3985,13 +3969,62 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			}
 		}
 
+		mkGetProtections := func(t *testing.T, ptp protectedts.Provider,
+			srv serverutils.TestServerInterface, ptsReader spanconfig.ProtectedTSReader,
+			span roachpb.Span) func() []hlc.Timestamp {
+			return func() (r []hlc.Timestamp) {
+				require.NoError(t,
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
+				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
+				require.NoError(t, err)
+				return protections
+			}
+		}
+
+		mkWaitForProtectionCond := func(t *testing.T, getProtection func() []hlc.Timestamp,
+			check func(protection []hlc.Timestamp) error) func() {
+			return func() {
+				t.Helper()
+				testutils.SucceedsSoon(t, func() error { return check(getProtection()) })
+			}
+		}
+
+		// Setup helpers on the system.descriptors table.
+		descriptorTableKey := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
+		descriptorTableSpan := roachpb.Span{
+			Key: descriptorTableKey, EndKey: descriptorTableKey.PrefixEnd(),
+		}
+		getDescriptorTableProtection := mkGetProtections(t, ptp, f.Server(), ptsReader,
+			descriptorTableSpan)
+
+		// Setup helpers on the user table.
+		tableKey := keys.SystemSQLCodec.TablePrefix(uint32(fooDesc.GetID()))
+		tableSpan := roachpb.Span{
+			Key: tableKey, EndKey: tableKey.PrefixEnd(),
+		}
+		getTableProtection := mkGetProtections(t, ptp, f.Server(), ptsReader, tableSpan)
+		waitForProtectionAdvanced := func(ts hlc.Timestamp, getProtection func() []hlc.Timestamp) {
+			check := func(protections []hlc.Timestamp) error {
+				if len(protections) == 0 {
+					return errors.New("expected protection but found none")
+				}
+				for _, p := range protections {
+					if p.LessEq(ts) {
+						return errors.Errorf("expected protected timestamp to exceed %v, found %v", ts, p)
+					}
+				}
+				return nil
+			}
+
+			mkWaitForProtectionCond(t, getProtection, check)()
+		}
+
 		// Observe the protected timestamp advancing along with resolved timestamps
 		for i := 0; i < 5; i++ {
 			// Progress the changefeed and allow time for a pts record to be laid down
 			nextResolved := waitAndDrainResolved(100 * time.Millisecond)
-			time.Sleep(2 * ptsInterval)
-			rec := getTablePtsRecord()
-			require.LessOrEqual(t, nextResolved.GoTime().UnixNano(), rec.Timestamp.GoTime().UnixNano())
+			waitForProtectionAdvanced(nextResolved, getTableProtection)
+			waitForProtectionAdvanced(nextResolved, getDescriptorTableProtection)
 		}
 	}
 
@@ -4048,43 +4081,34 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			}
 			return nil
 		})
-		mkGetPtsRec = func(t *testing.T, ptp protectedts.Provider, clock *hlc.Clock) func() *ptpb.Record {
-			return func() (r *ptpb.Record) {
-				t.Helper()
-				require.NoError(t, ptp.Refresh(ctx, clock.Now()))
-				ptp.Iterate(ctx, userSpan.Key, userSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
-					r = record
-					return false
-				})
-				return r
+		mkGetProtections = func(t *testing.T, ptp protectedts.Provider,
+			srv serverutils.TestServerInterface, ptsReader spanconfig.ProtectedTSReader,
+			span roachpb.Span) func() []hlc.Timestamp {
+			return func() (r []hlc.Timestamp) {
+				require.NoError(t,
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
+				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
+				require.NoError(t, err)
+				return protections
 			}
 		}
-		mkCheckRecord = func(t *testing.T, tableID int) func(r *ptpb.Record) error {
-			expectedKeys := map[string]struct{}{
-				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
-				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
-			}
-			return func(ptr *ptpb.Record) error {
-				if ptr == nil {
-					return errors.Errorf("expected protected timestamp")
-				}
-				require.Equal(t, len(ptr.DeprecatedSpans), len(expectedKeys), ptr.DeprecatedSpans, expectedKeys)
-				for _, s := range ptr.DeprecatedSpans {
-					require.Contains(t, expectedKeys, string(s.Key))
-				}
-				return nil
-			}
-		}
-		checkNoRecord = func(ptr *ptpb.Record) error {
-			if ptr != nil {
-				return errors.Errorf("expected protected timestamp to not exist, found %v", ptr)
+		checkProtection = func(protections []hlc.Timestamp) error {
+			if len(protections) == 0 {
+				return errors.New("expected protected timestamp to exist")
 			}
 			return nil
 		}
-		mkWaitForRecordCond = func(t *testing.T, getRecord func() *ptpb.Record, check func(record *ptpb.Record) error) func() {
+		checkNoProtection = func(protections []hlc.Timestamp) error {
+			if len(protections) != 0 {
+				return errors.Errorf("expected protected timestamp to not exist, found %v", protections)
+			}
+			return nil
+		}
+		mkWaitForProtectionCond = func(t *testing.T, getProtection func() []hlc.Timestamp,
+			check func(protection []hlc.Timestamp) error) func() {
 			return func() {
 				t.Helper()
-				testutils.SucceedsSoon(t, func() error { return check(getRecord()) })
+				testutils.SucceedsSoon(t, func() error { return check(getProtection()) })
 			}
 		}
 	)
@@ -4093,6 +4117,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 			defer close(done)
 			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms';`)
 			sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 100`)
 			sqlDB.Exec(t, `ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 100`)
 			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -4107,19 +4133,44 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				context.Background(), &f.Server().ClusterSettings().SV, 100*time.Millisecond)
 
 			ptp := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
-			getPtsRec := mkGetPtsRec(t, ptp, f.Server().Clock())
-			waitForRecord := mkWaitForRecordCond(t, getPtsRec, mkCheckRecord(t, tableID))
-			waitForNoRecord := mkWaitForRecordCond(t, getPtsRec, checkNoRecord)
+			store, err := f.Server().GetStores().(*kvserver.Stores).GetStore(f.Server().GetFirstStoreID())
+			require.NoError(t, err)
+			ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+
+			// Setup helpers on the system.descriptors table.
+			descriptorTableKey := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
+			descriptorTableSpan := roachpb.Span{
+				Key: descriptorTableKey, EndKey: descriptorTableKey.PrefixEnd(),
+			}
+			getDescriptorTableProtection := mkGetProtections(t, ptp, f.Server(), ptsReader,
+				descriptorTableSpan)
+			waitForDescriptorTableProtection := mkWaitForProtectionCond(t, getDescriptorTableProtection,
+				checkProtection)
+			waitForNoDescriptorTableProtection := mkWaitForProtectionCond(t, getDescriptorTableProtection,
+				checkNoProtection)
+
+			// Setup helpers on the user table.
+			tableKey := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+			tableSpan := roachpb.Span{
+				Key: tableKey, EndKey: tableKey.PrefixEnd(),
+			}
+			getTableProtection := mkGetProtections(t, ptp, f.Server(), ptsReader, tableSpan)
+			waitForTableProtection := mkWaitForProtectionCond(t, getTableProtection, checkProtection)
+			waitForNoTableProtection := mkWaitForProtectionCond(t, getTableProtection, checkNoProtection)
 			waitForBlocked := requestBlockedScan()
-			waitForRecordAdvanced := func(ts hlc.Timestamp) {
-				check := func(ptr *ptpb.Record) error {
-					if ptr != nil && !ptr.Timestamp.LessEq(ts) {
-						return nil
+			waitForProtectionAdvanced := func(ts hlc.Timestamp, getProtection func() []hlc.Timestamp) {
+				check := func(protections []hlc.Timestamp) error {
+					if len(protections) != 0 {
+						for _, p := range protections {
+							if p.LessEq(ts) {
+								return errors.Errorf("expected protected timestamp to exceed %v, found %v", ts, p)
+							}
+						}
 					}
-					return errors.Errorf("expected protected timestamp to exceed %v, found %v", ts, ptr.Timestamp)
+					return nil
 				}
 
-				mkWaitForRecordCond(t, getPtsRec, check)()
+				mkWaitForProtectionCond(t, getProtection, check)()
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
@@ -4128,7 +4179,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				// Ensure that there's a protected timestamp on startup that goes
 				// away after the initial scan.
 				unblock := waitForBlocked()
-				require.NotNil(t, getPtsRec())
+				waitForTableProtection()
 				unblock()
 				assertPayloads(t, foo, []string{
 					`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
@@ -4138,7 +4189,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 					`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
 				})
 				resolved, _ := expectResolvedTimestamp(t, foo)
-				waitForRecordAdvanced(resolved)
+				waitForProtectionAdvanced(resolved, getTableProtection)
 			}
 
 			{
@@ -4147,7 +4198,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				waitForBlocked = requestBlockedScan()
 				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN c INT NOT NULL DEFAULT 1`)
 				unblock := waitForBlocked()
-				waitForRecord()
+				waitForTableProtection()
+				waitForDescriptorTableProtection()
 				unblock()
 				assertPayloads(t, foo, []string{
 					`foo: [1]->{"after": {"a": 1, "b": "a", "c": 1}}`,
@@ -4157,7 +4209,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 					`foo: [8]->{"after": {"a": 8, "b": "e", "c": 1}}`,
 				})
 				resolved, _ := expectResolvedTimestamp(t, foo)
-				waitForRecordAdvanced(resolved)
+				waitForProtectionAdvanced(resolved, getTableProtection)
+				waitForProtectionAdvanced(resolved, getDescriptorTableProtection)
 			}
 
 			{
@@ -4166,9 +4219,11 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				waitForBlocked = requestBlockedScan()
 				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d INT NOT NULL DEFAULT 2`)
 				_ = waitForBlocked()
-				waitForRecord()
+				waitForTableProtection()
+				waitForDescriptorTableProtection()
 				sqlDB.Exec(t, `CANCEL JOB $1`, foo.(cdctest.EnterpriseTestFeed).JobID())
-				waitForNoRecord()
+				waitForNoTableProtection()
+				waitForNoDescriptorTableProtection()
 			}
 		}, feedTestNoTenants, withArgsFn(func(args *base.TestServerArgs) {
 			storeKnobs := &kvserver.StoreTestingKnobs{}
