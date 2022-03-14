@@ -45,7 +45,7 @@ func (e *EnumSetting) String(sv *Values) string {
 
 // DecodeToString decodes and renders an encoded value.
 func (e *EnumSetting) DecodeToString(encoded string) (string, error) {
-	v, err := e.decodeNum(encoded)
+	v, err := e.DecodeValue(encoded)
 	if err != nil {
 		return "", err
 	}

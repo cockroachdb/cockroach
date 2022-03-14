@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -36,9 +35,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (p *planner) showVersionSetting(
-	ctx context.Context, st *cluster.Settings, s *settings.VersionSetting, name string,
+func (p *planner) getCurrentEncodedVersionSettingValue(
+	ctx context.Context, s *settings.VersionSetting, name string,
 ) (string, error) {
+	st := p.ExecCfg().Settings
 	var res string
 	// For the version setting we show the value from the KV store and
 	// additionally wait for the local setting instance to have observed the
@@ -98,12 +98,7 @@ func (p *planner) showVersionSetting(
 							localRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
 					}
 
-					val, err := s.Decode(kvRawVal)
-					if err != nil {
-						return err
-					}
-
-					res = val.String()
+					res = string(kvRawVal)
 					return nil
 				})
 			})
@@ -118,7 +113,6 @@ func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
-	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(
 		name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
 	)
@@ -130,6 +124,27 @@ func (p *planner) ShowClusterSetting(
 		return nil, err
 	}
 
+	setting, ok := val.(settings.NonMaskedSetting)
+	if !ok {
+		return nil, errors.AssertionFailedf("setting is masked: %v", name)
+	}
+
+	return planShowClusterSetting(setting, name,
+		func(ctx context.Context, p *planner) (bool, string, error) {
+			if verSetting, ok := setting.(*settings.VersionSetting); ok {
+				encoded, err := p.getCurrentEncodedVersionSettingValue(ctx, verSetting, name)
+				return true, encoded, err
+			}
+			return true, setting.Encoded(&p.ExecCfg().Settings.SV), nil
+		},
+	)
+}
+
+func planShowClusterSetting(
+	val settings.NonMaskedSetting,
+	name string,
+	getEncodedValue func(ctx context.Context, p *planner) (bool, string, error),
+) (planNode, error) {
 	var dType *types.T
 	switch val.(type) {
 	case *settings.IntSetting:
@@ -153,32 +168,55 @@ func (p *planner) ShowClusterSetting(
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			isNotNull, encoded, err := getEncodedValue(ctx, p)
+			if err != nil {
+				return nil, err
+			}
+
 			var d tree.Datum
-			switch s := val.(type) {
-			case *settings.IntSetting:
-				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
-			case *settings.StringSetting:
-				d = tree.NewDString(s.String(&st.SV))
-			case *settings.BoolSetting:
-				d = tree.MakeDBool(tree.DBool(s.Get(&st.SV)))
-			case *settings.FloatSetting:
-				d = tree.NewDFloat(tree.DFloat(s.Get(&st.SV)))
-			case *settings.DurationSetting:
-				d = &tree.DInterval{Duration: duration.MakeDuration(s.Get(&st.SV).Nanoseconds(), 0, 0)}
-			case *settings.DurationSettingWithExplicitUnit:
-				d = &tree.DInterval{Duration: duration.MakeDuration(s.Get(&st.SV).Nanoseconds(), 0, 0)}
-			case *settings.EnumSetting:
-				d = tree.NewDString(s.String(&st.SV))
-			case *settings.ByteSizeSetting:
-				d = tree.NewDString(s.String(&st.SV))
-			case *settings.VersionSetting:
-				valStr, err := p.showVersionSetting(ctx, st, s, name)
-				if err != nil {
-					return nil, err
+			d = tree.DNull
+			if isNotNull {
+				switch s := val.(type) {
+				case *settings.IntSetting:
+					v, err := s.DecodeValue(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = tree.NewDInt(tree.DInt(v))
+				case *settings.StringSetting, *settings.EnumSetting,
+					*settings.ByteSizeSetting, *settings.VersionSetting:
+					v, err := val.DecodeToString(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = tree.NewDString(v)
+				case *settings.BoolSetting:
+					v, err := s.DecodeValue(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = tree.MakeDBool(tree.DBool(v))
+				case *settings.FloatSetting:
+					v, err := s.DecodeValue(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = tree.NewDFloat(tree.DFloat(v))
+				case *settings.DurationSetting:
+					v, err := s.DecodeValue(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = &tree.DInterval{Duration: duration.MakeDuration(v.Nanoseconds(), 0, 0)}
+				case *settings.DurationSettingWithExplicitUnit:
+					v, err := s.DecodeValue(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = &tree.DInterval{Duration: duration.MakeDuration(v.Nanoseconds(), 0, 0)}
+				default:
+					return nil, errors.AssertionFailedf("unknown setting type for %s: %s (%T)", name, val.Typ(), val)
 				}
-				d = tree.NewDString(valStr)
-			default:
-				return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 			}
 
 			v := p.newContainerValuesNode(columns, 0)
