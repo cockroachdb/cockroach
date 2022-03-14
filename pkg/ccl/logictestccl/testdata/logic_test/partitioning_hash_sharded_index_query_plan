@@ -1097,16 +1097,16 @@ vectorized: true
     └── • lookup join (anti)
         │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
         │ estimated row count: 0 (missing stats)
-        │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+        │ table: t_unique_hash_sec_key@idx_uniq_hash_email
         │ equality cols are key
-        │ lookup condition: (column1 = id) AND (part IN ('new york', 'seattle'))
+        │ lookup condition: ((column2 = email) AND (part IN ('new york', 'seattle'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
             │ estimated row count: 0 (missing stats)
-            │ table: t_unique_hash_sec_key@idx_uniq_hash_email
+            │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
             │ equality cols are key
-            │ lookup condition: ((column2 = email) AND (part IN ('new york', 'seattle'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+            │ lookup condition: (column1 = id) AND (part IN ('new york', 'seattle'))
             │
             └── • render
                 │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
