@@ -79,7 +79,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			require.Equal(t, validateRecordForProtect(context.Background(), tc.r, st,
-				&protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}), tc.err)
+				&protectedts.TestingKnobs{}), tc.err)
 		})
 
 		// Test that prior to the `AlterSystemProtectedTimestampAddColumn` migration
@@ -94,7 +94,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 			}
 			st := cluster.MakeTestingClusterSettings()
 			require.Equal(t, validateRecordForProtect(context.Background(), r, st,
-				&protectedts.TestingKnobs{}), errEmptySpans)
+				&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}), errEmptySpans)
 		})
 	}
 }

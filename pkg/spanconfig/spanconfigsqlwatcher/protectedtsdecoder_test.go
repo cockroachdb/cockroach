@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
@@ -37,12 +36,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				ProtectedTS: &protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}},
-		},
-	})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	s0 := tc.Server(0)
