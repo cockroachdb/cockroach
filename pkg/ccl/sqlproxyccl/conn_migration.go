@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -133,18 +134,22 @@ func (f *forwarder) runTransfer() (retErr error) {
 	// the context (with the span) gets cleaned up. Some ideas to fix this:
 	// (1) errgroup (?), (2) use the stopper instead of the go keyword - that
 	// should fork a new span, and avoid this issue.
+	tBegin := timeutil.Now()
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(f.ctx))
 	defer func() {
+		latencyDur := timeutil.Since(tBegin)
+		f.metrics.ConnMigrationAttemptedLatency.RecordValue(latencyDur.Nanoseconds())
+
 		if !ctx.isRecoverable() {
-			log.Infof(logCtx, "transfer failed: connection closed, err=%v", retErr)
+			log.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
 		} else {
 			// Transfer was successful.
 			if retErr == nil {
-				log.Infof(logCtx, "transfer successful")
+				log.Infof(logCtx, "transfer successful, latency=%v", latencyDur)
 				f.metrics.ConnMigrationSuccessCount.Inc(1)
 			} else {
-				log.Infof(logCtx, "transfer failed: connection recovered, err=%v", retErr)
+				log.Infof(logCtx, "transfer failed: connection recovered, latency=%v, err=%v", latencyDur, retErr)
 				f.metrics.ConnMigrationErrorRecoverableCount.Inc(1)
 			}
 			if err := f.resumeProcessors(); err != nil {
@@ -165,7 +170,7 @@ func (f *forwarder) runTransfer() (retErr error) {
 
 	// Transfer the connection.
 	clientConn, serverConn := f.getConns()
-	newServerConn, err := transferConnection(ctx, f.connector, clientConn, serverConn)
+	newServerConn, err := transferConnection(ctx, f.connector, f.metrics, clientConn, serverConn)
 	if err != nil {
 		return errors.Wrap(err, "transferring connection")
 	}
@@ -179,7 +184,10 @@ func (f *forwarder) runTransfer() (retErr error) {
 // connection, and returns the a new connection to the server that the
 // connection got transferred to.
 func transferConnection(
-	ctx *transferContext, connector *connector, clientConn, serverConn *interceptor.PGConn,
+	ctx *transferContext,
+	connector *connector,
+	metrics *metrics,
+	clientConn, serverConn *interceptor.PGConn,
 ) (_ *interceptor.PGConn, retErr error) {
 	ctx.markRecoverable(true)
 
@@ -198,7 +206,7 @@ func transferConnection(
 	}
 
 	transferErr, state, revivalToken, err := waitForShowTransferState(
-		ctx, serverConn.ToFrontendConn(), clientConn, transferKey)
+		ctx, serverConn.ToFrontendConn(), clientConn, transferKey, metrics)
 	if err != nil {
 		return nil, errors.Wrap(err, "waiting for transfer state")
 	}
@@ -306,6 +314,9 @@ var runShowTransferState = func(w io.Writer, transferKey string) error {
 // Since ReadyForQuery may be for a previous pipelined query, this handles the
 // forwarding of messages back to the client in case we don't see our state yet.
 //
+// metrics is optional, and if not nil, it will be used to record the transfer
+// response message size in ConnMigrationTransferResponseMessageSize.
+//
 // WARNING: When using this, we assume that no other goroutines are using both
 // serverConn and clientConn. In the context of a transfer, the response
 // processor must be blocked to avoid concurrent reads from serverConn.
@@ -314,6 +325,7 @@ var waitForShowTransferState = func(
 	serverConn *interceptor.FrontendConn,
 	clientConn io.Writer,
 	transferKey string,
+	metrics *metrics,
 ) (transferErr string, state string, revivalToken string, retErr error) {
 	// Wait for a response that looks like the following:
 	//
@@ -358,7 +370,7 @@ var waitForShowTransferState = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow) bool {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow, size int) bool {
 		// This has to be 4 since we validated RowDescription earlier.
 		if len(msg.Values) != 4 {
 			return false
@@ -376,6 +388,11 @@ var waitForShowTransferState = func(
 		// referenced in msg will no longer be valid once we read the next pgwire
 		// message.
 		transferErr, state, revivalToken = string(msg.Values[0]), string(msg.Values[1]), string(msg.Values[2])
+
+		// Since the DataRow is valid, record response message size.
+		if metrics != nil {
+			metrics.ConnMigrationTransferResponseMessageSize.RecordValue(int64(size))
+		}
 		return true
 	}); err != nil {
 		return "", "", "", errors.Wrap(err, "expecting DataRow")
@@ -443,7 +460,7 @@ var runAndWaitForDeserializeSession = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow) bool {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow, _ int) bool {
 		return len(msg.Values) == 1 && string(msg.Values[0]) == "t"
 	}); err != nil {
 		return errors.Wrap(err, "expecting DataRow")
@@ -560,10 +577,14 @@ func waitForSmallRowDescription(
 func expectDataRow(
 	ctx context.Context,
 	serverConn *interceptor.FrontendConn,
-	validateFn func(*pgproto3.DataRow) bool,
+	validateFn func(*pgproto3.DataRow, int) bool,
 ) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	_, size, err := serverConn.PeekMsg()
+	if err != nil {
+		return errors.Wrap(err, "peeking message")
 	}
 	msg, err := serverConn.ReadMsg()
 	if err != nil {
@@ -573,7 +594,7 @@ func expectDataRow(
 	if !ok {
 		return errors.Newf("unexpected message: %v", jsonOrRaw(msg))
 	}
-	if !validateFn(pgMsg) {
+	if !validateFn(pgMsg, size) {
 		return errors.Newf("validation failed for message: %v", jsonOrRaw(msg))
 	}
 	return nil
