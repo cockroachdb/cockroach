@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -74,194 +76,40 @@ func alterChangefeedPlanHook(
 			return errors.Errorf(`job %d is not paused`, jobID)
 		}
 
-		// this CREATE CHANGEFEED node will be used to update the existing changefeed
-		newChangefeedStmt := &tree.CreateChangefeed{
-			SinkURI: tree.NewDString(prevDetails.SinkURI),
+		newChangefeedStmt := &tree.CreateChangefeed{}
+
+		newOptions, newSinkURI, err := generateNewOpts(ctx, p, alterChangefeedStmt.Cmds, prevDetails)
+		if err != nil {
+			return err
 		}
 
-		optionsMap := make(map[string]tree.KVOption, len(prevDetails.Opts))
+		newTargets, newProgress, newStatementTime, err := generateNewTargets(ctx,
+			p,
+			alterChangefeedStmt.Cmds,
+			newOptions,
+			prevDetails,
+			job.Progress(),
+		)
+		if err != nil {
+			return err
+		}
+		newChangefeedStmt.Targets = *newTargets
 
-		// pull the options that are set for the existing changefeed
-		for key, value := range prevDetails.Opts {
-			// There are some options (e.g. topics) that we set during the creation of
-			// a changefeed, but we do not allow these options to be set by the user.
-			// Hence, we can not include these options in our new CREATE CHANGEFEED
-			// statement.
-			if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-				continue
-			}
-			existingOpt := tree.KVOption{Key: tree.Name(key)}
+		for key, value := range newOptions {
+			opt := tree.KVOption{Key: tree.Name(key)}
 			if len(value) > 0 {
-				existingOpt.Value = tree.NewDString(value)
+				opt.Value = tree.NewDString(value)
 			}
-			optionsMap[key] = existingOpt
+			newChangefeedStmt.Options = append(newChangefeedStmt.Options, opt)
 		}
-
-		statementTime := hlc.Timestamp{
-			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
-		}
-
-		allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), statementTime)
-		if err != nil {
-			return err
-		}
-		descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
-		if err != nil {
-			return err
-		}
-
-		newDescs := make(map[descpb.ID]*tree.UnresolvedName)
-
-		for _, target := range AllTargets(prevDetails) {
-			desc := descResolver.DescByID[target.TableID]
-			newDescs[target.TableID] = tree.NewUnresolvedName(desc.GetName())
-		}
-
-		for _, cmd := range alterChangefeedStmt.Cmds {
-			switch v := cmd.(type) {
-			case *tree.AlterChangefeedAddTarget:
-				for _, targetPattern := range v.Targets.Tables {
-					targetName, err := getTargetName(targetPattern)
-					if err != nil {
-						return err
-					}
-					found, _, desc, err := resolver.ResolveExisting(
-						ctx,
-						targetName.ToUnresolvedObjectName(),
-						descResolver,
-						tree.ObjectLookupFlags{},
-						p.CurrentDatabase(),
-						p.CurrentSearchPath(),
-					)
-					if err != nil {
-						return err
-					}
-					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
-					}
-					newDescs[desc.GetID()] = tree.NewUnresolvedName(desc.GetName())
-				}
-			case *tree.AlterChangefeedDropTarget:
-				for _, targetPattern := range v.Targets.Tables {
-					targetName, err := getTargetName(targetPattern)
-					if err != nil {
-						return err
-					}
-					found, _, desc, err := resolver.ResolveExisting(
-						ctx,
-						targetName.ToUnresolvedObjectName(),
-						descResolver,
-						tree.ObjectLookupFlags{},
-						p.CurrentDatabase(),
-						p.CurrentSearchPath(),
-					)
-					if err != nil {
-						return err
-					}
-					if !found {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `target %q does not exist`, tree.ErrString(targetPattern))
-					}
-					delete(newDescs, desc.GetID())
-				}
-			case *tree.AlterChangefeedSetOptions:
-				optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
-				if err != nil {
-					return err
-				}
-
-				opts, err := optsFn()
-				if err != nil {
-					return err
-				}
-
-				for key, value := range opts {
-					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
-					}
-					if key == changefeedbase.OptSink {
-						newSinkURI, err := url.Parse(value)
-						if err != nil {
-							return err
-						}
-
-						prevSinkURI, err := url.Parse(prevDetails.SinkURI)
-						if err != nil {
-							return err
-						}
-
-						if newSinkURI.Scheme != prevSinkURI.Scheme {
-							return pgerror.Newf(
-								pgcode.InvalidParameterValue,
-								`New sink type %q does not match original sink type %q. Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
-								newSinkURI.Scheme,
-								prevSinkURI.Scheme,
-							)
-						}
-
-						newChangefeedStmt.SinkURI = tree.NewDString(value)
-					} else {
-						opt := tree.KVOption{Key: tree.Name(key)}
-						if len(value) > 0 {
-							opt.Value = tree.NewDString(value)
-						}
-						optionsMap[key] = opt
-					}
-				}
-			case *tree.AlterChangefeedUnsetOptions:
-				optKeys := v.Options.ToStrings()
-				for _, key := range optKeys {
-					if key == changefeedbase.OptSink {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot unset option %q`, key)
-					}
-					if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
-					}
-					if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
-						return pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
-					}
-					delete(optionsMap, key)
-				}
-			}
-		}
-
-		if len(newDescs) == 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop all targets for changefeed job %d", jobID)
-		}
-
-		for _, targetName := range newDescs {
-			newChangefeedStmt.Targets.Tables = append(newChangefeedStmt.Targets.Tables, targetName)
-		}
-
-		for _, val := range optionsMap {
-			newChangefeedStmt.Options = append(newChangefeedStmt.Options, val)
-		}
-
-		sinkURIFn, err := p.TypeAsString(ctx, newChangefeedStmt.SinkURI, `ALTER CHANGEFEED`)
-		if err != nil {
-			return err
-		}
-
-		optsFn, err := p.TypeAsStringOpts(ctx, newChangefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
-		if err != nil {
-			return err
-		}
-
-		sinkURI, err := sinkURIFn()
-		if err != nil {
-			return err
-		}
-
-		opts, err := optsFn()
-		if err != nil {
-			return err
-		}
+		newChangefeedStmt.SinkURI = tree.NewDString(newSinkURI)
 
 		jobRecord, err := createChangefeedJobRecord(
 			ctx,
 			p,
 			newChangefeedStmt,
-			sinkURI,
-			opts,
+			newSinkURI,
+			newOptions,
 			jobID,
 			``,
 		)
@@ -270,10 +118,11 @@ func alterChangefeedPlanHook(
 		}
 
 		newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
+		newDetails.Opts[changefeedbase.OptInitialScan] = ``
 
-		// We need to persist the statement time that was generated during the
-		// creation of the changefeed
-		newDetails.StatementTime = prevDetails.StatementTime
+		// newStatementTime will either be the StatementTime of the job prior to the
+		// alteration, or it will be the high watermark of the job.
+		newDetails.StatementTime = newStatementTime
 
 		newPayload := job.Payload()
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
@@ -284,6 +133,9 @@ func alterChangefeedPlanHook(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			ju.UpdatePayload(&newPayload)
+			if newProgress != nil {
+				ju.UpdateProgress(newProgress)
+			}
 			return nil
 		})
 
@@ -305,15 +157,454 @@ func alterChangefeedPlanHook(
 	return fn, header, nil, false, nil
 }
 
-func getTargetName(targetPattern tree.TablePattern) (*tree.TableName, error) {
+func getTargetDesc(
+	ctx context.Context,
+	p sql.PlanHookState,
+	descResolver *backupresolver.DescriptorResolver,
+	targetPattern tree.TablePattern,
+) (catalog.Descriptor, bool, error) {
 	pattern, err := targetPattern.NormalizeTablePattern()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	targetName, ok := pattern.(*tree.TableName)
 	if !ok {
-		return nil, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(targetPattern))
+		return nil, false, errors.Errorf(`CHANGEFEED cannot target %q`, tree.AsString(targetPattern))
 	}
 
-	return targetName, nil
+	found, _, desc, err := resolver.ResolveExisting(
+		ctx,
+		targetName.ToUnresolvedObjectName(),
+		descResolver,
+		tree.ObjectLookupFlags{},
+		p.CurrentDatabase(),
+		p.CurrentSearchPath(),
+	)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return desc, found, nil
+}
+
+func generateNewOpts(
+	ctx context.Context,
+	p sql.PlanHookState,
+	alterCmds tree.AlterChangefeedCmds,
+	details jobspb.ChangefeedDetails,
+) (map[string]string, string, error) {
+	sinkURI := details.SinkURI
+	newOptions := make(map[string]string, len(details.Opts))
+
+	// pull the options that are set for the existing changefeed.
+	for key, value := range details.Opts {
+		// There are some options (e.g. topics) that we set during the creation of
+		// a changefeed, but we do not allow these options to be set by the user.
+		// Hence, we can not include these options in our new CREATE CHANGEFEED
+		// statement.
+		if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
+			continue
+		}
+		newOptions[key] = value
+	}
+
+	for _, cmd := range alterCmds {
+		switch v := cmd.(type) {
+		case *tree.AlterChangefeedSetOptions:
+			optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
+			if err != nil {
+				return nil, ``, err
+			}
+
+			opts, err := optsFn()
+			if err != nil {
+				return nil, ``, err
+			}
+
+			for key, value := range opts {
+				if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
+					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
+				}
+				if key == changefeedbase.OptSink {
+					newSinkURI, err := url.Parse(value)
+					if err != nil {
+						return nil, ``, err
+					}
+
+					prevSinkURI, err := url.Parse(details.SinkURI)
+					if err != nil {
+						return nil, ``, err
+					}
+
+					if newSinkURI.Scheme != prevSinkURI.Scheme {
+						return nil, ``, pgerror.Newf(
+							pgcode.InvalidParameterValue,
+							`New sink type %q does not match original sink type %q. `+
+								`Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
+							newSinkURI.Scheme,
+							prevSinkURI.Scheme,
+						)
+					}
+
+					sinkURI = value
+				} else {
+					newOptions[key] = value
+				}
+			}
+		case *tree.AlterChangefeedUnsetOptions:
+			optKeys := v.Options.ToStrings()
+			for _, key := range optKeys {
+				if key == changefeedbase.OptSink {
+					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot unset option %q`, key)
+				}
+				if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
+					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
+				}
+				if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
+					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
+				}
+				delete(newOptions, key)
+			}
+		}
+	}
+
+	return newOptions, sinkURI, nil
+}
+
+func generateNewTargets(
+	ctx context.Context,
+	p sql.PlanHookState,
+	alterCmds tree.AlterChangefeedCmds,
+	opts map[string]string,
+	prevDetails jobspb.ChangefeedDetails,
+	prevProgress jobspb.Progress,
+) (*tree.TargetList, *jobspb.Progress, hlc.Timestamp, error) {
+	newTargetList := &tree.TargetList{}
+
+	// the new progress and statement time will start from the progress and
+	// statement time of the job prior to the alteration of the changefeed. Each
+	// time we add a new set of targets we update the newJobProgress and
+	// newJobStatementTime accordingly.
+	newJobProgress := prevProgress
+	newJobStatementTime := prevDetails.StatementTime
+
+	statementTime := hlc.Timestamp{
+		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+	}
+
+	// we attempt to resolve the changefeed targets as of the current time to
+	// ensure that all targets exist. However, we also need to make sure that all
+	// targets can be resolved at the time in which the changefeed is resumed. We
+	// perform these validations in the validateNewTargets function.
+	allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), statementTime)
+	if err != nil {
+		return nil, nil, hlc.Timestamp{}, err
+	}
+	descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
+	if err != nil {
+		return nil, nil, hlc.Timestamp{}, err
+	}
+
+	newTargets := make(map[descpb.ID]catalog.Descriptor)
+
+	for _, target := range AllTargets(prevDetails) {
+		desc := descResolver.DescByID[target.TableID]
+		newTargets[target.TableID] = desc
+	}
+
+	for _, cmd := range alterCmds {
+		switch v := cmd.(type) {
+		case *tree.AlterChangefeedAddTarget:
+			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedTargetOptions)
+			if err != nil {
+				return nil, nil, hlc.Timestamp{}, err
+			}
+			targetOpts, err := targetOptsFn()
+			if err != nil {
+				return nil, nil, hlc.Timestamp{}, err
+			}
+
+			_, withInitialScan := targetOpts[changefeedbase.OptInitialScan]
+			_, noInitialScan := targetOpts[changefeedbase.OptNoInitialScan]
+			if withInitialScan && noInitialScan {
+				return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
+					changefeedbase.OptNoInitialScan,
+				)
+			}
+
+			// When we add new targets with or without initial scans, indicating
+			// initial_scan or no_initial_scan in the job description would lose its
+			// meaning. Hence, we will omit these details from the changefeed
+			// description. However, to ensure that we do perform the initial scan on
+			// newly added targets, we will introduce the initial_scan opt after the
+			// job record is created.
+			delete(opts, changefeedbase.OptNoInitialScan)
+			delete(opts, changefeedbase.OptInitialScan)
+
+			var existingTargetDescs []catalog.Descriptor
+			for _, targetDesc := range newTargets {
+				existingTargetDescs = append(existingTargetDescs, targetDesc)
+			}
+			existingTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, existingTargetDescs)
+			if err != nil {
+				return nil, nil, hlc.Timestamp{}, err
+			}
+
+			var newTargetDescs []catalog.Descriptor
+			for _, targetPattern := range v.Targets.Tables {
+				desc, found, err := getTargetDesc(ctx, p, descResolver, targetPattern)
+				if err != nil {
+					return nil, nil, hlc.Timestamp{}, err
+				}
+				if !found {
+					return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`target %q does not exist`,
+						tree.ErrString(targetPattern),
+					)
+				}
+				newTargets[desc.GetID()] = desc
+				newTargetDescs = append(newTargetDescs, desc)
+			}
+
+			addedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, newTargetDescs)
+			if err != nil {
+				return nil, nil, hlc.Timestamp{}, err
+			}
+
+			// By default, we will not perform an initial scan on newly added
+			// targets. Hence, the user must explicitly state that they want an
+			// initial scan performed on the new targets.
+			newJobProgress, newJobStatementTime, err = generateNewProgress(
+				newJobProgress,
+				newJobStatementTime,
+				existingTargetSpans,
+				addedTargetSpans,
+				withInitialScan,
+			)
+			if err != nil {
+				return nil, nil, hlc.Timestamp{}, err
+			}
+		case *tree.AlterChangefeedDropTarget:
+			var droppedTargetDescs []catalog.Descriptor
+			for _, targetPattern := range v.Targets.Tables {
+				desc, found, err := getTargetDesc(ctx, p, descResolver, targetPattern)
+				if err != nil {
+					return nil, nil, hlc.Timestamp{}, err
+				}
+				if !found {
+					return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`target %q does not exist`,
+						tree.ErrString(targetPattern),
+					)
+				}
+				delete(newTargets, desc.GetID())
+				droppedTargetDescs = append(droppedTargetDescs, desc)
+			}
+			droppedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, droppedTargetDescs)
+			if err != nil {
+				return nil, nil, hlc.Timestamp{}, err
+			}
+			removeSpansFromProgress(newJobProgress, droppedTargetSpans)
+		}
+	}
+
+	for _, targetDesc := range newTargets {
+		targetName := tree.NewUnresolvedName(targetDesc.GetName())
+		newTargetList.Tables = append(newTargetList.Tables, targetName)
+	}
+
+	if err := validateNewTargets(ctx, p, newTargetList, newJobProgress, newJobStatementTime); err != nil {
+		return nil, nil, hlc.Timestamp{}, err
+	}
+
+	return newTargetList, &newJobProgress, newJobStatementTime, nil
+}
+
+func validateNewTargets(
+	ctx context.Context,
+	p sql.PlanHookState,
+	newTargets *tree.TargetList,
+	jobProgress jobspb.Progress,
+	jobStatementTime hlc.Timestamp,
+) error {
+	if len(newTargets.Tables) == 0 {
+		return pgerror.New(pgcode.InvalidParameterValue, "cannot drop all targets")
+	}
+
+	// when we resume the changefeed, we need to ensure that the newly added
+	// targets can be resolved at the time of the high watermark. If the high
+	// watermark is empty, then we need to ensure that the newly added targets can
+	// be resolved at the StatementTime of the changefeed job.
+	var resolveTime hlc.Timestamp
+	highWater := jobProgress.GetHighWater()
+	if highWater != nil && !highWater.IsEmpty() {
+		resolveTime = *highWater
+	} else {
+		resolveTime = jobStatementTime
+	}
+
+	allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), resolveTime)
+	if err != nil {
+		return errors.Wrap(err, `error while validating new targets`)
+	}
+	descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
+	if err != nil {
+		return errors.Wrap(err, `error while validating new targets`)
+	}
+
+	for _, targetName := range newTargets.Tables {
+		_, found, err := getTargetDesc(ctx, p, descResolver, targetName)
+		if err != nil {
+			return errors.Wrap(err, `error while validating new targets`)
+		}
+		if !found {
+			if highWater != nil && !highWater.IsEmpty() {
+				return errors.Errorf(`target %q cannot be resolved as of the high water mark. `+
+					`Please wait until the high water mark progresses past the creation time of this target in order to add it to the changefeed.`,
+					tree.ErrString(targetName),
+				)
+			}
+			return errors.Errorf(`target %q cannot be resolved as of the creation time of the changefeed. `+
+				`Please wait until the high water mark progresses past the creation time of this target in order to add it to the changefeed.`,
+				tree.ErrString(targetName),
+			)
+		}
+	}
+
+	return nil
+}
+
+// generateNewProgress determines if the progress of a changefeed job needs to
+// be updated based on the targets that have been added, the options associated
+// with each target we are adding/removing (i.e. with initial_scan or
+// no_initial_scan), and the current status of the job. If the progress does not
+// need to be updated, we will simply return the previous progress and statement
+// time that is passed into the function.
+func generateNewProgress(
+	prevProgress jobspb.Progress,
+	prevStatementTime hlc.Timestamp,
+	existingTargetSpans []roachpb.Span,
+	newSpans []roachpb.Span,
+	withInitialScan bool,
+) (jobspb.Progress, hlc.Timestamp, error) {
+	prevHighWater := prevProgress.GetHighWater()
+	changefeedProgress := prevProgress.GetChangefeed()
+
+	haveHighwater := !(prevHighWater == nil || prevHighWater.IsEmpty())
+	haveCheckpoint := changefeedProgress != nil && changefeedProgress.Checkpoint != nil &&
+		len(changefeedProgress.Checkpoint.Spans) != 0
+
+	// Check if the progress does not need to be updated. The progress does not
+	// need to be updated if:
+	// * the high watermark is empty, and we would like to perform an initial scan.
+	// * the high watermark is non-empty, the checkpoint is empty, and we do not want to
+	//   perform an initial scan.
+	if (!haveHighwater && withInitialScan) || (haveHighwater && !haveCheckpoint && !withInitialScan) {
+		return prevProgress, prevStatementTime, nil
+	}
+
+	// Check if the user is trying to perform an initial scan during a
+	// non-initial backfill.
+	if haveHighwater && haveCheckpoint && withInitialScan {
+		// TODO(sherman): change error string
+		return prevProgress, prevStatementTime, errors.Errorf(
+			`cannot perform initial scan on newly added targets while the checkpoint is non-empty, ` +
+				`please unpause the changefeed and wait until the high watermark progresses past the current value to add these targets.`,
+		)
+	}
+
+	// Check if the user is trying to perform an initial scan while the high
+	// watermark is non-empty but the checkpoint is empty.
+	if haveHighwater && !haveCheckpoint && withInitialScan {
+		// If we would like to perform an initial scan on the new targets,
+		// we need to reset the high watermark. However, by resetting the high
+		// watermark, the initial scan will be performed on existing targets as well.
+		// To avoid this, we update the statement time of the job to the previous high
+		// watermark, and add all the existing targets to the checkpoint to skip the
+		// initial scan on these targets.
+		newStatementTime := *prevHighWater
+
+		newProgress := jobspb.Progress{
+			Progress: &jobspb.Progress_HighWater{},
+			Details: &jobspb.Progress_Changefeed{
+				Changefeed: &jobspb.ChangefeedProgress{
+					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
+						Spans: existingTargetSpans,
+					},
+				},
+			},
+		}
+
+		return newProgress, newStatementTime, nil
+	}
+
+	// At this point, we are left with one of two cases:
+	// * the high watermark is empty, and we do not want to perform
+	//   an initial scan on the new targets.
+	// * the high watermark is non-empty, the checkpoint is non-empty,
+	//   and we do not want to perform an initial scan on the new targets.
+	// In either case, we need to update the checkpoint to include the spans
+	// of the newly added targets so that the changefeed will skip performing
+	// a backfill on these targets.
+
+	var mergedSpanGroup roachpb.SpanGroup
+	if haveCheckpoint {
+		mergedSpanGroup.Add(changefeedProgress.Checkpoint.Spans...)
+	}
+	mergedSpanGroup.Add(newSpans...)
+
+	newProgress := jobspb.Progress{
+		Progress: &jobspb.Progress_HighWater{},
+		Details: &jobspb.Progress_Changefeed{
+			Changefeed: &jobspb.ChangefeedProgress{
+				Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
+					Spans: mergedSpanGroup.Slice(),
+				},
+			},
+		},
+	}
+	return newProgress, prevStatementTime, nil
+}
+
+func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roachpb.Span) {
+	changefeedProgress := prevProgress.GetChangefeed()
+	if changefeedProgress == nil {
+		return
+	}
+	changefeedCheckpoint := changefeedProgress.Checkpoint
+	if changefeedCheckpoint == nil {
+		return
+	}
+	prevSpans := changefeedCheckpoint.Spans
+
+	var spanGroup roachpb.SpanGroup
+	spanGroup.Add(prevSpans...)
+	spanGroup.Sub(spansToRemove...)
+	changefeedProgress.Checkpoint.Spans = spanGroup.Slice()
+}
+
+func fetchSpansForDescs(
+	ctx context.Context,
+	p sql.PlanHookState,
+	opts map[string]string,
+	statementTime hlc.Timestamp,
+	descs []catalog.Descriptor,
+) ([]roachpb.Span, error) {
+	targets, tables, err := getTargetsAndTables(ctx, p, descs, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	details := jobspb.ChangefeedDetails{
+		TargetSpecifications: targets,
+		Tables:               tables,
+	}
+
+	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), AllTargets(details), statementTime)
+
+	return spans, err
 }
