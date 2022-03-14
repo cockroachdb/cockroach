@@ -97,6 +97,16 @@ func (s *Set) Length() int {
 	return int(s.length)
 }
 
+// Immutable indicates if all constraints in the Set are immutable.
+func (s *Set) Immutable() bool {
+	for i := 0; i < s.Length(); i++ {
+		if !s.Constraint(i).Immutable() {
+			return false
+		}
+	}
+	return true
+}
+
 // Constraint returns the nth constraint in the set. Together with the Length
 // method, Constraint allows iteration over the list of constraints (since
 // there is no method to return a slice of constraints).
@@ -111,6 +121,45 @@ func (s *Set) Constraint(nth int) *Constraint {
 // which means column values can have any possible values.
 func (s *Set) IsUnconstrained() bool {
 	return s.length == 0 && !s.contradiction
+}
+
+// Equals returns true if the two Constraint Sets are identical.
+func (s *Set) Equals(other *Set, evalCtx *eval.Context) bool {
+	if other == nil {
+		return false
+	}
+	if s.Length() != other.Length() {
+		return false
+	}
+	if s.Immutable() != other.Immutable() {
+		return false
+	}
+	if s.contradiction != other.contradiction {
+		return false
+	}
+	for i := 0; i < s.Length(); i++ {
+		if !s.Constraint(i).Equals(other.Constraint(i), evalCtx) {
+			return false
+		}
+	}
+	return true
+}
+
+// CopyAndMaybeRemapConstraintSetWithColMap copies the constraint Set in s and
+// conditionally remaps the Set's Columns according to a colMap if they can be
+// found in the colMap.
+func (s *Set) CopyAndMaybeRemapConstraintSetWithColMap(colMap opt.ColMap) *Set {
+	newConstraints := Set{}
+	length := s.Length()
+	for i := 0; i < length; i++ {
+		newConstraints.allocConstraint(length)
+		toConstraint := newConstraints.Constraint(i)
+		fromConstraint := s.Constraint(i)
+		toConstraint.Spans = fromConstraint.Spans
+		fromColumns := fromConstraint.Columns
+		toConstraint.Columns = fromColumns.CopyAndMaybeRemapColumnsWithColMap(colMap)
+	}
+	return &newConstraints
 }
 
 // Intersect finds the overlap between this constraint set and the given set.

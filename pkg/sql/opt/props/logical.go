@@ -13,6 +13,7 @@ package props
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // AvailableRuleProps is a bit set that indicates when lazily-populated Rule
@@ -45,6 +46,8 @@ const (
 
 // Shared are properties that are shared by both relational and scalar
 // expressions.
+// Note: If new fields are added to this struct, the Equals and CopyFrom
+//       functions must be updated.
 type Shared struct {
 	// Populated is set to true once the properties have been built for the
 	// operator.
@@ -277,6 +280,8 @@ type Relational struct {
 // Scalar properties are logical properties that are computed for scalar
 // expressions that return primitive-valued types. Scalar properties are
 // lazily populated on request.
+// Note: If new fields are added to this struct, the Equals and CopyFrom
+//       functions must be updated.
 type Scalar struct {
 	Shared
 
@@ -338,6 +343,83 @@ type Scalar struct {
 		// been set.
 		HasHoistableSubquery bool
 	}
+}
+
+// Equals returns true if the shared properties in s are identical to those in
+// "other". The Rule.WithUses map is not compared, as it is lazily populated.
+func (s *Shared) Equals(other *Shared) bool {
+	if other == nil {
+		return false
+	}
+	if s.Populated != other.Populated ||
+		s.HasSubquery != other.HasSubquery ||
+		s.HasCorrelatedSubquery != other.HasCorrelatedSubquery ||
+		s.VolatilitySet != other.VolatilitySet ||
+		s.CanMutate != other.CanMutate ||
+		s.HasPlaceholder != other.HasPlaceholder ||
+		!s.OuterCols.Equals(other.OuterCols) {
+		return false
+	}
+	return true
+}
+
+// Equals returns true if the scalar properties in s are identical to those in
+// "other", including Shared properties.
+func (s *Scalar) Equals(other *Scalar, evalCtx *eval.Context) bool {
+	if other == nil {
+		return false
+	}
+	if !s.Shared.Equals(&other.Shared) {
+		return false
+	}
+	if !s.Constraints.Equals(other.Constraints, evalCtx) {
+		return false
+	}
+	if !s.FuncDeps.Equals(&other.FuncDeps) {
+		return false
+	}
+	if s.TightConstraints != other.TightConstraints {
+		return false
+	}
+	if s.Rule.HasHoistableSubquery != other.Rule.HasHoistableSubquery {
+		return false
+	}
+	if s.Rule.Available != other.Rule.Available {
+		return false
+	}
+	return true
+}
+
+// CopyFrom copies all properties from fromProps into s, remapping any
+// ColumnIDs or ColSets using colMap. Panics if a column cannot be remapped.
+// Scalar.Rule.WithUses is not copied as it is lazily populated, so will get
+// filled in later.
+func (s *Scalar) CopyFrom(fromProps *Scalar, colMap opt.ColMap) {
+	// Shared Properties
+	s.HasSubquery = fromProps.HasSubquery
+	s.HasCorrelatedSubquery = fromProps.HasCorrelatedSubquery
+	s.VolatilitySet = fromProps.VolatilitySet
+	s.CanMutate = fromProps.CanMutate
+	s.HasPlaceholder = fromProps.HasPlaceholder
+	s.OuterCols = fromProps.OuterCols.CopyAndRemap(colMap)
+	s.HasPlaceholder = fromProps.HasPlaceholder
+	// toProps.Rule.WithUses is lazily populated later on, if required, and the
+	// copy would have different WithIDs, so we intentionally do not copy it.
+
+	// Scalar Properties
+	s.FuncDeps = fromProps.FuncDeps.CopyAndRemap(colMap)
+	s.TightConstraints = fromProps.TightConstraints
+	s.Rule.Available = fromProps.Rule.Available
+	s.Rule.HasHoistableSubquery = fromProps.Rule.HasHoistableSubquery
+
+	fromConstraints := fromProps.Constraints
+	// Map from one set of constraints to another to save memory by sharing
+	// Spans and processing overhead and making a copy of Constraints instead
+	// of recomputing from scratch.
+	if fromConstraints != nil {
+		s.Constraints = fromConstraints.CopyAndMaybeRemapConstraintSetWithColMap(colMap)
+	}
+	s.Populated = true
 }
 
 // IsAvailable returns true if the specified rule property has been populated

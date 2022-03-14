@@ -361,6 +361,11 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 		return 0, false
 	}
 
+	if prefixLength > keyCtx.Columns.Count() {
+		// Unable to examine a column not defined by keyCtx.
+		return 0, false
+	}
+
 	startKey := sp.start
 	endKey := sp.end
 	if startKey.Length() < prefixLength || endKey.Length() < prefixLength {

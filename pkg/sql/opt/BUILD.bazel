@@ -48,6 +48,7 @@ go_test(
     size = "small",
     srcs = [
         "colset_test.go",
+        "filters_test.go",
         "metadata_test.go",
         "operator_test.go",
         "ordering_test.go",
@@ -58,6 +59,7 @@ go_test(
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/eval",

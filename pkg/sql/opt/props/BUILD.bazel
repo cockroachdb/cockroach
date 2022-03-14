@@ -47,6 +47,7 @@ go_test(
         "histogram_test.go",
         "multiplicity_test.go",
         "ordering_choice_test.go",
+        "scalar_test.go",
         "selectivity_test.go",
         "statistics_test.go",
         "volatility_test.go",

@@ -1330,6 +1330,21 @@ func makeJoinFD(t *testing.T) *props.FuncDepSet {
 	return join
 }
 
+func testFDRemap(t *testing.T, fd *props.FuncDepSet) {
+	var colMap opt.ColMap
+	var reverseMap opt.ColMap
+	const maxColID = 150
+	for i := 1; i <= maxColID; i++ {
+		colMap.Set(i, i+maxColID)
+		reverseMap.Set(i+maxColID, i)
+	}
+	fdRemapped := fd.CopyAndRemap(colMap)
+	fdReRemapped := fdRemapped.CopyAndRemap(reverseMap)
+	if !fd.Equals(&fdReRemapped) || !fdReRemapped.Equals(fd) {
+		t.Errorf("FDs not equal. fd: %v, fdReRemapped: %v", fd, fdReRemapped)
+	}
+}
+
 func verifyFD(t *testing.T, f *props.FuncDepSet, expected string) {
 	t.Helper()
 	actual := f.String()
@@ -1356,6 +1371,7 @@ func verifyFD(t *testing.T, f *props.FuncDepSet, expected string) {
 	} else {
 		testColsAreStrictKey(t, f, opt.ColSet{}, false)
 	}
+	testFDRemap(t, f)
 }
 
 func testColsAreStrictKey(t *testing.T, f *props.FuncDepSet, cols opt.ColSet, expected bool) {
