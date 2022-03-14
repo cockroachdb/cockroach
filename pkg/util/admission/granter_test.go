@@ -373,7 +373,7 @@ func TestIOLoadListener(t *testing.T) {
 					ioll.mu.Mutex = &syncutil.Mutex{}
 					ioll.mu.kvGranter = kvGranter
 				}
-				ioll.pebbleMetricsTick(ctx, metrics)
+				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
@@ -419,8 +419,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		Sublevels: 100,
 		NumFiles:  10000,
 	}
-	ioll.pebbleMetricsTick(ctx, m)
-	ioll.pebbleMetricsTick(ctx, m)
+	ioll.pebbleMetricsTick(ctx, &m)
+	ioll.pebbleMetricsTick(ctx, &m)
 	ioll.allocateTokensTick()
 }
 
@@ -458,7 +458,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	ioll.mu.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
 		randomValues()
-		ioll.pebbleMetricsTick(ctx, m)
+		ioll.pebbleMetricsTick(ctx, &m)
 		for j := 0; j < adjustmentInterval; j++ {
 			ioll.allocateTokensTick()
 			require.LessOrEqual(t, int64(0), ioll.totalTokens)
