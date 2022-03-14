@@ -179,6 +179,15 @@ func (s *schemaChange) Ops(
 
 	s.dumpLogsOnce = &sync.Once{}
 
+	// TODO (fqazi): For 21.2 disable the schemahcnage workload, by always forcing
+	// a concurrency of 0. See epic: CRDB-13725
+	// Note: We can't only disable the external workload, since there are other
+	// mixed workloads that require this workload.
+	s.concurrency = 0
+	if artifactsLog != nil {
+		artifactsLog.printLn("schemachanger workload is disabled in 21.2 since it flakes.")
+	}
+
 	for i := 0; i < s.concurrency; i++ {
 
 		opGeneratorParams := operationGeneratorParams{
