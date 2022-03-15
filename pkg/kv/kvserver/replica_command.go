@@ -1210,56 +1210,37 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 	// complete. If we don't find the current leaseholder there this means it's being removed,
 	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
 	beingRemoved := true
+	voterIncomingTarget := roachpb.ReplicaDescriptor{}
 	for _, v := range voters {
-		if v.ReplicaID == r.ReplicaID() {
+		if beingRemoved && v.ReplicaID == r.ReplicaID() {
 			beingRemoved = false
-			break
+		}
+		if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) &&
+			v.GetType() == roachpb.VOTER_INCOMING {
+			voterIncomingTarget = v
 		}
 	}
 	if !beingRemoved {
 		return nil
 	}
-	// TransferLeaseTarget looks for a suitable target for lease transfer.
-	// Replicas are filtered from considerations based on the arguments passed,
-	// as well as various indicators. One such filtering is a requirement that a
-	// target replica has applied a snapshot. We exclude VOTER_INCOMING replicas
-	// from this check, since they only move to this state after applying a
-	// snapshot. Another filtering is based on the lieveness status of nodes
-	// We do not transfer the lease to nodes in draining or unknown state.
-	// Unknown is a temporary state, and is usually resolved after receiving a
-	// gossip message. But we do not know whether a particular node is alive,
-	// and would rather stay in the JOINT config than transferring the lease
-	// to a dead node. If no candidates are found, we will remain in a JOINT
-	// config, and rely on upper layers to retry exiting from the config.
-	target := r.store.allocator.TransferLeaseTarget(
-		ctx,
-		r.SpanConfig(),
-		voters,
-		r,
-		r.leaseholderStats,
-		true, /* forceDecisionWithoutStats */
-		transferLeaseOptions{
-			goal:                     followTheWorkload,
-			checkTransferLeaseSource: false,
-			checkCandidateFullness:   false,
-			dryRun:                   false,
-		},
-	)
-	if target == (roachpb.ReplicaDescriptor{}) {
+
+	if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) {
 		err := errors.Errorf(
-			"could not find a better lease transfer target for r%d", desc.RangeID)
+			"no VOTER_INCOMING to transfer lease to for r%d (should not happen)", desc.RangeID)
 		log.VErrEventf(ctx, 5, "%v", err)
 		// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
-		// caller will retry. Note that the JOINT config isn't rolled back.
+		// caller will retry. Note that the JOINT config isn't rolled back. This should not happen
+		// since we only go into the JOINT config if leaseholder is being removed, when there is a
+		// VOTER_INCOMING node.
 		return err
 	}
 	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
-		" atomic replication change. Transferring lease to %v", r.String(), target)
-	err := r.store.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
+		" atomic replication change. Transferring lease to %v", r.String(), voterIncomingTarget)
+	err := r.store.DB().AdminTransferLease(ctx, r.startKey, voterIncomingTarget.StoreID)
 	if err != nil {
 		return err
 	}
-	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", target)
+	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", voterIncomingTarget)
 	return nil
 }
 
@@ -2871,8 +2852,21 @@ func (r *Replica) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			if !r.store.cfg.Settings.Version.IsActive(ctx,
-				clusterversion.EnableLeaseHolderRemoval) {
+			// Check whether we are proposing to add a replica that isn't already the
+			// leaseholder.
+			containsVoterIncoming := false
+			for _, op := range ops {
+				if op.ChangeType == roachpb.ADD_VOTER {
+					containsVoterIncoming = true
+					break
+				}
+			}
+			// Determines whether we can remove the leaseholder without first
+			// transferring the lease away
+			lhRemovalAllowed := containsVoterIncoming &&
+				r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+
+			if !lhRemovalAllowed {
 				if leaseTarget != nil {
 					// NB: we may need to transfer even if there are no ops, to make
 					// sure the attempt is made to make the first target the final
@@ -3127,9 +3121,12 @@ func (r *Replica) relocateOne(
 		if err := r.store.DB().Run(ctx, &b); err != nil {
 			return nil, nil, errors.Wrap(err, "looking up lease")
 		}
-		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) ||
+		// Determines whether we can remove the leaseholder without first
+		// transferring the lease away.
+		lhRemovalAllowed := len(args.votersToAdd) > 0 &&
 			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
+		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
 		if args.targetType == voterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.

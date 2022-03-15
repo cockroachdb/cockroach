@@ -327,6 +327,17 @@ func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (Replica
 	return ReplicaDescriptor{}, false
 }
 
+// ContainsVoterIncoming returns true if the descriptor contains a VOTER_INCOMING replica
+// that is different from the provided leaseHolderID.
+func (r *RangeDescriptor) ContainsVoterIncoming() bool {
+	for _, repDesc := range r.Replicas().Descriptors() {
+		if repDesc.GetType() == VOTER_INCOMING {
+			return true
+		}
+	}
+	return false
+}
+
 // IsInitialized returns false if this descriptor represents an
 // uninitialized range.
 // TODO(bdarnell): unify this with Validate().

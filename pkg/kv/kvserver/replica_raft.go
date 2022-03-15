@@ -345,10 +345,10 @@ func (r *Replica) propose(
 		// In case (1) the lease needs to be transferred out before a removal is
 		// proposed (cooperative transfer). The code below permits leaseholder
 		// removal only if entering a joint configuration (option 2 above) in which
-		// the leaseholder is (any kind of) voter. In this case, the lease is
-		// transferred to a different voter (potentially incoming) in
-		// maybeLeaveAtomicChangeReplicas right before we exit the joint
-		// configuration.
+		// the leaseholder is (any kind of) voter, and in addition, this joint config
+		// should include a VOTER_INCOMING replica. In this case, the lease is
+		// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
+		// before we exit the joint configuration.
 		//
 		// When the leaseholder is replaced by a new replica, transferring the
 		// lease in the joint config allows transferring directly from old to new,
@@ -366,19 +366,20 @@ func (r *Replica) propose(
 		// See also https://github.com/cockroachdb/cockroach/issues/67740.
 		replID := r.ReplicaID()
 		rDesc, ok := p.command.ReplicatedEvalResult.State.Desc.GetReplicaDescriptorByID(replID)
-		lhRemovalAllowed := r.store.cfg.Settings.Version.IsActive(ctx,
+		hasVoterIncoming := p.command.ReplicatedEvalResult.State.Desc.ContainsVoterIncoming()
+		lhRemovalAllowed := hasVoterIncoming && r.store.cfg.Settings.Version.IsActive(ctx,
 			clusterversion.EnableLeaseHolderRemoval)
 		// Previously, we were not allowed to enter a joint config where the
 		// leaseholder is being removed (i.e., not a voter). In the new version
-		// we're allowed to enter such a joint config, but not to exit it in this
-		// state, i.e., the leaseholder must be some kind of voter in the next
-		// new config (potentially VOTER_DEMOTING).
+		// we're allowed to enter such a joint config (if it has a VOTER_INCOMING),
+		// but not to exit it in this state, i.e., the leaseholder must be some
+		// kind of voter in the next new config (potentially VOTER_DEMOTING).
 		if !ok ||
 			(lhRemovalAllowed && !rDesc.IsAnyVoter()) ||
 			(!lhRemovalAllowed && !rDesc.IsVoterNewConfig()) {
 			err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self ("+
-				"leaseholder); lhRemovalAllowed: %v", crt, lhRemovalAllowed),
-				errMarkInvalidReplicationChange)
+				"leaseholder); lhRemovalAllowed: %v; proposed descriptor: %v", crt, lhRemovalAllowed,
+				p.command.ReplicatedEvalResult.State.Desc), errMarkInvalidReplicationChange)
 			log.Errorf(p.ctx, "%v", err)
 			return roachpb.NewError(err)
 		}
