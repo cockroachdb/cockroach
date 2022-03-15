@@ -365,10 +365,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 	// If there are any implicit partitioning columns in the primary index,
 	// these columns will need to be fetched.
 	primaryIndex := mb.tab.Index(cat.PrimaryIndex)
-	// TODO(mgartner): It should be possible to perform an UPSERT fast path for a
-	// non-partitioned hash-sharded primary index, but this restriction disallows
-	// it.
-	if primaryIndex.ImplicitColumnCount() > 0 {
+	if primaryIndex.ImplicitPartitioningColumnCount() > 0 {
 		return true
 	}
 
@@ -865,7 +862,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 	// Never update primary key columns. Implicit partitioning columns are not
 	// considered part of the primary key in this case.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
-	skipCols := conflictIndex.ImplicitColumnCount()
+	skipCols := conflictIndex.ImplicitPartitioningColumnCount()
 	for i, n := skipCols, conflictIndex.KeyColumnCount(); i < n; i++ {
 		mb.updateColIDs[conflictIndex.Column(i).Ordinal()] = 0
 	}
