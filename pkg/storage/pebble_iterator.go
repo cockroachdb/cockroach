@@ -217,6 +217,12 @@ func (p *pebbleIterator) init(
 		}
 	}
 
+	if opts.RangeKeyMaskingBelow.IsSet() {
+		p.options.RangeKeyMasking = pebble.RangeKeyMasking{
+			Suffix: EncodeMVCCTimestampSuffix(opts.RangeKeyMaskingBelow),
+		}
+	}
+
 	if doClone {
 		var err error
 		if p.iter, err = iterToClone.Clone(); err != nil {

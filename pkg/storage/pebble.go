@@ -1855,7 +1855,8 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	// TODO(erikgrinaker): We should generalize and consolidate iterator reuse.
-	reusable := opts.MinTimestampHint.IsEmpty() && opts.KeyTypes == IterKeyTypePointsOnly
+	reusable := opts.MinTimestampHint.IsEmpty() && opts.KeyTypes == IterKeyTypePointsOnly &&
+		opts.RangeKeyMaskingBelow.IsEmpty()
 	if !reusable {
 		iter := MVCCIterator(newPebbleIterator(
 			p.parent.db, nil, opts, p.durability, p.parent.db.FormatMajorVersion()))
@@ -1900,7 +1901,7 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		panic("using a closed pebbleReadOnly")
 	}
 
-	reusable := opts.KeyTypes == IterKeyTypePointsOnly
+	reusable := opts.KeyTypes == IterKeyTypePointsOnly && opts.RangeKeyMaskingBelow.IsEmpty()
 	if !reusable {
 		return newPebbleIterator(
 			p.parent.db, nil, opts, StandardDurability, p.parent.db.FormatMajorVersion())
@@ -1941,6 +1942,9 @@ func checkOptionsForIterReuse(opts IterOptions) {
 	// keytype once e.g. pebbleMVCCScanner is migrated to respect range keys.
 	if opts.KeyTypes != IterKeyTypePointsOnly {
 		panic("iterators with range keys cannot be reused")
+	}
+	if opts.RangeKeyMaskingBelow.IsSet() {
+		panic("iterators with range key masking cannot be reused")
 	}
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
