@@ -75,8 +75,9 @@ process" below):
 - When you're happy with the result, commit your changes, submit a pull
   request, and have it reviewed.
 - Ask someone with permissions to run the
-  `Build and Publish Cross Toolchains` build configuration in TeamCity.
-  This will publish the toolchains to a new subdirectory in Google cloud
+  `Build and Publish Cross Toolchains` and
+  `Build and Publish Darwin Toolchains` build configurations in TeamCity.
+  These will publish the new toolchains to a new subdirectory in Google cloud
   storage, and the build log will additionally contain the sha256 of
   every tarball created.
 - Update the URL's in `build/builder/Dockerfile` and their sha256's
