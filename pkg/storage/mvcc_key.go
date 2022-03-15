@@ -225,13 +225,26 @@ func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
 // representation, including the length suffix but excluding the sentinel byte.
 // This is equivalent to the Pebble suffix.
 func EncodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
+	return encodeMVCCTimestampSuffixToBuf(nil, ts)
+}
+
+// encodeMVCCTimestampSuffixToBuf encodes an MVCC timestamp into its Pebble
+// representation, including the length suffix but excluding the sentinel byte.
+// This is equivalent to the Pebble suffix. It reuses the given byte buffer if
+// it has sufficient capacity.
+func encodeMVCCTimestampSuffixToBuf(buf []byte, ts hlc.Timestamp) []byte {
 	tsLen := encodedMVCCTimestampLength(ts)
 	if tsLen == 0 {
-		return nil
+		return buf[:0]
 	}
-	buf := make([]byte, tsLen+mvccEncodedTimeLengthLen)
+	suffixLen := tsLen + mvccEncodedTimeLengthLen
+	if cap(buf) < suffixLen {
+		buf = make([]byte, suffixLen)
+	} else {
+		buf = buf[:suffixLen]
+	}
 	encodeMVCCTimestampToBuf(buf, ts)
-	buf[tsLen] = byte(tsLen + mvccEncodedTimeLengthLen)
+	buf[tsLen] = byte(suffixLen)
 	return buf
 }
 

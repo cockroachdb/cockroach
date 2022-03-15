@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -222,6 +223,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		return reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
 	intentOpts.KeyTypes = IterKeyTypePointsOnly
+	intentOpts.RangeKeyMaskingBelow = hlc.Timestamp{}
 
 	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
 	intentKeyBuf := iiIter.intentKeyBuf
