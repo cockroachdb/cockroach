@@ -1210,56 +1210,34 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 	// complete. If we don't find the current leaseholder there this means it's being removed,
 	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
 	beingRemoved := true
+	voterIncomingTarget := roachpb.ReplicaDescriptor{}
 	for _, v := range voters {
-		if v.ReplicaID == r.ReplicaID() {
+		if beingRemoved && v.ReplicaID == r.ReplicaID() {
 			beingRemoved = false
-			break
+		}
+		if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) &&
+			v.GetType() == roachpb.VOTER_INCOMING {
+			voterIncomingTarget = v
 		}
 	}
 	if !beingRemoved {
 		return nil
 	}
-	// TransferLeaseTarget looks for a suitable target for lease transfer.
-	// Replicas are filtered from considerations based on the arguments passed,
-	// as well as various indicators. One such filtering is a requirement that a
-	// target replica has applied a snapshot. We exclude VOTER_INCOMING replicas
-	// from this check, since they only move to this state after applying a
-	// snapshot. Another filtering is based on the lieveness status of nodes
-	// We do not transfer the lease to nodes in draining or unknown state.
-	// Unknown is a temporary state, and is usually resolved after receiving a
-	// gossip message. But we do not know whether a particular node is alive,
-	// and would rather stay in the JOINT config than transferring the lease
-	// to a dead node. If no candidates are found, we will remain in a JOINT
-	// config, and rely on upper layers to retry exiting from the config.
-	target := r.store.allocator.TransferLeaseTarget(
-		ctx,
-		r.SpanConfig(),
-		voters,
-		r,
-		r.leaseholderStats,
-		true, /* forceDecisionWithoutStats */
-		transferLeaseOptions{
-			goal:                     followTheWorkload,
-			checkTransferLeaseSource: false,
-			checkCandidateFullness:   false,
-			dryRun:                   false,
-		},
-	)
-	if target == (roachpb.ReplicaDescriptor{}) {
-		err := errors.Errorf(
-			"could not find a better lease transfer target for r%d", desc.RangeID)
-		log.VErrEventf(ctx, 5, "%v", err)
-		// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
-		// caller will retry. Note that the JOINT config isn't rolled back.
-		return err
+
+	if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) {
+		// Couldn't find a VOTER_INCOMING target. This should not happen since we only go into the
+		// JOINT config if the leaseholder is being removed, when there is a VOTER_INCOMING replica.
+		// Killing the leaseholder to force lease transfer.
+		log.Fatalf(ctx, "no VOTER_INCOMING to transfer lease to for r%d. " +
+			"Range descriptor: %v", desc.RangeID, desc)
 	}
 	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
-		" atomic replication change. Transferring lease to %v", r.String(), target)
-	err := r.store.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
+		" atomic replication change. Transferring lease to %v", r.String(), voterIncomingTarget)
+	err := r.store.DB().AdminTransferLease(ctx, r.startKey, voterIncomingTarget.StoreID)
 	if err != nil {
 		return err
 	}
-	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", target)
+	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", voterIncomingTarget)
 	return nil
 }
 
@@ -2864,15 +2842,14 @@ func (r *Replica) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			ops, leaseTarget, err := r.relocateOne(
+			ops, leaseTarget, lhRemovalAllowed, err := r.relocateOne(
 				ctx, &rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
 			)
 			if err != nil {
 				return rangeDesc, err
 			}
 
-			if !r.store.cfg.Settings.Version.IsActive(ctx,
-				clusterversion.EnableLeaseHolderRemoval) {
+			if !lhRemovalAllowed {
 				if leaseTarget != nil {
 					// NB: we may need to transfer even if there are no ops, to make
 					// sure the attempt is made to make the first target the final
@@ -2885,16 +2862,6 @@ func (r *Replica) relocateReplicas(
 					// Done
 					return rangeDesc, ctx.Err()
 				}
-			} else if len(ops) == 0 {
-				if len(voterTargets) > 0 && transferLeaseToFirstVoter {
-					// NB: we may need to transfer even if there are no ops, to make
-					// sure the attempt is made to make the first target the final
-					// leaseholder.
-					if err := transferLease(voterTargets[0]); err != nil {
-						return rangeDesc, err
-					}
-				}
-				return rangeDesc, ctx.Err()
 			}
 
 			opss := [][]roachpb.ReplicationChange{ops}
@@ -2970,21 +2937,21 @@ func (r *Replica) relocateOne(
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,
-) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
+) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, bool, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
 		// shouldn't be anything but voters and non_voters.
-		return nil, nil, errors.AssertionFailedf(
+		return nil, nil, false, errors.AssertionFailedf(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
 	confReader, err := r.store.GetConfReader(ctx)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "can't relocate range")
+		return nil, nil, false, errors.Wrap(err, "can't relocate range")
 	}
 	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	storeList, _, _ := r.store.allocator.storePool.getStoreList(storeFilterNone)
@@ -3019,7 +2986,7 @@ func (r *Replica) relocateOne(
 		for _, candidate := range candidateTargets {
 			store, ok := storeMap[candidate.StoreID]
 			if !ok {
-				return nil, nil, fmt.Errorf(
+				return nil, nil, false, fmt.Errorf(
 					"cannot up-replicate to s%d; missing gossiped StoreDescriptor"+
 						" (the store is likely dead, draining or decommissioning)", candidate.StoreID,
 				)
@@ -3042,7 +3009,7 @@ func (r *Replica) relocateOne(
 			args.targetType,
 		)
 		if roachpb.Empty(additionTarget) {
-			return nil, nil, fmt.Errorf(
+			return nil, nil, false, fmt.Errorf(
 				"none of the remaining %ss %v are legal additions to %v",
 				args.targetType, args.targetsToAdd(), desc.Replicas(),
 			)
@@ -3086,6 +3053,7 @@ func (r *Replica) relocateOne(
 		shouldAdd = true
 	}
 
+	lhRemovalAllowed := false
 	var transferTarget *roachpb.ReplicationTarget
 	if len(args.targetsToRemove()) > 0 {
 		// Pick a replica to remove. Note that existingVoters/existingNonVoters may
@@ -3106,7 +3074,7 @@ func (r *Replica) relocateOne(
 			r.store.allocator.scorerOptions(),
 		)
 		if err != nil {
-			return nil, nil, errors.Wrapf(
+			return nil, nil, false, errors.Wrapf(
 				err, "unable to select removal target from %v; current replicas %v",
 				args.targetsToRemove(), existingReplicas,
 			)
@@ -3125,11 +3093,14 @@ func (r *Replica) relocateOne(
 		liReq.Key = desc.StartKey.AsRawKey()
 		b.AddRawRequest(liReq)
 		if err := r.store.DB().Run(ctx, &b); err != nil {
-			return nil, nil, errors.Wrap(err, "looking up lease")
+			return nil, nil, false, errors.Wrap(err, "looking up lease")
 		}
-		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) ||
+		// Determines whether we can remove the leaseholder without first
+		// transferring the lease away.
+		lhRemovalAllowed = len(args.votersToAdd) > 0 &&
 			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
+		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
 		if args.targetType == voterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.
@@ -3178,7 +3149,7 @@ func (r *Replica) relocateOne(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 	} else if shouldAdd {
 		if canPromoteNonVoter {
@@ -3203,7 +3174,7 @@ func (r *Replica) relocateOne(
 		// asked for it.
 		transferTarget = &voterTargets[0]
 	}
-	return ops, transferTarget, nil
+	return ops, transferTarget, lhRemovalAllowed, nil
 }
 
 func getRelocationArgs(
