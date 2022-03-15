@@ -32,7 +32,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// executeDescriptorMutationOps will visit each operation, accumulating
+// side effects into a mutationVisitorState object, and then writing out
+// those side effects using the provided deps.
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
+
 	mvs := newMutationVisitorState(deps.Catalog())
 	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Catalog(), deps.Clock())
 	for _, op := range ops {
@@ -40,7 +44,31 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			return err
 		}
 	}
-	b := deps.Catalog().NewCatalogChangeBatcher()
+
+	// Note that we perform the catalog writes first in order to acquire locks
+	// on the descriptors in question as early as possible. If a restart is
+	// encountered, these locks will be retained in subsequent epochs (assuming
+	// that the transaction is not aborted due to, say, a deadlock). If we were
+	// to lock the eventlog or jobs tables first, they would not provide any
+	// liveness benefit because their entries are non-deterministic. The jobs
+	// writes are particularly bad because that table is constantly being
+	// scanned.
+	if err := performBatchedCatalogWrites(ctx, mvs, deps.Catalog()); err != nil {
+		return err
+	}
+	if err := logEvents(ctx, mvs, deps.EventLogger()); err != nil {
+		return err
+	}
+	if err := updateDescriptorMetadata(ctx, mvs, deps.DescriptorMetadataUpdater(ctx)); err != nil {
+		return err
+	}
+	return updateOrDeleteJobs(ctx, deps.TransactionalJobRegistry(), mvs)
+}
+
+func performBatchedCatalogWrites(
+	ctx context.Context, mvs *mutationVisitorState, cat Catalog,
+) error {
+	b := cat.NewCatalogChangeBatcher()
 	mvs.descriptorsToDelete.ForEach(func(id descpb.ID) {
 		mvs.checkedOutDescriptors.Remove(id)
 	})
@@ -49,6 +77,11 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	})
 	if err != nil {
 		return err
+	}
+	for _, id := range mvs.descriptorsToDelete.Ordered() {
+		if err := b.DeleteDescriptor(ctx, id); err != nil {
+			return err
+		}
 	}
 	for id, drainedNames := range mvs.drainedNames {
 		for _, name := range drainedNames {
@@ -67,73 +100,10 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-	var dbIDs catalog.DescriptorIDSet
-	for dbID := range mvs.descriptorGCJobs {
-		dbIDs.Add(dbID)
-	}
-	for _, dbID := range dbIDs.Ordered() {
-		job := jobspb.SchemaChangeGCDetails{
-			Tables: mvs.descriptorGCJobs[dbID],
-		}
-		// Check if the database is also being cleaned up at the same time.
-		if mvs.dbGCJobs.Contains(dbID) {
-			job.ParentID = dbID
-		}
-		jobName := func() string {
-			var ids catalog.DescriptorIDSet
-			if job.ParentID != descpb.InvalidID {
-				ids.Add(job.ParentID)
-			}
-			for _, table := range mvs.descriptorGCJobs[dbID] {
-				ids.Add(table.ID)
-			}
-			var sb strings.Builder
-			if ids.Len() == 1 {
-				sb.WriteString("dropping descriptor")
-			} else {
-				sb.WriteString("dropping descriptors")
-			}
-			ids.ForEach(func(id descpb.ID) {
-				sb.WriteString(fmt.Sprintf(" %d", id))
-			})
-			return sb.String()
-		}
+	return b.ValidateAndRun(ctx)
+}
 
-		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		record.JobID = deps.TransactionalJobRegistry().MakeJobID()
-		if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
-			return err
-		}
-	}
-	for tableID, indexes := range mvs.indexGCJobs {
-		job := jobspb.SchemaChangeGCDetails{
-			ParentID: tableID,
-			Indexes:  indexes,
-		}
-		jobName := func() string {
-			if len(indexes) == 1 {
-				return fmt.Sprintf("dropping table %d index %d", tableID, indexes[0].IndexID)
-			}
-			var sb strings.Builder
-			sb.WriteString(fmt.Sprintf("dropping table %d indexes", tableID))
-			for _, index := range indexes {
-				sb.WriteString(fmt.Sprintf(" %d", index.IndexID))
-			}
-			return sb.String()
-		}
-
-		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		record.JobID = deps.TransactionalJobRegistry().MakeJobID()
-		if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
-			return err
-		}
-	}
-	if mvs.schemaChangerJob != nil {
-		if err := deps.TransactionalJobRegistry().CreateJob(ctx, *mvs.schemaChangerJob); err != nil {
-			return err
-		}
-	}
-
+func logEvents(ctx context.Context, mvs *mutationVisitorState, el EventLogger) error {
 	statementIDs := make([]uint32, 0, len(mvs.eventsByStatement))
 	for statementID := range mvs.eventsByStatement {
 		statementIDs = append(statementIDs, statementID)
@@ -145,69 +115,12 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		entries := eventLogEntriesForStatement(mvs.eventsByStatement[statementID])
 		for _, e := range entries {
 			// TODO(postamar): batch these
-			if err := deps.EventLogger().LogEvent(ctx, e.id, e.details, e.event); err != nil {
+			if err := el.LogEvent(ctx, e.id, e.details, e.event); err != nil {
 				return err
 			}
 		}
 	}
-	metadataUpdater := deps.DescriptorMetadataUpdater(ctx)
-	for _, comment := range mvs.commentsToUpdate {
-		if len(comment.comment) > 0 {
-			if err := metadataUpdater.UpsertDescriptorComment(
-				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
-				return err
-			}
-		} else {
-			if err := metadataUpdater.DeleteDescriptorComment(
-				comment.id, comment.subID, comment.commentType); err != nil {
-				return err
-			}
-		}
-	}
-	for _, comment := range mvs.constraintCommentsToUpdate {
-		if len(comment.comment) > 0 {
-			if err := metadataUpdater.UpsertConstraintComment(
-				comment.tblID, comment.constraintID, comment.comment); err != nil {
-				return err
-			}
-		} else {
-			if err := metadataUpdater.DeleteConstraintComment(
-				comment.tblID, comment.constraintID); err != nil {
-				return err
-			}
-		}
-	}
-	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
-		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
-		if err != nil {
-			return err
-		}
-	}
-	for _, id := range mvs.descriptorsToDelete.Ordered() {
-		if err := b.DeleteDescriptor(ctx, id); err != nil {
-			return err
-		}
-	}
-	for id, update := range mvs.schemaChangerJobUpdates {
-		if err := deps.TransactionalJobRegistry().UpdateSchemaChangeJob(ctx, id, func(
-			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
-		) error {
-			progress := *md.Progress
-			updateProgress(&progress)
-			if !md.Payload.Noncancelable && update.isNonCancelable {
-				setNonCancelable()
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	for _, scheduleID := range mvs.scheduleIDsToDelete {
-		if err := metadataUpdater.DeleteSchedule(ctx, scheduleID); err != nil {
-			return err
-		}
-	}
-	return b.ValidateAndRun(ctx)
+	return nil
 }
 
 func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []eventPayload) {
@@ -290,6 +203,137 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 		logEntries = append(logEntries, sourceEvent)
 	}
 	return logEntries
+}
+
+// updateDescriptorMetadata performs the portions of the side effects of the
+// operations delegated to the DescriptorMetadataUpdater.
+func updateDescriptorMetadata(
+	ctx context.Context, mvs *mutationVisitorState, metadataUpdater DescriptorMetadataUpdater,
+) error {
+	for _, comment := range mvs.commentsToUpdate {
+		if len(comment.comment) > 0 {
+			if err := metadataUpdater.UpsertDescriptorComment(
+				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
+				return err
+			}
+		} else {
+			if err := metadataUpdater.DeleteDescriptorComment(
+				comment.id, comment.subID, comment.commentType); err != nil {
+				return err
+			}
+		}
+	}
+	for _, comment := range mvs.constraintCommentsToUpdate {
+		if len(comment.comment) > 0 {
+			if err := metadataUpdater.UpsertConstraintComment(
+				comment.tblID, comment.constraintID, comment.comment); err != nil {
+				return err
+			}
+		} else {
+			if err := metadataUpdater.DeleteConstraintComment(
+				comment.tblID, comment.constraintID); err != nil {
+				return err
+			}
+		}
+	}
+	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
+		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, scheduleID := range mvs.scheduleIDsToDelete {
+		if err := metadataUpdater.DeleteSchedule(ctx, scheduleID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func updateOrDeleteJobs(
+	ctx context.Context, jr TransactionalJobRegistry, mvs *mutationVisitorState,
+) error {
+	var dbIDs catalog.DescriptorIDSet
+	for dbID := range mvs.descriptorGCJobs {
+		dbIDs.Add(dbID)
+	}
+	for _, dbID := range dbIDs.Ordered() {
+		job := jobspb.SchemaChangeGCDetails{
+			Tables: mvs.descriptorGCJobs[dbID],
+		}
+		// Check if the database is also being cleaned up at the same time.
+		if mvs.dbGCJobs.Contains(dbID) {
+			job.ParentID = dbID
+		}
+		jobName := func() string {
+			var ids catalog.DescriptorIDSet
+			if job.ParentID != descpb.InvalidID {
+				ids.Add(job.ParentID)
+			}
+			for _, table := range mvs.descriptorGCJobs[dbID] {
+				ids.Add(table.ID)
+			}
+			var sb strings.Builder
+			if ids.Len() == 1 {
+				sb.WriteString("dropping descriptor")
+			} else {
+				sb.WriteString("dropping descriptors")
+			}
+			ids.ForEach(func(id descpb.ID) {
+				sb.WriteString(fmt.Sprintf(" %d", id))
+			})
+			return sb.String()
+		}
+
+		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
+		record.JobID = jr.MakeJobID()
+		if err := jr.CreateJob(ctx, record); err != nil {
+			return err
+		}
+	}
+	for tableID, indexes := range mvs.indexGCJobs {
+		job := jobspb.SchemaChangeGCDetails{
+			ParentID: tableID,
+			Indexes:  indexes,
+		}
+		jobName := func() string {
+			if len(indexes) == 1 {
+				return fmt.Sprintf("dropping table %d index %d", tableID, indexes[0].IndexID)
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("dropping table %d indexes", tableID))
+			for _, index := range indexes {
+				sb.WriteString(fmt.Sprintf(" %d", index.IndexID))
+			}
+			return sb.String()
+		}
+
+		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
+		record.JobID = jr.MakeJobID()
+		if err := jr.CreateJob(ctx, record); err != nil {
+			return err
+		}
+	}
+	if mvs.schemaChangerJob != nil {
+		if err := jr.CreateJob(ctx, *mvs.schemaChangerJob); err != nil {
+			return err
+		}
+	}
+	for id, update := range mvs.schemaChangerJobUpdates {
+		if err := jr.UpdateSchemaChangeJob(ctx, id, func(
+			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
+		) error {
+			progress := *md.Progress
+			updateProgress(&progress)
+			if !md.Payload.Noncancelable && update.isNonCancelable {
+				setNonCancelable()
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type mutationVisitorState struct {
