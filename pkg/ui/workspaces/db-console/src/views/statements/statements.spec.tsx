@@ -27,7 +27,7 @@ import {
 import { selectStatementDetails } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { util } from "@cockroachlabs/cluster-ui";
+import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
 
 const { generateStmtDetailsToID } = util;
 
@@ -37,16 +37,18 @@ type StatementStatistics = util.StatementStatistics;
 
 const INTERNAL_STATEMENT_PREFIX = "$ internal";
 
-const timePeriod = {
-  start: new Long(1646250884),
-  end: new Long(1646337284),
+const timeScale: TimeScale = {
+  key: "Custom",
+  windowSize: moment.duration(1, "hour"),
+  windowValid: moment.duration(1, "minute"),
+  sampleSize: moment.duration(30, "seconds"),
+  fixedWindowEnd: moment(1646334815),
 };
 
 describe("selectStatements", () => {
   it("returns null if the statements data is invalid", () => {
     const state = makeInvalidState();
     const props = makeEmptyRouteProps();
-
     const result = selectStatements(state, props);
 
     assert.isNull(result);
@@ -56,11 +58,7 @@ describe("selectStatements", () => {
     const stmtA = makeFingerprint(1);
     const stmtB = makeFingerprint(2, "foobar");
     const stmtC = makeFingerprint(3, "another");
-    const state = makeStateWithStatements(
-      [stmtA, stmtB, stmtC],
-      timePeriod.start,
-      timePeriod.end,
-    );
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale);
     const props = makeEmptyRouteProps();
 
     const result = selectStatements(state, props);
@@ -82,8 +80,7 @@ describe("selectStatements", () => {
     const stmtD = makeFingerprint(3, "another");
     const state = makeStateWithStatements(
       [stmtA, stmtB, stmtC, stmtD],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const props = makeEmptyRouteProps();
 
@@ -99,11 +96,7 @@ describe("selectStatements", () => {
     const sumCount = stmtA.stats.count
       .add(stmtB.stats.count.add(stmtC.stats.count))
       .toNumber();
-    const state = makeStateWithStatements(
-      [stmtA, stmtB, stmtC],
-      timePeriod.start,
-      timePeriod.end,
-    );
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale);
     const props = makeEmptyRouteProps();
 
     const result = selectStatements(state, props);
@@ -120,8 +113,7 @@ describe("selectStatements", () => {
         makeFingerprint(1, "", 2),
         makeFingerprint(1, "", 3),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const props = makeEmptyRouteProps();
 
@@ -138,8 +130,7 @@ describe("selectStatements", () => {
         makeFingerprint(1, "", 1, true, false),
         makeFingerprint(1, "", 1, true, true),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const props = makeEmptyRouteProps();
 
@@ -155,8 +146,7 @@ describe("selectStatements", () => {
         makeFingerprint(2, "bar"),
         makeFingerprint(3, "baz"),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const props = makeRoutePropsWithApp("foo");
 
@@ -172,8 +162,7 @@ describe("selectStatements", () => {
         makeFingerprint(2, "bar"),
         makeFingerprint(3, "baz"),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const props = makeRoutePropsWithApp("(unset)");
 
@@ -189,8 +178,7 @@ describe("selectStatements", () => {
         makeFingerprint(2, "bar"),
         makeFingerprint(3, "baz"),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const props = makeRoutePropsWithApp("$ internal");
     const result = selectStatements(state, props);
@@ -215,8 +203,7 @@ describe("selectApps", () => {
         makeFingerprint(2, "foobar"),
         makeFingerprint(3, "cockroach sql"),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
 
     const result = selectApps(state);
@@ -237,8 +224,7 @@ describe("selectTotalFingerprints", () => {
   it("returns the number of statement fingerprints", () => {
     const state = makeStateWithStatements(
       [makeFingerprint(1), makeFingerprint(2), makeFingerprint(3)],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
 
     const result = selectTotalFingerprints(state);
@@ -253,8 +239,7 @@ describe("selectTotalFingerprints", () => {
         makeFingerprint(1, "foobar"),
         makeFingerprint(1, "another"),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
 
     const result = selectTotalFingerprints(state);
@@ -269,8 +254,7 @@ describe("selectTotalFingerprints", () => {
         makeFingerprint(1, "", 2),
         makeFingerprint(1, "", 3),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
 
     const result = selectTotalFingerprints(state);
@@ -286,8 +270,7 @@ describe("selectTotalFingerprints", () => {
         makeFingerprint(1, "", 1, true, false),
         makeFingerprint(1, "", 1, true, true),
       ],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
 
     const result = selectTotalFingerprints(state);
@@ -307,11 +290,7 @@ describe("selectLastReset", () => {
 
   it("returns the formatted timestamp if valid", () => {
     const timestamp = 92951700;
-    const state = makeStateWithLastReset(
-      timestamp,
-      timePeriod.start,
-      timePeriod.end,
-    );
+    const state = makeStateWithLastReset(timestamp, timeScale);
 
     const result = selectLastReset(state);
 
@@ -323,7 +302,6 @@ describe("selectStatement", () => {
   it("returns null if the statements data is invalid", () => {
     const state = makeInvalidState();
     const props = makeEmptyRouteProps();
-
     const result = selectStatementDetails(state, props);
 
     assert.isNull(result);
@@ -333,11 +311,7 @@ describe("selectStatement", () => {
     const stmtA = makeFingerprint(1);
     const stmtB = makeFingerprint(2, "foobar");
     const stmtC = makeFingerprint(3, "another");
-    const state = makeStateWithStatements(
-      [stmtA, stmtB, stmtC],
-      timePeriod.start,
-      timePeriod.end,
-    );
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale);
 
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
@@ -356,8 +330,7 @@ describe("selectStatement", () => {
     const stmtA = makeFingerprint(1, "foo");
     const state = makeStateWithStatements(
       [stmtA, makeFingerprint(2, "bar"), makeFingerprint(3, "baz")],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(stmtAFingerprintID, "foo");
@@ -377,8 +350,7 @@ describe("selectStatement", () => {
     const stmtA = makeFingerprint(1, "");
     const state = makeStateWithStatements(
       [stmtA, makeFingerprint(2, "bar"), makeFingerprint(3, "baz")],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(
@@ -401,8 +373,7 @@ describe("selectStatement", () => {
     const stmtA = makeFingerprint(1, "$ internal_stmnt_app");
     const state = makeStateWithStatements(
       [stmtA, makeFingerprint(2, "bar"), makeFingerprint(3, "baz")],
-      timePeriod.start,
-      timePeriod.end,
+      timeScale,
     );
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(
@@ -521,8 +492,7 @@ function makeInvalidState(): AdminUIState {
 function makeStateWithStatementsAndLastReset(
   statements: CollectedStatementStatistics[],
   lastReset: number,
-  start: Long,
-  end: Long,
+  timeScale: TimeScale,
 ) {
   const store = createAdminUIStore(H.createMemoryHistory());
   const state = merge(store.getState(), {
@@ -545,15 +515,22 @@ function makeStateWithStatementsAndLastReset(
         valid: false,
       },
     },
+    localSettings: {
+      "timeScale/SQLActivity": timeScale,
+    },
   });
+
+  const [start, end] = toRoundedDateRange(timeScale);
+  const timeStart = Long.fromNumber(start.unix());
+  const timeEnd = Long.fromNumber(end.unix());
 
   for (const stmt of statements) {
     state.cachedData.statementDetails[
       generateStmtDetailsToID(
         stmt.id.toString(),
         stmt.key.key_data.app,
-        start,
-        end,
+        timeStart,
+        timeEnd,
       )
     ] = {
       data: protos.cockroach.server.serverpb.StatementDetailsResponse.fromObject(
@@ -579,14 +556,13 @@ function makeStateWithStatementsAndLastReset(
 
 function makeStateWithStatements(
   statements: CollectedStatementStatistics[],
-  start: Long,
-  end: Long,
+  timeScale: TimeScale,
 ) {
-  return makeStateWithStatementsAndLastReset(statements, 0, start, end);
+  return makeStateWithStatementsAndLastReset(statements, 0, timeScale);
 }
 
-function makeStateWithLastReset(lastReset: number, start: Long, end: Long) {
-  return makeStateWithStatementsAndLastReset([], lastReset, start, end);
+function makeStateWithLastReset(lastReset: number, timeScale: TimeScale) {
+  return makeStateWithStatementsAndLastReset([], lastReset, timeScale);
 }
 
 function makeRoutePropsWithParams(params: { [key: string]: string }) {
