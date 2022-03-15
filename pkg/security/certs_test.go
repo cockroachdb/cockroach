@@ -37,27 +37,13 @@ import (
 
 const testKeySize = 1024
 
-// tempDir is like testutils.TempDir but avoids a circular import.
-func tempDir(t *testing.T) (string, func()) {
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return certsDir, func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 func TestGenerateCACert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
 	security.ResetAssetLoader()
 	defer ResetTest()
 
-	certsDir, cleanup := tempDir(t)
-	defer cleanup()
+	certsDir := t.TempDir()
 
 	cm, err := security.NewCertificateManager(certsDir, security.CommandTLSSettings{})
 	if err != nil {
@@ -126,8 +112,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 	security.ResetAssetLoader()
 	defer ResetTest()
 
-	certsDir, cleanup := tempDir(t)
-	defer cleanup()
+	certsDir := t.TempDir()
 
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
 	require.NoError(t, security.CreateTenantCAPair(
@@ -191,15 +176,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 	security.ResetAssetLoader()
 	defer ResetTest()
 
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	// Try generating node certs without CA certs present.
 	if err := security.CreateNodePair(
@@ -340,15 +317,7 @@ func TestUseCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetAssetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
@@ -430,15 +399,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetAssetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateSplitCACerts(certsDir); err != nil {
 		t.Fatal(err)
@@ -547,15 +508,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetAssetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateSplitCACerts(certsDir); err != nil {
 		t.Fatal(err)

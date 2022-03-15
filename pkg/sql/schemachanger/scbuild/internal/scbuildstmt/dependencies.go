@@ -181,10 +181,6 @@ type TableHelpers interface {
 		partBy *tree.PartitionBy,
 	) catpb.PartitioningDescriptor
 
-	// CheckNoConcurrentSchemaChanges panics if the underlying table is undergoing
-	// concurrent schema changes.
-	CheckNoConcurrentSchemaChanges(table *scpb.Table)
-
 	// ResolveTypeRef resolves a type reference.
 	ResolveTypeRef(typeref tree.ResolvableTypeReference) scpb.TypeT
 

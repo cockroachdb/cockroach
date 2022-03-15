@@ -296,7 +296,7 @@ func TestSecureHTTPRedirect(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	httpClient, err := s.GetHTTPClient()
+	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +345,7 @@ func TestAcceptEncoding(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	client, err := s.GetAdminAuthenticatedHTTPClient()
+	client, err := s.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -856,7 +856,7 @@ func TestServeIndexHTML(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
 
-		client, err := tsrv.GetHTTPClient()
+		client, err := tsrv.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
 		t.Run("short build", func(t *testing.T) {
@@ -910,9 +910,9 @@ Binary built without web UI.
 		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
 
-		loggedInClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
+		loggedInClient, err := tsrv.GetAdminHTTPClient()
 		require.NoError(t, err)
-		loggedOutClient, err := tsrv.GetHTTPClient()
+		loggedOutClient, err := tsrv.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
 		cases := []struct {

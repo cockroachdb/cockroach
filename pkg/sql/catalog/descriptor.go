@@ -217,6 +217,10 @@ type Descriptor interface {
 	// GetPostDeserializationChanges returns the set of ways the Descriptor
 	// was changed after running RunPostDeserializationChanges.
 	GetPostDeserializationChanges() PostDeserializationChanges
+
+	// HasConcurrentSchemaChanges returns if declarative schema
+	// changes are currently in progress.
+	HasConcurrentSchemaChanges() bool
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.

@@ -135,7 +135,7 @@ func TestRouteToNode(t *testing.T) {
 		t.Run(rt.name, func(t *testing.T) {
 			s := tc.Server(rt.sourceServerID)
 			require.Equal(t, rt.sourceServerID+1, int(s.NodeID()))
-			client, err := s.GetHTTPClient()
+			client, err := s.GetUnauthenticatedHTTPClient()
 			if rt.requireAuth {
 				client, err = s.GetAuthenticatedHTTPClient(rt.requireAdmin)
 			}
@@ -178,7 +178,7 @@ func TestRouteToNode(t *testing.T) {
 	t.Run("route to shutdown node should fail with error status", func(t *testing.T) {
 		tc.Server(1).Stopper().Stop(context.Background())
 		s := tc.Server(0)
-		client, err := s.GetHTTPClient()
+		client, err := s.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
 		resp, err := client.Get(s.AdminURL() + fmt.Sprintf("/_status/vars?%s=%s", RemoteNodeID, "2"))

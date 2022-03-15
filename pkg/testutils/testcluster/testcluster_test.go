@@ -197,7 +197,7 @@ func TestStopServer(t *testing.T) {
 	server1 := tc.Server(1)
 	var response serverpb.JSONResponse
 
-	httpClient1, err := server1.GetHTTPClient()
+	httpClient1, err := server1.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestStopServer(t *testing.T) {
 	}
 
 	// Verify that request to Server 0 still works.
-	httpClient1, err = tc.Server(0).GetHTTPClient()
+	httpClient1, err = tc.Server(0).GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

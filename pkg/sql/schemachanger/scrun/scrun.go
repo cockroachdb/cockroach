@@ -144,6 +144,12 @@ func executeStage(
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
 		return errors.Wrapf(p.DecorateErrorWithPlanDetails(err), "error executing %s", stage.String())
 	}
+	if knobs != nil && knobs.AfterStage != nil {
+		if err := knobs.AfterStage(p, stageIdx); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

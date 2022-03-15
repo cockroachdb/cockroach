@@ -97,7 +97,7 @@ func TestAdminAPITableStats(t *testing.T) {
 	// Create clients (SQL, HTTP) connected to server 0.
 	db := tc.ServerConn(0)
 
-	client, err := server0.GetAdminAuthenticatedHTTPClient()
+	client, err := server0.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

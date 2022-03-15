@@ -757,7 +757,7 @@ columns:
       "column": {
         "column_id": 3,
         "name": "j",
-        "type": "family: BytesFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 17\ntime_precision_is_set: false\n",
+        "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
         "is_non_nullable": false
       },
       "direction": 0,
@@ -780,7 +780,7 @@ columns:
     {
       "column_id": 3,
       "name": "j",
-      "type": "family: BytesFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 17\ntime_precision_is_set: false\n",
+      "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     },
     {
@@ -830,7 +830,7 @@ columns:
       "column": {
         "column_id": 3,
         "name": "j",
-        "type": "family: BytesFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 17\ntime_precision_is_set: false\n",
+        "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
         "is_non_nullable": false
       },
       "direction": 0,
@@ -853,7 +853,7 @@ columns:
     {
       "column_id": 3,
       "name": "j",
-      "type": "family: BytesFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 17\ntime_precision_is_set: false\n",
+      "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     },
     {

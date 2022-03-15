@@ -152,7 +152,7 @@ func TestTenantHTTP(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("prometheus", func(t *testing.T) {
-		httpClient, err := tenant.GetHTTPClient()
+		httpClient, err := tenant.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
 		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/vars")
@@ -163,7 +163,7 @@ func TestTenantHTTP(t *testing.T) {
 		require.Contains(t, string(body), "sql_ddl_started_count_internal")
 	})
 	t.Run("pprof", func(t *testing.T) {
-		httpClient, err := tenant.GetAdminAuthenticatedHTTPClient()
+		httpClient, err := tenant.GetAdminHTTPClient()
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
 		resp, err := httpClient.Get(tenant.AdminURL() + "/debug/pprof/goroutine?debug=2")

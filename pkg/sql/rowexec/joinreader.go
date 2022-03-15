@@ -17,7 +17,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -130,6 +130,7 @@ type joinReader struct {
 		budgetAcc           mon.BoundAccount
 		budgetLimit         int64
 		maxKeysPerRow       int
+		diskMonitor         *mon.BytesMonitor
 	}
 
 	input execinfra.RowSource
@@ -298,9 +299,8 @@ func newJoinReader(
 	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		shouldLimitBatches = false
 	}
-	tryStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings) &&
-		!spec.MaintainOrdering
+	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
+		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
 
 	jr := &joinReader{
 		fetchSpec:                         spec.FetchSpec,
@@ -313,7 +313,7 @@ func newJoinReader(
 		readerType:                        readerType,
 		keyLocking:                        spec.LockingStrength,
 		lockWaitPolicy:                    row.GetWaitPolicy(spec.LockingWaitPolicy),
-		usesStreamer:                      (readerType == indexJoinReaderType) && tryStreamer,
+		usesStreamer:                      useStreamer,
 		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
@@ -976,10 +976,19 @@ func (jr *joinReader) Start(ctx context.Context) {
 			jr.streamerInfo.budgetLimit,
 			&jr.streamerInfo.budgetAcc,
 		)
+		mode := kvstreamer.OutOfOrder
+		if jr.maintainOrdering {
+			mode = kvstreamer.InOrder
+			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
+				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+			)
+		}
 		jr.streamerInfo.Streamer.Init(
-			kvstreamer.OutOfOrder,
+			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			jr.streamerInfo.maxKeysPerRow,
+			jr.FlowCtx.Cfg.TempStorage,
+			jr.streamerInfo.diskMonitor,
 		)
 	}
 	jr.runningState = jrReadingInput
@@ -1001,10 +1010,13 @@ func (jr *joinReader) close() {
 			// the latter might release some memory tracked by the budget of the
 			// streamer.
 			if jr.streamerInfo.Streamer != nil {
-				jr.streamerInfo.Streamer.Close()
+				jr.streamerInfo.Streamer.Close(jr.Ctx)
 			}
 			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
 			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
+			if jr.streamerInfo.diskMonitor != nil {
+				jr.streamerInfo.diskMonitor.Stop(jr.Ctx)
+			}
 		}
 		jr.strategy.close(jr.Ctx)
 		jr.memAcc.Close(jr.Ctx)
