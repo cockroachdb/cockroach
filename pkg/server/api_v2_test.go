@@ -82,7 +82,7 @@ func TestListSessionsV2(t *testing.T) {
 	}
 
 	time.Sleep(500 * time.Millisecond)
-	adminClient, err := ts1.GetAdminAuthenticatedHTTPClient()
+	adminClient, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 	sessionsResponse := doSessionsRequest(adminClient, 0, "")
 	require.LessOrEqual(t, 15, len(sessionsResponse.Sessions))
@@ -138,7 +138,7 @@ func TestHealthV2(t *testing.T) {
 
 	ts1 := testCluster.Server(0)
 
-	client, err := ts1.GetAdminAuthenticatedHTTPClient()
+	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"health/", nil)
@@ -166,7 +166,7 @@ func TestRulesV2(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts := testCluster.Server(0)
-	client, err := ts.GetHTTPClient()
+	client, err := ts.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"rules/", nil)
