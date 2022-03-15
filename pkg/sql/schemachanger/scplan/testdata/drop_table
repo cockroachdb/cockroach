@@ -50,7 +50,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescID: 108
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 109
-PreCommitPhase stage 1 of 1 with 43 MutationType ops
+PreCommitPhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [[Namespace:{DescID: 107, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
@@ -124,16 +124,8 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
         DescriptorID: 107
         Name: shipments
         SchemaID: 101
-    *scop.RemoveTableComment
-      TableID: 107
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
-      TableID: 107
-    *scop.RemoveColumnComment
-      ColumnID: 1
-      TableID: 107
-    *scop.RemoveColumnComment
-      ColumnID: 2
       TableID: 107
     *scop.RemoveSequenceOwner
       ColumnID: 2
@@ -144,13 +136,7 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
     *scop.RemoveDroppedColumnType
       ColumnID: 3
       TableID: 107
-    *scop.RemoveColumnComment
-      ColumnID: 3
-      TableID: 107
     *scop.RemoveDroppedColumnType
-      ColumnID: 4
-      TableID: 107
-    *scop.RemoveColumnComment
       ColumnID: 4
       TableID: 107
     *scop.RemoveColumnDefaultExpression
@@ -161,20 +147,11 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
       BackReferencedTableID: 107
       SequenceIDs:
       - 106
-    *scop.RemoveColumnComment
-      ColumnID: 5
-      TableID: 107
-    *scop.RemoveIndexComment
-      IndexID: 1
-      TableID: 107
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 2
       OriginTableID: 107
       ReferencedTableID: 104
     *scop.RemoveForeignKeyConstraint
-      ConstraintID: 2
-      TableID: 107
-    *scop.RemoveConstraintComment
       ConstraintID: 2
       TableID: 107
     *scop.RemoveForeignKeyBackReference
@@ -184,35 +161,22 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
     *scop.RemoveForeignKeyConstraint
       ConstraintID: 3
       TableID: 107
-    *scop.RemoveConstraintComment
-      ConstraintID: 3
-      TableID: 107
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 108
         Name: sq1
         SchemaID: 101
-    *scop.RemoveTableComment
-      TableID: 108
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 109
         Name: v1
         SchemaID: 101
-    *scop.RemoveTableComment
-      TableID: 109
     *scop.RemoveDroppedColumnType
       ColumnID: 1
       TableID: 109
-    *scop.RemoveColumnComment
-      ColumnID: 1
-      TableID: 109
     *scop.RemoveDroppedColumnType
-      ColumnID: 2
-      TableID: 109
-    *scop.RemoveColumnComment
       ColumnID: 2
       TableID: 109
     *scop.RemoveDroppedColumnType
@@ -226,14 +190,20 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
       TableID: 107
     *scop.MarkDescriptorAsDropped
       DescID: 108
+    *scop.RemoveAllTableComments
+      TableID: 108
     *scop.MarkDescriptorAsDropped
       DescID: 109
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 109
       RelationIDs:
       - 107
+    *scop.RemoveAllTableComments
+      TableID: 109
     *scop.MarkDescriptorAsDropped
       DescID: 107
+    *scop.RemoveAllTableComments
+      TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -818,7 +788,7 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 112
-PreCommitPhase stage 1 of 1 with 24 MutationType ops
+PreCommitPhase stage 1 of 1 with 18 MutationType ops
   transitions:
     [[Namespace:{DescID: 112, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
@@ -860,8 +830,6 @@ PreCommitPhase stage 1 of 1 with 24 MutationType ops
         DescriptorID: 112
         Name: greeter
         SchemaID: 101
-    *scop.RemoveTableComment
-      TableID: 112
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 112
@@ -870,9 +838,6 @@ PreCommitPhase stage 1 of 1 with 24 MutationType ops
       TypeIDs:
       - 110
       - 111
-    *scop.RemoveColumnComment
-      ColumnID: 1
-      TableID: 112
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 112
@@ -881,20 +846,8 @@ PreCommitPhase stage 1 of 1 with 24 MutationType ops
       TypeIDs:
       - 110
       - 111
-    *scop.RemoveColumnComment
-      ColumnID: 2
-      TableID: 112
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
-      TableID: 112
-    *scop.RemoveColumnComment
-      ColumnID: 3
-      TableID: 112
-    *scop.RemoveIndexComment
-      IndexID: 1
-      TableID: 112
-    *scop.RemoveIndexComment
-      IndexID: 2
       TableID: 112
     *scop.RemoveCheckConstraint
       ConstraintID: 2
@@ -904,11 +857,10 @@ PreCommitPhase stage 1 of 1 with 24 MutationType ops
       TypeIDs:
       - 110
       - 111
-    *scop.RemoveConstraintComment
-      ConstraintID: 2
-      TableID: 112
     *scop.MarkDescriptorAsDropped
       DescID: 112
+    *scop.RemoveAllTableComments
+      TableID: 112
     *scop.RemoveDroppedColumnType
       ColumnID: 1
       TableID: 112
