@@ -33,7 +33,7 @@ func TestHotRangesV2(t *testing.T) {
 	defer ts.Stopper().Stop(context.Background())
 
 	var hotRangesResp hotRangesResponse
-	client, err := ts.GetAdminAuthenticatedHTTPClient()
+	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"ranges/hot/", nil)
@@ -73,7 +73,7 @@ func TestNodeRangesV2(t *testing.T) {
 	}
 
 	var nodeRangesResp nodeRangesResponse
-	client, err := ts.GetAdminAuthenticatedHTTPClient()
+	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"nodes/local/ranges/", nil)
@@ -130,7 +130,7 @@ func TestNodesV2(t *testing.T) {
 	ts1 := testCluster.Server(0)
 
 	var nodesResp nodesResponse
-	client, err := ts1.GetAdminAuthenticatedHTTPClient()
+	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"nodes/", nil)

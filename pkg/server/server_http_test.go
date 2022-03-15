@@ -30,7 +30,7 @@ func TestHSTS(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	httpClient, err := s.GetHTTPClient()
+	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	defer httpClient.CloseIdleConnections()
 

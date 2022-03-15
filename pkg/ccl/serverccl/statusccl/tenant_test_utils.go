@@ -164,13 +164,17 @@ func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
 }
 
 func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx, isAdmin bool) *httpClient {
-	client, err := c.tenant(idx).tenant.GetAuthenticatedHTTPClient(isAdmin)
+	if isAdmin {
+		client, err := c.tenant(idx).tenant.GetAdminHTTPClient()
+	} else {
+		client, err := c.tenant(idx).tenant.GetAuthenticatedHTTPClient(false)
+	}
 	require.NoError(t, err)
 	return &httpClient{t: t, client: client, baseURL: c[idx].tenant.AdminURL()}
 }
 
 func (c tenantCluster) tenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {
-	return c.tenantHTTPClient(t, idx, true /* isAdmin */)
+	return c.tenantHTTPClient(t, idx)
 }
 
 func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {

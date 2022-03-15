@@ -95,7 +95,7 @@ func postAdminJSONProtoWithAdminOption(
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
-	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
+	httpClient, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func TestAdminDebugAuth(t *testing.T) {
 	url := debugURL(s)
 
 	// Unauthenticated.
-	client, err := ts.GetHTTPClient()
+	client, err := ts.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestAdminDebugRedirect(t *testing.T) {
 	origURL := expURL + "incorrect"
 
 	// Must be admin to access debug endpoints
-	client, err := ts.GetAdminAuthenticatedHTTPClient()
+	client, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

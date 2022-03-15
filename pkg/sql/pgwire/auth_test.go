@@ -210,7 +210,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
 
-		httpClient, err := s.GetAdminAuthenticatedHTTPClient()
+		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
 			t.Fatal(err)
 		}
