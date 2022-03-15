@@ -434,6 +434,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		evalCtx.Settings,
 		disallowShadowingBelow,
 		writeAtBatchTS,
+		false, /* splitFilledRanges */
 	)
 	if err != nil {
 		return summary, err
