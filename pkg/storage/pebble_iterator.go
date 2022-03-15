@@ -177,6 +177,8 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		}
 	}
 
+	rangeKeyMaskingSuffix := EncodeMVCCTimestampSuffix(opts.RangeKeyMaskingBelow)
+
 	// Omit setting the Pebble options if there's nothing to change, since calling
 	// pebble.Iterator.SetOptions() can make the next seek more expensive.
 	//
@@ -198,6 +200,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 			!bytes.Equal(opts.UpperBound, p.options.UpperBound[:len(p.options.UpperBound)-1])) ||
 		(p.options.LowerBound != nil &&
 			!bytes.Equal(opts.LowerBound, p.options.LowerBound[:len(p.options.LowerBound)-1])) ||
+		!bytes.Equal(rangeKeyMaskingSuffix, p.options.RangeKeyMasking.Suffix) ||
 		// We can't compare these filters, so if any existing or new filters are set
 		// we consider them changed.
 		p.options.TableFilter != nil ||
@@ -212,6 +215,9 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	p.options = pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  keyTypes,
+		RangeKeyMasking: pebble.RangeKeyMasking{
+			Suffix: rangeKeyMaskingSuffix,
+		},
 	}
 	p.prefix = opts.Prefix
 
