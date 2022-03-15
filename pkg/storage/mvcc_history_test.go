@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -45,6 +46,8 @@ import (
 // perform properly.
 //
 // The input files use the following DSL:
+//
+// run            [ok|trace|error]
 //
 // txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // txn_remove     t=<name>
@@ -209,14 +212,9 @@ func TestMVCCHistories(t *testing.T) {
 				// "error" means expect an error to occur. The specific error type/
 				// message to expect is spelled out in the expected output.
 				//
-				trace := false
-				if e.hasArg("trace") {
-					trace = true
-				}
-				expectError := false
-				if e.hasArg("error") {
-					expectError = true
-				}
+				trace := e.hasArg("trace")
+				stats := e.hasArg("stats")
+				expectError := e.hasArg("error")
 
 				// buf will accumulate the actual output, which the
 				// datadriven driver will use to compare to the expected
@@ -340,8 +338,26 @@ func TestMVCCHistories(t *testing.T) {
 						_ = buf.WriteByte('\n')
 					}
 
+					var msBefore, msAfter enginepb.MVCCStats
+					if stats {
+						msBefore = computeStats(e.t, e.engine, keys.LocalMax, keys.MaxKey, 100e9)
+					}
+
 					// Run the command.
+					e.ms = &enginepb.MVCCStats{}
 					foundErr = cmd.fn(e)
+
+					if stats {
+						if trace {
+							buf.Printf("stats: %s\n", formatStats(e.ms, true, true))
+						}
+						msAfter = computeStats(e.t, e.engine, keys.LocalMax, keys.MaxKey, 100e9)
+						msBefore.Add(*e.ms)
+						if msAfter != msBefore {
+							buf.Printf("stats-expected: %s\n", &msBefore)
+							buf.Printf("stats-computed: %s\n", &msAfter)
+						}
+					}
 
 					if trace {
 						// If tracing is enabled, we report the intermediate results
@@ -363,6 +379,22 @@ func TestMVCCHistories(t *testing.T) {
 						buf.SafeString(">> at end:\n")
 					}
 					reportResults(txnChange, dataChange)
+				}
+
+				// Calculate and output stats if requested.
+				if stats {
+					iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						LowerBound: keys.LocalMax,
+						UpperBound: keys.MaxKey,
+						KeyTypes:   IterKeyTypePointsAndRanges,
+					})
+					defer iter.Close()
+
+					ms, err := ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, 1e12)
+					if err != nil {
+						e.t.Errorf("failed to compute stats: %s", err)
+					}
+					buf.Printf("stats: %s\n", formatStats(&ms, false, false))
 				}
 
 				signalError := e.t.Errorf
@@ -603,7 +635,7 @@ func (e *evalCtx) resolveIntent(
 ) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
-	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
+	_, err := MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent)
 	return err
 }
 
@@ -655,7 +687,7 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw ReadWriter) error {
-		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, val, expVal, behavior, txn); err != nil {
+		if err := MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, val, expVal, behavior, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -671,7 +703,7 @@ func cmdDelete(e *evalCtx) error {
 	ts := e.getTs(txn)
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw ReadWriter) error {
-		if err := MVCCDelete(e.ctx, rw, nil, key, ts, txn); err != nil {
+		if err := MVCCDelete(e.ctx, rw, e.ms, key, ts, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -693,7 +725,7 @@ func cmdDeleteRange(e *evalCtx) error {
 
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw ReadWriter) error {
-		deleted, resumeSpan, num, err := MVCCDeleteRange(e.ctx, rw, nil, key, endKey, int64(max), ts, txn, returnKeys)
+		deleted, resumeSpan, num, err := MVCCDeleteRange(e.ctx, rw, e.ms, key, endKey, int64(max), ts, txn, returnKeys)
 		if err != nil {
 			return err
 		}
@@ -717,11 +749,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	ts := e.getTs(nil)
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		err := ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, nil, key, endKey, ts, 0)
-		if err != nil {
-			return err
-		}
-		return nil
+		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, 0)
 	})
 }
 
@@ -780,7 +808,7 @@ func cmdIncrement(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw ReadWriter) error {
-		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, txn, inc)
+		curVal, err := MVCCIncrement(e.ctx, rw, e.ms, key, ts, txn, inc)
 		if err != nil {
 			return err
 		}
@@ -804,7 +832,7 @@ func cmdMerge(e *evalCtx) error {
 	}
 	ts := e.getTs(nil)
 	return e.withWriter("merge", func(rw ReadWriter) error {
-		return MVCCMerge(e.ctx, rw, nil, key, ts, val)
+		return MVCCMerge(e.ctx, rw, e.ms, key, ts, val)
 	})
 }
 
@@ -818,7 +846,7 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw ReadWriter) error {
-		if err := MVCCPut(e.ctx, rw, nil, key, ts, val, txn); err != nil {
+		if err := MVCCPut(e.ctx, rw, e.ms, key, ts, val, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -1074,6 +1102,31 @@ func printIter(e *evalCtx) {
 	}
 }
 
+func formatStats(ms *enginepb.MVCCStats, compact bool, delta bool) string {
+	var fields []string
+	reEmpty := regexp.MustCompile(`:0$`)
+	reDelta := regexp.MustCompile(`:(\d+)`)
+	for _, field := range strings.Fields(ms.String()) {
+		if compact && (reEmpty.MatchString(field) || strings.HasPrefix(field, "last_update_nanos")) {
+			continue
+		}
+		if delta {
+			field = reDelta.ReplaceAllString(field, `:+$1`)
+		}
+		fields = append(fields, field)
+	}
+	if compact {
+		return strings.Join(fields, " ")
+	}
+
+	s := "{\n"
+	for _, field := range fields {
+		s += "  " + field + "\n"
+	}
+	s += "}"
+	return s
+}
+
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -1089,6 +1142,7 @@ type evalCtx struct {
 	td         *datadriven.TestData
 	txns       map[string]*roachpb.Transaction
 	txnCounter uint128.Uint128
+	ms         *enginepb.MVCCStats
 }
 
 func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
