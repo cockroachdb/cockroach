@@ -253,6 +253,39 @@ func init() {
 	)
 }
 
+// Skip all removal ops for dropping table comments corresponding to elements
+// when dropping the table itself.
+func init() {
+	desc, descTarget, _ := targetNodeVars("desc")
+	dep, depTarget, depNode := targetNodeVars("dep")
+	descID := rel.Var("desc-id")
+
+	registerOpRule(
+		"skip table comment removal ops on descriptor drop",
+		depNode,
+		screl.MustQuery(
+			desc.Type(
+				(*scpb.Table)(nil),
+				(*scpb.View)(nil),
+				(*scpb.Sequence)(nil),
+			),
+			dep.Type(
+				(*scpb.ColumnComment)(nil),
+				(*scpb.IndexComment)(nil),
+				(*scpb.ConstraintComment)(nil),
+				(*scpb.TableComment)(nil),
+			),
+
+			descID.Entities(screl.DescID, desc, dep),
+
+			screl.JoinTarget(desc, descTarget),
+			descTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			screl.JoinTargetNode(dep, depTarget, depNode),
+			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+		),
+	)
+}
+
 // TODO(fqazi): For create operations we will need to have the ability
 // to have transformations that will combine transitions into a single
 // stage for execution. For example, a newly CREATE TABLE will be represented

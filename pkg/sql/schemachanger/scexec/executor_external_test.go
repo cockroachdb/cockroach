@@ -539,6 +539,11 @@ func (noopMetadataUpdater) DeleteDescriptorComment(
 	return nil
 }
 
+// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
+func (noopMetadataUpdater) DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error {
+	return nil
+}
+
 //UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpsertConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,

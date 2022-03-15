@@ -187,7 +187,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 13 MutationType ops
+## PreCommitPhase stage 1 of 1 with 9 MutationType ops
 delete object namespace entry {104 107 t} -> 108
 upsert descriptor #108
   ...
@@ -506,11 +506,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 107
   -  version: "1"
   +  version: "2"
-delete comment for descriptor #108 of type TableCommentType
-delete comment for descriptor #108 of type ColumnCommentType
-delete comment for descriptor #108 of type ColumnCommentType
-delete comment for descriptor #108 of type ColumnCommentType
-delete comment for descriptor #108 of type IndexCommentType
+delete all comments for table descriptors [108]
 create job #1: "schema change job"
   descriptor IDs: [108]
 # end PreCommitPhase
@@ -1496,7 +1492,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 15 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 113 MutationType ops
+## PreCommitPhase stage 1 of 1 with 92 MutationType ops
 delete database namespace entry {0 0 db1} -> 111
 delete schema namespace entry {111 0 public} -> 112
 delete schema namespace entry {111 0 sc1} -> 113
@@ -4233,37 +4229,7 @@ upsert descriptor #125
 delete comment for descriptor #111 of type DatabaseCommentType
 delete comment for descriptor #112 of type SchemaCommentType
 delete comment for descriptor #113 of type SchemaCommentType
-delete comment for descriptor #114 of type TableCommentType
-delete comment for descriptor #117 of type TableCommentType
-delete comment for descriptor #117 of type ColumnCommentType
-delete comment for descriptor #117 of type ColumnCommentType
-delete comment for descriptor #117 of type ColumnCommentType
-delete comment for descriptor #117 of type IndexCommentType
-delete comment for descriptor #118 of type TableCommentType
-delete comment for descriptor #118 of type ColumnCommentType
-delete comment for descriptor #118 of type ColumnCommentType
-delete comment for descriptor #118 of type IndexCommentType
-delete comment for descriptor #115 of type TableCommentType
-delete comment for descriptor #116 of type TableCommentType
-delete comment for descriptor #116 of type ColumnCommentType
-delete comment for descriptor #116 of type ColumnCommentType
-delete comment for descriptor #116 of type ColumnCommentType
-delete comment for descriptor #116 of type IndexCommentType
-delete comment for descriptor #119 of type TableCommentType
-delete comment for descriptor #119 of type ColumnCommentType
-delete comment for descriptor #120 of type TableCommentType
-delete comment for descriptor #120 of type ColumnCommentType
-delete comment for descriptor #120 of type ColumnCommentType
-delete comment for descriptor #121 of type TableCommentType
-delete comment for descriptor #121 of type ColumnCommentType
-delete comment for descriptor #121 of type ColumnCommentType
-delete comment for descriptor #122 of type TableCommentType
-delete comment for descriptor #122 of type ColumnCommentType
-delete comment for descriptor #122 of type ColumnCommentType
-delete comment for descriptor #125 of type TableCommentType
-delete comment for descriptor #125 of type ColumnCommentType
-delete comment for descriptor #125 of type ColumnCommentType
-delete comment for descriptor #125 of type ColumnCommentType
+delete all comments for table descriptors [114 115 116 117 118 119 120 121 122 125]
 delete role settings for database on #111
 create job #1: "schema change job"
   descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]

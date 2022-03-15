@@ -108,6 +108,11 @@ func (m *visitor) DeleteDescriptor(_ context.Context, op scop.DeleteDescriptor) 
 	return nil
 }
 
+func (m *visitor) RemoveAllTableComments(_ context.Context, op scop.RemoveAllTableComments) error {
+	m.s.DeleteAllTableComments(op.TableID)
+	return nil
+}
+
 func (m *visitor) RemoveTableComment(_ context.Context, op scop.RemoveTableComment) error {
 	m.s.DeleteComment(op.TableID, 0, keys.TableCommentType)
 	return nil

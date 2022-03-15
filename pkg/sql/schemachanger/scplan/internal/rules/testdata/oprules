@@ -126,3 +126,18 @@ oprules
     - $dep-node[Type] = '*screl.Node'
     - $dep-node[Target] = $dep-target
     - $dep-target[TargetStatus] = ABSENT
+- name: skip table comment removal ops on descriptor drop
+  from: dep-node
+  query:
+    - $desc[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence']
+    - $dep[Type] IN ['*scpb.ColumnComment', '*scpb.IndexComment', '*scpb.ConstraintComment', '*scpb.TableComment']
+    - $desc[DescID] = $desc-id
+    - $dep[DescID] = $desc-id
+    - $desc-target[Type] = '*scpb.Target'
+    - $desc-target[Element] = $desc
+    - $desc-target[TargetStatus] = ABSENT
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*screl.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[TargetStatus] = ABSENT

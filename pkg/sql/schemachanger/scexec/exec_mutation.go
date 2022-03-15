@@ -208,16 +208,16 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 // updateDescriptorMetadata performs the portions of the side effects of the
 // operations delegated to the DescriptorMetadataUpdater.
 func updateDescriptorMetadata(
-	ctx context.Context, mvs *mutationVisitorState, metadataUpdater DescriptorMetadataUpdater,
+	ctx context.Context, mvs *mutationVisitorState, m DescriptorMetadataUpdater,
 ) error {
 	for _, comment := range mvs.commentsToUpdate {
 		if len(comment.comment) > 0 {
-			if err := metadataUpdater.UpsertDescriptorComment(
+			if err := m.UpsertDescriptorComment(
 				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
 				return err
 			}
 		} else {
-			if err := metadataUpdater.DeleteDescriptorComment(
+			if err := m.DeleteDescriptorComment(
 				comment.id, comment.subID, comment.commentType); err != nil {
 				return err
 			}
@@ -225,25 +225,30 @@ func updateDescriptorMetadata(
 	}
 	for _, comment := range mvs.constraintCommentsToUpdate {
 		if len(comment.comment) > 0 {
-			if err := metadataUpdater.UpsertConstraintComment(
+			if err := m.UpsertConstraintComment(
 				comment.tblID, comment.constraintID, comment.comment); err != nil {
 				return err
 			}
 		} else {
-			if err := metadataUpdater.DeleteConstraintComment(
+			if err := m.DeleteConstraintComment(
 				comment.tblID, comment.constraintID); err != nil {
 				return err
 			}
 		}
 	}
+	if !mvs.tableCommentsToDelete.Empty() {
+		if err := m.DeleteAllCommentsForTables(mvs.tableCommentsToDelete); err != nil {
+			return err
+		}
+	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
-		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
+		err := m.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
 		if err != nil {
 			return err
 		}
 	}
 	for _, scheduleID := range mvs.scheduleIDsToDelete {
-		if err := metadataUpdater.DeleteSchedule(ctx, scheduleID); err != nil {
+		if err := m.DeleteSchedule(ctx, scheduleID); err != nil {
 			return err
 		}
 	}
@@ -342,6 +347,7 @@ type mutationVisitorState struct {
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
 	commentsToUpdate             []commentToUpdate
+	tableCommentsToDelete        catalog.DescriptorIDSet
 	constraintCommentsToUpdate   []constraintCommentToUpdate
 	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
 	dbGCJobs                     catalog.DescriptorIDSet
@@ -447,6 +453,10 @@ func (mvs *mutationVisitorState) MaybeCheckedOutDescriptor(id descpb.ID) catalog
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
 	mvs.descriptorsToDelete.Add(id)
+}
+
+func (mvs *mutationVisitorState) DeleteAllTableComments(id descpb.ID) {
+	mvs.tableCommentsToDelete.Add(id)
 }
 
 func (mvs *mutationVisitorState) DeleteComment(

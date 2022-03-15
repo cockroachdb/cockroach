@@ -275,6 +275,10 @@ type DescriptorMetadataUpdater interface {
 	// SwapDescriptorSubComment moves a comment from one sub ID to another.
 	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error
 
+	// DeleteAllCommentsForTables deletes all table-bound comments for the tables
+	// with the specified IDs.
+	DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error
+
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
 }
