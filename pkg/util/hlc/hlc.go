@@ -92,6 +92,8 @@ type Clock struct {
 // ManualClock is a convenience type to facilitate
 // creating a hybrid logical clock whose physical clock
 // is manually controlled. ManualClock is thread safe.
+//
+// NOTE: ManualClock is deprecated. Use timeutil.ManualTime instead.
 type ManualClock struct {
 	nanos int64
 }
@@ -204,7 +206,9 @@ func UnixNano() int64 {
 // physical clock. The logical ts is initialized to zero.
 //
 // The physical clock is typically given by the wall time of the local machine
-// in unix epoch nanoseconds, using hlc.UnixNano. This is not a requirement.
+// in unix epoch nanoseconds, using hlc.UnixNano. This is not a requirement. In
+// tests, timeutil.ManualTime.UnixNano can be used for a clock that can be
+// controlled.
 //
 // A value of 0 for maxOffset means that clock skew checking, if performed on
 // this clock by RemoteClockMonitor, is disabled.

@@ -188,7 +188,10 @@ type RequestSequencer interface {
 	// Alternatively, the concurrency manager may be able to serve the request
 	// directly, in which case it will return a Response for the request. If it
 	// does so, it will not return a request guard.
-	SequenceReq(context.Context, *Guard, Request, RequestEvalKind) (*Guard, Response, *Error)
+	//
+	// Contention events encountered during the lock table scanning are passed to
+	// the ContentionEventTracer, which emits them to the trace.
+	SequenceReq(context.Context, *Guard, Request, RequestEvalKind, *ContentionEventTracer) (*Guard, Response, *Error)
 
 	// PoisonReq idempotently marks a Guard as poisoned, indicating that its
 	// latches may be held for an indefinite amount of time. Requests waiting on
@@ -808,7 +811,10 @@ type lockTableWaiter interface {
 	// has acquired. It returns when the request is at the front of all lock
 	// wait-queues and it is safe to re-acquire latches and scan the lockTable
 	// again.
-	WaitOn(context.Context, Request, lockTableGuard) *Error
+	//
+	// Contention events are passed to the ContentionEventTracer, which will emit
+	// them to the trace.
+	WaitOn(context.Context, Request, lockTableGuard, *ContentionEventTracer) *Error
 
 	// ResolveDeferredIntents resolves the batch of intents if the provided
 	// error is nil. The batch of intents may be resolved more efficiently than

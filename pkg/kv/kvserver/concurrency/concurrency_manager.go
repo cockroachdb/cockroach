@@ -130,7 +130,6 @@ type Config struct {
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
-	OnContentionEvent func(*roachpb.ContentionEvent) // may be nil; allowed to mutate the event
 	TxnWaitKnobs      txnwait.TestingKnobs
 }
 
@@ -165,7 +164,6 @@ func NewManager(cfg Config) Manager {
 			lt:                   lt,
 			contentionEventClock: cfg.TimeSource,
 			disableTxnPushing:    cfg.DisableTxnPushing,
-			onContentionEvent:    cfg.OnContentionEvent,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
@@ -183,7 +181,11 @@ func NewManager(cfg Config) Manager {
 
 // SequenceReq implements the RequestSequencer interface.
 func (m *managerImpl) SequenceReq(
-	ctx context.Context, prev *Guard, req Request, evalKind RequestEvalKind,
+	ctx context.Context,
+	prev *Guard,
+	req Request,
+	evalKind RequestEvalKind,
+	contentionTracer *ContentionEventTracer,
 ) (*Guard, Response, *Error) {
 	var g *Guard
 	if prev == nil {
@@ -212,7 +214,7 @@ func (m *managerImpl) SequenceReq(
 		}
 	}
 	g.EvalKind = evalKind
-	resp, err := m.sequenceReqWithGuard(ctx, g)
+	resp, err := m.sequenceReqWithGuard(ctx, g, contentionTracer)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
 		m.FinishReq(g)
@@ -221,7 +223,9 @@ func (m *managerImpl) SequenceReq(
 	return g, nil, nil
 }
 
-func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Response, *Error) {
+func (m *managerImpl) sequenceReqWithGuard(
+	ctx context.Context, g *Guard, contentionTracer *ContentionEventTracer,
+) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
 	if shouldIgnoreLatches(g.Req) {
 		log.Event(ctx, "not acquiring latches")
@@ -313,7 +317,7 @@ func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Respo
 			m.lm.Release(g.moveLatchGuard())
 
 			log.Event(ctx, "waiting in lock wait-queues")
-			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg); err != nil {
+			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg, contentionTracer); err != nil {
 				return nil, err
 			}
 			continue

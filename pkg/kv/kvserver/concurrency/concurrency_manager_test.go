@@ -79,6 +79,7 @@ import (
 // debug-lock-table
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
+// debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
 // debug-set-max-locks n=<count>
 // reset
@@ -229,7 +230,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				opName := fmt.Sprintf("sequence %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					guard, resp, err := m.SequenceReq(ctx, prev, req, evalKind)
+					tr := concurrency.NewContentionEventTracer(tracing.SpanFromContext(ctx), c.manual)
+					guard, resp, err := m.SequenceReq(ctx, prev, req, evalKind, tr)
 					if err != nil {
 						log.Eventf(ctx, "sequencing complete, returned error: %v", err)
 					} else if resp != nil {
@@ -528,7 +530,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if nanos < c.manual.UnixNano() {
 					d.Fatalf(t, "manual clock must advance")
 				}
-				c.manual.Set(nanos)
+				c.manual.AdvanceTo(timeutil.Unix(0, nanos))
+				return ""
+
+			case "debug-advance-clock":
+				var secs int
+				d.ScanArgs(t, "ts", &secs)
+				c.manual.Advance(time.Duration(secs) * time.Second)
 				return ""
 
 			case "debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache":
@@ -590,7 +598,7 @@ type cluster struct {
 	nodeDesc  *roachpb.NodeDescriptor
 	rangeDesc *roachpb.RangeDescriptor
 	st        *clustersettings.Settings
-	manual    *hlc.ManualClock
+	manual    *timeutil.ManualTime
 	clock     *hlc.Clock
 	m         concurrency.Manager
 
@@ -621,7 +629,7 @@ type txnPush struct {
 }
 
 func newCluster() *cluster {
-	manual := hlc.NewManualClock(123 * time.Second.Nanoseconds())
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
@@ -643,11 +651,8 @@ func (c *cluster) makeConfig() concurrency.Config {
 		RangeDesc:      c.rangeDesc,
 		Settings:       c.st,
 		Clock:          c.clock,
-		TimeSource:     timeutil.DefaultTimeSource{},
+		TimeSource:     c.manual,
 		IntentResolver: c,
-		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
-			ev.Duration = 1234 * time.Millisecond // for determinism
-		},
 		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
 }

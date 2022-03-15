@@ -50,6 +50,11 @@ func (m *ManualTime) Now() time.Time {
 	return m.mu.now
 }
 
+// UnixNano returns the current time as a Unix timestamp.
+func (m *ManualTime) UnixNano() int64 {
+	return m.Now().UnixNano()
+}
+
 // Since implements TimeSource interface
 func (m *ManualTime) Since(t time.Time) time.Duration {
 	return m.Now().Sub(t)
