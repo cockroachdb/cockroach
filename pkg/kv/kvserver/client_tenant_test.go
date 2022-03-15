@@ -227,7 +227,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	// Create some tooling to read and verify metrics off of the prometheus
 	// endpoint.
 	runner.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
-	httpClient, err := s.GetHTTPClient()
+	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
 		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")

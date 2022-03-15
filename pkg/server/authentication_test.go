@@ -486,7 +486,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	tryLogin := func(username, password string) (*http.Response, error) {
 		// We need to instantiate our own HTTP Request, because we must inspect
 		// the returned headers.
-		httpClient, err := ts.GetHTTPClient()
+		httpClient, err := ts.GetUnauthenticatedHTTPClient()
 		if util.RaceEnabled {
 			httpClient.Timeout += 30 * time.Second
 		}
@@ -611,7 +611,7 @@ func TestLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	invalidAuthClient, err := s.GetHTTPClient()
+	invalidAuthClient, err := s.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,11 +647,11 @@ func TestAuthenticationMux(t *testing.T) {
 	tsrv := s.(*TestServer)
 
 	// Both the normal and authenticated client will be used for each test.
-	normalClient, err := tsrv.GetHTTPClient()
+	normalClient, err := tsrv.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	authClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
+	authClient, err := tsrv.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

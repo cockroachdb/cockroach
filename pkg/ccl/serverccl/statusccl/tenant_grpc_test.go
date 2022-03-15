@@ -73,7 +73,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		require.NotEmpty(t, resp.Statements)
 	})
 
-	httpClient, err := tenant.GetAdminAuthenticatedHTTPClient()
+	httpClient, err := tenant.GetAdminHTTPClient()
 	require.NoError(t, err)
 	defer httpClient.CloseIdleConnections()
 
@@ -114,7 +114,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer connTenant3.Close()
 
 	t.Run("fanout of statements endpoint is segregated by tenant", func(t *testing.T) {
-		httpClient3, err := tenant3.GetAdminAuthenticatedHTTPClient()
+		httpClient3, err := tenant3.GetAdminHTTPClient()
 		require.NoError(t, err)
 		defer httpClient3.CloseIdleConnections()
 

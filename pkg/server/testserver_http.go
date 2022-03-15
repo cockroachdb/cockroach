@@ -50,13 +50,13 @@ func (ts *httpTestServer) AdminURL() string {
 	return ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String()
 }
 
-// GetHTTPClient implements TestServerInterface.
-func (ts *httpTestServer) GetHTTPClient() (http.Client, error) {
+// GetUnauthenticatedHTTPClient implements TestServerInterface.
+func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
 	return ts.t.sqlServer.execCfg.RPCContext.GetHTTPClient()
 }
 
-// GetAdminAuthenticatedHTTPClient implements the TestServerInterface.
-func (ts *httpTestServer) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
+// GetAdminHTTPClient implements the TestServerInterface.
+func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
 	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
 	return httpClient, err
 }
