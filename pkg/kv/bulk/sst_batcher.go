@@ -133,6 +133,7 @@ type SSTBatcher struct {
 		scatterWait time.Duration
 	}
 	// Tracking for if we have "filled" a range in case we want to split/scatter.
+	disableSplits         bool
 	flushedToCurrentRange int64
 	lastFlushKey          []byte
 	maxWriteTS            hlc.Timestamp
@@ -159,12 +160,14 @@ func MakeSSTBatcher(
 	settings *cluster.Settings,
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
+	splitFilledRanges bool,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:                     db,
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
+		disableSplits:          !splitFilledRanges,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -364,7 +367,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		//
 		// We only do this splitting if the caller expects the sst_batcher to
 		// split and scatter the data as it ingests it i.e. splitAfter > 0.
-		if !b.initialSplitDone && b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 {
+		if !b.disableSplits && !b.initialSplitDone && b.flushCounts.total == 1 && splitAfter.Get(&b.settings.SV) > 0 {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "failed to generate split key to separate ingestion span: %v", err)
 			} else {
@@ -426,7 +429,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 			b.lastFlushKey = append(b.lastFlushKey[:0], b.flushKey...)
 			b.flushedToCurrentRange = size
 		}
-		if splitSize := splitAfter.Get(&b.settings.SV); splitSize > 0 {
+		if splitSize := splitAfter.Get(&b.settings.SV); !b.disableSplits && splitSize > 0 {
 			if b.flushedToCurrentRange > splitSize && nextKey != nil {
 				if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
 					log.Warningf(ctx, "%v", err)
