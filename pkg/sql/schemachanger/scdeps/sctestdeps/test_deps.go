@@ -899,7 +899,7 @@ func (s *TestState) EventLogger() scexec.EventLogger {
 	return s
 }
 
-// UpsertDescriptorComment implements scexec.DescriptorMetaDataUpdater.
+// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
@@ -908,7 +908,13 @@ func (s *TestState) UpsertDescriptorComment(
 	return nil
 }
 
-// DeleteDescriptorComment implements scexec.DescriptorMetaDataUpdater.
+// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
+func (s *TestState) DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error {
+	s.LogSideEffectf("delete all comments for table descriptors %v", ids.Ordered())
+	return nil
+}
+
+// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
@@ -917,7 +923,7 @@ func (s *TestState) DeleteDescriptorComment(
 	return nil
 }
 
-//UpsertConstraintComment implements scexec.DescriptorMetaDataUpdater.
+//UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) UpsertConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
@@ -926,7 +932,7 @@ func (s *TestState) UpsertConstraintComment(
 	return nil
 }
 
-//DeleteConstraintComment implements scexec.DescriptorMetaDataUpdater.
+//DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) DeleteConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
@@ -935,13 +941,13 @@ func (s *TestState) DeleteConstraintComment(
 	return nil
 }
 
-// DeleteDatabaseRoleSettings implements scexec.DescriptorMetaDataUpdater.
+// DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID) error {
 	s.LogSideEffectf("delete role settings for database on #%d", dbID)
 	return nil
 }
 
-// SwapDescriptorSubComment implements scexec.DescriptorMetaDataUpdater.
+// SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) SwapDescriptorSubComment(
 	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
 ) error {

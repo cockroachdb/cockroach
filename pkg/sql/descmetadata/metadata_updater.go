@@ -13,10 +13,12 @@ package descmetadata
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,6 +66,33 @@ func (mu metadataUpdater) DeleteDescriptorComment(
 		id,
 		subID,
 		commentType,
+	)
+	return err
+}
+
+// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) DeleteAllCommentsForTables(idSet catalog.DescriptorIDSet) error {
+	if idSet.Empty() {
+		return nil
+	}
+	var buf strings.Builder
+	ids := idSet.Ordered()
+	_, _ = fmt.Fprintf(&buf, `
+DELETE FROM system.comments
+      WHERE type IN (%d, %d, %d, %d)
+        AND object_id IN (%d`,
+		keys.TableCommentType, keys.ColumnCommentType, keys.ConstraintCommentType,
+		keys.IndexCommentType, ids[0],
+	)
+	for _, id := range ids[1:] {
+		_, _ = fmt.Fprintf(&buf, ", %d", id)
+	}
+	buf.WriteString(")")
+	_, err := mu.ie.ExecEx(context.Background(),
+		"delete-all-comments-for-tables",
+		mu.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		buf.String(),
 	)
 	return err
 }
