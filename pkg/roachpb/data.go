@@ -50,6 +50,12 @@ const (
 	localPrefixByte = '\x01'
 	// LocalMaxByte is the end of the local key range.
 	LocalMaxByte = '\x02'
+	// PrevishKeyLength is a reasonable key length to use for Key.Prevish(),
+	// typically when peeking to the left of a known key. We want this to be as
+	// tight as possible, since it can e.g. be used for latch spans. However, the
+	// exact previous key has infinite length, so we assume that most keys are
+	// less than 8192 bytes, or have a fairly unique 8192-byte prefix.
+	PrevishKeyLength = 8192
 )
 
 var (
@@ -157,6 +163,32 @@ func BytesNext(b []byte) []byte {
 	return bn
 }
 
+// BytesPrevish returns a previous byte slice in lexicographical ordering. It is
+// impossible in general to find the exact previous byte slice, because it has
+// an infinite number of 0xff bytes at the end, so this returns the nearest
+// previous slice right-padded with 0xff up to length bytes. It may reuse the
+// given slice when possible.
+func BytesPrevish(b []byte, length int) []byte {
+	bLen := len(b)
+	// An empty slice has no previous slice.
+	if bLen == 0 {
+		return b
+	}
+	// If the last byte is 0, just remove it.
+	if b[bLen-1] == 0 {
+		return b[:bLen-1]
+	}
+	// Otherwise, decrement the last byte and right-pad with 0xff.
+	if bLen > length {
+		length = bLen
+	}
+	buf := make([]byte, length)
+	copy(buf, b)
+	buf[bLen-1]--
+	copy(buf[bLen:], bytes.Repeat([]byte{0xff}, length-bLen))
+	return buf
+}
+
 // Clone returns a copy of the key.
 func (k Key) Clone() Key {
 	if k == nil {
@@ -172,6 +204,21 @@ func (k Key) Clone() Key {
 // value should be treated as immutable after.
 func (k Key) Next() Key {
 	return Key(BytesNext(k))
+}
+
+// Prevish returns a previous key in lexicographic sort order. It is impossible
+// in general to find the exact immediate predecessor key, because it has an
+// infinite number of 0xff bytes at the end, so this returns the nearest
+// previous key right-padded with 0xff up to length bytes. An infinite number of
+// keys may exist between Key and Key.Prevish(), as keys have unbounded length.
+// This also implies that k.Prevish().IsPrev(k) will often be false.
+//
+// PrevishKeyLength can be used as a reasonable length in most situations.
+//
+// The method may only take a shallow copy of the Key, so both the receiver and
+// the return value should be treated as immutable after.
+func (k Key) Prevish(length int) Key {
+	return Key(BytesPrevish(k, length))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
