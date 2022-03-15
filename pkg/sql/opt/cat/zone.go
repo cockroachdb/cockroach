@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -47,6 +48,34 @@ type Zone interface {
 	// LeasePreference returns the ith lease preference in the zone, where
 	// i < LeasePreferenceCount.
 	LeasePreference(i int) ConstraintSet
+
+	// SubzoneCount returns the number of subzones that are part of this zone.
+	SubzoneCount() int
+
+	// Subzone returns the ith subzone in the zone, where i < SubzoneCount.
+	Subzone(i int) Subzone
+
+	// Equal returns whether the two zone configurations are equal.
+	Equal(o Zone) bool
+
+	// InheritFromParent hydrates a zones missing fields from its parent,
+	// returning a new zone.
+	InheritFromParent(parent Zone) Zone
+}
+
+// Subzone is an interface to zone configuration information that applies to
+// either a SQL table index or a partition of a SQL table index.
+type Subzone interface {
+	// Index returns the ID of the SQL table index that the subzone represents.
+	Index() StableID
+
+	// Partition returns the name of the partition of the SQL table index that the
+	// subzone represents. The return value is empty when the subzone represents
+	// the entire index.
+	Partition() string
+
+	// Zone returns the Zone that applies to this Subzone.
+	Zone() Zone
 }
 
 // ConstraintSet is a set of constraints that apply to a range, restricting
@@ -93,6 +122,150 @@ type Constraint interface {
 
 	// GetValue returns the constraint's string value (to right of =).
 	GetValue() string
+}
+
+// catZone implements Zone for a zone configuration.
+type catZone zonepb.ZoneConfig
+
+// AsZone returns a Zone corresponding to the provided ZoneConfig.
+func AsZone(z *zonepb.ZoneConfig) Zone {
+	return (*catZone)(z)
+}
+
+// EmptyZone returns an empty Zone.
+func EmptyZone() Zone {
+	return AsZone(&zonepb.ZoneConfig{})
+}
+
+var _ Zone = &catZone{}
+
+// ReplicaConstraintsCount is part of the Zone interface.
+func (z *catZone) ReplicaConstraintsCount() int {
+	return len(z.Constraints)
+}
+
+// ReplicaConstraints is part of the Zone interface.
+func (z *catZone) ReplicaConstraints(i int) ReplicaConstraints {
+	return (*catConstraintsConjunction)(&z.Constraints[i])
+}
+
+// VoterConstraintsCount is part of the Zone interface.
+func (z *catZone) VoterConstraintsCount() int {
+	return len(z.VoterConstraints)
+}
+
+// VoterConstraint is part of the Zone interface.
+func (z *catZone) VoterConstraint(i int) ReplicaConstraints {
+	return (*catConstraintsConjunction)(&z.VoterConstraints[i])
+}
+
+// LeasePreferenceCount is part of the Zone interface.
+func (z *catZone) LeasePreferenceCount() int {
+	return len(z.LeasePreferences)
+}
+
+// LeasePreference is part of the Zone interface.
+func (z *catZone) LeasePreference(i int) ConstraintSet {
+	return (*catConstraintSet)(&z.LeasePreferences[i])
+}
+
+// SubzoneCount is part of the Zone interface.
+func (z *catZone) SubzoneCount() int {
+	return len(z.Subzones)
+}
+
+// Subzone is part of the Zone interface.
+func (z *catZone) Subzone(i int) Subzone {
+	return (*catSubzone)(&z.Subzones[i])
+}
+
+// Equal is part of the Zone interface.
+func (z *catZone) Equal(o Zone) bool {
+	return (*zonepb.ZoneConfig)(z).Equal((*zonepb.ZoneConfig)(o.(*catZone)))
+}
+
+// InheritFromParent is part of the Zone interface.
+func (z *catZone) InheritFromParent(parent Zone) Zone {
+	cpy := zonepb.ZoneConfig(*z)
+	cpy.InheritFromParent((*zonepb.ZoneConfig)(parent.(*catZone)))
+	return AsZone(&cpy)
+}
+
+// catSubzone implements Subzone for a zone configuration subzone.
+type catSubzone zonepb.Subzone
+
+var _ Subzone = &catSubzone{}
+
+// Index is part of the Subzone interface.
+func (s *catSubzone) Index() StableID {
+	return StableID(s.IndexID)
+}
+
+// Partition is part of the Subzone interface.
+func (s *catSubzone) Partition() string {
+	return s.PartitionName
+}
+
+// Zone is part of the Subzone interface.
+func (s *catSubzone) Zone() Zone {
+	return AsZone(&s.Config)
+}
+
+// catConstraintSet implements ConstraintSet for a zone configuration lease
+// preference.
+type catConstraintSet zonepb.LeasePreference
+
+var _ ConstraintSet = &catConstraintSet{}
+
+// ConstraintCount is part of the LeasePreference interface.
+func (l *catConstraintSet) ConstraintCount() int {
+	return len(l.Constraints)
+}
+
+// Constraint is part of the LeasePreference interface.
+func (l *catConstraintSet) Constraint(i int) Constraint {
+	return (*catConstraints)(&l.Constraints[i])
+}
+
+// catConstraintsConjunction implements ReplicaConstraints for a zone
+// configuration constraint conjunction.
+type catConstraintsConjunction zonepb.ConstraintsConjunction
+
+var _ ReplicaConstraints = &catConstraintsConjunction{}
+
+// ReplicaCount is part of the ReplicaConstraints interface.
+func (c *catConstraintsConjunction) ReplicaCount() int32 {
+	return c.NumReplicas
+}
+
+// ConstraintCount is part of the ReplicaConstraints interface.
+func (c *catConstraintsConjunction) ConstraintCount() int {
+	return len(c.Constraints)
+}
+
+// Constraint is part of the ReplicaConstraints interface.
+func (c *catConstraintsConjunction) Constraint(i int) Constraint {
+	return (*catConstraints)(&c.Constraints[i])
+}
+
+// catConstraints implements Constraint for a zone configuration constraint.
+type catConstraints zonepb.Constraint
+
+var _ Constraint = &catConstraints{}
+
+// IsRequired is part of the Constraint interface.
+func (c *catConstraints) IsRequired() bool {
+	return c.Type == zonepb.Constraint_REQUIRED
+}
+
+// GetKey is part of the Constraint interface.
+func (c *catConstraints) GetKey() string {
+	return c.Key
+}
+
+// GetValue is part of the Constraint interface.
+func (c *catConstraints) GetValue() string {
+	return c.Value
 }
 
 // FormatZone nicely formats a catalog zone using a treeprinter for debugging

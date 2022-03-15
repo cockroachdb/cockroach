@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"gopkg.in/yaml.v2"
@@ -187,7 +188,7 @@ func TestGetRegionsFromZone(t *testing.T) {
 			}
 		}
 
-		regions := getRegionsFromZone(zone)
+		regions := getRegionsFromZone(cat.AsZone(zone))
 		actual := make([]string, 0, len(regions))
 		for r := range regions {
 			actual = append(actual, r)
