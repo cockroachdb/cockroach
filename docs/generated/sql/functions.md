@@ -3105,6 +3105,8 @@ table. Returns an error if validation fails.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="acldefault"></a><code>acldefault(c: <a href="string.html">string</a>, oid: oid) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>placeholder</p>
+</span></td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
 </span></td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>, missing_ok: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>

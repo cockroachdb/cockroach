@@ -2129,6 +2129,21 @@ SELECT description
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+
+	"acldefault": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"c", types.String},
+				{"oid", types.Oid},
+			},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.String)),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
+			},
+			Info:       "placeholder",
+			Volatility: tree.VolatilityStable,
+		},
+	),
 }
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
