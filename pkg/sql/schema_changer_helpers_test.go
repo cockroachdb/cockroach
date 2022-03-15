@@ -31,7 +31,8 @@ func (sc *SchemaChanger) TestingDistIndexBackfill(
 	addedIndexes []descpb.IndexID,
 	filter backfill.MutationFilter,
 ) error {
-	err := sc.distIndexBackfill(ctx, version, targetSpans, addedIndexes, true, filter)
+	scaler := newMultiStageFractionScaler(0, backfillStageFractions)
+	err := sc.distIndexBackfill(ctx, version, targetSpans, addedIndexes, true, filter, scaler)
 	return err
 }
 
