@@ -101,6 +101,12 @@ func DecodeUntaggedDatum(
 			return nil, b, err
 		}
 		return a.NewDBytes(tree.DBytes(data)), b, nil
+	case types.EncodedKeyFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDEncodedKey(tree.DEncodedKey(data)), b, nil
 	case types.DateFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {

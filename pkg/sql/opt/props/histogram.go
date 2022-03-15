@@ -375,6 +375,8 @@ func (h *Histogram) InvertedFilter(spans inverted.Spans) *Histogram {
 
 func makeSpanFromInvertedSpan(invSpan inverted.Span) *constraint.Span {
 	var span constraint.Span
+	// The statistics use the Bytes type for the encoded key, so we use DBytes
+	// here.
 	span.Init(
 		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.Start))),
 		constraint.IncludeBoundary,

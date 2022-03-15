@@ -36,7 +36,7 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 	switch family {
 	case types.BoolFamily:
 		return types.BoolFamily
-	case types.BytesFamily, types.StringFamily, types.UuidFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily, types.EncodedKeyFamily:
 		return types.BytesFamily
 	case types.DecimalFamily:
 		return types.DecimalFamily

@@ -85,6 +85,7 @@ var rowsToVecPreludeTmpls = map[familyWidthPair]string{
 var rowsToVecConversionTmpls = map[familyWidthPair]string{
 	{types.BoolFamily, anyWidth}:                     `bool(*%[1]s.(*tree.DBool))`,
 	{types.BytesFamily, anyWidth}:                    `encoding.UnsafeConvertStringToBytes(string(*%[1]s.(*tree.DBytes)))`,
+	{types.EncodedKeyFamily, anyWidth}:               `encoding.UnsafeConvertStringToBytes(string(*%[1]s.(*tree.DEncodedKey)))`,
 	{types.IntFamily, 16}:                            `int16(*%[1]s.(*tree.DInt))`,
 	{types.IntFamily, 32}:                            `int32(*%[1]s.(*tree.DInt))`,
 	{types.IntFamily, anyWidth}:                      `int64(*%[1]s.(*tree.DInt))`,

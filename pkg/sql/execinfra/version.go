@@ -64,17 +64,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 65
+const Version execinfrapb.DistSQLVersion = 66
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 65
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 66
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 66 (MinAcceptedVersion: 66)
+  - Processor columns for inverted index keys now are presented as having
+    a new EncodedKey type.
 
 - Version: 65 (MinAcceptedVersion: 65)
   - adds the RestoreValidation field to the RestoreDataSpec and SplitAndScatterSpec
