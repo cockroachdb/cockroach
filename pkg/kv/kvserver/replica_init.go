@@ -82,6 +82,7 @@ func newUnloadedReplica(
 			Settings:          store.ClusterSettings(),
 			DB:                store.DB(),
 			Clock:             store.Clock(),
+			TimeSource:        store.cfg.TimeSource,
 			Stopper:           store.Stopper(),
 			IntentResolver:    store.intentResolver,
 			TxnWaitMetrics:    store.txnWaitMetrics,
