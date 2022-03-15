@@ -593,46 +593,14 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	})
 }
 
-// Tests that when leaseholder is relocated, the lease can be transferred directly to a new node.
-// This verifies https://github.com/cockroachdb/cockroach/issues/67740
-func TestLeaseholderRelocatePreferred(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testLeaseholderRelocateInternal(t, "us")
-}
-
-// Tests that when leaseholder is relocated, the lease will transfer to a node in a preferred
-// location, even if another node is being added.
-// This verifies https://github.com/cockroachdb/cockroach/issues/67740
-func TestLeaseholderRelocateNonPreferred(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testLeaseholderRelocateInternal(t, "eu")
-}
-
-// Tests that when leaseholder is relocated, the lease will transfer to some node,
-// even if nodes in the preferred region aren't available.
-// This verifies https://github.com/cockroachdb/cockroach/issues/67740
-func TestLeaseholderRelocateNonExistent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testLeaseholderRelocateInternal(t, "au")
-}
-
 // Tests that when leaseholder is relocated, the lease can be transferred directly to new node
-func testLeaseholderRelocateInternal(t *testing.T, preferredRegion string) {
+func TestLeaseholderRelocate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyRegistry.CloseAllStickyInMemEngines()
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	zcfg := zonepb.DefaultZoneConfig()
-	zcfg.LeasePreferences = []zonepb.LeasePreference{
-		{
-			Constraints: []zonepb.Constraint{
-				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: preferredRegion},
-			},
-		},
-	}
 
 	serverArgs := make(map[int]base.TestServerArgs)
 	locality := func(region string) roachpb.Locality {
@@ -647,7 +615,6 @@ func testLeaseholderRelocateInternal(t *testing.T, preferredRegion string) {
 		locality("eu"),
 		locality("us"),
 		locality("us"),
-		locality("au"),
 	}
 
 	const numNodes = 4
@@ -656,9 +623,8 @@ func testLeaseholderRelocateInternal(t *testing.T, preferredRegion string) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:               manualClock.UnixNano,
-					DefaultZoneConfigOverride: &zcfg,
-					StickyEngineRegistry:      stickyRegistry,
+					ClockSource:          manualClock.UnixNano,
+					StickyEngineRegistry: stickyRegistry,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{
@@ -711,34 +677,13 @@ func testLeaseholderRelocateInternal(t *testing.T, preferredRegion string) {
 		return nil
 	})
 
-	// The only node with "au" locality is down, the lease can move anywhere.
-	if preferredRegion == "au" {
-		return
-	}
-
 	// Make sure lease moved to the preferred region, if .
 	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
 	require.NoError(t, err)
-	require.Equal(t, locality(preferredRegion),
-		localities[leaseHolder.NodeID-1])
-
-	var leaseholderNodeId int
-	if preferredRegion == "us" {
-		require.Equal(t, tc.Target(3).NodeID,
-			leaseHolder.NodeID)
-		leaseholderNodeId = 3
-	} else {
-		if leaseHolder.NodeID == tc.Target(0).NodeID {
-			leaseholderNodeId = 0
-		} else {
-			require.Equal(t, tc.Target(1).NodeID,
-				leaseHolder.NodeID)
-			leaseholderNodeId = 1
-		}
-	}
+	require.Equal(t, tc.Target(3), leaseHolder)
 
 	// Double check that lease moved directly.
-	repl := tc.GetFirstStoreFromServer(t, leaseholderNodeId).
+	repl := tc.GetFirstStoreFromServer(t, 3).
 		LookupReplica(roachpb.RKey(rhsDesc.StartKey.AsRawKey()))
 	history := repl.GetLeaseHistory()
 	require.Equal(t, leaseHolder.NodeID,
@@ -793,7 +738,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			},
 		},
 	}
-	numNodes := 6
+	numNodes := 5
 	serverArgs := make(map[int]base.TestServerArgs)
 	locality := func(region string, dc string) roachpb.Locality {
 		return roachpb.Locality{
@@ -804,7 +749,6 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 	}
 	localities := []roachpb.Locality{
-		locality("eu", "tr"),
 		locality("eu", "tr"),
 		locality("us", "sf"),
 		locality("us", "sf"),
@@ -834,25 +778,26 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			ReplicationMode:   base.ReplicationManual,
 			ServerArgsPerNode: serverArgs,
 		})
+
 	defer tc.Stopper().Stop(ctx)
 
 	key := bootstrap.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, key)
-	tc.AddVotersOrFatal(t, key, tc.Targets(2, 4)...)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 3)...)
 	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
-	require.NoError(t, tc.WaitForVoters(key, tc.Targets(2, 4)...))
-	tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(2))
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 3)...))
+	tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
 
 	// Shutdown the sf datacenter, which is going to kill the node with the lease.
+	tc.StopServer(1)
 	tc.StopServer(2)
-	tc.StopServer(3)
 
 	wait := func(duration int64) {
 		manualClock.Increment(duration)
 		// Gossip and heartbeat all the live stores, we do this manually otherwise the
 		// allocator on server 0 may see everyone as temporarily dead due to the
 		// clock move above.
-		for _, i := range []int{0, 1, 4, 5} {
+		for _, i := range []int{0, 3, 4} {
 			require.NoError(t, tc.Servers[i].HeartbeatNodeLiveness())
 			require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
 		}
@@ -879,18 +824,18 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		store := tc.GetFirstStoreFromServer(t, 0)
 		sl, _, _ := store.GetStoreConfig().StorePool.GetStoreList()
-		if len(sl.Stores()) != 4 {
-			return errors.Errorf("expected all 4 remaining stores to be live, but only got %v", sl.Stores())
+		if len(sl.Stores()) != 3 {
+			return errors.Errorf("expected all 3 remaining stores to be live, but only got %v",
+				sl.Stores())
+		}
+		if err := checkDead(store, 1); err != nil {
+			return err
 		}
 		if err := checkDead(store, 2); err != nil {
 			return err
 		}
-		if err := checkDead(store, 3); err != nil {
-			return err
-		}
 		return nil
 	})
-
 	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
 		ManuallyEnqueue(ctx, "replicate", repl, true)
 
@@ -903,26 +848,22 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		return err
 	})
 
-	// Check that the leaseholder is in the US
 	srv, err := tc.FindMemberServer(newLeaseHolder.StoreID)
 	require.NoError(t, err)
 	region, ok := srv.Locality().Find("region")
 	require.True(t, ok)
 	require.Equal(t, "us", region)
-
+	require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
 	// Validate that we upreplicated outside of SF.
-	replicas := repl.Desc().Replicas().Voters().VoterDescriptors()
-	require.Equal(t, 3, len(replicas))
-	for _, replDesc := range replicas {
+	for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
 		serv, err := tc.FindMemberServer(replDesc.StoreID)
 		require.NoError(t, err)
 		dc, ok := serv.Locality().Find("dc")
 		require.True(t, ok)
 		require.NotEqual(t, "sf", dc)
 	}
-
-	// make sure we see the eu node as a lease holder in the second to last position.
 	history := repl.GetLeaseHistory()
+	// make sure we see the eu node as a lease holder in the second to last position.
 	require.Equal(t, tc.Target(0).NodeID, history[len(history)-2].Replica.NodeID)
 }
 
@@ -1001,7 +942,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 
 	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
-	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0))
+	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
 
 	startKeys := make([]roachpb.Key, 20)
 	startKeys[0] = rhsDesc.StartKey.AsRawKey()
