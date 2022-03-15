@@ -341,6 +341,17 @@ type IterOptions struct {
 	// MVCCIterators from them. Range key behavior for EngineIterators is
 	// undefined.
 	KeyTypes IterKeyType
+	// RangeKeyMaskingBelow enables masking (hiding) of point keys by range keys.
+	// Any range key with a timestamp at or below the RangeKeyMaskingBelow
+	// timestamp will mask point keys below it, preventing them from being
+	// surfaced. Consider the following example:
+	//
+	// 4          o---------------o    RangeKeyMaskingBelow=4 emits b3
+	// 3      b3      d3               RangeKeyMaskingBelow=3 emits b3,d3,f2
+	// 2  o---------------o   f2       RangeKeyMaskingBelow=2 emits b3,d3,f2
+	// 1  a1  b1          o-------o    RangeKeyMaskingBelow=1 emits a1,b3,b1,d3,f2
+	//    a   b   c   d   e   f   g
+	RangeKeyMaskingBelow hlc.Timestamp
 }
 
 // IterKeyType configures which types of keys an iterator should surface.

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -159,6 +160,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 			opts.UpperBound = []byte{0}
 		}
 		opts.KeyTypes = IterKeyTypePointsOnly
+		opts.RangeKeyMaskingBelow = hlc.Timestamp{}
 	}
 
 	// Generate new Pebble iterator options.
@@ -168,6 +170,10 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	newOptions := pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  opts.KeyTypes,
+		RangeKeyMasking: pebble.RangeKeyMasking{
+			// TODO(erikgrinaker): Consider reusing a buffer if necessary.
+			Suffix: EncodeMVCCTimestampSuffix(opts.RangeKeyMaskingBelow),
+		},
 	}
 
 	newBuf := 1 - p.curBuf
@@ -236,6 +242,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		newOptions.KeyTypes != p.options.KeyTypes ||
 		!bytes.Equal(newOptions.UpperBound, p.options.UpperBound) ||
 		!bytes.Equal(newOptions.LowerBound, p.options.LowerBound) ||
+		!bytes.Equal(newOptions.RangeKeyMasking.Suffix, p.options.RangeKeyMasking.Suffix) ||
 		// We can't compare these filters, so if any existing or new filters are set
 		// we consider them changed.
 		newOptions.TableFilter != nil || p.options.TableFilter != nil ||
