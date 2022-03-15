@@ -242,6 +242,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		Settings:                    st,
 		AmbientCtx:                  log.MakeTestingAmbientContext(tracer),
 		Clock:                       clock,
+		TimeSource:                  timeutil.DefaultTimeSource{},
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
@@ -964,6 +965,7 @@ type StoreConfig struct {
 	DefaultSpanConfig    roachpb.SpanConfig
 	Settings             *cluster.Settings
 	Clock                *hlc.Clock
+	TimeSource           timeutil.TimeSource
 	DB                   *kv.DB
 	Gossip               *gossip.Gossip
 	NodeLiveness         *liveness.NodeLiveness

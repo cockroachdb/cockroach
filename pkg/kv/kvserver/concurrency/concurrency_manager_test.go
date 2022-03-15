@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -642,6 +643,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 		RangeDesc:      c.rangeDesc,
 		Settings:       c.st,
 		Clock:          c.clock,
+		TimeSource:     timeutil.DefaultTimeSource{},
 		IntentResolver: c,
 		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
 			ev.Duration = 1234 * time.Millisecond // for determinism
