@@ -176,7 +176,10 @@ func CheckTwoVersionInvariant(
 		return false, err
 	}
 	if count == 0 {
-		return false, nil
+		// This is the last step before committing a transaction which modifies
+		// descriptors. This is a perfect time to refresh the deadline prior to
+		// committing.
+		return false, descsCol.MaybeUpdateDeadline(ctx, txn)
 	}
 
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
