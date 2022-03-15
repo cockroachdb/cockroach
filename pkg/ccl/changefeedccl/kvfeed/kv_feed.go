@@ -343,6 +343,8 @@ func (f *kvFeed) scanIfShould(
 		return err
 	}
 
+	f.checkpoint = nil
+
 	// NB: We don't update the highwater even though we've technically seen all
 	// events for all spans at the previous highwater.Next(). We choose not to
 	// because doing so would be wrong once we only backfill some tables.
