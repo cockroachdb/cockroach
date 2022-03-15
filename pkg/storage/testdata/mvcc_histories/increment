@@ -3,18 +3,23 @@
 
 # Non-transactional increments.
 
-run ok
+run stats ok
 with k=k
   increment ts=0,1 inc=0
   get       ts=0,1
   increment ts=0,2 inc=2
 ----
+>> increment ts=0,1 inc=0 k=k
 inc: current value = 0
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 get: "k" -> /INT/0 @0,1
+>> increment ts=0,2 inc=2 k=k
 inc: current value = 2
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 gc_bytes_age=+1800
 >> at end:
 data: "k"/0,2 -> /INT/2
 data: "k"/0,1 -> /INT/0
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=12 live_count=1 live_bytes=20 gc_bytes_age=1800
 
 run ok
 clear_range k=k end=-k
@@ -23,7 +28,7 @@ clear_range k=k end=-k
 <no data>
 
 # Transactional increments.
-run ok
+run stats ok
 with k=k t=a ts=0,1
   txn_begin
   txn_step
@@ -31,12 +36,17 @@ with k=k t=a ts=0,1
   txn_step
   increment
 ----
+>> increment k=k t=a ts=0,1
 inc: current value = 1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+51 live_count=+1 live_bytes=+65 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+100
+>> increment k=k t=a ts=0,1
 inc: current value = 2
+stats: val_bytes=+10 live_bytes=+10
 >> at end:
 txn: "a" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=100
 
 
 # Increments at older timestamp generate WriteTooOld.

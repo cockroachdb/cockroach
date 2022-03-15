@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,6 +46,8 @@ import (
 // perform properly.
 //
 // The input files use the following DSL:
+//
+// run            [ok|trace|stats|error]
 //
 // txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // txn_remove     t=<name>
@@ -112,6 +116,9 @@ func TestMVCCHistories(t *testing.T) {
 
 	// Everything reads/writes under the same prefix.
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
+
+	// Timestamp for MVCC stats calculations, in nanoseconds.
+	const statsTS = 100e9
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
 		// We start from a clean slate in every test file.
@@ -214,18 +221,14 @@ func TestMVCCHistories(t *testing.T) {
 				// It stops upon the first error encountered, if any.
 				//
 				// Options:
-				// "trace" means detail each operation in the output.
-				// "error" means expect an error to occur. The specific error type/
-				// message to expect is spelled out in the expected output.
+				// - trace: emit intermediate results after each operation.
+				// - stats: emit MVCC statistics for each operation and at the end.
+				// - error: expect an error to occur. The specific error type/ message
+				//   to expect is spelled out in the expected output.
 				//
-				trace := false
-				if e.hasArg("trace") {
-					trace = true
-				}
-				expectError := false
-				if e.hasArg("error") {
-					expectError = true
-				}
+				trace := e.hasArg("trace")
+				stats := e.hasArg("stats")
+				expectError := e.hasArg("error")
 
 				// buf will accumulate the actual output, which the
 				// datadriven driver will use to compare to the expected
@@ -339,7 +342,7 @@ func TestMVCCHistories(t *testing.T) {
 					txnChange = txnChange || cmd.typ == typTxnUpdate
 					dataChange = dataChange || cmd.typ == typDataUpdate
 
-					if trace {
+					if trace || (stats && cmd.typ == typDataUpdate) {
 						// If tracing is also requested by the datadriven input,
 						// we'll trace the statement in the actual results too.
 						buf.Printf(">> %s", d.Cmd)
@@ -349,7 +352,13 @@ func TestMVCCHistories(t *testing.T) {
 						_ = buf.WriteByte('\n')
 					}
 
+					var msInitial enginepb.MVCCStats
+					if stats {
+						msInitial = computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
+					}
+
 					// Run the command.
+					e.ms = &enginepb.MVCCStats{}
 					foundErr = cmd.fn(e)
 
 					if trace {
@@ -357,6 +366,21 @@ func TestMVCCHistories(t *testing.T) {
 						// after each individual step in the script.
 						// This may modify foundErr too.
 						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate)
+					}
+
+					if stats && cmd.typ == typDataUpdate {
+						// If stats are enabled, emit evaluated stats returned by the
+						// command, and compare them with the real computed stats diff.
+						msEval := *e.ms
+						msEval.AgeTo(statsTS)
+						buf.Printf("stats: %s\n", formatStats(msEval, true))
+
+						msDiff := computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
+						msDiff.Subtract(msInitial)
+						if msEval != msDiff {
+							e.t.Errorf("MVCC stats mismatch for %q at %s\nReturned: %s\nExpected: %s",
+								d.Cmd, d.Pos, formatStats(msEval, true), formatStats(msDiff, true))
+						}
 					}
 
 					if foundErr != nil {
@@ -372,6 +396,12 @@ func TestMVCCHistories(t *testing.T) {
 						buf.SafeString(">> at end:\n")
 					}
 					reportResults(txnChange, dataChange)
+				}
+
+				// Calculate and output final stats if requested and the data changed.
+				if stats && dataChange {
+					ms := computeStats(t, e.engine, span.Key, span.EndKey, statsTS)
+					buf.Printf("stats: %s\n", formatStats(ms, false))
 				}
 
 				signalError := e.t.Errorf
@@ -619,7 +649,7 @@ func (e *evalCtx) resolveIntent(
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
+	_, err := MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent)
 	return err
 }
 
@@ -672,7 +702,7 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw ReadWriter) error {
-		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, localTs, val, expVal, behavior, txn); err != nil {
+		if err := MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, localTs, val, expVal, behavior, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -710,7 +740,7 @@ func cmdDelete(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw ReadWriter) error {
-		if err := MVCCDelete(e.ctx, rw, nil, key, ts, localTs, txn); err != nil {
+		if err := MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -734,7 +764,7 @@ func cmdDeleteRange(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw ReadWriter) error {
 		deleted, resumeSpan, num, err := MVCCDeleteRange(
-			e.ctx, rw, nil, key, endKey, int64(max), ts, localTs, txn, returnKeys)
+			e.ctx, rw, e.ms, key, endKey, int64(max), ts, localTs, txn, returnKeys)
 		if err != nil {
 			return err
 		}
@@ -819,7 +849,7 @@ func cmdIncrement(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw ReadWriter) error {
-		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, localTs, txn, inc)
+		curVal, err := MVCCIncrement(e.ctx, rw, e.ms, key, ts, localTs, txn, inc)
 		if err != nil {
 			return err
 		}
@@ -836,7 +866,7 @@ func cmdMerge(e *evalCtx) error {
 	val := e.getVal()
 	ts := e.getTs(nil)
 	return e.withWriter("merge", func(rw ReadWriter) error {
-		return MVCCMerge(e.ctx, rw, nil, key, ts, val)
+		return MVCCMerge(e.ctx, rw, e.ms, key, ts, val)
 	})
 }
 
@@ -851,8 +881,7 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw ReadWriter) error {
-		// NB: conflict handling for inline values requires ms to be non-nil.
-		if err := MVCCPut(e.ctx, rw, &enginepb.MVCCStats{}, key, ts, localTs, val, txn); err != nil {
+		if err := MVCCPut(e.ctx, rw, e.ms, key, ts, localTs, val, txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -1127,6 +1156,53 @@ func printIter(e *evalCtx) {
 	}
 }
 
+// formatStats formats MVCC stats.
+func formatStats(ms enginepb.MVCCStats, delta bool) string {
+	reZero := regexp.MustCompile(`:0$`)
+	reUnsigned := regexp.MustCompile(`:(\d+)`)
+
+	var fields []string
+	for _, field := range strings.Fields(ms.String()) {
+		// Always skip zero-valued fields and LastUpdateNanos.
+		if reZero.MatchString(field) || strings.HasPrefix(field, "last_update_nanos") {
+			continue
+		}
+		// For deltas, prefix unsigned numbers with a + (they are an increase).
+		if delta {
+			field = reUnsigned.ReplaceAllString(field, `:+$1`)
+		}
+		// Use = instead of : as separator.
+		field = strings.ReplaceAll(field, ":", "=")
+		fields = append(fields, field)
+	}
+
+	// Sort some fields in preferred order, keeping the rest as-is at the end.
+	//
+	// TODO(erikgrinaker): Consider just reordering the struct fields instead,
+	// which determines the order of MVCCStats.String().
+	order := []string{
+		"key_count", "key_bytes", "val_count", "val_bytes",
+		"live_count", "live_bytes", "gc_bytes_age",
+		"intent_count", "intent_bytes", "separated_intent_count", "intent_age",
+	}
+	sort.SliceStable(fields, func(i, j int) bool {
+		a, b := strings.Split(fields[i], "=")[0], strings.Split(fields[j], "=")[0]
+		for _, field := range order {
+			if a == field {
+				return true
+			} else if b == field {
+				return false
+			}
+		}
+		return false
+	})
+
+	if len(fields) == 0 && delta {
+		return "no change"
+	}
+	return strings.Join(fields, " ")
+}
+
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -1142,6 +1218,7 @@ type evalCtx struct {
 	td         *datadriven.TestData
 	txns       map[string]*roachpb.Transaction
 	txnCounter uint128.Uint128
+	ms         *enginepb.MVCCStats
 }
 
 func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
