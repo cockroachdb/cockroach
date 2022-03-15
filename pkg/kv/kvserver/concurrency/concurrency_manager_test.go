@@ -89,6 +89,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
+		clock := timeutil.DefaultTimeSource{}
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
 		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
@@ -229,7 +230,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				opName := fmt.Sprintf("sequence %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					guard, resp, err := m.SequenceReq(ctx, prev, req, evalKind)
+					tr := concurrency.NewContentionEventTracer(tracing.SpanFromContext(ctx), clock)
+					tr.SetOnContentionEvent(func(ev *roachpb.ContentionEvent) {
+						ev.Duration = 1234 * time.Millisecond // for determinism
+					})
+					guard, resp, err := m.SequenceReq(ctx, prev, req, evalKind, tr)
 					if err != nil {
 						log.Eventf(ctx, "sequencing complete, returned error: %v", err)
 					} else if resp != nil {
@@ -645,9 +650,6 @@ func (c *cluster) makeConfig() concurrency.Config {
 		Clock:          c.clock,
 		TimeSource:     timeutil.DefaultTimeSource{},
 		IntentResolver: c,
-		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
-			ev.Duration = 1234 * time.Millisecond // for determinism
-		},
 		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
 }

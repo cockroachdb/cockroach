@@ -408,6 +408,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// commands and wait even if the circuit breaker is tripped.
 		pp = poison.Policy_Wait
 	}
+	contentionTracer := concurrency.NewContentionEventTracer(tracing.SpanFromContext(ctx), r.store.cfg.TimeSource)
 	for first := true; ; first = false {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
@@ -449,7 +450,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
-		}, requestEvalKind)
+		}, requestEvalKind, contentionTracer)
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
 				// NB: we make the breaker error (which may be nil at this point, but

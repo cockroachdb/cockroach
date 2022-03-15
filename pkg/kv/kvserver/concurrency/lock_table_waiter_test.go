@@ -134,7 +134,10 @@ func makeTxnProto(name string) roachpb.Transaction {
 func TestLockTableWaiterWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 
 	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
 		uncertaintyLimit := hlc.Timestamp{WallTime: 15}
@@ -193,7 +196,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 				g.state = waitingState{kind: doneWaiting}
 				g.notify()
 
-				err := w.WaitOn(ctx, makeReq(), g)
+				err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 				require.Nil(t, err)
 			})
 		})
@@ -205,7 +208,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			ctxWithCancel, cancel := context.WithCancel(ctx)
 			go cancel()
 
-			err := w.WaitOn(ctxWithCancel, makeReq(), g)
+			err := w.WaitOn(ctxWithCancel, makeReq(), g, NewContentionEventTracer(sp, clock))
 			require.NotNil(t, err)
 			require.Equal(t, context.Canceled.Error(), err.GoError().Error())
 		})
@@ -218,7 +221,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 				w.stopper.Quiesce(ctx)
 			}()
 
-			err := w.WaitOn(ctx, makeReq(), g)
+			err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 			require.NotNil(t, err)
 			require.IsType(t, &roachpb.NodeUnavailableError{}, err.GetDetail())
 		})
@@ -230,7 +233,10 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 func TestLockTableWaiterWithNonTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 
 	reqHeaderTS := hlc.Timestamp{WallTime: 10}
 	makeReq := func() Request {
@@ -269,7 +275,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 			g.state = waitingState{kind: doneWaiting}
 			g.notify()
 
-			err := w.WaitOn(ctx, makeReq(), g)
+			err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 			require.Nil(t, err)
 		})
 	})
@@ -281,7 +287,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
 		go cancel()
 
-		err := w.WaitOn(ctxWithCancel, makeReq(), g)
+		err := w.WaitOn(ctxWithCancel, makeReq(), g, NewContentionEventTracer(sp, clock))
 		require.NotNil(t, err)
 		require.Equal(t, context.Canceled.Error(), err.GoError().Error())
 	})
@@ -294,14 +300,17 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 			w.stopper.Quiesce(ctx)
 		}()
 
-		err := w.WaitOn(ctx, makeReq(), g)
+		err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 		require.NotNil(t, err)
 		require.IsType(t, &roachpb.NodeUnavailableError{}, err.GetDetail())
 	})
 }
 
 func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hlc.Timestamp) {
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 	keyA := roachpb.Key("keyA")
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
 		testutils.RunTrueAndFalse(t, "waitAsWrite", func(t *testing.T, waitAsWrite bool) {
@@ -325,7 +334,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			// waitElsewhere does not cause a push if the lock is not held.
 			// It returns immediately.
 			if k == waitElsewhere && !lockHeld {
-				err := w.WaitOn(ctx, req, g)
+				err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 				require.Nil(t, err)
 				return
 			}
@@ -334,7 +343,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			// reservations, only locks. They wait for doneWaiting.
 			if req.Txn == nil && !lockHeld {
 				defer notifyUntilDone(t, g)()
-				err := w.WaitOn(ctx, req, g)
+				err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 				require.Nil(t, err)
 				return
 			}
@@ -379,14 +388,17 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				return resp, nil
 			}
 
-			err := w.WaitOn(ctx, req, g)
+			err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 			require.Nil(t, err)
 		})
 	})
 }
 
 func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 	w, _, g, _ := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
 
@@ -398,7 +410,7 @@ func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
 	g.notify()
 	defer notifyUntilDone(t, g)()
 
-	err := w.WaitOn(ctx, makeReq(), g)
+	err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 	require.Nil(t, err)
 }
 
@@ -424,7 +436,10 @@ func notifyUntilDone(t *testing.T, g *mockLockTableGuard) func() {
 func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 
 	uncertaintyLimit := hlc.Timestamp{WallTime: 15}
 	makeReq := func() Request {
@@ -468,7 +483,7 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 			g.state = waitingState{kind: doneWaiting}
 			g.notify()
 
-			err := w.WaitOn(ctx, makeReq(), g)
+			err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 			require.Nil(t, err)
 		})
 	})
@@ -483,7 +498,10 @@ func testErrorWaitPush(
 	expPushTS hlc.Timestamp,
 	errReason roachpb.WriteIntentError_Reason,
 ) {
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 	keyA := roachpb.Key("keyA")
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
 		testutils.RunTrueAndFalse(t, "pusheeActive", func(t *testing.T, pusheeActive bool) {
@@ -511,7 +529,7 @@ func testErrorWaitPush(
 			// immediately. The one exception to this is waitElsewhere, which
 			// expects no error.
 			if !lockHeld || expPushTS == dontExpectPush {
-				err := w.WaitOn(ctx, req, g)
+				err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 				if k == waitElsewhere {
 					require.Nil(t, err)
 				} else {
@@ -559,7 +577,7 @@ func testErrorWaitPush(
 				return resp, nil
 			}
 
-			err := w.WaitOn(ctx, req, g)
+			err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 			if pusheeActive {
 				require.NotNil(t, err)
 				wiErr := new(roachpb.WriteIntentError)
@@ -577,7 +595,10 @@ func testErrorWaitPush(
 func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 
 	testutils.RunTrueAndFalse(t, "txn", func(t *testing.T, txn bool) {
 		const lockTimeout = 1 * time.Millisecond
@@ -626,7 +647,7 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 				g.state = waitingState{kind: doneWaiting}
 				g.notify()
 
-				err := w.WaitOn(ctx, makeReq(), g)
+				err := w.WaitOn(ctx, makeReq(), g, NewContentionEventTracer(sp, clock))
 				require.Nil(t, err)
 			})
 		})
@@ -634,7 +655,10 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 }
 
 func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 	keyA := roachpb.Key("keyA")
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
 		testutils.RunTrueAndFalse(t, "pusheeActive", func(t *testing.T, pusheeActive bool) {
@@ -675,7 +699,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				// waitElsewhere does not cause a push if the lock is not held.
 				// It returns immediately.
 				if !lockHeld && k == waitElsewhere {
-					err := w.WaitOn(ctx, req, g)
+					err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 					require.Nil(t, err)
 					return
 				}
@@ -683,7 +707,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				// If the lock is not held and the request hits its lock timeout
 				// before a deadlock push, an error is returned immediately.
 				if !lockHeld && timeoutBeforePush {
-					err := w.WaitOn(ctx, req, g)
+					err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 					require.NotNil(t, err)
 					wiErr := new(roachpb.WriteIntentError)
 					require.True(t, errors.As(err.GoError(), &wiErr))
@@ -745,7 +769,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					return resp, nil
 				}
 
-				err := w.WaitOn(ctx, req, g)
+				err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 				if pusheeActive {
 					require.NotNil(t, err)
 					wiErr := new(roachpb.WriteIntentError)
@@ -767,7 +791,10 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 	w, ir, g, _ := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
 
@@ -801,7 +828,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		) (*roachpb.Transaction, *Error) {
 			return nil, err1
 		}
-		err := w.WaitOn(ctx, req, g)
+		err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 		require.Equal(t, err1, err)
 
 		if lockHeld {
@@ -815,7 +842,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 				return err2
 			}
-			err = w.WaitOn(ctx, req, g)
+			err = w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 			require.Equal(t, err2, err)
 		}
 	})
@@ -826,7 +853,10 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	tr := tracing.NewTracer()
+	ctx, sp := tr.StartSpanCtx(context.Background(), "test")
+	defer sp.Finish()
+	clock := timeutil.DefaultTimeSource{}
 	w, ir, g, _ := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
 
@@ -859,7 +889,7 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 		require.Equal(t, roachpb.ABORTED, intents[0].Status)
 		return err1
 	}
-	err := w.WaitOn(ctx, req, g)
+	err := w.WaitOn(ctx, req, g, NewContentionEventTracer(sp, clock))
 	require.Equal(t, err1, err)
 }
 
@@ -927,28 +957,28 @@ func BenchmarkTxnCache(b *testing.B) {
 	}
 }
 
-func TestContentionEventHelper(t *testing.T) {
+func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
 
 	var events []*roachpb.ContentionEvent
 
-	h := getOrCreateContentionEventTracer(ctx,
-		func(ev *roachpb.ContentionEvent) {
-			events = append(events, ev)
-		}, timeutil.DefaultTimeSource{})
-	defer h.close()
+	h := NewContentionEventTracer(sp, timeutil.DefaultTimeSource{})
+	h.onEvent = func(ev *roachpb.ContentionEvent) {
+		events = append(events, ev)
+	}
 	txn := makeTxnProto("foo")
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("a"),
 		txn:  &txn.TxnMeta,
 	})
-	require.Zero(t, h.mu.lockWait)
-	require.NotZero(t, h.mu.waitStart)
+	require.Zero(t, h.tag.mu.lockWait)
+	require.NotZero(t, h.tag.mu.waitStart)
 	require.Empty(t, events)
 	rec := sp.GetRecording(tracing.RecordingVerbose)
+	require.Contains(t, rec[0].Tags, tagNumLocks)
 	require.Equal(t, "1", rec[0].Tags[tagNumLocks])
 	require.Contains(t, rec[0].Tags, tagWaited)
 	require.Contains(t, rec[0].Tags, tagWaitKey)
@@ -957,41 +987,32 @@ func TestContentionEventHelper(t *testing.T) {
 
 	// Another event for the same txn/key should not mutate
 	// or emitLocked an event.
-	prevNumLocks := h.mu.numLocks
+	prevNumLocks := h.tag.mu.numLocks
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
 		txn:  &txn.TxnMeta,
 	})
 	require.Empty(t, events)
-	require.Zero(t, h.mu.lockWait)
-	require.Equal(t, prevNumLocks, h.mu.numLocks)
+	require.Zero(t, h.tag.mu.lockWait)
+	require.Equal(t, prevNumLocks, h.tag.mu.numLocks)
 
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
 		txn:  &txn.TxnMeta,
 	})
-	require.Zero(t, h.mu.lockWait)
+	require.Zero(t, h.tag.mu.lockWait)
 	require.Len(t, events, 1)
 	require.Equal(t, txn.TxnMeta, events[0].TxnMeta)
 	require.Equal(t, roachpb.Key("a"), events[0].Key)
 	require.NotZero(t, events[0].Duration)
 
-	h.close()
-	require.NotZero(t, h.mu.lockWait)
+	h.notify(ctx, waitingState{kind: doneWaiting})
+	require.NotZero(t, h.tag.mu.lockWait)
 	require.Len(t, events, 2)
 
-	oldH := h
-	h = getOrCreateContentionEventTracer(ctx,
-		func(ev *roachpb.ContentionEvent) {
-			events = append(events, ev)
-		}, timeutil.DefaultTimeSource{})
-	require.Equal(t, oldH, h)
-	require.Equal(t, 2, h.mu.numLocks)
-	require.NotZero(t, h.mu.lockWait)
-	lockWaitBefore := h.mu.lockWait
-
+	lockWaitBefore := h.tag.mu.lockWait
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("b"),
@@ -1001,7 +1022,7 @@ func TestContentionEventHelper(t *testing.T) {
 		kind: doneWaiting,
 	})
 	require.Len(t, events, 3)
-	require.Less(t, lockWaitBefore, h.mu.lockWait)
+	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
 	rec = sp.GetRecording(tracing.RecordingVerbose)
 	require.Equal(t, "3", rec[0].Tags[tagNumLocks])
 	require.Contains(t, rec[0].Tags, tagWaited)
