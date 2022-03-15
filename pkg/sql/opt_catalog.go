@@ -1455,6 +1455,11 @@ func (oi *optIndex) ImplicitColumnCount() int {
 	return implicitColCnt
 }
 
+// ImplicitPartitioningColumnCount is part of the cat.Index interface.
+func (oi *optIndex) ImplicitPartitioningColumnCount() int {
+	return oi.idx.GetPartitioning().NumImplicitColumns()
+}
+
 // GeoConfig is part of the cat.Index interface.
 func (oi *optIndex) GeoConfig() *geoindex.Config {
 	return &oi.idx.IndexDesc().GeoConfig
@@ -2224,6 +2229,11 @@ func (oi *optVirtualIndex) Ordinal() int {
 
 // ImplicitColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ImplicitColumnCount() int {
+	return 0
+}
+
+// ImplicitPartitioningColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
 	return 0
 }
 

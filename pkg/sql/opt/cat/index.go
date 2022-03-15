@@ -182,6 +182,11 @@ type Index interface {
 	// list, and ImplicitColumnCount < LaxKeyColumnCount.
 	ImplicitColumnCount() int
 
+	// ImplicitPartitioningColumnCount returns the number of implicit columns at
+	// the front of the index that are implicit partitioning columns. The value
+	// returned is always <= ImplicitColumnCount.
+	ImplicitPartitioningColumnCount() int
+
 	// GeoConfig returns a geospatial index configuration. If non-nil, it
 	// describes the configuration for this geospatial inverted index.
 	GeoConfig() *geoindex.Config
