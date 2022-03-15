@@ -4684,11 +4684,25 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 	rnd, _ := randutil.NewPseudoRand()
 
+	drainUntilTimestamp := func(f cdctest.TestFeed, ts hlc.Timestamp) (err error) {
+		var msg *cdctest.TestFeedMessage
+		for msg, err = f.Next(); msg != nil; msg, err = f.Next() {
+			if msg.Resolved != nil {
+				resolvedTs := extractResolvedTimestamp(t, msg)
+				if ts.LessEq(resolvedTs) {
+					break
+				}
+			}
+		}
+		return err
+	}
+
 	var maxCheckpointSize int64
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
-		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 1000)`)
+		valRange := []int{1, 1000}
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, valRange[0], valRange[1]))
 
 		fooDesc := catalogkv.TestingGetTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
@@ -4734,9 +4748,13 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		registry := f.Server().JobRegistry().(*jobs.Registry)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms'`)
 		// Some test feeds (kafka) are not buffered, so we have to consume messages.
+		var shouldDrain int32 = 1
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
 			for {
+				if shouldDrain == 0 {
+					return nil
+				}
 				m, err := foo.Next()
 				if err != nil {
 					return err
@@ -4753,9 +4771,6 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		defer func() {
 			closeFeed(t, foo)
-			if err := g.Wait(); err != nil {
-				require.NotRegexp(t, "unexpected epoch resolved event", err)
-			}
 		}()
 
 		jobFeed := foo.(cdctest.EnterpriseTestFeed)
@@ -4818,6 +4833,24 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		for _, sp := range resolved {
 			require.Falsef(t, checkpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
 		}
+
+		// Consume all potentially buffered kv events
+		atomic.StoreInt32(&shouldDrain, 0)
+		if err := g.Wait(); err != nil {
+			require.NotRegexp(t, "unexpected epoch resolved event", err)
+		}
+		err := drainUntilTimestamp(foo, *progress.GetHighWater())
+		require.NoError(t, err)
+
+		// Verify that the checkpoint does not affect future scans
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING DEFAULT 'd'`)
+		var expected []string
+		for i := valRange[0]; i <= valRange[1]; i++ {
+			expected = append(expected, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d, "b": "d"}}`, i, i,
+			))
+		}
+		assertPayloads(t, foo, expected)
 	}
 
 	// TODO(ssd): Tenant testing disabled because of use of DB()
