@@ -163,6 +163,7 @@ var reqMethodAllowlist = [...]bool{
 	roachpb.HeartbeatTxn:   true,
 	roachpb.QueryTxn:       true,
 	roachpb.QueryIntent:    true,
+	roachpb.QueryLocks:     true,
 	roachpb.InitPut:        true,
 	roachpb.Export:         true,
 	roachpb.AdminScatter:   true,
