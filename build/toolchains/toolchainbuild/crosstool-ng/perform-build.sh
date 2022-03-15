@@ -101,33 +101,6 @@ apt-get update \
   && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
 
-# libtapi is required for later versions of MacOSX.
-git clone https://github.com/tpoechtrager/apple-libtapi.git \
-    && cd apple-libtapi \
-    && git checkout a66284251b46d591ee4a0cb4cf561b92a0c138d8 \
-    && ./build.sh \
-    && ./install.sh \
-    && cd .. \
-    && rm -rf apple-libtapi
-
-# Install osxcross. This needs the min supported osx version (we bump that
-# whenever Go does, in which case the builder image stops working). The SDK
-# can be generated from Xcode by following
-# https://github.com/tpoechtrager/osxcross#packaging-the-sdk.
-#
-# See https://en.wikipedia.org/wiki/Uname for the right suffix in the `mv` step
-# below. For example, Yosemite is 10.10 and has kernel release (uname -r)
-# 14.0.0. Similar edits are needed in mkrelease.sh.
-#
-# The osxcross SHA should be bumped. It's fixed merely to avoid an obvious
-# highjack of the upstream repo from slipping in unnoticed.
-git clone https://github.com/tpoechtrager/osxcross.git \
- && (cd osxcross && git checkout 9d7f6c2461dccb2b2781fff323f231a4b096fe41) \
- && (cd osxcross/tarballs && curl -sfSL https://cockroach-builder-assets.s3.amazonaws.com/MacOSX10.15.sdk.tar.xz -O) \
- && echo "c0b910e485bd24aba62b879a724c48bcb2520a8ab92067a79e3762dac0d7f47c osxcross/tarballs/MacOSX10.15.sdk.tar.xz" | sha256sum -c - \
- && OSX_VERSION_MIN=10.15 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
- && mv osxcross/target /x-tools/x86_64-apple-darwin19 \
- && rm -rf osxcross
 
 # Bundle artifacts
 bundle() {
@@ -140,4 +113,4 @@ bundle /x-tools/x86_64-unknown-linux-gnu
 bundle /x-tools/aarch64-unknown-linux-gnu
 bundle /x-tools/s390x-ibm-linux-gnu
 bundle /x-tools/x86_64-w64-mingw32
-bundle /x-tools/x86_64-apple-darwin19
+
