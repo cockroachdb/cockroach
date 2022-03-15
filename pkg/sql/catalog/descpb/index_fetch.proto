@@ -30,7 +30,7 @@ message IndexFetchSpec {
     optional string name = 2 [(gogoproto.nullable) = false];
 
     // Type of the column. If this is the key column of an inverted index, this
-    // is the actual type of whan the index encodes (usually Bytes), rather than
+    // is the type of the data element (currently always EncodedKey) and not
     // the table column type (e.g. JSON).
     optional sql.sem.types.T type = 3;
 
@@ -51,7 +51,7 @@ message IndexFetchSpec {
 
     // IsInverted is true if this column is the inverted key of an inverted index.
     // In this case, the type of this column is the type of the data element
-    // (currently always Bytes).
+    // (currently always EncodedKey).
     optional bool is_inverted = 4 [(gogoproto.nullable) = false];
   }
 

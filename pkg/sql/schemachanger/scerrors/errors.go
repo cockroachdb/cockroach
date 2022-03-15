@@ -82,6 +82,6 @@ func ConcurrentSchemaChangeDescID(err error) descpb.ID {
 
 // ConcurrentSchemaChangeError returns a concurrent schema change error for the
 // given table.
-func ConcurrentSchemaChangeError(table catalog.TableDescriptor) error {
-	return &concurrentSchemaChangeError{descID: table.GetID()}
+func ConcurrentSchemaChangeError(desc catalog.Descriptor) error {
+	return &concurrentSchemaChangeError{descID: desc.GetID()}
 }

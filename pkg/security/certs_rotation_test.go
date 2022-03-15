@@ -50,15 +50,7 @@ func TestRotateCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetAssetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)

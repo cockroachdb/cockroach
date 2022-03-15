@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"testing"
 	"time"
 
@@ -149,8 +148,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	demoCtx.SimulateLatency = true
 	demoCtx.NumNodes = 9
 
-	certsDir, err := ioutil.TempDir("", "cli-demo-test")
-	require.NoError(t, err)
+	certsDir := t.TempDir()
 
 	cleanupFunc := securitytest.CreateTestCerts(certsDir)
 	defer func() {
@@ -273,16 +271,9 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	}
 
 	security.ResetAssetLoader()
-	certsDir, err := ioutil.TempDir("", "cli-demo-mt-test")
-	require.NoError(t, err)
+	certsDir := t.TempDir()
 
 	require.NoError(t, demoCtx.generateCerts(certsDir))
-
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
 
 	ctx := context.Background()
 

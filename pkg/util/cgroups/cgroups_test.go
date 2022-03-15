@@ -106,7 +106,6 @@ func TestCgroupsGetMemoryUsage(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := createFiles(t, tc.paths)
-			defer func() { _ = os.RemoveAll(dir) }()
 
 			limit, warn, err := getCgroupMemUsage(dir)
 			require.True(t, testutils.IsError(err, tc.errMsg),
@@ -203,7 +202,6 @@ func TestCgroupsGetMemoryInactiveFileUsage(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := createFiles(t, tc.paths)
-			defer func() { _ = os.RemoveAll(dir) }()
 			limit, warn, err := getCgroupMemInactiveFileUsage(dir)
 			require.True(t, testutils.IsError(err, tc.errMsg),
 				"%v %v", err, tc.errMsg)
@@ -306,7 +304,6 @@ func TestCgroupsGetMemoryLimit(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := createFiles(t, tc.paths)
-			defer func() { _ = os.RemoveAll(dir) }()
 
 			limit, warn, err := getCgroupMemLimit(dir)
 			require.True(t, testutils.IsError(err, tc.errMsg),
@@ -491,7 +488,6 @@ func TestCgroupsGetCPU(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := createFiles(t, tc.paths)
-			defer func() { _ = os.RemoveAll(dir) }()
 
 			cpuusage, err := getCgroupCPU(dir)
 			require.True(t, testutils.IsError(err, tc.errMsg),
@@ -505,8 +501,7 @@ func TestCgroupsGetCPU(t *testing.T) {
 }
 
 func createFiles(t *testing.T, paths map[string]string) (dir string) {
-	dir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
+	dir = t.TempDir()
 
 	for path, data := range paths {
 		path = filepath.Join(dir, path)

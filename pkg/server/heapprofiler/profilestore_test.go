@@ -197,13 +197,7 @@ func TestCleanupLastRampup(t *testing.T) {
 	s := profileStore{prefix: HeapFileNamePrefix}
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			path, err := ioutil.TempDir("", "cleanup")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = os.RemoveAll(path) }()
-
-			files := populate(t, path, tc.startFiles)
+			files := populate(t, t.TempDir(), tc.startFiles)
 
 			cleaned := []string{}
 			cleanupFn := func(s string) error {

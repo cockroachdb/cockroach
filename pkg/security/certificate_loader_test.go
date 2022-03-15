@@ -211,15 +211,7 @@ func TestNamingScheme(t *testing.T) {
 	}
 
 	// Create directory.
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	type testFile struct {
 		name     string

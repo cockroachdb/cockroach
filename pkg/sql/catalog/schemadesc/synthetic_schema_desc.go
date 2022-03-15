@@ -116,6 +116,11 @@ func (p synthetic) GetPostDeserializationChanges() catalog.PostDeserializationCh
 	return catalog.PostDeserializationChanges{}
 }
 
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (p synthetic) HasConcurrentSchemaChanges() bool {
+	return false
+}
+
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))

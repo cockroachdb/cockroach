@@ -12,7 +12,6 @@ package security_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,11 +84,7 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 	}()
 	require.NoError(t, os.Setenv("COCKROACH_CERT_NODE_USER", "node.crdb.io"))
 
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.RemoveAll(certsDir))
-	}()
+	certsDir := t.TempDir()
 
 	caKey := filepath.Join(certsDir, "ca.key")
 	require.NoError(t, security.CreateCAPair(

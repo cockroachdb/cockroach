@@ -180,7 +180,7 @@ type Index interface {
 	InvertedColumnName() string
 
 	// InvertedColumnKeyType returns the type of the data element that is encoded
-	// as the inverted index key. This is currently always Bytes.
+	// as the inverted index key. This is currently always EncodedKey.
 	//
 	// Panics if the index is not inverted.
 	InvertedColumnKeyType() *types.T
@@ -787,14 +787,4 @@ func ColumnNeedsBackfill(col Column) bool {
 		return false
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
-}
-
-// HasConcurrentSchemaChanges returns whether the table descriptor is undergoing
-// concurrent schema changes.
-func HasConcurrentSchemaChanges(table TableDescriptor) bool {
-	// TODO(ajwerner): For now we simply check for the absence of mutations. Once
-	// we start implementing schema changes with ops to be executed during
-	// statement execution, we'll have to take into account mutations that were
-	// written in this transaction.
-	return len(table.AllMutations()) > 0
 }

@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -72,11 +71,7 @@ func TestComposeCompare(t *testing.T) {
 		// start up docker-compose, but the files themselves will be
 		// Bazel-built symlinks. We want to copy these files to a
 		// different temporary location.
-		composeBinsDir, err := ioutil.TempDir("", "compose-bins")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = os.RemoveAll(composeBinsDir) }()
+		composeBinsDir := t.TempDir()
 		compareDir = composeBinsDir
 		cockroachBin = filepath.Join(composeBinsDir, "cockroach")
 		err = copyBin(*flagCockroach, cockroachBin)
@@ -88,10 +83,7 @@ func TestComposeCompare(t *testing.T) {
 			t.Fatal(err)
 		}
 		if *flagArtifacts == "" {
-			*flagArtifacts, err = ioutil.TempDir("", "compose")
-			if err != nil {
-				t.Fatal(err)
-			}
+			*flagArtifacts = t.TempDir()
 		}
 	} else {
 		if *flagCompare != "" {

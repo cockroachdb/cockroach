@@ -23,15 +23,7 @@ import (
 )
 
 func TestGetFileACLInfo(t *testing.T) {
-	certsDir, err := ioutil.TempDir("", "acl_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	exampleData := []byte("example")
 
