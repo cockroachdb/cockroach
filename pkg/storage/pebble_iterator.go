@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -34,10 +35,11 @@ type pebbleIterator struct {
 	options pebble.IterOptions
 	// Reusable buffer for MVCCKey or EngineKey encoding.
 	keyBuf []byte
-	// Buffers for copying iterator bounds to. Note that the underlying memory
+	// Buffers for copying iterator options to. Note that the underlying memory
 	// is not GCed upon Close(), to reduce the number of overall allocations.
-	lowerBoundBuf []byte
-	upperBoundBuf []byte
+	lowerBoundBuf      []byte
+	upperBoundBuf      []byte
+	rangeKeyMaskingBuf []byte
 
 	// True if the iterator's underlying reader supports range keys.
 	//
@@ -106,11 +108,12 @@ func (p *pebbleIterator) init(
 	supportsRangeKeys bool, // TODO(erikgrinaker): remove after 22.2.
 ) {
 	*p = pebbleIterator{
-		keyBuf:            p.keyBuf,
-		lowerBoundBuf:     p.lowerBoundBuf,
-		upperBoundBuf:     p.upperBoundBuf,
-		reusable:          p.reusable,
-		supportsRangeKeys: supportsRangeKeys,
+		keyBuf:             p.keyBuf,
+		lowerBoundBuf:      p.lowerBoundBuf,
+		upperBoundBuf:      p.upperBoundBuf,
+		rangeKeyMaskingBuf: p.rangeKeyMaskingBuf,
+		reusable:           p.reusable,
+		supportsRangeKeys:  supportsRangeKeys,
 	}
 
 	if iterToClone != nil {
@@ -155,6 +158,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 			opts.UpperBound = []byte{0}
 		}
 		opts.KeyTypes = IterKeyTypePointsOnly
+		opts.RangeKeyMaskingBelow = hlc.Timestamp{}
 	}
 
 	// Generate new Pebble iterator options.
@@ -181,6 +185,11 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
 		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
 		p.options.UpperBound = p.upperBoundBuf
+	}
+	if opts.RangeKeyMaskingBelow.IsSet() {
+		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
+			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
+		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
@@ -825,13 +834,14 @@ func (p *pebbleIterator) destroy() {
 		}
 		p.iter = nil
 	}
-	// Reset all fields except for the key and lower/upper bound buffers. Holding
-	// onto their underlying memory is more efficient to prevent extra
-	// allocations down the line.
+	// Reset all fields except for the key and option buffers. Holding onto their
+	// underlying memory is more efficient to prevent extra allocations down the
+	// line.
 	*p = pebbleIterator{
-		keyBuf:        p.keyBuf,
-		lowerBoundBuf: p.lowerBoundBuf,
-		upperBoundBuf: p.upperBoundBuf,
-		reusable:      p.reusable,
+		keyBuf:             p.keyBuf,
+		lowerBoundBuf:      p.lowerBoundBuf,
+		upperBoundBuf:      p.upperBoundBuf,
+		rangeKeyMaskingBuf: p.rangeKeyMaskingBuf,
+		reusable:           p.reusable,
 	}
 }
