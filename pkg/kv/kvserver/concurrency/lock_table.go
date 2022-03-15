@@ -2931,6 +2931,7 @@ func (t *lockTableImpl) QueryLockTableState(
 		resumeState.ResumeNextBytes = nextByteSize
 		resumeState.ResumeSpan = &roachpb.Span{Key: nextKey, EndKey: span.EndKey}
 	}
+	resumeState.TotalBytes = numBytes
 
 	return lockTableState, resumeState
 }
