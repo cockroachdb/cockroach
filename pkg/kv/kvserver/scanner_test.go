@@ -113,8 +113,8 @@ type testQueue struct {
 	disabled       bool
 }
 
-// setDisabled suspends processing of items from the queue.
-func (tq *testQueue) setDisabled(d bool) {
+// SetDisabled suspends processing of items from the queue.
+func (tq *testQueue) SetDisabled(d bool) {
 	tq.Lock()
 	defer tq.Unlock()
 	tq.disabled = d
@@ -206,8 +206,8 @@ func TestScannerAddToQueues(t *testing.T) {
 	ranges := newTestRangeSet(count, t)
 	q1, q2 := &testQueue{}, &testQueue{}
 	// We don't want to actually consume entries from the queues during this test.
-	q1.setDisabled(true)
-	q2.setDisabled(true)
+	q1.SetDisabled(true)
+	q2.SetDisabled(true)
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)

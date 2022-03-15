@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testdata",
+    srcs = ["embedded_assets.go"],
+    embedsrcs = ["assets/bundle.js"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/testdata",
+    visibility = ["//visibility:public"],
+)

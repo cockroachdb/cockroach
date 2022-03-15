@@ -33,6 +33,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server/telemetry",

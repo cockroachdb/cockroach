@@ -2472,6 +2472,10 @@ func (fq *fakeRangeQueue) NeedsLease() bool {
 	return false
 }
 
+func (fq *fakeRangeQueue) SetDisabled(disabled bool) {
+	// Do nothing.
+}
+
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
 func TestMaybeRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()

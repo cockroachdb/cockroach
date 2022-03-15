@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -6421,6 +6422,185 @@ table. Returns an error if validation fails.`,
 			},
 			Info: `This function is used to revalidate the given unique constraint in the given
 table. Returns an error if validation fails.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.kv_set_queue_active": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true, // applicable only on the gateway
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"queue_name", types.String},
+				{"active", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				queue := string(tree.MustBeDString(args[0]))
+				active := bool(tree.MustBeDBool(args[1]))
+
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					return store.SetQueueActive(active, queue)
+				}); err != nil {
+					return nil, err
+				}
+
+				return tree.DBoolTrue, nil
+			},
+			Info: `Used to enable/disable the named queue on all stores on the node it's run from.
+One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
+'raftsnapshot', 'consistencyChecker', and 'timeSeriesMaintenance'.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"queue_name", types.String},
+				{"active", types.Bool},
+				{"store_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				queue := string(tree.MustBeDString(args[0]))
+				active := bool(tree.MustBeDBool(args[1]))
+				storeID := roachpb.StoreID(tree.MustBeDInt(args[2]))
+
+				var foundStore bool
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					if storeID == store.StoreID() {
+						foundStore = true
+						return store.SetQueueActive(active, queue)
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundStore {
+					return nil, errors.Errorf("store %s not found on this node", storeID)
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `Used to enable/disable the named queue on the specified store on the node it's
+run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
+'raftlog', 'raftsnapshot', 'consistencyChecker', and 'timeSeriesMaintenance'.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.kv_enqueue_replica": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true, // applicable only on the gateway
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"range_id", types.Int},
+				{"queue_name", types.String},
+				{"skip_should_queue", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
+				queue := string(tree.MustBeDString(args[1]))
+				skipShouldQueue := bool(tree.MustBeDBool(args[2]))
+
+				var foundRepl bool
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					err := store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+					if err == nil {
+						foundRepl = true
+						return nil
+					}
+
+					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+						return nil
+					}
+					return err
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundRepl {
+					return nil, errors.Errorf("replica with range id %s not found on this node", rangeID)
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `Enqueue the replica with the given range ID into the named queue, on the
+specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
+'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
+'timeSeriesMaintenance'.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"range_id", types.Int},
+				{"queue_name", types.String},
+				{"skip_should_queue", types.Bool},
+				{"store_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
+				queue := string(tree.MustBeDString(args[1]))
+				skipShouldQueue := bool(tree.MustBeDBool(args[2]))
+				storeID := roachpb.StoreID(tree.MustBeDInt(args[3]))
+
+				var foundStore bool
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					if storeID == store.StoreID() {
+						foundStore = true
+						return store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundStore {
+					return nil, errors.Errorf("store %s not found on this node", storeID)
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `Enqueue the replica with the given range ID into the named queue, on the
+specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
+'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
+'timeSeriesMaintenance'.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

@@ -100,6 +100,7 @@ go_library(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",

@@ -41,6 +41,8 @@ type replicaQueue interface {
 	Name() string
 	// NeedsLease returns whether the queue requires a replica to be leaseholder.
 	NeedsLease() bool
+	// SetDisabled turns queue processing off or on as directed.
+	SetDisabled(disabled bool)
 }
 
 // A replicaSet provides access to a sequence of replicas to consider

@@ -87,6 +87,7 @@ go_library(
         "store_snapshot.go",
         "store_split.go",
         "stores.go",
+        "stores_base.go",
         "stores_server.go",
         "syncing_write.go",
         "testing_knobs.go",

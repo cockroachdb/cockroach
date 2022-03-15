@@ -183,6 +183,10 @@ type sqlServerOptionalKVArgs struct {
 
 	// The admission queue to use for SQLSQLResponseWork.
 	sqlSQLResponseAdmissionQ *admission.WorkQueue
+
+	// kvStores is used by crdb_internal builtins to access the stores on this
+	// node.
+	kvStoresIterator kvserverbase.StoresIterator
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -652,6 +656,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
+		KVStoresIterator:        cfg.kvStoresIterator,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,

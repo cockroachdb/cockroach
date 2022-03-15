@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -1053,7 +1054,7 @@ type nodeStatusGenerator interface {
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
-// a Executor; the rest will have sane defaults set if omitted.
+// an Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
 	Settings *cluster.Settings
 	NodeInfo
@@ -1166,6 +1167,10 @@ type ExecutorConfig struct {
 	// TenantUsageServer is used to implement configuration APIs for tenant cost
 	// control.
 	TenantUsageServer multitenant.TenantUsageServer
+
+	// KVStoresIterator is used by various crdb_internal builtins to directly
+	// access stores on this node.
+	KVStoresIterator kvserverbase.StoresIterator
 
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory

@@ -121,6 +121,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SQLStatusServer = execCfg.SQLStatusServer
 	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
 	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
+	evalCtx.KVStoresIterator = execCfg.KVStoresIterator
 }
 
 // copy returns a deep copy of ctx.
