@@ -1,13 +1,18 @@
-run ok
+run stats ok
 with k=k
   put ts=0,1 v=v
   get ts=1
   put ts=2 v=v2
 ----
+>> put ts=0,1 v=v k=k
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 get: "k" -> /BYTES/v @0,1
+>> put ts=2 v=v2 k=k
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_bytes=+1 gc_bytes_age=+1764
 >> at end:
 data: "k"/2.000000000,0 -> /BYTES/v2
 data: "k"/0,1 -> /BYTES/v
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=13 live_count=1 live_bytes=21 gc_bytes_age=1764
 
 # Read the latest version.
 run ok
