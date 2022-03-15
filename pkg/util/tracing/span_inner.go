@@ -155,10 +155,6 @@ func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s
 	}
-	return s.setTagInner(key, value, false /* locked */)
-}
-
-func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) *spanInner {
 	if s.otelSpan != nil {
 		s.otelSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key(key),
@@ -168,13 +164,31 @@ func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) 
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
-	// The internal tags will be used if we start a recording on this Span.
-	if !locked {
-		s.crdb.mu.Lock()
-		defer s.crdb.mu.Unlock()
-	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
 	s.crdb.setTagLocked(key, value)
 	return s
+}
+
+func (s *spanInner) SetLazyTag(key string, value interface{}) *spanInner {
+	if s.isNoop() {
+		return s
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	s.crdb.setLazyTagLocked(key, value)
+	return s
+}
+
+// GetLazyTag returns the value of the tag with the given key. If that tag doesn't
+// exist, the bool retval is false.
+func (s *spanInner) GetLazyTag(key string) (interface{}, bool) {
+	if s.isNoop() {
+		return attribute.Value{}, false
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	return s.crdb.getLazyTagLocked(key)
 }
 
 func (s *spanInner) RecordStructured(item Structured) {

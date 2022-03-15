@@ -79,6 +79,7 @@ import (
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
+// debug-set-max-locks n=<count>
 // reset
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
@@ -275,6 +276,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					m.PoisonReq(guard)
 				})
 				return c.waitAndCollect(t, mon)
+
 			case "handle-write-intent-error":
 				var reqName string
 				d.ScanArgs(t, "req", &reqName)
@@ -532,6 +534,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var n int
 				d.ScanArgs(t, "n", &n)
 				c.setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n)
+				return ""
+
+			case "debug-set-max-locks":
+				var n int
+				d.ScanArgs(t, "n", &n)
+				m.TestingSetMaxLocks(int64(n))
 				return ""
 
 			case "reset":
