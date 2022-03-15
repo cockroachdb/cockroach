@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -704,7 +703,7 @@ func (tt *Table) addIndexWithVersion(
 		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
-		IdxZone:  &zonepb.ZoneConfig{},
+		IdxZone:  cat.EmptyZone(),
 		table:    tt,
 		version:  version,
 	}
@@ -790,7 +789,7 @@ func (tt *Table) addIndexWithVersion(
 				p := &partitionBy.List[i]
 				idx.partitions[i] = Partition{
 					name:   string(p.Name),
-					zone:   &zonepb.ZoneConfig{},
+					zone:   cat.EmptyZone(),
 					datums: make([]tree.Datums, 0, len(p.Exprs)),
 				}
 

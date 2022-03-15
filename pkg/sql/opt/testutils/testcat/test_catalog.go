@@ -752,7 +752,7 @@ func (tt *Table) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 // Zone is part of the cat.Table interface.
 func (tt *Table) Zone() cat.Zone {
 	zone := zonepb.DefaultZoneConfig()
-	return &zone
+	return cat.AsZone(&zone)
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -843,7 +843,7 @@ type Index struct {
 
 	// IdxZone is the zone associated with the index. This may be inherited from
 	// the parent table, database, or even the default zone.
-	IdxZone *zonepb.ZoneConfig
+	IdxZone cat.Zone
 
 	// Ordinal is the ordinal of this index in the table.
 	ordinal int
@@ -991,7 +991,7 @@ func (ti *Index) SetPartitions(partitions []Partition) {
 // Partition implements the cat.Partition interface for testing purposes.
 type Partition struct {
 	name   string
-	zone   *zonepb.ZoneConfig
+	zone   cat.Zone
 	datums []tree.Datums
 }
 

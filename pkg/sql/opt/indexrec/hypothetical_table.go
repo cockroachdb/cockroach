@@ -13,7 +13,6 @@ package indexrec
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,7 +53,7 @@ func BuildOptAndHypTableMaps(
 				indexCols,
 				indexOrd,
 				inverted,
-				t.Zone().(*zonepb.ZoneConfig),
+				t.Zone(),
 			)
 
 			// Do not add hypothetical inverted indexes for which there is an existing
