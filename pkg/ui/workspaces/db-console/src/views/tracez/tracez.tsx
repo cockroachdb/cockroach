@@ -438,10 +438,8 @@ const TraceView = ({
           </Button>
         </PageConfigItem>
       </PageConfig>
-      <section className="section">
-        <div>
-          <pre>{currentTrace.serialized_recording}</pre>
-        </div>
+      <section className="section" style={{ maxWidth: "none" }}>
+        <pre>{currentTrace.serialized_recording}</pre>
       </section>
     </>
   );
