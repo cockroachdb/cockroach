@@ -1851,34 +1851,6 @@ func getLeaseInfoOrFatal(
 	return reply.(*roachpb.LeaseInfoResponse)
 }
 
-func TestRemoveLeaseholder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
-	defer tc.Stopper().Stop(context.Background())
-	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
-
-	// We start with having the range under test on (1,2,3).
-	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
-
-	// Make sure the lease is on 1.
-	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(0))
-	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
-	require.NoError(t, err)
-	require.Equal(t, tc.Target(0), leaseHolder)
-
-	// Remove server 1.
-	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0))
-
-	// Check that the lease moved away from 1.
-	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-	require.NoError(t, err)
-	require.NotEqual(t, tc.Target(0), leaseHolder)
-}
-
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
