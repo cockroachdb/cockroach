@@ -82,6 +82,27 @@ func (ds *DistSender) RangeFeed(
 	withDiff bool,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
+	timedSpans := make([]SpanTimePair, 0, len(spans))
+	for _, sp := range spans {
+		timedSpans = append(timedSpans, SpanTimePair{
+			Span: sp,
+			TS:   startFrom,
+		})
+	}
+	return ds.RangeFeedSpans(ctx, timedSpans, withDiff, eventCh)
+}
+
+// SpanTimePair is a pair of span along with its starting time.
+type SpanTimePair struct {
+	Span roachpb.Span
+	TS   hlc.Timestamp
+}
+
+// RangeFeedSpans is similar to RangeFeed but allows specification of different
+// starting time for each span.
+func (ds *DistSender) RangeFeedSpans(
+	ctx context.Context, spans []SpanTimePair, withDiff bool, eventCh chan<- *roachpb.RangeFeedEvent,
+) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("expected at least 1 span, got none")
 	}
@@ -90,7 +111,7 @@ func (ds *DistSender) RangeFeed(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	rr := newRangeFeedRegistry(ctx, startFrom, withDiff)
+	rr := newRangeFeedRegistry(ctx, withDiff)
 	ds.activeRangeFeeds.Store(rr, nil)
 	defer ds.activeRangeFeeds.Delete(rr)
 
@@ -116,14 +137,16 @@ func (ds *DistSender) RangeFeed(
 	})
 
 	// Kick off the initial set of ranges.
-	for _, span := range spans {
-		rs, err := keys.SpanAddr(span)
-		if err != nil {
-			return err
-		}
-		g.GoCtx(func(ctx context.Context) error {
-			return ds.divideAndSendRangeFeedToRanges(ctx, rs, startFrom, rangeCh)
-		})
+	for _, s := range spans {
+		func(stp SpanTimePair) {
+			g.GoCtx(func(ctx context.Context) error {
+				rs, err := keys.SpanAddr(stp.Span)
+				if err != nil {
+					return err
+				}
+				return ds.divideAndSendRangeFeedToRanges(ctx, rs, stp.TS, rangeCh)
+			})
+		}(s)
 	}
 	return g.Wait()
 }
@@ -134,9 +157,8 @@ type RangeFeedContext struct {
 	ID      int64  // unique ID identifying range feed.
 	CtxTags string // context tags
 
-	// StartFrom and withDiff options passed to RangeFeed call.
-	StartFrom hlc.Timestamp
-	WithDiff  bool
+	// WithDiff options passed to RangeFeed call. StartFrom hlc.Timestamp
+	WithDiff bool
 }
 
 // PartialRangeFeed structure describes the state of currently executing partial range feed.
@@ -214,14 +236,9 @@ type rangeFeedRegistry struct {
 	ranges sync.Map // map[*activeRangeFeed]nil
 }
 
-func newRangeFeedRegistry(
-	ctx context.Context, startFrom hlc.Timestamp, withDiff bool,
-) *rangeFeedRegistry {
+func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry {
 	rr := &rangeFeedRegistry{
-		RangeFeedContext: RangeFeedContext{
-			StartFrom: startFrom,
-			WithDiff:  withDiff,
-		},
+		RangeFeedContext: RangeFeedContext{WithDiff: withDiff},
 	}
 	rr.ID = *(*int64)(unsafe.Pointer(&rr))
 
