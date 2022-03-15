@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -77,8 +75,8 @@ var NamedZonesByID = func() map[uint32]NamedZone {
 
 // IsNamedZoneID returns true if the given ID is one of the pseudo-table IDs
 // that maps to named zones.
-func IsNamedZoneID(id descpb.ID) bool {
-	_, ok := NamedZonesByID[(uint32(id))]
+func IsNamedZoneID(id uint32) bool {
+	_, ok := NamedZonesByID[id]
 	return ok
 }
 
@@ -1062,7 +1060,7 @@ func (z *ZoneConfig) ReplicaConstraintsCount() int {
 }
 
 // ReplicaConstraints is part of the cat.Zone interface.
-func (z *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
+func (z *ZoneConfig) ReplicaConstraints(i int) *ConstraintsConjunction {
 	return &z.Constraints[i]
 }
 
@@ -1072,7 +1070,7 @@ func (z *ZoneConfig) VoterConstraintsCount() int {
 }
 
 // VoterConstraint is part of the cat.Zone interface.
-func (z *ZoneConfig) VoterConstraint(i int) cat.ReplicaConstraints {
+func (z *ZoneConfig) VoterConstraint(i int) *ConstraintsConjunction {
 	return &z.VoterConstraints[i]
 }
 
@@ -1082,17 +1080,17 @@ func (z *ZoneConfig) LeasePreferenceCount() int {
 }
 
 // LeasePreference is part of the cat.Zone interface.
-func (z *ZoneConfig) LeasePreference(i int) cat.ConstraintSet {
+func (z *ZoneConfig) LeasePreference(i int) *LeasePreference {
 	return &z.LeasePreferences[i]
 }
 
-// ConstraintCount is part of the cat.LeasePreference interface.
+// ConstraintCount is part of the cat.ConstraintSet interface.
 func (l *LeasePreference) ConstraintCount() int {
 	return len(l.Constraints)
 }
 
-// Constraint is part of the cat.LeasePreference interface.
-func (l *LeasePreference) Constraint(i int) cat.Constraint {
+// Constraint is part of the cat.ConstraintSet interface.
+func (l *LeasePreference) Constraint(i int) *Constraint {
 	return &l.Constraints[i]
 }
 
@@ -1121,7 +1119,7 @@ func (c *ConstraintsConjunction) ConstraintCount() int {
 }
 
 // Constraint is part of the cat.ReplicaConstraints interface.
-func (c *ConstraintsConjunction) Constraint(i int) cat.Constraint {
+func (c *ConstraintsConjunction) Constraint(i int) *Constraint {
 	return &c.Constraints[i]
 }
 

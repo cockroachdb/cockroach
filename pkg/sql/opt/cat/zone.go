@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -30,7 +31,7 @@ type Zone interface {
 
 	// ReplicaConstraints returns the ith set of replica constraints in the zone,
 	// where i < ReplicaConstraintsCount.
-	ReplicaConstraints(i int) ReplicaConstraints
+	ReplicaConstraints(i int) *zonepb.ConstraintsConjunction
 
 	// VoterConstraintsCount returns the number of voter replica constraint sets
 	// that are part of this zone.
@@ -38,7 +39,7 @@ type Zone interface {
 
 	// VoterConstraint returns the ith set of voter replica constraints in the
 	// zone, where i < VoterConstraintsCount.
-	VoterConstraint(i int) ReplicaConstraints
+	VoterConstraint(i int) *zonepb.ConstraintsConjunction
 
 	// LeasePreferenceCount returns the number of lease preferences that are part
 	// of this zone.
@@ -46,7 +47,7 @@ type Zone interface {
 
 	// LeasePreference returns the ith lease preference in the zone, where
 	// i < LeasePreferenceCount.
-	LeasePreference(i int) ConstraintSet
+	LeasePreference(i int) *zonepb.LeasePreference
 }
 
 // ConstraintSet is a set of constraints that apply to a range, restricting
@@ -58,7 +59,7 @@ type ConstraintSet interface {
 
 	// Constraint returns the ith constraint in the set, where
 	// i < ConstraintCount.
-	Constraint(i int) Constraint
+	Constraint(i int) *zonepb.Constraint
 }
 
 // ReplicaConstraints is a set of constraints that apply to one or more replicas
