@@ -91,6 +91,9 @@ finish req=reqSecondLock
 ----
 [-] finish reqSecondLock: finishing request
 
+debug-advance-clock ts=123
+----
+
 # Abort the writing txn. This will cause the blocked request to unblock. Note
 # that we expect the "conflicted with" contention event after the push. This
 # shows that the event is emitted only after the request exits both the waitFor
@@ -102,7 +105,7 @@ on-txn-updated txn=txnWriter status=aborted
 [4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key "k"
 [4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: resolving intent "k" for txn 00000001 with ABORTED status
-[4] sequence reqWaiter: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence reqWaiter: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 123.000s
 [4] sequence reqWaiter: acquiring latches
 [4] sequence reqWaiter: scanning lock table for conflicting locks
 [4] sequence reqWaiter: sequencing complete, returned guard

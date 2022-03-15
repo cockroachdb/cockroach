@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -79,6 +78,7 @@ import (
 // debug-lock-table
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
+// debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
 // debug-set-max-locks n=<count>
 // reset
@@ -531,6 +531,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.manual.Set(nanos)
 				return ""
 
+			case "debug-advance-clock":
+				var secs int
+				d.ScanArgs(t, "ts", &secs)
+				c.manual.Increment(int64(secs) * time.Second.Nanoseconds())
+				return ""
+
 			case "debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache":
 				var n int
 				d.ScanArgs(t, "n", &n)
@@ -643,11 +649,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 		RangeDesc:      c.rangeDesc,
 		Settings:       c.st,
 		Clock:          c.clock,
-		TimeSource:     timeutil.DefaultTimeSource{},
 		IntentResolver: c,
-		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
-			ev.Duration = 1234 * time.Millisecond // for determinism
-		},
 		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
 }

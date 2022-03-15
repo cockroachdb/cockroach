@@ -587,7 +587,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientCtx:               cfg.AmbientCtx,
 		RaftConfig:               cfg.RaftConfig,
 		Clock:                    clock,
-		TimeSource:               timeutil.DefaultTimeSource{},
 		DB:                       db,
 		Gossip:                   g,
 		NodeLiveness:             nodeLiveness,
