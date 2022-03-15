@@ -88,7 +88,7 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
+	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self} and waitElsewhere
 	key           roachpb.Key       // the key of the conflict
 	held          bool              // is the conflict a held lock?
 	queuedWriters int               // how many writers are waiting?
@@ -97,6 +97,11 @@ type waitingState struct {
 	// Represents the action that the request was trying to perform when
 	// it hit the conflict. E.g. was it trying to read or write?
 	guardAccess spanset.SpanAccess
+
+	// lockWaitStart represents the timestamp when the request started waiting on
+	// the lock that this waitingState refers to. If multiple consecutive states
+	// refer to the same lock, they share the same lockWaitStart.
+	lockWaitStart time.Time
 }
 
 // String implements the fmt.Stringer interface.
@@ -265,21 +270,25 @@ var _ lockTable = &lockTableImpl{}
 func newLockTable(
 	maxLocks int64, rangeID roachpb.RangeID, timeProvider timeutil.TimeSource,
 ) *lockTableImpl {
+	lt := &lockTableImpl{
+		rID:          rangeID,
+		timeProvider: timeProvider,
+	}
+	lt.setMaxLocks(maxLocks)
+	return lt
+}
+
+func (t *lockTableImpl) setMaxLocks(maxLocks int64) {
 	// Check at 5% intervals of the max count.
 	lockAddMaxLocksCheckInterval := maxLocks / (int64(spanset.NumSpanScope) * 20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
-	lt := &lockTableImpl{
-		rID:          rangeID,
-		maxLocks:     maxLocks,
-		minLocks:     maxLocks / 2,
-		timeProvider: timeProvider,
-	}
+	t.maxLocks = maxLocks
+	t.minLocks = maxLocks / 2
 	for i := 0; i < int(spanset.NumSpanScope); i++ {
-		lt.locks[i].lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+		t.locks[i].lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
 	}
-	return lt
 }
 
 // lockTableGuardImpl is an implementation of lockTableGuard.
@@ -416,8 +425,12 @@ type lockTableGuardImpl struct {
 
 	mu struct {
 		syncutil.Mutex
-		startWait        bool
-		requestWaitBegin time.Time
+		startWait bool
+		// curLockWaitStart represents the timestamp when the request started waiting
+		// on the current lock. Multiple consecutive waitingStates might refer to
+		// the same lock, in which case the curLockWaitStart is not updated in between
+		// them.
+		curLockWaitStart time.Time
 
 		state  waitingState
 		signal chan struct{}
@@ -521,6 +534,16 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 	g.findNextLockAfter(false /* notify */)
 	g.mu.Lock() // Unlock deferred
 	return g.mu.state
+}
+
+func (g *lockTableGuardImpl) updateStateLocked(newState waitingState) {
+	g.mu.state = newState
+	switch newState.kind {
+	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
+		g.mu.state.lockWaitStart = g.mu.curLockWaitStart
+	default:
+		g.mu.state.lockWaitStart = time.Time{}
+	}
 }
 
 func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet) (ok bool) {
@@ -660,7 +683,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.mu.state = waitingState{kind: doneWaiting}
+	g.updateStateLocked(waitingState{kind: doneWaiting})
 	// We are doneWaiting but may have some locks to resolve. There are
 	// two cases:
 	// - notify=false: the caller was already waiting and will look at this list
@@ -1116,7 +1139,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			WaitingTxn:   l.reservation.txn,
 			ActiveWaiter: true,
 			Strength:     lock.Exclusive,
-			WaitDuration: now.Sub(l.reservation.mu.requestWaitBegin),
+			WaitDuration: now.Sub(l.reservation.mu.curLockWaitStart),
 		})
 		l.reservation.mu.Unlock()
 	}
@@ -1129,7 +1152,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			WaitingTxn:   readerGuard.txn,
 			ActiveWaiter: false,
 			Strength:     lock.None,
-			WaitDuration: now.Sub(readerGuard.mu.requestWaitBegin),
+			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
 		})
 		readerGuard.mu.Unlock()
 	}
@@ -1143,7 +1166,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			WaitingTxn:   writerGuard.txn,
 			ActiveWaiter: qg.active,
 			Strength:     lock.Exclusive,
-			WaitDuration: now.Sub(writerGuard.mu.requestWaitBegin),
+			WaitDuration: now.Sub(writerGuard.mu.curLockWaitStart),
 		})
 		writerGuard.mu.Unlock()
 	}
@@ -1229,7 +1252,7 @@ func (l *lockState) informActiveWaiters() {
 			findDistinguished = false
 		}
 		g.mu.Lock()
-		g.mu.state = state
+		g.updateStateLocked(state)
 		if l.distinguishedWaiter == g {
 			g.mu.state.kind = waitForDistinguished
 		}
@@ -1256,7 +1279,7 @@ func (l *lockState) informActiveWaiters() {
 			}
 		}
 		g.mu.Lock()
-		g.mu.state = state
+		g.updateStateLocked(state)
 		g.notify()
 		g.mu.Unlock()
 	}
@@ -1351,7 +1374,7 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 		g := e.Value.(*lockTableGuardImpl)
 		g.mu.Lock()
-		waitDuration := now.Sub(g.mu.requestWaitBegin)
+		waitDuration := now.Sub(g.mu.curLockWaitStart)
 		totalWaitDuration += waitDuration
 		if waitDuration > maxWaitDuration {
 			maxWaitDuration = waitDuration
@@ -1362,7 +1385,7 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 		qg := e.Value.(*queuedGuard)
 		g := qg.guard
 		g.mu.Lock()
-		waitDuration := now.Sub(g.mu.requestWaitBegin)
+		waitDuration := now.Sub(g.mu.curLockWaitStart)
 		totalWaitDuration += waitDuration
 		if waitDuration > maxWaitDuration {
 			maxWaitDuration = waitDuration
@@ -1628,10 +1651,9 @@ func (l *lockState) tryActiveWait(
 				// would be more fair, but more complicated, and we expect that the
 				// common case is that this waiter will be at the end of the queue.
 				g.mu.startWait = true
-				g.mu.requestWaitBegin = timeProvider.Now()
 				state := waitForState
 				state.kind = waitQueueMaxLengthExceeded
-				g.mu.state = state
+				g.updateStateLocked(state)
 				if notify {
 					g.notify()
 				}
@@ -1680,18 +1702,18 @@ func (l *lockState) tryActiveWait(
 	// Make it an active waiter.
 	g.key = l.key
 	g.mu.startWait = true
-	g.mu.requestWaitBegin = timeProvider.Now()
+	g.mu.curLockWaitStart = timeProvider.Now()
 	if g.isSameTxnAsReservation(waitForState) {
 		state := waitForState
 		state.kind = waitSelf
-		g.mu.state = state
+		g.updateStateLocked(state)
 	} else {
 		state := waitForState
 		if l.distinguishedWaiter == nil {
 			l.distinguishedWaiter = g
 			state.kind = waitForDistinguished
 		}
-		g.mu.state = state
+		g.updateStateLocked(state)
 	}
 	if notify {
 		g.notify()
@@ -2030,7 +2052,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		l.waitingReaders.Remove(curr)
 
 		g.mu.Lock()
-		g.mu.state = waitState
+		g.updateStateLocked(waitState)
 		g.notify()
 		delete(g.mu.locks, l)
 		g.mu.Unlock()
@@ -2046,7 +2068,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		g := qg.guard
 		g.mu.Lock()
 		if qg.active {
-			g.mu.state = waitState
+			g.updateStateLocked(waitState)
 			g.notify()
 		}
 		delete(g.mu.locks, l)
