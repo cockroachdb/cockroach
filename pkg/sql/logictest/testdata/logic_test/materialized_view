@@ -103,8 +103,14 @@ TRUNCATE v
 # runs into a uniqueness constraint violation.
 statement ok
 CREATE TABLE dup (x INT);
+
+statement ok
 CREATE MATERIALIZED VIEW v_dup AS SELECT x FROM dup;
+
+statement ok
 CREATE UNIQUE INDEX i ON v_dup (x);
+
+statement ok
 INSERT INTO dup VALUES (1), (1);
 
 statement error pq: duplicate key value violates unique constraint "i"\nDETAIL: Key \(x\)=\(1\) already exists\.
@@ -137,6 +143,8 @@ DROP MATERIALIZED VIEW normal_view
 # an empty view.
 statement ok
 CREATE MATERIALIZED VIEW with_options AS SELECT 1;
+
+statement ok
 REFRESH MATERIALIZED VIEW with_options WITH DATA
 
 query I

@@ -903,6 +903,8 @@ pk  pk2  partition_by  a  b  c  d
 # Regression tests for #59583.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (
   pk INT,
   pk2 INT NOT NULL,
@@ -913,6 +915,8 @@ CREATE TABLE t (
 ) PARTITION BY LIST (partition_by) (
     PARTITION p1 VALUES IN (1)
 );
+
+statement ok
 INSERT INTO t VALUES (1,2,3,4,5),(11,12,13,14,15)
 
 query IIIII rowsort
@@ -948,7 +952,11 @@ SELECT * FROM t@new_idx
 # Tests adding a new UNIQUE index with implicit partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, v INT);
+
+statement ok
 INSERT INTO t VALUES (1, 1), (2, 1);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
@@ -967,10 +975,14 @@ CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
 # Tests adding a UNIQUE index with PARTITION ALL BY implicit partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, v INT) PARTITION ALL BY LIST (partition_by) (
    PARTITION one VALUES IN (1),
    PARTITION two VALUES IN (2)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 1), (2, 1);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
@@ -983,7 +995,11 @@ CREATE UNIQUE INDEX uniq_on_t ON t(v)
 # Tests adding a new partial UNIQUE index with implicit partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, a INT, b INT);
+
+statement ok
 INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
@@ -1003,10 +1019,14 @@ CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
 # partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, a INT, b INT) PARTITION ALL BY LIST (partition_by) (
    PARTITION one VALUES IN (1),
    PARTITION two VALUES IN (2)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated

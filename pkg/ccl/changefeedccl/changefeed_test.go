@@ -5470,12 +5470,10 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `
-SET CLUSTER SETTING kv.rangefeed.enabled='true';
-CREATE TABLE tbl (a INT, b STRING);
-INSERT INTO tbl VALUES (1, 'one'), (2, 'two'), (3, 'three');
-CREATE CHANGEFEED FOR tbl INTO 'null://';
-`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled='true';`)
+	sqlDB.Exec(t, `CREATE TABLE tbl (a INT, b STRING);`)
+	sqlDB.Exec(t, `INSERT INTO tbl VALUES (1, 'one'), (2, 'two'), (3, 'three');`)
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR tbl INTO 'null://';`)
 
 	var tableID int
 	sqlDB.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name='tbl'").Scan(&tableID)

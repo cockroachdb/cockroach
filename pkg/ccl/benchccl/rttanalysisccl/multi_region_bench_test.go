@@ -34,7 +34,7 @@ func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }
 
 const (
 	multipleTableFixture = `
-CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
+BEGIN; CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3"; COMMIT;
 USE test;
 CREATE TABLE test11 (p int) LOCALITY REGIONAL BY TABLE IN "us-east1";
 CREATE TABLE test12 (p int) LOCALITY REGIONAL BY TABLE IN "us-east1";

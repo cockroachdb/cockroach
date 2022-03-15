@@ -10,6 +10,7 @@ package spanconfigsqlwatcherccl
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -132,97 +133,117 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	}()
 
 	testCases := []struct {
-		stmt               string
+		stmts              []string
 		expectedIDs        descpb.IDs
 		expectedPTSUpdates []spanconfig.ProtectedTimestampUpdate
 	}{
 		{
-			stmt:        "CREATE TABLE t()",
+			stmts:       []string{"CREATE TABLE t()"},
 			expectedIDs: ids(1),
 		},
 		{
-			stmt:        "CREATE TABLE t2(); ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
+			stmts: []string{
+				"CREATE TABLE t2();",
+				"ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
+			},
 			expectedIDs: ids(2),
 		},
 		{
-			stmt:        "CREATE DATABASE d; CREATE TABLE d.t1(); CREATE TABLE d.t2()",
+			stmts: []string{
+				"CREATE DATABASE d;",
+				"CREATE TABLE d.t1();",
+				"CREATE TABLE d.t2()",
+			},
 			expectedIDs: ids(3, 4, 5, 6),
 		},
 		{
-			stmt:        "ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5",
+			stmts:       []string{"ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5"},
 			expectedIDs: ids(3),
 		},
 		{
-			stmt:        "CREATE TABLE t3(); CREATE TABLE t4()",
+			stmts: []string{
+				"CREATE TABLE t3();",
+				"CREATE TABLE t4()",
+			},
 			expectedIDs: ids(7, 8),
 		},
 		{
-			stmt:        "ALTER TABLE t3 CONFIGURE ZONE USING num_replicas=5; CREATE TABLE t5(); DROP TABLE t4;",
+			stmts: []string{
+				"ALTER TABLE t3 CONFIGURE ZONE USING num_replicas=5;",
+				"CREATE TABLE t5();",
+				"DROP TABLE t4;",
+			},
 			expectedIDs: ids(7, 8, 9),
 		},
 		// Named zone tests.
 		{
-			stmt:        "ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 7",
+			stmts:       []string{"ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 7"},
 			expectedIDs: descpb.IDs{keys.RootNamespaceID},
 		},
 		{
-			stmt:        "ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 7",
+			stmts:       []string{"ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 7"},
 			expectedIDs: descpb.IDs{keys.LivenessRangesID},
 		},
 		{
-			stmt:        "ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7",
+			stmts:       []string{"ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7"},
 			expectedIDs: descpb.IDs{keys.MetaRangesID},
 		},
 		{
-			stmt:        "ALTER RANGE system CONFIGURE ZONE USING num_replicas = 7",
+			stmts:       []string{"ALTER RANGE system CONFIGURE ZONE USING num_replicas = 7"},
 			expectedIDs: descpb.IDs{keys.SystemRangesID},
 		},
 		{
-			stmt:        "ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas = 7",
+			stmts:       []string{"ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas = 7"},
 			expectedIDs: descpb.IDs{keys.TimeseriesRangesID},
 		},
 		// Test that events on types/schemas are also captured.
 		{
-			stmt: "CREATE DATABASE db; CREATE SCHEMA db.sc",
+			stmts: []string{
+				"CREATE DATABASE db;",
+				"CREATE SCHEMA db.sc",
+			},
 			// One ID each for the parent database, the public schema and the schema.
 			expectedIDs: ids(10, 11, 12),
 		},
 		{
-			stmt: "CREATE TYPE typ AS ENUM()",
+			stmts: []string{"CREATE TYPE typ AS ENUM()"},
 			// One ID each for the enum and the array type.
 			expectedIDs: ids(13, 14),
 		},
 		// Test that pts updates are seen.
 		{
-			stmt:        "BACKUP TABLE t,t2 INTO 'nodelocal://1/foo'",
+			stmts:       []string{"BACKUP TABLE t,t2 INTO 'nodelocal://1/foo'"},
 			expectedIDs: ids(1, 2),
 		},
 		{
-			stmt:        "BACKUP DATABASE d INTO 'nodelocal://1/foo'",
+			stmts:       []string{"BACKUP DATABASE d INTO 'nodelocal://1/foo'"},
 			expectedIDs: ids(3),
 		},
 		{
-			stmt:        "BACKUP TABLE d.* INTO 'nodelocal://1/foo'",
+			stmts:       []string{"BACKUP TABLE d.* INTO 'nodelocal://1/foo'"},
 			expectedIDs: ids(3),
 		},
 		{
-			stmt: "BACKUP INTO 'nodelocal://1/foo'",
+			stmts: []string{"BACKUP INTO 'nodelocal://1/foo'"},
 			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: true,
 				TenantTarget: roachpb.TenantID{}}},
 		},
 		{
-			stmt: `
-SELECT crdb_internal.create_tenant(2); 
-BACKUP TENANT 2 INTO 'nodelocal://1/foo'`,
+			stmts: []string{
+				"SELECT crdb_internal.create_tenant(2);",
+				"BACKUP TENANT 2 INTO 'nodelocal://1/foo'",
+			},
 			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: false,
 				TenantTarget: roachpb.MakeTenantID(2)}},
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.stmt, func(t *testing.T) {
+		t.Run(strings.Join(tc.stmts, "_"), func(t *testing.T) {
 			reset()
-			tdb.Exec(t, tc.stmt)
+			for _, stmt := range tc.stmts {
+				tdb.Exec(t, stmt)
+			}
 			afterStmtTS := ts.Clock().Now()
 
 			testutils.SucceedsSoon(t, func() error {

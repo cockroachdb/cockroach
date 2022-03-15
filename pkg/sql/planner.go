@@ -195,10 +195,12 @@ type planner struct {
 	// 2. Disable the use of the table cache in tests.
 	avoidLeasedDescriptors bool
 
-	// autoCommit indicates whether we're planning for an implicit transaction.
-	// If autoCommit is true, the plan is allowed (but not required) to commit the
-	// transaction along with other KV operations. Committing the txn might be
-	// beneficial because it may enable the 1PC optimization.
+	// autoCommit indicates whether the plan is allowed (but not required) to
+	// commit the transaction along with other KV operations. Committing the txn
+	// might be beneficial because it may enable the 1PC optimization. Note that
+	// autocommit may be false for implicit transactions; for example, an implicit
+	// transaction is used for all the statements sent in a batch at the same
+	// time.
 	//
 	// NOTE: plan node must be configured appropriately to actually perform an
 	// auto-commit. This is dependent on information from the optimizer.
@@ -491,6 +493,11 @@ func (p *planner) SemaCtx() *tree.SemaContext {
 // Note: if the context will be modified, use ExtendedEvalContextCopy instead.
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 	return &p.extendedEvalCtx
+}
+
+// IsAutoCommit implements the PlanHookState interface.
+func (p *planner) IsAutoCommit() bool {
+	return p.autoCommit
 }
 
 func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {

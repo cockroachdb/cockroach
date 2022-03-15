@@ -4086,6 +4086,7 @@ distsql_workmem                                       64 MiB              NULL  
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
 enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                     on                  NULL      NULL        NULL        string
+enable_implicit_transaction_for_batch_statements      on                  NULL      NULL        NULL        string
 enable_insert_fast_path                               on                  NULL      NULL        NULL        string
 enable_multiregion_placement_policy                   off                 NULL      NULL        NULL        string
 enable_seqscan                                        on                  NULL      NULL        NULL        string
@@ -4204,6 +4205,7 @@ distsql_workmem                                       64 MiB              NULL  
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
 enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                     on                  NULL  user     NULL      on                  on
+enable_implicit_transaction_for_batch_statements      on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                               on                  NULL  user     NULL      on                  on
 enable_multiregion_placement_policy                   off                 NULL  user     NULL      off                 off
 enable_seqscan                                        on                  NULL  user     NULL      on                  on
@@ -4317,6 +4319,7 @@ distsql_workmem                                       NULL    NULL     NULL     
 enable_experimental_alter_column_type_general         NULL    NULL     NULL     NULL        NULL
 enable_experimental_stream_replication                NULL    NULL     NULL     NULL        NULL
 enable_implicit_select_for_update                     NULL    NULL     NULL     NULL        NULL
+enable_implicit_transaction_for_batch_statements      NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                               NULL    NULL     NULL     NULL        NULL
 enable_multiregion_placement_policy                   NULL    NULL     NULL     NULL        NULL
 enable_seqscan                                        NULL    NULL     NULL     NULL        NULL
@@ -4707,6 +4710,8 @@ conkey  confkey
 # Test an index of 3 referencing an index of 2.
 statement ok
 DROP TABLE b;
+
+statement ok
 CREATE TABLE b (
   id_b_1 INT,
   id_b_2 INT,
@@ -4724,6 +4729,8 @@ conkey  confkey
 # Test an index of 3 referencing an index of 1.
 statement ok
 DROP TABLE b;
+
+statement ok
 CREATE TABLE b (
   id_b_1 INT,
   id_b_2 INT,
@@ -4942,6 +4949,8 @@ SELECT adnum FROM pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 
 statement ok
 ALTER TABLE t46799 DROP COLUMN y;
+
+statement ok
 ALTER TABLE t46799 ADD COLUMN y INT DEFAULT 1;
 
 # Make sure after adding and dropping the same column, the adnum for the re-added column increases.

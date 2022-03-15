@@ -4,12 +4,19 @@ config secure
 sql
 CREATE USER userpw WITH PASSWORD 'pass';
 CREATE USER usernopw;
+----
+ok
+
+sql
 ALTER USER root WITH PASSWORD 'secureabc';
+----
+ok
+
+sql
 CREATE USER trusted;
 CREATE USER usernologin WITH NOLOGIN PASSWORD '123';
 CREATE USER usernosqllogin WITH NOSQLLOGIN PASSWORD '123';
 CREATE USER userexpired WITH PASSWORD '123' VALID UNTIL '2000-01-01'
-
 ----
 ok
 
