@@ -207,7 +207,8 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		return iter
 	}
 
-	reusable := opts.MinTimestampHint.IsEmpty() && opts.KeyTypes == IterKeyTypePointsOnly
+	reusable := opts.MinTimestampHint.IsEmpty() && opts.KeyTypes == IterKeyTypePointsOnly &&
+		opts.RangeKeyMaskingBelow.IsEmpty()
 	if !reusable {
 		iter := MVCCIterator(newPebbleIterator(
 			p.batch, nil, opts, StandardDurability, p.db.FormatMajorVersion()))
@@ -259,7 +260,7 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		panic("write-only batch")
 	}
 
-	reusable := opts.KeyTypes == IterKeyTypePointsOnly
+	reusable := opts.KeyTypes == IterKeyTypePointsOnly && opts.RangeKeyMaskingBelow.IsEmpty()
 	if !reusable {
 		return newPebbleIterator(p.batch, nil, opts, StandardDurability, p.db.FormatMajorVersion())
 	}
