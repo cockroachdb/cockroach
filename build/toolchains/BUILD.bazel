@@ -1,3 +1,5 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
 toolchain(
     name = "cross_linux_toolchain",
     exec_compatible_with = [
@@ -123,24 +125,42 @@ platform(
     ],
 )
 
+bool_flag(
+    name = "crdb_test_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
     name = "crdb_test",
-    define_values = {
-        "crdb_test": "y",
+    flag_values = {
+        ":crdb_test_flag": "true",
     },
+)
+
+bool_flag(
+    name = "dev_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "dev",
-    define_values = {
-        "cockroach_bazel_dev": "y",
+    flag_values = {
+        ":dev_flag": "true",
     },
+)
+
+bool_flag(
+    name = "cross_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "cross",
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -149,8 +169,8 @@ config_setting(
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
     ],
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -159,8 +179,8 @@ config_setting(
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",
     ],
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -171,9 +191,15 @@ config_setting(
     },
 )
 
+bool_flag(
+    name = "nonogo_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
     name = "nonogo",
-    define_values = {
-        "cockroach_nonogo": "y",
+    flag_values = {
+        ":nonogo_flag": "true",
     },
 )
