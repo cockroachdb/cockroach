@@ -149,6 +149,8 @@ outer:
 				continue outer
 			}
 		}
+		// TODO(sarkesian): support arbitrary key elements beyond TableID/IndexID,
+		// such as /Table/104/1/"hello".
 		return mkErr(errors.New("can't handle key"))
 	}
 	if s.validateRoundTrip {

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -549,6 +550,31 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 				return err
 			}
 			fmt.Println(k)
+		}
+		return nil
+	},
+}
+
+var debugEncodeKeyCmd = &cobra.Command{
+	Use:   "encode-key",
+	Short: "encode <key>",
+	Long: `
+Encode a pretty-printed key into the hexadecimal representation of the key bytes.
+Note that many key types are currently unsupported.  For example:
+
+	$ encode-key /Table/104/1
+	F089
+`,
+	Args: cobra.ArbitraryArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		for _, arg := range args {
+			scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+			key, err := scanner.Scan(arg)
+			if err != nil {
+				return err
+			}
+			hexStr := gohex.EncodeToString(key)
+			fmt.Println(hexStr)
 		}
 		return nil
 	},
@@ -1543,6 +1569,7 @@ var debugCmds = []*cobra.Command{
 	debugBallastCmd,
 	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
+	debugEncodeKeyCmd,
 	debugDecodeValueCmd,
 	debugDecodeProtoCmd,
 	debugGossipValuesCmd,
