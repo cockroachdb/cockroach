@@ -1111,9 +1111,11 @@ func (d *delayingConn) Read(b []byte) (n int, err error) {
 			return 0, errors.WithStack(errMagicNotFound)
 		}
 
-		// Once we receive our first packet, we set our delay to the expected
-		// delay that was sent on the write side.
-		d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
+		// Once we receive our first packet with a DelayMS field set, we set our
+		// delay to the expected delay that was sent on the write side.
+		if d.latency == 0 && hdr.DelayMS != 0 {
+			d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
+		}
 		defer func() {
 			time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
 		}()
