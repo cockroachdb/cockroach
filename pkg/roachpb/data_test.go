@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"bytes"
+	"encoding/hex"
 	"math"
 	"math/rand"
 	"reflect"
@@ -218,6 +219,27 @@ func TestNextKey(t *testing.T) {
 		if !c.key.Next().Equal(c.next) {
 			t.Fatalf("%d: unexpected next key for %q: %s", i, c.key, c.key.Next())
 		}
+	}
+}
+
+func TestPrevish(t *testing.T) {
+	const length = 4
+	testcases := []struct {
+		key    Key
+		expect Key
+	}{
+		{nil, nil},
+		{[]byte{}, []byte{}},
+		{[]byte{0x00}, []byte{}},
+		{[]byte{0x01, 0x00}, []byte{0x01}},
+		{[]byte{0x01}, []byte{0x00, 0xff, 0xff, 0xff}},
+		{[]byte{0x01, 0x01}, []byte{0x01, 0x00, 0xff, 0xff}},
+		{[]byte{0xff, 0xff, 0xff, 0xff}, []byte{0xff, 0xff, 0xff, 0xfe}},
+	}
+	for _, tc := range testcases {
+		t.Run(hex.EncodeToString(tc.key), func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.key.Prevish(length))
+		})
 	}
 }
 

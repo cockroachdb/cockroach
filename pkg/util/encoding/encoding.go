@@ -3185,3 +3185,29 @@ func BytesNext(b []byte) []byte {
 	bn[len(bn)-1] = 0
 	return bn
 }
+
+// BytesPrevish returns a previous byte slice in lexicographical ordering. It is
+// impossible in general to find the exact previous byte slice, because it has
+// an infinite number of 0xff bytes at the end, so this returns the nearest
+// previous slice right-padded with 0xff up to length bytes. It may reuse the
+// given slice when possible.
+func BytesPrevish(b []byte, length int) []byte {
+	bLen := len(b)
+	// An empty slice has no previous slice.
+	if bLen == 0 {
+		return b
+	}
+	// If the last byte is 0, just remove it.
+	if b[bLen-1] == 0 {
+		return b[:bLen-1]
+	}
+	// Otherwise, decrement the last byte and right-pad with 0xff.
+	if bLen > length {
+		length = bLen
+	}
+	buf := make([]byte, length)
+	copy(buf, b)
+	buf[bLen-1]--
+	copy(buf[bLen:], bytes.Repeat([]byte{0xff}, length-bLen))
+	return buf
+}
