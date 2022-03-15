@@ -41,6 +41,7 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3/tracker"
+	"gopkg.in/yaml.v2"
 )
 
 func makeIDKey() kvserverbase.CmdIDKey {
@@ -533,6 +534,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
+
+	// TODO(josh): I wonder if the way I've structured this will lead the backoff to block
+	// other stuff that need not be blocked, e.g. blocking the committing of new entries.
+	r.backoffIfRecentPanic(ctx, r.mu.state.RaftAppliedIndex)
+	defer r.recoverThenLogPanicThenPanicAgain(ctx, r.mu.state.RaftAppliedIndex)
+
 	lastIndex := r.mu.lastIndex // used for append below
 	lastTerm := r.mu.lastTerm
 	raftLogSize := r.mu.raftLogSize
@@ -952,6 +959,109 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// get blocked.
 	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 	return stats, "", nil
+}
+
+// TODO(josh): Write tests.
+// TODO(josh): Below only handles panics right now. It should also handle
+// any error that leads to a panic in maybeFatalOnRaftReadyErr. I put the logic
+// down here instead of in store_raft.go since I want access to the applied
+// index.
+
+func (r *Replica) backoffIfRecentPanic(ctx context.Context, currentAppliedIndex uint64) {
+	var panicLog []failureToApplyRecord
+
+	// TODO(josh): Reading from storage & unmarshalling should happen
+	// once at server startup time, for perf reasons.
+	{
+		iter := r.store.engine.NewEngineIterator(storage.IterOptions{
+			LowerBound: keys.StorePanicLogKey(),
+			UpperBound: keys.StorePanicLogKey().Next(),
+		})
+		defer iter.Close()
+		_, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: keys.StorePanicLogKey()})
+		if err != nil {
+			log.Errorf(ctx, "couldn't seek to panic log: %v", err)
+			return
+		}
+		val := iter.Value()
+		// TODO(josh): Use proto instead of yaml.
+		err = yaml.Unmarshal(val, &panicLog)
+		if err != nil {
+			log.Errorf(ctx, "couldn't unmarshall panic log: %v", err)
+			return
+		}
+	}
+
+	var shouldBackoff bool
+	for _, e := range panicLog {
+		if e.RangeID == r.RangeID && e.CurrentAppliedIndex == currentAppliedIndex {
+			shouldBackoff = true
+		}
+	}
+
+	// TODO(josh): Do an exponential backoff.
+	// TODO(josh): Make backoff params configurable with cluster settings.
+	if shouldBackoff {
+		d := 5 * time.Minute
+		log.Warningf(ctx, "backing off for %v because recent apply panic", d)
+		time.Sleep(d)
+	}
+}
+
+type failureToApplyRecord struct {
+	RangeID             roachpb.RangeID
+	CurrentAppliedIndex uint64
+	Time                time.Time
+}
+
+func (r *Replica) recoverThenLogPanicThenPanicAgain(
+	ctx context.Context, currentAppliedIndex uint64,
+) {
+	if re := recover(); re != nil {
+		func() {
+			iter := r.store.engine.NewEngineIterator(storage.IterOptions{
+				LowerBound: keys.StorePanicLogKey(),
+				UpperBound: keys.StorePanicLogKey().Next(),
+			})
+			defer iter.Close()
+			_, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: keys.StorePanicLogKey()})
+			if err != nil {
+				log.Errorf(ctx, "couldn't seek to panic log: %v", err)
+				return
+			}
+			val := iter.Value()
+			var panicLog []failureToApplyRecord
+			// TODO(josh): Use proto instead of yaml.
+			err = yaml.Unmarshal(val, &panicLog)
+			if err != nil {
+				log.Errorf(ctx, "couldn't unmarshall panic log: %v", err)
+				return
+			}
+			re := failureToApplyRecord{
+				RangeID:             r.RangeID,
+				CurrentAppliedIndex: currentAppliedIndex,
+				Time:                time.Now(),
+			}
+			panicLog = append(panicLog, re)
+			// In order to bound disk usage, there is one panic log per store, and it is truncated to a length of N=3.
+			// TODO(josh): The size of the panic log should be configurable with a cluster setting.
+			if len(panicLog) > 3 {
+				panicLog = panicLog[len(panicLog)-3:]
+			}
+			marshalledLog, err := yaml.Marshal(panicLog)
+			if err != nil {
+				log.Errorf(ctx, "couldn't marshall panic log: %v", err)
+				return
+			}
+			// TODO(josh): Remove this log line.
+			fmt.Printf("test: %v\n", panicLog)
+			if err := r.store.engine.PutUnversioned(keys.StorePanicLogKey(), marshalledLog); err != nil {
+				log.Errorf(ctx, "couldn't write to log panic key: %v", err)
+				return
+			}
+		}()
+		panic(re)
+	}
 }
 
 // splitMsgApps splits the Raft message slice into two slices, one containing

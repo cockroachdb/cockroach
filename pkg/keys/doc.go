@@ -218,6 +218,7 @@ var _ = [...]interface{}{
 	StoreGossipKey,         // "goss"
 	StoreHLCUpperBoundKey,  // "hlcu"
 	StoreIdentKey,          // "iden"
+	StorePanicLogKey,       // "plog"
 	StoreNodeTombstoneKey,  // "ntmb"
 	StoreLastUpKey,         // "uptm"
 	StoreCachedSettingsKey, // "stng"

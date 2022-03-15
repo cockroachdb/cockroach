@@ -55,6 +55,12 @@ func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, nil)
 }
 
+// StorePanicLogKey returns a store-local key for a persistent log of panics and
+// errors that happened during application.
+func StorePanicLogKey() roachpb.Key {
+	return MakeStoreKey(localStorePanicLogSuffix, nil)
+}
+
 // StoreGossipKey returns a store-local key for the gossip bootstrap metadata.
 func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)

@@ -160,6 +160,9 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// localStorePanicLogSuffix stores a persistent log of panics and
+	// errors that happened during application.
+	localStorePanicLogSuffix = []byte("plog")
 	// localStoreNodeTombstoneSuffix stores key value pairs that map
 	// nodeIDs to time of removal from cluster.
 	localStoreNodeTombstoneSuffix = []byte("ntmb")
