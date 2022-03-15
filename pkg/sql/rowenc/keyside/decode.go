@@ -269,6 +269,15 @@ func Decode(
 			return nil, nil, err
 		}
 		return a.NewDEnum(tree.DEnum{EnumTyp: valType, PhysicalRep: phys, LogicalRep: log}), rkey, nil
+	case types.EncodedKeyFamily:
+		// We don't actually decode anything; we wrap the raw key bytes into a
+		// DEncodedKey.
+		len, err := encoding.PeekLength(key)
+		if err != nil {
+			return nil, nil, err
+		}
+		rkey := key[len:]
+		return a.NewDEncodedKey(tree.DEncodedKey(key[:len])), rkey, nil
 	default:
 		return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 	}
