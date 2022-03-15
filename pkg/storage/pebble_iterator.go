@@ -168,6 +168,10 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	newOptions := pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  opts.KeyTypes,
+		RangeKeyMasking: pebble.RangeKeyMasking{
+			// TODO(erikgrinaker): Consider reusing a buffer if necessary.
+			Suffix: EncodeMVCCTimestampSuffix(opts.RangeKeyMaskingBelow),
+		},
 	}
 
 	newBuf := (p.curBuf + 1) % 2
@@ -236,6 +240,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		newOptions.KeyTypes != p.options.KeyTypes ||
 		!bytes.Equal(newOptions.UpperBound, p.options.UpperBound) ||
 		!bytes.Equal(newOptions.LowerBound, p.options.LowerBound) ||
+		!bytes.Equal(newOptions.RangeKeyMasking.Suffix, p.options.RangeKeyMasking.Suffix) ||
 		// We can't compare these filters, so if any existing or new filters are set
 		// we consider them changed.
 		newOptions.TableFilter != nil || p.options.TableFilter != nil ||
