@@ -2027,8 +2027,9 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 				require.False(t, r.SupportsRangeKeys())
 
 				iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-					KeyTypes:   keyType,
-					UpperBound: keys.MaxKey,
+					KeyTypes:             keyType,
+					UpperBound:           keys.MaxKey,
+					RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
 				})
 				defer iter.Close()
 
