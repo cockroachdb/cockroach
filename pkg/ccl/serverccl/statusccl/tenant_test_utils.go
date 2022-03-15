@@ -163,8 +163,8 @@ func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
 	return c.tenant(idx).tenantDB
 }
 
-func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx, isAdmin bool) *httpClient {
-	client, err := c.tenant(idx).tenant.GetAuthenticatedHTTPClient(isAdmin)
+func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx) *httpClient {
+	client, err := c.tenant(idx).tenant.GetAdminHTTPClient()
 	require.NoError(t, err)
 	return &httpClient{t: t, client: client, baseURL: c[idx].tenant.AdminURL()}
 }

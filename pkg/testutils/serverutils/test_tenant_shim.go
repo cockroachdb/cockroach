@@ -117,13 +117,15 @@ type TestTenantInterface interface {
 
 	// AdminURL returns the URL for the admin UI.
 	AdminURL() string
-	// GetHTTPClient returns an http client configured with the client TLS
+	// GetUnauthenticatedHTTPClient returns an http client configured with the client TLS
 	// config required by the TestServer's configuration.
-	GetHTTPClient() (http.Client, error)
-	// GetAdminAuthenticatedHTTPClient returns an http client which has been
+	// Discourages implementer from using unauthenticated http connections
+	// with verbose method name.
+	GetUnauthenticatedHTTPClient() (http.Client, error)
+	// GetAdminHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	// The user has admin privileges.
-	GetAdminAuthenticatedHTTPClient() (http.Client, error)
+	GetAdminHTTPClient() (http.Client, error)
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
