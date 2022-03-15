@@ -1854,7 +1854,7 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1)
+	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1+len(ot.desc.SystemColumns()))
 	// Init dummy PK column.
 	ot.columns[0].Init(
 		0,
@@ -1887,6 +1887,25 @@ func newOptVirtualTable(
 		)
 	}
 
+	// Set up any registered system columns.
+	for i, sysCol := range ot.desc.SystemColumns() {
+		ord := len(ot.columns) - len(ot.desc.SystemColumns()) + i
+		ot.columns[ord].Init(
+			ord,
+			cat.StableID(sysCol.GetID()),
+			sysCol.ColName(),
+			cat.System,
+			sysCol.GetType(),
+			sysCol.IsNullable(),
+			cat.MaybeHidden(sysCol.IsHidden()),
+			sysCol.ColumnDesc().DefaultExpr,
+			sysCol.ColumnDesc().ComputeExpr,
+			sysCol.ColumnDesc().OnUpdateExpr,
+			mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
+			sysCol.ColumnDesc().GeneratedAsIdentitySequenceOption,
+		)
+	}
+
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
 	for i := range ot.columns {
 		ot.colMap.Set(descpb.ColumnID(ot.columns[i].ColID()), i)
@@ -1895,7 +1914,7 @@ func newOptVirtualTable(
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
-	ot.family.init(ot)
+	ot.family.init(ot, len(ot.desc.SystemColumns()))
 
 	// Build the indexes (add 1 to account for lack of primary index in
 	// indexes slice).
@@ -1904,7 +1923,7 @@ func newOptVirtualTable(
 	ot.indexes[0] = optVirtualIndex{
 		tab:          ot,
 		indexOrdinal: 0,
-		numCols:      ot.ColumnCount(),
+		numCols:      ot.ColumnCount() - len(ot.desc.SystemColumns()),
 	}
 
 	for _, idx := range ot.desc.PublicNonPrimaryIndexes() {
@@ -1918,7 +1937,7 @@ func newOptVirtualTable(
 			idx:          idx,
 			indexOrdinal: idx.Ordinal(),
 			// The virtual indexes don't return the bogus PK key?
-			numCols: ot.ColumnCount(),
+			numCols: ot.ColumnCount() - len(ot.desc.SystemColumns()),
 		}
 	}
 
@@ -2260,13 +2279,15 @@ func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 // optVirtualFamily is a dummy implementation of cat.Family for the only family
 // reported by a virtual table.
 type optVirtualFamily struct {
-	tab *optVirtualTable
+	tab     *optVirtualTable
+	numVirt int
 }
 
 var _ cat.Family = &optVirtualFamily{}
 
-func (oi *optVirtualFamily) init(tab *optVirtualTable) {
+func (oi *optVirtualFamily) init(tab *optVirtualTable, numVirt int) {
 	oi.tab = tab
+	oi.numVirt = numVirt
 }
 
 // ID is part of the cat.Family interface.
@@ -2281,7 +2302,7 @@ func (oi *optVirtualFamily) Name() tree.Name {
 
 // ColumnCount is part of the cat.Family interface.
 func (oi *optVirtualFamily) ColumnCount() int {
-	return oi.tab.ColumnCount()
+	return oi.tab.ColumnCount() - oi.numVirt
 }
 
 // Column is part of the cat.Family interface.

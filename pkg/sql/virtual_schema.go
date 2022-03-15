@@ -17,6 +17,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -497,6 +498,14 @@ func (e *virtualDefEntry) getPlanInfo(
 			PGAttributeNum: col.GetPGAttributeNum(),
 		})
 	}
+	for _, col := range e.desc.SystemColumns() {
+		columns = append(columns, colinfo.ResultColumn{
+			Name:           col.GetName(),
+			Typ:            col.GetType(),
+			TableID:        table.GetID(),
+			PGAttributeNum: col.GetPGAttributeNum(),
+		})
+	}
 
 	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
 		var dbDesc catalog.DatabaseDescriptor
@@ -533,6 +542,16 @@ func (e *virtualDefEntry) getPlanInfo(
 			if !constrainedScan {
 				generator, cleanup, setupError := setupGenerator(ctx, func(ctx context.Context, pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
+						for _, col := range e.desc.SystemColumns() {
+							switch col.GetName() {
+							case colinfo.MVCCTimestampColumnName:
+								dv := apd.New(0, 0)
+								dd := &tree.DDecimal{Decimal: *dv}
+								row = append(row, dd)
+							case colinfo.TableOIDColumnName:
+								row = append(row, tree.NewDOid(tree.DInt(table.GetID())))
+							}
+						}
 						if err := e.validateRow(row, columns); err != nil {
 							return err
 						}

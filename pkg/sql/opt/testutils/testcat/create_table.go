@@ -340,6 +340,25 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		}
 	}
 
+	// Add tableoid.
+	var tableoid cat.Column
+	ordinal := len(tab.Columns)
+	tableoid.Init(
+		ordinal,
+		cat.StableID(1+ordinal),
+		colinfo.TableOIDColumnName,
+		cat.System,
+		types.Oid,
+		true, /* nullable */
+		cat.Hidden,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
+	)
+	tab.Columns = append(tab.Columns, tableoid)
+
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
 
