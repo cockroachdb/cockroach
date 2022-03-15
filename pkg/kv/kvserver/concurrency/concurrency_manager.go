@@ -121,6 +121,7 @@ type Config struct {
 	Settings       *cluster.Settings
 	DB             *kv.DB
 	Clock          *hlc.Clock
+	TimeSource     timeutil.TimeSource
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
@@ -143,8 +144,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	timeSource := timeutil.DefaultTimeSource{}
-	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, timeSource)
+	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.TimeSource)
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -163,7 +163,7 @@ func NewManager(cfg Config) Manager {
 			stopper:              cfg.Stopper,
 			ir:                   cfg.IntentResolver,
 			lt:                   lt,
-			contentionEventClock: timeSource,
+			contentionEventClock: cfg.TimeSource,
 			disableTxnPushing:    cfg.DisableTxnPushing,
 			onContentionEvent:    cfg.OnContentionEvent,
 		},
