@@ -876,13 +876,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 	addedIndexes []descpb.IndexID,
 	writeAtRequestTimestamp bool,
 	filter backfill.MutationFilter,
+	fractionScaler *multiStageFractionScaler,
 ) error {
-
-	// Variables to track progress of the index backfill.
-	origNRanges := -1
-	origFractionCompleted := sc.job.FractionCompleted()
-	fractionLeft := 1 - origFractionCompleted
-
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
 	var mutationIdx int
@@ -1051,14 +1046,13 @@ func (sc *SchemaChanger) distIndexBackfill(
 			mu.updatedTodoSpans...,
 		)
 	}
+
+	origNRanges := -1
 	updateJobProgress = func() error {
-		// Report schema change progress. We define progress at this point as the
-		// the fraction of fully-backfilled ranges of the primary index of the
-		// table being scanned. Since we may have already modified the fraction
-		// completed of our job from the 10% allocated to completing the schema
-		// change state machine or from a previous backfill attempt, we scale that
-		// fraction of ranges completed by the remaining fraction of the job's
-		// progress bar.
+		// Report schema change progress. We define progress at this point as the fraction of
+		// fully-backfilled ranges of the primary index of the table being scanned. We scale that
+		// fraction of ranges completed by the remaining fraction of the job's progress bar allocated to
+		// this phase of the backfill.
 		updatedTodoSpans := getTodoSpansForUpdate()
 		if updatedTodoSpans == nil {
 			return nil
@@ -1074,7 +1068,10 @@ func (sc *SchemaChanger) distIndexBackfill(
 			// No processor has returned completed spans yet.
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
-				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
+				fractionCompleted, err := fractionScaler.fractionCompleteFromStageFraction(stageBackfill, fractionRangesFinished)
+				if err != nil {
+					return err
+				}
 				if err := sc.job.FractionProgressed(ctx, txn,
 					jobs.FractionUpdater(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
@@ -1999,12 +1996,17 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
+	fractionScaler := &multiStageFractionScaler{initial: sc.job.FractionCompleted(), stages: backfillStageFractions}
+	if writeAtRequestTimestamp {
+		fractionScaler.stages = mvccCompatibleBackfillStageFractions
+	}
+
 	// NB: The index backfilling process and index merging process
 	// use different ResumeSpans to track their progress, so it is
 	// safe to pass addedIndexes here even if the merging has
 	// already started.
 	if err := sc.distIndexBackfill(
-		ctx, version, addingSpans, addedIndexes, writeAtRequestTimestamp, backfill.IndexMutationFilter,
+		ctx, version, addingSpans, addedIndexes, writeAtRequestTimestamp, backfill.IndexMutationFilter, fractionScaler,
 	); err != nil {
 		return err
 	}
@@ -2020,7 +2022,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			return err
 		}
 
-		if err := sc.mergeFromTemporaryIndex(ctx, version, addedIndexes, temporaryIndexes); err != nil {
+		if err := sc.mergeFromTemporaryIndex(ctx, addedIndexes, temporaryIndexes, fractionScaler); err != nil {
 			return err
 		}
 
@@ -2043,9 +2045,9 @@ func (sc *SchemaChanger) backfillIndexes(
 
 func (sc *SchemaChanger) mergeFromTemporaryIndex(
 	ctx context.Context,
-	version descpb.DescriptorVersion,
 	addingIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
+	fractionScaler *multiStageFractionScaler,
 ) error {
 	var tbl *tabledesc.Mutable
 	if err := sc.txn(ctx, func(
@@ -2058,7 +2060,7 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 		return err
 	}
 	tableDesc := tabledesc.NewBuilder(&tbl.ClusterVersion).BuildImmutableTable()
-	if err := sc.distIndexMerge(ctx, tableDesc, addingIndexes, temporaryIndexes); err != nil {
+	if err := sc.distIndexMerge(ctx, tableDesc, addingIndexes, temporaryIndexes, fractionScaler); err != nil {
 		return err
 	}
 	return nil
@@ -2652,6 +2654,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	tableDesc catalog.TableDescriptor,
 	addedIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
+	fractionScaler *multiStageFractionScaler,
 ) error {
 	// Gather the initial resume spans for the merge process.
 	progress, err := extractMergeProgress(sc.job, tableDesc, addedIndexes, temporaryIndexes)
@@ -2666,7 +2669,10 @@ func (sc *SchemaChanger) distIndexMerge(
 
 	// TODO(rui): these can be initialized along with other new schema changer dependencies.
 	planner := NewIndexBackfillerMergePlanner(sc.execCfg, sc.execCfg.InternalExecutorFactory)
-	tracker := NewIndexMergeTracker(progress, sc.job)
+	rc := func(ctx context.Context, spans []roachpb.Span) (int, error) {
+		return numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, spans)
+	}
+	tracker := NewIndexMergeTracker(progress, sc.job, rc, fractionScaler)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -2683,6 +2689,11 @@ func (sc *SchemaChanger) distIndexMerge(
 			})
 			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
 				if err := tracker.FlushCheckpoint(ctx); err != nil {
+					return err
+				}
+			}
+			if sc.testingKnobs.AlwaysUpdateIndexBackfillProgress {
+				if err := tracker.FlushFractionCompleted(ctx); err != nil {
 					return err
 				}
 			}
@@ -2744,4 +2755,59 @@ func extractMergeProgress(
 	}
 
 	return &progress, nil
+}
+
+type backfillStage int
+
+const (
+	stageBackfill backfillStage = iota
+	stageMerge
+)
+
+var (
+	// These fractions were chosen arbitrarily. Since we believe the majority of the index's data will
+	// be populated during the backfill stage and since there is some schema change work before
+	// the merge, we've given the backfill 60%.
+	mvccCompatibleBackfillStageFractions = []float32{
+		.60,
+		1.0,
+	}
+	backfillStageFractions = []float32{
+		1.0,
+	}
+)
+
+// multiStageFractionScales scales a given completion fraction for a single stage of a multi-stage
+// process based on the given boundaries.
+type multiStageFractionScaler struct {
+	initial float32
+	stages  []float32
+}
+
+func (m *multiStageFractionScaler) fractionCompleteFromStageFraction(
+	stage backfillStage, fraction float32,
+) (float32, error) {
+	if fraction > 1.0 || fraction < 0.0 {
+		return 0, errors.AssertionFailedf("fraction %f outside allowed range [0.0, 1.0]", fraction)
+	}
+
+	if int(stage) >= len(m.stages) {
+		return 0, errors.AssertionFailedf("unknown stage %d", stage)
+	}
+
+	max := m.stages[stage]
+	if max > 1.0 {
+		return 0, errors.AssertionFailedf("stage %d max percentage larger than 1: %f", stage, max)
+	}
+
+	min := m.initial
+	if stage > 0 {
+		min = m.stages[stage-1]
+	}
+
+	v := min + (max-min)*fraction
+	if v < m.initial {
+		return m.initial, nil
+	}
+	return v, nil
 }
