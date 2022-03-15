@@ -201,6 +201,9 @@ type sqlServerOptionalKVArgs struct {
 
 	// Used when creating and deleting tenant records.
 	spanConfigKVAccessor spanconfig.KVAccessor
+	// kvStores is used by crdb_internal builtins to access the stores on this
+	// node.
+	kvStoresIterator kvserverbase.StoresIterator
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -708,6 +711,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
+		KVStoresIterator:        cfg.kvStoresIterator,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,

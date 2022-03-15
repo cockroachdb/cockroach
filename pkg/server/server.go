@@ -722,6 +722,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
 			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
+			kvStoresIterator:         kvserver.MakeStoresBase(node.stores),
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,

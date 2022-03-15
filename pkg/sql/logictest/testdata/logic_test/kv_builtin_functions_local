@@ -1,0 +1,34 @@
+# LogicTest: local
+
+subtest kv_enqueue_replica_all_stores
+
+# Create a table and split it up into ranges.
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, FAMILY (x, y));
+ALTER TABLE t SPLIT AT VALUES (0)
+
+# Get the range that contains this table.
+let $rangeid
+SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't'
+
+query B
+SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true);
+----
+true
+
+query error pq: crdb_internal.kv_enqueue_replica\(\): replica with range id 10000 not found on this node
+SELECT crdb_internal.kv_enqueue_replica(10000, 'mvccGC', true);
+
+
+subtest kv_enqueue_replica_named_store
+
+query B
+SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true, 1);
+----
+true
+
+query error pq: crdb_internal.kv_enqueue_replica\(\): store 42 not found on this node
+SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true, 42);
+
+query error pq: crdb_internal.kv_enqueue_replica\(\): r10000 was not found on s1
+SELECT crdb_internal.kv_enqueue_replica(10000, 'mvccGC', true, 1);
