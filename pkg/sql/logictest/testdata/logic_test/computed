@@ -926,10 +926,15 @@ CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING
 statement ok
 SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
 
+statement error timestamp::string: context-dependent operators are not allowed in computed column
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
+
+statement ok
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TIME ZONE 'utc'))";
+
 statement ok
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
 
-# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -950,7 +955,6 @@ CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
-# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -968,7 +972,6 @@ SET experimental_computed_column_rewrites = ""
 statement ok
 CREATE TABLE trewrite_copy (LIKE trewrite INCLUDING ALL)
 
-# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 ----
@@ -988,7 +991,7 @@ DROP TABLE trewrite_copy
 # Test multiple rewrites.
 statement ok
 SET experimental_computed_column_rewrites = "
-  (ts::STRING) -> ((ts AT TIME ZONE 'utc')::STRING),
+  (ts::STRING) -> (to_char(ts AT TIME ZONE 'utc')),
   (mod(fnv32(b::STRING), 4)) -> (mod(fnv32(b), 4)),
   (str::TIMESTAMP) -> (parse_timestamp(str))
 "
@@ -1005,7 +1008,6 @@ CREATE TABLE trewrite2(
   FAMILY (k,ts,b,str,c1,c2,c3)
 )
 
-# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
 ----

@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -2749,9 +2750,14 @@ func (ex *connExecutor) resetPlanner(
 	p.cancelChecker.Reset(ctx)
 
 	p.semaCtx = tree.MakeSemaContext()
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
+		p.semaCtx.IntervalStyleEnabled = true
+		p.semaCtx.DateStyleEnabled = true
+	} else {
+		p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
+		p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
+	}
 	p.semaCtx.SearchPath = ex.sessionData().SearchPath
-	p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
-	p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p
