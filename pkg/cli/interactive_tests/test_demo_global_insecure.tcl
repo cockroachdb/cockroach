@@ -8,7 +8,7 @@ set timeout 90
 start_test "Check --global flag runs as expected"
 
 # Start a demo with --global set
-spawn $argv demo --no-example-database --nodes 9 --global
+spawn $argv demo --no-example-database --nodes 9 --global --insecure
 
 # Ensure db is defaultdb.
 eexpect "defaultdb>"
@@ -58,3 +58,5 @@ expect {
         exp_continue
     }
 }
+
+end_test
