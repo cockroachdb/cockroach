@@ -1,17 +1,20 @@
 ## Write the base (default) value.
 
-run ok
+run stats ok
 with t=A
   txn_begin  ts=1
   put   k=a v=default resolve
   txn_remove
 ----
+>> put k=a v=default resolve t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+12 live_count=+1 live_bytes=+26
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/default
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=12 live_count=1 live_bytes=26
 
 ## See how the intent history evolves throughout the test.
 
-run trace ok
+run trace stats ok
 with t=A
   txn_begin  ts=2
   with       k=a
@@ -31,6 +34,7 @@ called PutIntent("a", _, 00000000-0000-0000-0000-000000000002)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
+stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+46 gc_bytes_age=+2352 intent_count=+1 intent_bytes=+22 separated_intent_count=+1 intent_age=+98
 >> txn_step k=a t=A
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
 >> put v=second k=a t=A
@@ -38,6 +42,7 @@ called PutIntent("a", _, 00000000-0000-0000-0000-000000000002)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/2.000000000,0 -> /BYTES/second
 data: "a"/1.000000000,0 -> /BYTES/default
+stats: val_bytes=+17 live_bytes=+17 intent_bytes=+1
 >> txn_step n=2 k=a t=A
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
 >> del k=a t=A
@@ -45,6 +50,7 @@ called PutIntent("a", _, 00000000-0000-0000-0000-000000000002)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=3} ts=2.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/first}{1 /BYTES/second}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/2.000000000,0 -> /<empty>
 data: "a"/1.000000000,0 -> /BYTES/default
+stats: val_bytes=+6 live_count=-1 live_bytes=-89 gc_bytes_age=+9310 intent_bytes=-11
 >> txn_step n=6 k=a t=A
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=9} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
 >> put v=first k=a t=A
@@ -52,7 +58,10 @@ called PutIntent("a", _, 00000000-0000-0000-0000-000000000002)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=9} ts=2.000000000,0 del=false klen=12 vlen=10 ih={{0 /BYTES/first}{1 /BYTES/second}{3 /<empty>}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
+stats: val_bytes=+16 live_count=+1 live_bytes=+111 gc_bytes_age=-9310 intent_bytes=+10
 >> resolve_intent k=a t=A
 called ClearIntent("a", TDNUM(false), 00000000-0000-0000-0000-000000000002)
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
+stats: val_bytes=-87 live_bytes=-87 intent_count=-1 intent_bytes=-22 separated_intent_count=-1 intent_age=-98
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=22 live_count=1 live_bytes=24 gc_bytes_age=2352

@@ -6,52 +6,64 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=
 
 # Write value1.
 
-run ok
+run stats ok
 with t=A
   txn_step
   cput k=k v=v
 ----
+>> cput k=k v=v t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+58 live_count=+1 live_bytes=+72 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=-23
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/123.000000000,0 -> /BYTES/v
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=58 live_count=1 live_bytes=72 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=-23
 
 # Now, overwrite value1 with value2 from same txn; should see value1
 # as pre-existing value.
 
-run ok
+run stats ok
 with t=A
   txn_step
   cput k=k v=v2 cond=v
 ----
+>> cput k=k v=v2 cond=v t=A
+stats: val_bytes=+11 live_bytes=+11 intent_bytes=+1
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=123.000000000,0 min=0,0 seq=2} ts=123.000000000,0 del=false klen=12 vlen=7 ih={{1 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v2
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=69 live_count=1 live_bytes=83 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=-23
 
 # Writing value3 from a new epoch should see nil again.
 
-run ok
+run stats ok
 with t=A
   txn_restart
   txn_step
   cput k=k v=v3
 ----
+>> cput k=k v=v3 t=A
+stats: val_bytes=-10 live_bytes=-10
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=123.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=123.000000000,0 min=0,0 seq=1} ts=123.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/123.000000000,0 -> /BYTES/v3
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=59 live_count=1 live_bytes=73 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=-23
 
 # Commit value3 at a later timestamp.
 
-run ok
+run stats ok
 with t=A
   txn_advance    ts=124
   resolve_intent k=k
   txn_remove
 ----
+>> resolve_intent k=k t=A
+stats: val_bytes=-38 live_bytes=-38 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=+23
 >> at end:
 data: "k"/124.000000000,0 -> vheader{ localTs=123.000000000,0 } /BYTES/v3
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=21 live_count=1 live_bytes=35
 
 # Write value4 with an old timestamp without txn...should get a write
 # too old error.
@@ -77,7 +89,7 @@ clear_range k=k end=-k
 
 # First txn attempt
 
-run ok
+run stats ok
 # Before txn start:
 put k=c v=value ts=1
 with t=A
@@ -85,15 +97,20 @@ with t=A
   txn_step
   cput k=c v=cput cond=value
 ----
+>> put k=c v=value ts=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+10 live_count=+1 live_bytes=+24
+>> cput k=c v=cput cond=value t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+49 gc_bytes_age=+2156 intent_count=+1 intent_bytes=+21 separated_intent_count=+1 intent_age=+98
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
 meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/2.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=69 live_count=1 live_bytes=73 gc_bytes_age=2156 intent_count=1 intent_bytes=21 separated_intent_count=1 intent_age=98
 
 # Restart and retry cput. It should succeed.
 
-run trace ok
+run trace stats ok
 with t=A
   txn_restart ts=3
   txn_step
@@ -108,3 +125,5 @@ called PutIntent("c", _, 00000000-0000-0000-0000-000000000002)
 meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "c"/3.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
+stats: gc_bytes_age=-22 intent_age=-1
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=69 live_count=1 live_bytes=73 gc_bytes_age=2134 intent_count=1 intent_bytes=21 separated_intent_count=1 intent_age=97
