@@ -114,7 +114,7 @@ on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -196,7 +196,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [7] sequence req2: lock wait-queue event: done waiting
-[7] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[7] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [7] sequence req2: acquiring latches
 [7] sequence req2: waiting to acquire read latch k2@10.000000000,1, held by write latch k2@10.000000000,1
 [7] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -313,7 +313,7 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 ----
 [-] update lock: committing txn 00000002 @ k
 [13] sequence req3: lock wait-queue event: done waiting
-[13] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[13] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 0.000s
 [13] sequence req3: acquiring latches
 [13] sequence req3: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [13] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -427,7 +427,7 @@ on-split
 ----
 [-] split range: complete
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -474,7 +474,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [4] sequence req2: lock wait-queue event: done waiting
-[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [4] sequence req2: acquiring latches
 [4] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -609,7 +609,7 @@ on-merge
 ----
 [-] merge range: complete
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -698,7 +698,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [8] sequence req2: lock wait-queue event: done waiting
-[8] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[8] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [8] sequence req2: acquiring latches
 [8] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [8] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -812,7 +812,7 @@ on-snapshot-applied
 ----
 [-] snapshot replica: applied
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -859,7 +859,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [4] sequence req2: lock wait-queue event: done waiting
-[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [4] sequence req2: acquiring latches
 [4] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
