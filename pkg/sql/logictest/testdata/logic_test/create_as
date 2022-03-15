@@ -112,15 +112,21 @@ statement error pq: value type unknown cannot be used for table columns
 CREATE TABLE foo2 (x) AS (VALUES(NULL))
 
 # Check nulls are handled properly (#13921)
+statement ok
+CREATE TABLE foo3 (x) AS VALUES (1), (NULL);
+
 query I
-CREATE TABLE foo3 (x) AS VALUES (1), (NULL); SELECT * FROM foo3 ORDER BY x
+SELECT * FROM foo3 ORDER BY x
 ----
 NULL
 1
 
 # Check that CREATE TABLE AS can use subqueries (#23002)
+statement ok
+CREATE TABLE foo4 (x) AS SELECT EXISTS(SELECT * FROM foo3 WHERE x IS NULL);
+
 query B
-CREATE TABLE foo4 (x) AS SELECT EXISTS(SELECT * FROM foo3 WHERE x IS NULL); SELECT * FROM foo4
+SELECT * FROM foo4
 ----
 true
 
@@ -368,6 +374,8 @@ ROLLBACK
 # Test CREATE TABLE AS referring to a sequence.
 statement ok
 CREATE SEQUENCE seq;
+
+statement OK
 CREATE TABLE tab_from_seq AS (SELECT nextval('seq'))
 
 query I

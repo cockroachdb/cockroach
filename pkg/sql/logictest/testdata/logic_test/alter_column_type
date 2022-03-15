@@ -232,9 +232,17 @@ SELECT * FROM t3 ORDER BY id
 # Ensure ALTER COLUMN TYPE correctly changes the precision of TIMESTAMPTZ.
 statement ok
 CREATE TABLE t5 (x TIMESTAMPTZ(6));
+
+statement ok
 INSERT INTO t5 VALUES ('2016-01-25 10:10:10.555555-05:00');
+
+statement ok
 INSERT INTO t5 VALUES ('2016-01-26 10:10:10.555555-05:00');
+
+statement ok
 ALTER TABLE t5 ALTER COLUMN x TYPE TIMESTAMPTZ(3);
+
+statement ok
 INSERT INTO t5 VALUES ('2016-01-26 10:10:10.55-05:00');
 
 query T
@@ -247,7 +255,11 @@ SELECT * FROM t5 ORDER BY x
 # Ensure column families stay the same.
 statement ok
 CREATE TABLE t6(id INT, id2 INT, FAMILY f1 (id), FAMILY f2 (id2));
+
+statement ok
 INSERT INTO t6 VALUES (1), (2), (3);
+
+statement ok
 ALTER TABLE t6 ALTER COLUMN id2 TYPE STRING;
 
 query TT
@@ -263,11 +275,14 @@ t6  CREATE TABLE public.t6 (
 )
 
 # Ensure the type of the default column is checked
-statement error default for column "x" cannot be cast automatically to type DATE
+statement ok
 CREATE TABLE t7 (x INT DEFAULT 1, y INT);
+
+statement ok
 INSERT INTO t7 (y) VALUES (1), (2), (3);
+
+statement error default for column "x" cannot be cast automatically to type DATE
 ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
-INSERT INTO t7 (y) VALUES (4);
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
 statement ok
@@ -323,7 +338,11 @@ ALTER TABLE uniq ALTER COLUMN x TYPE STRING
 # Ensure we cannot change the column type of a column stored in a secondary index.
 statement ok
 CREATE TABLE t15 (x INT, y INT);
+
+statement ok
 CREATE INDEX ON t15 (x) STORING (y);
+
+statement ok
 INSERT INTO t15 VALUES (1, 1), (2, 2)
 
 statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
@@ -332,6 +351,8 @@ ALTER TABLE t15 ALTER COLUMN y TYPE STRING;
 # Ensure ALTER COLUMN TYPE works for collated strings.
 statement ok
 CREATE TABLE t16 (x STRING);
+
+statement ok
 INSERT INTO t16 VALUES ('Backhaus'), ('Bär'), ('Baz');
 
 query T
@@ -377,6 +398,8 @@ t17         CREATE TABLE public.t17 (
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
 statement ok
 CREATE TABLE t18 (x INT NOT NULL PRIMARY KEY);
+
+statement ok
 CREATE TABLE t19 (y INT NOT NULL REFERENCES t18 (x), INDEX(y));
 
 statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
@@ -388,6 +411,8 @@ ALTER TABLE t19 ALTER COLUMN y TYPE STRING
 # Ensure ALTER COLUMN TYPE does not work inside a transaction.
 statement ok
 CREATE TABLE t20 (x INT);
+
+statement ok
 BEGIN
 
 statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
@@ -431,6 +456,8 @@ true
 # Ensure ALTER COLUMN TYPE rolls back if is not applicable to value in the column.
 statement ok
 CREATE TABLE t24 (x STRING);
+
+statement ok
 INSERT INTO t24 VALUES ('1'), ('hello');
 
 statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
@@ -457,6 +484,8 @@ ALTER TABLE t25 ALTER COLUMN x TYPE STRING USING (x);
 
 statement ok
 CREATE TABLE t26 (x INT);
+
+statement ok
 CREATE TABLE t27 (x INT);
 
 # Ensure USING EXPRESSION cannot reference columns that do not exist in the
@@ -484,7 +513,11 @@ ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (x::STRING)
 # converting to the same type.
 statement ok
 CREATE TABLE t28(x INT);
+
+statement ok
 INSERT INTO t28 VALUES (1), (2), (3);
+
+statement ok
 ALTER TABLE t28 ALTER COLUMN x TYPE INT USING (x * 5)
 
 query I
@@ -498,7 +531,11 @@ SELECT x FROM t28 ORDER BY x
 # error before running the online schema change.
 statement ok
 CREATE TABLE t29 (x INT8);
+
+statement ok
 INSERT INTO t29 VALUES (1), (2), (3);
+
+statement ok
 ALTER TABLE t29 ALTER COLUMN x TYPE INT4;
 
 query I
@@ -512,6 +549,8 @@ SELECT x FROM t29 ORDER BY x
 
 statement ok
 CREATE TABLE parent_71089 (id INT PRIMARY KEY);
+
+statement ok
 CREATE TABLE child_71089 (a INT, b INT REFERENCES parent_71089 (id) NOT NULL)
 
 statement ok
@@ -522,6 +561,8 @@ ALTER TABLE child_71089 ALTER COLUMN a TYPE FLOAT;
 # try the conversion and error out if the cast cannot be applied.
 statement ok
 CREATE TABLE t30 (x STRING);
+
+statement ok
 INSERT INTO t30 VALUES (e'a\\01');
 
 statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
@@ -546,6 +587,8 @@ ALTER TABLE t29 ALTER COLUMN x TYPE INT2
 
 statement ok
 CREATE TABLE regression_54844 (i int8);
+
+statement ok
 INSERT INTO regression_54844 VALUES (-9223372036854775807)
 
 statement error integer out of range for type int2

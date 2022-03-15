@@ -7,6 +7,9 @@ ERROR: crdb_internal.deserialize_session(): error deserializing session: unexpec
 
 exec
 SET experimental_enable_temp_tables = true;
+----
+
+exec
 CREATE TEMP TABLE temp_tbl()
 ----
 

@@ -287,10 +287,20 @@ subtest fk_drop
 # there is another index that can satisfy the foreign key constraint.
 statement ok
 CREATE TABLE fk1 (x int);
+
+statement ok
 CREATE TABLE fk2 (x int PRIMARY KEY);
+
+statement ok
 CREATE INDEX i ON fk1 (x);
+
+statement ok
 CREATE INDEX i2 ON fk1 (x);
+
+statement ok
 ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+
+statement ok
 DROP INDEX fk1@i CASCADE
 
 query TT

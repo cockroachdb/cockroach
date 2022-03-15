@@ -242,7 +242,10 @@ statement ok
 INSERT INTO a VALUES(5)
 
 statement ok
-SET tracing = on,kv; DELETE FROM a WHERE a = 5; SET tracing = off
+SET tracing = on,kv; DELETE FROM a WHERE a = 5;
+
+statement ok
+SET tracing = off
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]

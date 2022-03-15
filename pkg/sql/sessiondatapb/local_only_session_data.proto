@@ -236,6 +236,12 @@ message LocalOnlySessionData {
   // OverrideAlterPrimaryRegionInSuperRegion is true when the user is allowed
   // to modify a primary region that is part of a super region.
   bool override_alter_primary_region_in_super_region = 65;
+  // EnableImplicitTransactionForBatchStatements configures the handling of
+  // multiple statements in a single query. If enabled, then an implicit
+  // transaction is used when multiple statements are sent in a single query.
+  // Setting this to false is a divergence from the pgwire protocol, but
+  // matches the behavior of CockroachDB v21.2 and earlier.
+  bool enable_implicit_transaction_for_batch_statements = 66;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

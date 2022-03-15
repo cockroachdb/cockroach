@@ -133,7 +133,10 @@ BACKUP DATABASE d TO 'nodelocal://0/test/'
 ----
 
 exec-sql
-DROP DATABASE d;
+DROP DATABASE d
+----
+
+exec-sql
 RESTORE DATABASE d FROM 'nodelocal://0/test/';
 ----
 

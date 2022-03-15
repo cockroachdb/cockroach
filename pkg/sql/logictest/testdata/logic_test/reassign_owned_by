@@ -7,7 +7,11 @@ REASSIGN OWNED BY fake_old_role TO new_role
 
 statement ok
 CREATE ROLE old_role;
+
+statement ok
 GRANT CREATE ON DATABASE test TO old_role;
+
+statement ok
 ALTER TABLE t OWNER TO old_role
 
 user testuser
@@ -35,6 +39,8 @@ user root
 
 statement ok
 CREATE ROLE new_role;
+
+statement ok
 GRANT CREATE ON DATABASE test TO new_role
 
 user testuser
@@ -69,6 +75,8 @@ CREATE ROLE testuser2 WITH LOGIN;
 # Create database for old role
 statement ok
 CREATE DATABASE d;
+
+statement ok
 ALTER DATABASE d OWNER TO testuser
 
 # Check ownership - testuser should own all objects just created
@@ -106,11 +114,15 @@ DROP ROLE testuser
 # Can reassign from more than one old role to new role.
 statement ok
 use test;
+
+statement ok
 CREATE ROLE testuser;
 
 # Create schema for testuser and one for root.
 statement ok
 CREATE SCHEMA s1;
+
+statement ok
 ALTER SCHEMA s1 OWNER TO testuser
 
 statement ok
@@ -141,6 +153,8 @@ s2  3957504279
 # Ensure testuser2 is new owner by dropping.
 statement ok
 DROP SCHEMA s1;
+
+statement ok
 DROP SCHEMA s2
 
 user root

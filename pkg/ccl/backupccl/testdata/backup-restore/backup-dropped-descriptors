@@ -64,6 +64,9 @@ BACKUP INTO 'nodelocal://0/cluster/dropped-database';
 # dropped database 'd'.
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/dropped-database' WITH new_db_name = 'd1';
+----
+
+exec-sql
 USE d1;
 ----
 
@@ -77,6 +80,9 @@ public bar
 # dropped database 'd'.
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/dropped-database' WITH new_db_name = 'd2';
+----
+
+exec-sql
 USE d2;
 ----
 
@@ -95,6 +101,9 @@ new-server name=s2
 
 exec-sql
 CREATE DATABASE d2;
+----
+
+exec-sql
 CREATE TABLE d2.t2 (id INT);
 ----
 
@@ -102,8 +111,14 @@ exec-sql
 CREATE TYPE d2.typ AS ENUM ('hello');
 CREATE SCHEMA d2.s;
 CREATE TABLE d2.s.t (id INT);
+----
+
+exec-sql
 SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+----
+
+exec-sql
 DROP SCHEMA d2.s CASCADE;
 ----
 paused before it completed with reason: pause point "schemachanger.before.exec" hit
@@ -160,6 +175,9 @@ WHERE object_name = 's' OR object_name = 'typ';
 # Restore the backups to check they are valid.
 exec-sql
 RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/dropped-schema-in-database' WITH new_db_name = 'd3';
+----
+
+exec-sql
 USE d3;
 ----
 
@@ -182,6 +200,9 @@ public t2
 
 exec-sql
 RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
+----
+
+exec-sql
 USE d4;
 ----
 

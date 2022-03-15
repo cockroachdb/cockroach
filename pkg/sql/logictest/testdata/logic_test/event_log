@@ -894,8 +894,10 @@ USE defaultdb
 
 statement ok
 DROP DATABASE atest CASCADE;
- DROP USER v;
- DROP USER u
+
+statement ok
+DROP USER v;
+DROP USER u
 
 # Regression for #57734. Ensure that type names are fully qualified in the
 # event log.

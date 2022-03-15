@@ -106,17 +106,14 @@ func TestMaterializedViewRefreshVisibility(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Make a materialized view and update the data behind it.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.t (x INT);
-INSERT INTO t.t VALUES (1), (2);
-CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
-INSERT INTO t.t VALUES (3);
-`); err != nil {
-		t.Fatal(err)
-	}
+	runner.Exec(t, `CREATE DATABASE t;`)
+	runner.Exec(t, `CREATE TABLE t.t (x INT);`)
+	runner.Exec(t, `INSERT INTO t.t VALUES (1), (2);`)
+	runner.Exec(t, `CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;`)
+	runner.Exec(t, `INSERT INTO t.t VALUES (3);`)
 
 	// Start a refresh.
 	go func() {
@@ -129,7 +126,6 @@ INSERT INTO t.t VALUES (3);
 	<-waitForCommit
 
 	// Before the refresh commits, we shouldn't see any updated data.
-	runner := sqlutils.MakeSQLRunner(sqlDB)
 	runner.CheckQueryResults(t, "SELECT * FROM t.v ORDER BY x", [][]string{{"1"}, {"2"}})
 
 	// Let the refresh commit.

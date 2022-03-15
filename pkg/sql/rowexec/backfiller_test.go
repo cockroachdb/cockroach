@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -84,13 +85,10 @@ func TestWriteResumeSpan(t *testing.T) {
 	})
 	defer server.Stopper().Stop(ctx)
 
-	if _, err := sqlDB.Exec(`
-	CREATE DATABASE t;
-	CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-	CREATE UNIQUE INDEX vidx ON t.test (v);
-	`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)
+	sqlRunner.Exec(t, `CREATE UNIQUE INDEX vidx ON t.test (v);`)
 
 	resumeSpans := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},

@@ -301,6 +301,9 @@ sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table_i
 
 exec
 ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW;
+----
+
+exec
 ALTER TABLE t5 ADD COLUMN cr crdb_internal_region NOT NULL
 ----
 

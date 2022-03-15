@@ -232,6 +232,8 @@ CPut /Table/107/2/1/1/1 -> /TUPLE/2:2:Int/5 (replacing [10 35 4], if exists)
 # Test composite datatypes.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY,
   y DECIMAL,
@@ -269,6 +271,8 @@ vectorized: true
 # Ensure that we always have a k/v in family 0.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT,
@@ -292,6 +296,8 @@ Scan /Table/109/2/2/0
 # Ensure that when backfilling an index we only insert the needed k/vs.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY, y INT, z INT, w INT,
   FAMILY (y), FAMILY (x), FAMILY (z), FAMILY (w)
@@ -327,6 +333,8 @@ fetched: /t/i/9/8 -> <undecoded>
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY, y INT, z INT, w INT,
   FAMILY (y), FAMILY (x), FAMILY (z), FAMILY (w)
@@ -362,6 +370,8 @@ SELECT * FROM t@i
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY, y INT, a INT, b INT, c INT, d INT, e INT, f INT,
   FAMILY (x), FAMILY (y), FAMILY (a, b), FAMILY (c, d), FAMILY (e), FAMILY (f),
@@ -458,12 +468,16 @@ SELECT * FROM t@i2
 
 # Ensure that updating a row in the single family case still works.
 statement ok
-DROP TABLE IF EXISTS t;
+DROP TABLE IF EXISTS t
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY, y INT, z INT, w INT,
   INDEX i (y) STORING (z, w),
   FAMILY (x, y, z, w)
-);
+)
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
 # When the key is changed, we always delete and cput.

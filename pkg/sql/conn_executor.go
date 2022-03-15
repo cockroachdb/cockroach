@@ -1842,7 +1842,14 @@ func (ex *connExecutor) execCmd() error {
 			)
 			res = stmtRes
 
-			canAutoCommit := ex.implicitTxn()
+			// In the simple protocol, autocommit only when this is the last statement
+			// in the batch. This matches the Postgres behavior. See
+			// "Multiple Statements in a Single Query" at
+			// https://www.postgresql.org/docs/14/protocol-flow.html.
+			// The behavior is configurable, in case users want to preserve the
+			// behavior from v21.2 and earlier.
+			implicitTxnForBatch := ex.sessionData().EnableImplicitTransactionForBatchStatements
+			canAutoCommit := ex.implicitTxn() && (tcmd.LastInBatch || !implicitTxnForBatch)
 			ev, payload, err = ex.execStmt(
 				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)

@@ -387,8 +387,11 @@ UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 3 RETURNING k,v
 
 # Check that UPDATE properly supports LIMIT (MySQL extension)
 
+statement ok
+TRUNCATE kv;
+
 statement count 3
-TRUNCATE kv; INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
+INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
 
 query II
 UPDATE kv SET v = v - 1 WHERE k < 10 ORDER BY k LIMIT 1 RETURNING k, v

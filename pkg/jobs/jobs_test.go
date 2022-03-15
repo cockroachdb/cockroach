@@ -2040,9 +2040,10 @@ func TestShowJobsWithError(t *testing.T) {
 
 	// Create at least 6 rows, ensuring 3 rows are corrupted.
 	// Ensure there is at least one row in system.jobs.
-	if _, err := sqlDB.Exec(`
-     CREATE TABLE foo(x INT); ALTER TABLE foo ADD COLUMN y INT;
-	`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE foo(x INT);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`ALTER TABLE foo ADD COLUMN y INT;`); err != nil {
 		t.Fatal(err)
 	}
 	// Get the id of the ADD COLUMN job to use later.

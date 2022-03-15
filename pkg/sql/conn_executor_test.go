@@ -1270,8 +1270,11 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 	}
 
 	for _, tc := range testCases {
-		if _, err := sqlConn.Exec(tc.stmt); err != nil {
-			require.NoError(t, err, "executing %s  ", tc.stmt)
+		stmts := strings.Split(tc.stmt, ";")
+		for _, s := range stmts {
+			if _, err := sqlConn.Exec(s); err != nil {
+				require.NoError(t, err, "executing %s  ", s)
+			}
 		}
 
 		rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency")

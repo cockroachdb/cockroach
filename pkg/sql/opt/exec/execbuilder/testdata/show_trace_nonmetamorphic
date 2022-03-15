@@ -149,7 +149,10 @@ batch flow coordinator  fast path completed
 sql query               rows affected: 1
 
 statement ok
-SET tracing = on,kv,results; DROP TABLE t.kv2; SET tracing = off
+SET tracing = on,kv,results; DROP TABLE t.kv2
+
+statement ok
+SET tracing = off
 
 query TT
 $trace_query
@@ -159,7 +162,10 @@ commit sql txn  Put /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:3 mod
 commit sql txn  Del /NamespaceTable/30/1/106/107/"kv2"/4/1
 
 statement ok
-SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
+SET tracing = on,kv,results; DELETE FROM t.kv
+
+statement ok
+SET tracing = off
 
 query TT
 $trace_query
@@ -172,7 +178,10 @@ batch flow coordinator  fast path completed
 sql query               rows affected: 1
 
 statement ok
-SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE; SET tracing = off
+SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE
+
+statement ok
+SET tracing = off
 
 query TT
 $trace_query
@@ -181,7 +190,10 @@ batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 versio
 sql query               rows affected: 0
 
 statement ok
-SET tracing = on,kv,results; DROP TABLE t.kv; SET tracing = off
+SET tracing = on,kv,results; DROP TABLE t.kv
+
+statement ok
+SET tracing = off
 
 query TT
 $trace_query
@@ -199,7 +211,10 @@ statement ok
 CREATE TABLE t.kv3(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
 
 statement ok
-SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
+SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1)
+
+statement ok
+SET tracing = off
 
 # We look for rows containing an EndTxn as proof that the
 # insertNode is committing the txn.
@@ -279,7 +294,9 @@ ROLLBACK
 # The tracing is still enabled. Insert a couple of rows with auto-commit, and
 # stop the tracing.
 statement ok
-  INSERT INTO a VALUES (2), (3);
+INSERT INTO a VALUES (2), (3)
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -331,6 +348,8 @@ CREATE TABLE blobs (i INT PRIMARY KEY, j STRING, FAMILY (i, j))
 statement ok
 SET TRACING=ON;
   INSERT INTO blobs SELECT generate_series(1, 24), repeat('0123456789ab', 65536);
+
+statement ok
 SET TRACING=OFF;
 
 # verify insert of 24 rows paginated into 4 batches since they are .75mb each.

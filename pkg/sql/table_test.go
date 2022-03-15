@@ -656,22 +656,26 @@ func TestJobsCache(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
 
 	// ALTER TABLE t1 ADD COLUMN x INT should have created a job for the table
 	// we're altering.
 	// Further schema changes to the table should have an existing cache
 	// entry for the job.
-	if _, err := sqlDB.Exec(`
-CREATE TABLE t1();
-BEGIN;
+	if _, err := conn.ExecContext(ctx, `CREATE TABLE t1()`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `BEGIN;
 ALTER TABLE t1 ADD COLUMN x INT;
 `); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`
-ALTER TABLE t1 ADD COLUMN y INT;
-`); err != nil {
+	if _, err := conn.ExecContext(ctx, `ALTER TABLE t1 ADD COLUMN y INT;`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -682,15 +686,13 @@ ALTER TABLE t1 ADD COLUMN y INT;
 
 	// Verify that the cache is cleared once the transaction ends.
 	// Commit the old transaction.
-	if _, err := sqlDB.Exec(`
-COMMIT;
-`); err != nil {
+	if _, err := conn.ExecContext(ctx, `COMMIT;`); err != nil {
 		t.Fatal(err)
 	}
 
 	foundInCache = false
 
-	if _, err := sqlDB.Exec(`
+	if _, err := conn.ExecContext(ctx, `
 BEGIN;
 ALTER TABLE t1 ADD COLUMN z INT;
 `); err != nil {
