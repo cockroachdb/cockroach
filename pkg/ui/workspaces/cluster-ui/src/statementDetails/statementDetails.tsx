@@ -35,6 +35,7 @@ import {
   appAttr,
   appNamesAttr,
   statementAttr,
+  FormatBoolCount,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -66,7 +67,6 @@ import {
 type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-type BooleanCount = cockroach.sql.IBooleanCount;
 
 const { TabPane } = Tabs;
 
@@ -210,18 +210,6 @@ function renderTransactionType(implicitTxn: boolean) {
     return "Implicit";
   }
   return "Explicit";
-}
-
-function renderBoolCount(booleanCount: BooleanCount) {
-  if (longToInt(booleanCount.true) == 0) {
-    return "No";
-  }
-  if (longToInt(booleanCount.false) == 0) {
-    return "Yes";
-  }
-  return `${longToInt(booleanCount.true)} Yes / ${longToInt(
-    booleanCount.false,
-  )} No`;
 }
 
 class NumericStatTable extends React.Component<NumericStatTableProps> {
@@ -461,6 +449,7 @@ export class StatementDetails extends React.Component<
       databases,
       distSQL,
       failed,
+      full_scan,
       vec,
       implicit_txn,
     } = this.props.statementDetails.statement.key_data;
@@ -695,15 +684,19 @@ export class StatementDetails extends React.Component<
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
-                  <Text>{renderBoolCount(failed)}</Text>
+                  <Text>{FormatBoolCount(failed)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
-                  <Text>{renderBoolCount(distSQL)}</Text>
+                  <Text>{FormatBoolCount(distSQL)}</Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Full Scan?</Text>
+                  <Text>{FormatBoolCount(full_scan)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Vectorized execution?</Text>
-                  <Text>{renderBoolCount(vec)}</Text>
+                  <Text>{FormatBoolCount(vec)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Transaction type</Text>

@@ -8,6 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { longToInt } from "./fixLong";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+type BooleanCount = cockroach.sql.IBooleanCount;
+
 export const kibi = 1024;
 export const byteUnits: string[] = [
   "B",
@@ -163,3 +167,15 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
 };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] h:mm A";
+
+export function FormatBoolCount(booleanCount: BooleanCount): string {
+  if (longToInt(booleanCount.true) == 0) {
+    return "No";
+  }
+  if (longToInt(booleanCount.false) == 0) {
+    return "Yes";
+  }
+  return `${longToInt(booleanCount.true)} Yes / ${longToInt(
+    booleanCount.false,
+  )} No`;
+}

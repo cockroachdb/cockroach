@@ -17,6 +17,7 @@ import {
   formatNumberForDisplay,
   longToInt,
   TimestampToMoment,
+  FormatBoolCount,
 } from "../../util";
 
 export type PlanHashStats = cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
@@ -28,6 +29,9 @@ const planDetailsColumnLabels = {
   avgExecTime: "Average Execution Time",
   execCount: "Execution Count",
   avgRowsRead: "Average Rows Read",
+  fullScan: "Full Scan",
+  distSQL: "Distributed",
+  vectorized: "Vectorized",
 };
 export type PlanDetailsTableColumnKeys = keyof typeof planDetailsColumnLabels;
 
@@ -91,6 +95,39 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       </Tooltip>
     );
   },
+  fullScan: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If the Plan executed a Full Scan."}
+      >
+        {planDetailsColumnLabels.fullScan}
+      </Tooltip>
+    );
+  },
+  distSQL: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If the Plan was distributed."}
+      >
+        {planDetailsColumnLabels.distSQL}
+      </Tooltip>
+    );
+  },
+  vectorized: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If the Plan was vectorized."}
+      >
+        {planDetailsColumnLabels.vectorized}
+      </Tooltip>
+    );
+  },
 };
 
 export function makeExplainPlanColumns(
@@ -131,10 +168,28 @@ export function makeExplainPlanColumns(
       sort: (item: PlanHashStats) => longToInt(item.stats.count),
     },
     {
-      name: "avg_rows_read",
+      name: "avgRowsRead",
       title: planDetailsTableTitles.avgRowsRead(),
       cell: (item: PlanHashStats) => longToInt(item.stats.rows_read.mean),
       sort: (item: PlanHashStats) => longToInt(item.stats.rows_read.mean),
+    },
+    {
+      name: "fullScan",
+      title: planDetailsTableTitles.fullScan(),
+      cell: (item: PlanHashStats) => FormatBoolCount(item.key_data.full_scan),
+      sort: (item: PlanHashStats) => FormatBoolCount(item.key_data.full_scan),
+    },
+    {
+      name: "distSQL",
+      title: planDetailsTableTitles.distSQL(),
+      cell: (item: PlanHashStats) => FormatBoolCount(item.key_data.distSQL),
+      sort: (item: PlanHashStats) => FormatBoolCount(item.key_data.distSQL),
+    },
+    {
+      name: "vectorized",
+      title: planDetailsTableTitles.vectorized(),
+      cell: (item: PlanHashStats) => FormatBoolCount(item.key_data.vec),
+      sort: (item: PlanHashStats) => FormatBoolCount(item.key_data.vec),
     },
   ];
 }
