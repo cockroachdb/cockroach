@@ -19,6 +19,7 @@ go_library(
         "//pkg/security",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigreconciler",
+        "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql",
         "//pkg/sql/catalog",
