@@ -1224,6 +1224,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="pg_get_keywords"></a><code>pg_get_keywords() &rarr; tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
 </span></td></tr>
+<tr><td><a name="pg_options_to_table"></a><code>pg_options_to_table(options: <a href="string.html">string</a>[]) &rarr; tuple{string AS option_name, string AS option_value}</code></td><td><span class="funcdesc"><p>Options</p>
+</span></td></tr>
 <tr><td><a name="regexp_split_to_table"></a><code>regexp_split_to_table(string: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Split string using a POSIX regular expression as the delimiter.</p>
 </span></td></tr>
 <tr><td><a name="regexp_split_to_table"></a><code>regexp_split_to_table(string: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, flags: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Split string using a POSIX regular expression as the delimiter with flags.</p>

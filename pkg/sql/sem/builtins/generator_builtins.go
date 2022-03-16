@@ -174,6 +174,18 @@ var generators = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	`pg_options_to_table`: makeBuiltin(
+		genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"options", types.MakeArray(types.String)},
+			},
+			optionsToOverloadGeneratorType,
+			makeOptionsToOverloadGenerator,
+			"Options",
+			tree.VolatilityImmutable,
+		),
+	),
 
 	"regexp_split_to_table": makeBuiltin(
 		genProps(),
@@ -570,6 +582,42 @@ func (g *regexpSplitToTableGenerator) Next(_ context.Context) (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (g *regexpSplitToTableGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{tree.NewDString(g.words[g.curr])}, nil
+}
+
+type optionsToOverloadGenerator struct{}
+
+func makeOptionsToOverloadGenerator(
+	_ *tree.EvalContext, _ tree.Datums,
+) (tree.ValueGenerator, error) {
+	return &optionsToOverloadGenerator{}, nil
+}
+
+var optionsToOverloadGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.String},
+	[]string{"option_name", "option_value"},
+)
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (*optionsToOverloadGenerator) ResolvedType() *types.T {
+	return optionsToOverloadGeneratorType
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (*optionsToOverloadGenerator) Close(_ context.Context) {}
+
+// Start implements the tree.ValueGenerator interface.
+func (k *optionsToOverloadGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (k *optionsToOverloadGenerator) Next(_ context.Context) (bool, error) {
+	return false, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (k *optionsToOverloadGenerator) Values() (tree.Datums, error) {
+	return nil, nil
 }
 
 // keywordsValueGenerator supports the execution of pg_get_keywords().
