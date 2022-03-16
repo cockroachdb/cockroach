@@ -32,14 +32,11 @@ func (b *Builder) buildAlterRangeRelocate(
 	b.DisableMemoReuse = true
 
 	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, colinfo.AlterTableRelocateColumns)
+	b.synthesizeResultColumns(outScope, colinfo.AlterRangeRelocateColumns)
 
 	cmdName := "RELOCATE " + relocate.SubjectReplicas.String()
 	colNames := []string{"range ids"}
 	colTypes := []*types.T{types.Int}
-
-	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, colinfo.AlterRangeRelocateColumns)
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
@@ -70,6 +67,43 @@ func (b *Builder) buildAlterRangeRelocate(
 			SubjectReplicas: relocate.SubjectReplicas,
 			Columns:         colsToColList(outScope.cols),
 			Props:           physical.MinRequired,
+		},
+	)
+	return outScope
+}
+
+// buildAlterRangeSplit builds an ALTER RANGE SPLIT.
+func (b *Builder) buildAlterRangeSplit(split *tree.SplitRange, inScope *scope) (outScope *scope) {
+
+	if err := b.catalog.RequireAdminRole(b.ctx, "ALTER RANGE SPLIT"); err != nil {
+		panic(err)
+	}
+
+	// Disable optimizer caching, as we do for other ALTER statements.
+	b.DisableMemoReuse = true
+
+	outScope = inScope.push()
+	b.synthesizeResultColumns(outScope, colinfo.AlterRangeSplitColumns)
+
+	cmdName := "SPLIT"
+	colNames := []string{"range ids"}
+	colTypes := []*types.T{types.Int}
+
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	emptyScope := b.allocScope()
+	inputScope := b.buildStmt(split.Rows, colTypes, emptyScope)
+	checkInputColumns(cmdName, inputScope, colNames, colTypes, 1)
+
+	// Build the expiration scalar.
+	expiration := buildExpirationScalar(split.ExpireExpr, exprKindAlterRangeSplit, b, emptyScope)
+
+	outScope.expr = b.factory.ConstructAlterRangeSplit(
+		inputScope.expr,
+		expiration,
+		&memo.AlterRangeSplitPrivate{
+			Columns: colsToColList(outScope.cols),
+			Props:   physical.MinRequired,
 		},
 	)
 	return outScope

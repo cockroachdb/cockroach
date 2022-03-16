@@ -188,6 +188,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *relocateRange:
 		n.rows = v.visit(n.rows)
 
+	case *splitRange:
+		n.rows = v.visit(n.rows)
+
 	case *insertNode, *insertFastPathNode:
 		if ins, ok := n.(*insertNode); ok {
 			ins.source = v.visit(ins.source)
@@ -443,6 +446,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&showVarNode{}):                      "show",
 	reflect.TypeOf(&sortNode{}):                         "sort",
 	reflect.TypeOf(&splitNode{}):                        "split",
+	reflect.TypeOf(&splitRange{}):                       "split range",
 	reflect.TypeOf(&topKNode{}):                         "top-k",
 	reflect.TypeOf(&unsplitNode{}):                      "unsplit",
 	reflect.TypeOf(&unsplitAllNode{}):                   "unsplit all",

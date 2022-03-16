@@ -110,6 +110,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.AlterTableRelocateColumns)
 	case *relocateRange:
 		return n.getColumns(mut, colinfo.AlterRangeRelocateColumns)
+	case *splitRange:
+		return n.getColumns(mut, colinfo.AlterRangeSplitColumns)
 	case *scatterNode:
 		return n.getColumns(mut, colinfo.AlterTableScatterColumns)
 	case *showFingerprintsNode:

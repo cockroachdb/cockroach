@@ -750,3 +750,9 @@ define AlterRangeRelocate {
     toStoreID tree.TypedExpr
     fromStoreID tree.TypedExpr
 }
+
+# AlterRangeSplit implements ALTER RANGE SPLIT.
+define AlterRangeSplit {
+    input exec.Node
+    Expiration tree.TypedExpr
+}

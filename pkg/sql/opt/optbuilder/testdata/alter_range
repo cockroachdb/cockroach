@@ -6,10 +6,10 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX b (b), UNIQUE INDEX 
 build
 ALTER RANGE 1 RELOCATE FROM 1+2 TO 3+4
 ----
-alter-range-relocate &{VOTERS [3 4 5] []}
- ├── columns: range_id:3 pretty:4 result:5
+alter-range-relocate &{VOTERS [1 2 3] []}
+ ├── columns: range_id:1 pretty:2 result:3
  ├── values
- │    ├── columns: column1:6!null
+ │    ├── columns: column1:4!null
  │    └── (1,)
  ├── 3 + 4
  └── 1 + 2
@@ -17,12 +17,12 @@ alter-range-relocate &{VOTERS [3 4 5] []}
 build
 ALTER RANGE RELOCATE FROM 1+2 TO 3+4 FOR SELECT a FROM abc
 ----
-alter-range-relocate &{VOTERS [3 4 5] []}
- ├── columns: range_id:3 pretty:4 result:5
+alter-range-relocate &{VOTERS [1 2 3] []}
+ ├── columns: range_id:1 pretty:2 result:3
  ├── project
- │    ├── columns: a:6!null
+ │    ├── columns: a:4!null
  │    └── scan abc
- │         └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         └── columns: a:4!null b:5 c:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  ├── 3 + 4
  └── 1 + 2
 
@@ -39,10 +39,10 @@ error (42601): RELOCATE VOTERS data column 1 (range ids) must be of type int, no
 build
 ALTER RANGE 1 RELOCATE NONVOTERS FROM 1+2 TO 3+4
 ----
-alter-range-relocate &{NONVOTERS [3 4 5] []}
- ├── columns: range_id:3 pretty:4 result:5
+alter-range-relocate &{NONVOTERS [1 2 3] []}
+ ├── columns: range_id:1 pretty:2 result:3
  ├── values
- │    ├── columns: column1:6!null
+ │    ├── columns: column1:4!null
  │    └── (1,)
  ├── 3 + 4
  └── 1 + 2
@@ -50,12 +50,12 @@ alter-range-relocate &{NONVOTERS [3 4 5] []}
 build
 ALTER RANGE RELOCATE NONVOTERS FROM 1+2 TO 3+4 FOR SELECT a FROM abc
 ----
-alter-range-relocate &{NONVOTERS [3 4 5] []}
- ├── columns: range_id:3 pretty:4 result:5
+alter-range-relocate &{NONVOTERS [1 2 3] []}
+ ├── columns: range_id:1 pretty:2 result:3
  ├── project
- │    ├── columns: a:6!null
+ │    ├── columns: a:4!null
  │    └── scan abc
- │         └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         └── columns: a:4!null b:5 c:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  ├── 3 + 4
  └── 1 + 2
 
@@ -63,10 +63,10 @@ alter-range-relocate &{NONVOTERS [3 4 5] []}
 build
 ALTER RANGE 1 RELOCATE LEASE TO 1+2
 ----
-alter-range-relocate &{LEASE [3 4 5] []}
- ├── columns: range_id:3 pretty:4 result:5
+alter-range-relocate &{LEASE [1 2 3] []}
+ ├── columns: range_id:1 pretty:2 result:3
  ├── values
- │    ├── columns: column1:6!null
+ │    ├── columns: column1:4!null
  │    └── (1,)
  ├── 1 + 2
  └── NULL::INT8
@@ -74,12 +74,12 @@ alter-range-relocate &{LEASE [3 4 5] []}
 build
 ALTER RANGE RELOCATE LEASE TO 1+2 FOR SELECT a FROM abc
 ----
-alter-range-relocate &{LEASE [3 4 5] []}
- ├── columns: range_id:3 pretty:4 result:5
+alter-range-relocate &{LEASE [1 2 3] []}
+ ├── columns: range_id:1 pretty:2 result:3
  ├── project
- │    ├── columns: a:6!null
+ │    ├── columns: a:4!null
  │    └── scan abc
- │         └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         └── columns: a:4!null b:5 c:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  ├── 1 + 2
  └── NULL::INT8
 
@@ -87,3 +87,49 @@ build
 ALTER RANGE RELOCATE LEASE TO 1+2 FOR SELECT c FROM abc
 ----
 error (42601): RELOCATE LEASE data column 1 (range ids) must be of type int, not type string
+
+# Tests for ALTER RANGE SPLIT.
+build
+ALTER RANGE 1 SPLIT
+----
+alter-range-split
+ ├── columns: range_id:1 pretty:2 result:3
+ ├── values
+ │    ├── columns: column1:4!null
+ │    └── (1,)
+ └── CAST(NULL AS STRING)
+
+build
+ALTER RANGE 1 SPLIT WITH EXPIRATION '1 day'
+----
+alter-range-split
+ ├── columns: range_id:1 pretty:2 result:3
+ ├── values
+ │    ├── columns: column1:4!null
+ │    └── (1,)
+ └── '1 day'
+
+build
+ALTER RANGE SPLIT FOR VALUES (1)
+----
+alter-range-split
+ ├── columns: range_id:1 pretty:2 result:3
+ ├── values
+ │    ├── columns: column1:4!null
+ │    └── (1,)
+ └── CAST(NULL AS STRING)
+
+build
+ALTER RANGE SPLIT FOR VALUES (1) WITH EXPIRATION '1 day'
+----
+alter-range-split
+ ├── columns: range_id:1 pretty:2 result:3
+ ├── values
+ │    ├── columns: column1:4!null
+ │    └── (1,)
+ └── '1 day'
+
+build
+ALTER RANGE SPLIT FOR SELECT c FROM abc
+----
+error (42601): SPLIT data column 1 (range ids) must be of type int, not type string

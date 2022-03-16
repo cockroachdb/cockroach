@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -3581,4 +3582,79 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())
+}
+
+// TestAlterRangeSplit verifies that the ALTER_RANGE SPLIT commands work as expected.
+func TestAlterRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	ctx := context.Background()
+	const numStores = 3
+	tc := testcluster.StartTestCluster(t, numStores,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// Set the threshold to 1 second instead of the default 10, to speed
+						// up test.
+						LoadBasedSplitRecordDurationThreshold: 500*time.Millisecond,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	// We set the threshold artificially high, so we know that the automatic
+	// process never splits the range.
+	kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, 10000)
+
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+	// We start with having the range under test on (1,2,3).
+	db := tc.ServerConn(0)
+
+	startKey := rhsDesc.StartKey
+	endKey := rhsDesc.EndKey
+	// Put a consistent workload on the range, so it can pick a split point.
+	if err := tc.Stopper().RunAsyncTask(ctx, "workload", func(_ context.Context) {
+		store :=  tc.GetFirstStoreFromServer(t, 0)
+		key := rhsDesc.StartKey
+		keys := make([]roachpb.RKey, 10)
+		for i := 0; i < 10; i++ {
+			keys[i] = key
+			key = key.Next()
+		}
+		for {
+			select {
+			case <-tc.Stopper().ShouldQuiesce():
+				return // All done.
+			default:
+				// Keep going.
+			}
+			if err := store.DB().Put(ctx, keys[rand.Intn(10)], "foo"); err != nil {
+				t.Fatal(err)
+			}
+			key = key.Next()
+			time.Sleep(10*time.Millisecond)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := db.Exec("ALTER RANGE $1 SPLIT", rhsDesc.RangeID)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(startKey)
+		require.NotNil(t, repl)
+		if repl.Desc().EndKey.Equal(endKey) {
+			return errors.Errorf("No split yet, since the end key is the same")
+		}
+		return nil
+	})
 }

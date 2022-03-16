@@ -1246,7 +1246,7 @@ can also be specified (e.g. .25).`,
 
 	DemoWorkloadMaxQPS = FlagInfo{
 		Name:        "workload-max-qps",
-		Description: "The maximum QPS when a workload is running.",
+		Description: "The maximum QPS when a workload is  running.",
 	}
 
 	DemoNodeLocality = FlagInfo{

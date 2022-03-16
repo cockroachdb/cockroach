@@ -150,3 +150,35 @@ ALTER RANGE RELOCATE NONVOTERS FROM 1 + 2 TO 1 + 1 FOR SELECT range_id FROM foo 
 ALTER RANGE RELOCATE NONVOTERS FROM ((1) + (2)) TO ((1) + (1)) FOR SELECT (range_id) FROM foo -- fully parenthesized
 ALTER RANGE RELOCATE NONVOTERS FROM _ + _ TO _ + _ FOR SELECT range_id FROM foo -- literals removed
 ALTER RANGE RELOCATE NONVOTERS FROM 1 + 2 TO 1 + 1 FOR SELECT _ FROM _ -- identifiers removed
+
+parse
+ALTER RANGE 1+3 SPLIT
+----
+ALTER RANGE SPLIT FOR VALUES (1 + 3) -- normalized!
+ALTER RANGE SPLIT FOR VALUES (((1) + (3))) -- fully parenthesized
+ALTER RANGE SPLIT FOR VALUES (_ + _) -- literals removed
+ALTER RANGE SPLIT FOR VALUES (1 + 3) -- identifiers removed
+
+parse
+ALTER RANGE 1+3 SPLIT WITH EXPIRATION '1 day'
+----
+ALTER RANGE SPLIT FOR VALUES (1 + 3) WITH EXPIRATION '1 day' -- normalized!
+ALTER RANGE SPLIT FOR VALUES (((1) + (3))) WITH EXPIRATION ('1 day') -- fully parenthesized
+ALTER RANGE SPLIT FOR VALUES (_ + _) WITH EXPIRATION '_' -- literals removed
+ALTER RANGE SPLIT FOR VALUES (1 + 3) WITH EXPIRATION '1 day' -- identifiers removed
+
+parse
+ALTER RANGE SPLIT FOR SELECT range_id FROM foo
+----
+ALTER RANGE SPLIT FOR SELECT range_id FROM foo
+ALTER RANGE SPLIT FOR SELECT (range_id) FROM foo -- fully parenthesized
+ALTER RANGE SPLIT FOR SELECT range_id FROM foo -- literals removed
+ALTER RANGE SPLIT FOR SELECT _ FROM _ -- identifiers removed
+
+parse
+ALTER RANGE SPLIT FOR SELECT range_id FROM foo WITH EXPIRATION '1 day'
+----
+ALTER RANGE SPLIT FOR SELECT range_id FROM foo WITH EXPIRATION '1 day'
+ALTER RANGE SPLIT FOR SELECT (range_id) FROM foo WITH EXPIRATION ('1 day') -- fully parenthesized
+ALTER RANGE SPLIT FOR SELECT range_id FROM foo WITH EXPIRATION '_' -- literals removed
+ALTER RANGE SPLIT FOR SELECT _ FROM _ WITH EXPIRATION '1 day' -- identifiers removed

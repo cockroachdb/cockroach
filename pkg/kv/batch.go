@@ -716,6 +716,23 @@ func (b *Batch) adminSplit(
 	b.initResult(1, 0, notRaw, nil)
 }
 
+func (b *Batch) adminLoadBasedSplit(startKeyIn interface{}, expirationTime hlc.Timestamp) {
+	startKey, err := marshalKey(startKeyIn)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.AdminSplitRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: startKey,
+		},
+		ExpirationTime: expirationTime,
+		LoadBased:      true,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
 func (b *Batch) adminUnsplit(splitKeyIn interface{}) {
 	splitKey, err := marshalKey(splitKeyIn)
 	if err != nil {

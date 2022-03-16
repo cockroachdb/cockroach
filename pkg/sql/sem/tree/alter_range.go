@@ -65,3 +65,22 @@ func (n *RelocateRange) Format(ctx *FmtCtx) {
 	ctx.WriteString(" FOR ")
 	ctx.FormatNode(n.Rows)
 }
+
+// SplitRange represents an `ALTER RANGE .. SPLIT ..`
+// statement.
+type SplitRange struct {
+	Rows *Select
+	// Splits can last a specified amount of time before becoming eligible for
+	// automatic merging.
+	ExpireExpr Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *SplitRange) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER RANGE SPLIT FOR ")
+	ctx.FormatNode(node.Rows)
+	if node.ExpireExpr != nil {
+		ctx.WriteString(" WITH EXPIRATION ")
+		ctx.FormatNode(node.ExpireExpr)
+	}
+}

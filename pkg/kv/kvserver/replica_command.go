@@ -68,8 +68,11 @@ var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest, reason string,
 ) (reply roachpb.AdminSplitResponse, _ *roachpb.Error) {
-	if len(args.SplitKey) == 0 {
-		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
+	if len(args.SplitKey) == 0 && !args.LoadBased {
+		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided or load based flag set")
+	}
+	if len(args.SplitKey) != 0 && args.LoadBased {
+		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot do a load based split with the provided key")
 	}
 
 	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
@@ -322,6 +325,18 @@ func (r *Replica) adminSplitWithDescriptor(
 	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return reply, err
+	}
+
+	// A load based split is forced through the split queue, so this just sets
+	// the flags to force it to happen, rather than actually perform it.
+	// To perform an effective load based split we need to collect data on the
+	// keys to use and that data is only collected once we are ready to split.
+	// Thus forcing the loadBasedSplitter to start collecting data, will quickly
+	// force a split regardless of QPS threshold, assuming there is still
+	// traffic to this range.
+	if args.LoadBased {
+		r.loadBasedSplitter.ForceSplitDecision()
+		return reply, nil
 	}
 
 	// Determine split key if not provided with args. This scan is

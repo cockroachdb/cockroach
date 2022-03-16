@@ -38,7 +38,9 @@ func TestDecider(t *testing.T) {
 	intn := rand.New(rand.NewSource(12)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 10.0 }, func() time.Duration { return 2 * time.Second })
+	Init(&d, intn, func() float64 { return 10.0 },
+		func() time.Duration { return 2 * time.Second },
+		func() time.Duration {return DefaultRecordDurationThreshold})
 
 	op := func(s string) func() roachpb.Span {
 		return func() roachpb.Span { return roachpb.Span{Key: roachpb.Key(s)} }
@@ -194,7 +196,9 @@ func TestDecider_MaxQPS(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 100.0 }, func() time.Duration { return 10 * time.Second })
+	Init(&d, intn, func() float64 { return 100.0 },
+		func() time.Duration { return 10 * time.Second },
+		func() time.Duration {return DefaultRecordDurationThreshold})
 
 	assertMaxQPS := func(i int, expMaxQPS float64, expOK bool) {
 		t.Helper()
@@ -237,7 +241,9 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second })
+	Init(&d, intn, func() float64 { return 1.0 },
+		func() time.Duration { return time.Second },
+		func() time.Duration {return DefaultRecordDurationThreshold})
 
 	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
@@ -270,7 +276,9 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second })
+	Init(&d, intn, func() float64 { return 1.0 },
+		func() time.Duration { return time.Second },
+		func() time.Duration {return DefaultRecordDurationThreshold})
 
 	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {

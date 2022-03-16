@@ -43,13 +43,13 @@ import (
 //     key as split key, and provide hint to scatter the replicas.
 
 const (
-	// RecordDurationThreshold is the minimum duration of time the split finder
+	// DefaultRecordDurationThreshold is the minimum duration of time the split finder
 	// will record a range for, before being ready for a split.
-	RecordDurationThreshold    = 10 * time.Second // 10s
-	splitKeySampleSize         = 20               // size of split key sample
-	splitKeyMinCounter         = 100              // min aggregate counters before consideration
-	splitKeyThreshold          = 0.25             // 25% difference between left/right counters
-	splitKeyContainedThreshold = 0.50             // too many spanning queries over split point
+	DefaultRecordDurationThreshold = 10 * time.Second // 10s
+	splitKeySampleSize             = 20               // size of split key sample
+	splitKeyMinCounter             = 100              // min aggregate counters before consideration
+	splitKeyThreshold              = 0.25             // 25% difference between left/right counters
+	splitKeyContainedThreshold     = 0.50             // too many spanning queries over split point
 )
 
 type sample struct {
@@ -60,22 +60,24 @@ type sample struct {
 // Finder is a structure that is used to determine the split point
 // using the Reservoir Sampling method.
 type Finder struct {
-	startTime time.Time
-	samples   [splitKeySampleSize]sample
-	count     int
+	startTime               time.Time
+	samples                 [splitKeySampleSize]sample
+	count                   int
+	recordDurationThreshold time.Duration
 }
 
 // NewFinder initiates a Finder with the given time.
-func NewFinder(startTime time.Time) *Finder {
+func NewFinder(startTime time.Time, recordDurationThreshold time.Duration) *Finder {
 	return &Finder{
-		startTime: startTime,
+		startTime:               startTime,
+		recordDurationThreshold: recordDurationThreshold,
 	}
 }
 
 // Ready checks if the Finder has been initialized with a sufficient
 // sample duration.
 func (f *Finder) Ready(nowTime time.Time) bool {
-	return nowTime.Sub(f.startTime) > RecordDurationThreshold
+	return nowTime.Sub(f.startTime) > f.recordDurationThreshold
 }
 
 // Record informs the Finder about where the span lies with
