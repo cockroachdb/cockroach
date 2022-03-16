@@ -546,29 +546,28 @@ CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p))
 norm format=show-all
 WITH cte AS (INSERT INTO child VALUES (1, 1) RETURNING c) SELECT c FROM cte UNION SELECT c+1 FROM cte
 ----
-with &2 (cte)
+with &1 (cte)
  ├── columns: c:14(int!null)
  ├── cardinality: [1 - 2]
  ├── volatile, mutations
  ├── stats: [rows=2, distinct(14)=2, null(14)=0, avgsize(14)=4]
- ├── cost: 1056.9075
+ ├── cost: 1054.45
  ├── key: (14)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
  │    ├── insert-mapping:
  │    │    ├── column1:5 => t.public.child.c:1
  │    │    └── column2:6 => t.public.child.p:2
- │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
- │    ├── cost: 1056.7975
+ │    ├── cost: 1054.34
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:5(int!null) column2:6(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(5)=1, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
+ │    │    ├── stats: [rows=1, distinct(5)=1, null(5)=0, avgsize(5)=4]
  │    │    ├── cost: 0.02
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(5,6)
@@ -578,39 +577,43 @@ with &2 (cte)
  │    │         └── const: 1 [type=int]
  │    └── f-k-checks
  │         └── f-k-checks-item: child(p) -> parent(p)
- │              └── anti-join (hash)
+ │              └── anti-join (cross)
  │                   ├── columns: p:7(int!null)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
- │                   ├── cost: 1056.7675
+ │                   ├── cost: 1054.31
  │                   ├── key: ()
  │                   ├── fd: ()-->(7)
- │                   ├── cte-uses
- │                   │    └── &1: count=1 used-columns=(6)
- │                   ├── with-scan &1
+ │                   ├── prune: (7)
+ │                   ├── values
  │                   │    ├── columns: p:7(int!null)
- │                   │    ├── mapping:
- │                   │    │    └──  column2:6(int) => p:7(int)
  │                   │    ├── cardinality: [1 - 1]
- │                   │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
- │                   │    ├── cost: 0.01
+ │                   │    ├── stats: [rows=1]
+ │                   │    ├── cost: 0.02
  │                   │    ├── key: ()
  │                   │    ├── fd: ()-->(7)
  │                   │    ├── prune: (7)
- │                   │    └── cte-uses
- │                   │         └── &1: count=1 used-columns=(6)
- │                   ├── scan t.public.parent
+ │                   │    └── tuple [type=tuple{int}]
+ │                   │         └── const: 1 [type=int]
+ │                   ├── select
  │                   │    ├── columns: t.public.parent.p:8(int!null)
- │                   │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │                   │    ├── cost: 1044.22
- │                   │    ├── key: (8)
- │                   │    ├── prune: (8)
- │                   │    ├── interesting orderings: (+8)
- │                   │    └── unfiltered-cols: (8-10)
- │                   └── filters
- │                        └── eq [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
- │                             ├── variable: p:7 [type=int]
- │                             └── variable: t.public.parent.p:8 [type=int]
+ │                   │    ├── cardinality: [0 - 1]
+ │                   │    ├── stats: [rows=1, distinct(8)=1, null(8)=0, avgsize(8)=4]
+ │                   │    ├── cost: 1054.24
+ │                   │    ├── key: ()
+ │                   │    ├── fd: ()-->(8)
+ │                   │    ├── scan t.public.parent
+ │                   │    │    ├── columns: t.public.parent.p:8(int!null)
+ │                   │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │                   │    │    ├── cost: 1044.22
+ │                   │    │    ├── key: (8)
+ │                   │    │    ├── prune: (8)
+ │                   │    │    └── interesting orderings: (+8)
+ │                   │    └── filters
+ │                   │         └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+ │                   │              ├── variable: t.public.parent.p:8 [type=int]
+ │                   │              └── const: 1 [type=int]
+ │                   └── filters (true)
  └── union
       ├── columns: c:14(int!null)
       ├── left columns: c:11(int)
@@ -620,7 +623,7 @@ with &2 (cte)
       ├── stats: [rows=2, distinct(14)=2, null(14)=0, avgsize(14)=4]
       ├── cost: 0.1
       ├── key: (14)
-      ├── with-scan &2 (cte)
+      ├── with-scan &1 (cte)
       │    ├── columns: c:11(int!null)
       │    ├── mapping:
       │    │    └──  t.public.child.c:1(int) => c:11(int)
@@ -639,7 +642,7 @@ with &2 (cte)
            ├── key: ()
            ├── fd: ()-->(13)
            ├── prune: (13)
-           ├── with-scan &2 (cte)
+           ├── with-scan &1 (cte)
            │    ├── columns: c:12(int!null)
            │    ├── mapping:
            │    │    └──  t.public.child.c:1(int) => c:12(int)
