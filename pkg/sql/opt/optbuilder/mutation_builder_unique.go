@@ -41,7 +41,6 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		return
 	}
 
-	mb.ensureWithID()
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
@@ -310,7 +309,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	// existing values on the right.
 
 	withScanScope, _ := h.mb.buildCheckInputScan(
-		checkInputScanNewVals, h.scanOrdinals,
+		checkInputScanNewVals, h.scanOrdinals, false, /* isFK */
 	)
 
 	// Build the join filters:
@@ -338,7 +337,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 
 	// If the unique constraint is partial, we need to filter out inserted rows
 	// that don't satisfy the predicate. We also need to make sure that rows do
-	// not match existing rows in the the table that do not satisfy the
+	// not match existing rows in the table that do not satisfy the
 	// predicate. So we add the predicate as a filter on both the WithScan
 	// columns and the Scan columns.
 	if isPartial {

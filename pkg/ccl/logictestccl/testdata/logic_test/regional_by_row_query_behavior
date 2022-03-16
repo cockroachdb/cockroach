@@ -1108,6 +1108,58 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 │   │
 │   └── • error if rows
 │       │
+│       └── • cross join
+│           │
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│                 limit: 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality cols are key
+            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • lookup join (anti)
+                │ table: parent@parent_pkey
+                │ equality cols are key
+                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# Non-constant insert values cannot be inlined in uniqueness check, and all
+# regions must be searched for duplicates.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: child(c_id, c_p_id, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
 │       └── • lookup join (semi)
 │           │ table: child@child_pkey
 │           │ lookup condition: (column1 = c_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
@@ -1467,9 +1519,6 @@ ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 # We should plan uniqueness checks for all unique indexes in
 # REGIONAL BY ROW tables.
-# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
-# to stats issues w/ empty stats, partial indexes and multicol stats its not.
-# Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
@@ -1479,63 +1528,106 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 ├── • insert
 │   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
 │   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 8 columns, 1 row
+│   └── • values
+│         size: 8 columns, 1 row
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@regional_by_row_table_pkey
-│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: crdb_region_default != crdb_region
+│       └── • cross join
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: regional_by_row_table@regional_by_row_table_pkey
+│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│                 limit: 1
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column4 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│       └── • cross join
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column3 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
-│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           ├── • values
+│           │     size: 1 column, 1 row
 │           │
-│           └── • filter
-│               │ estimated row count: 1
-│               │ filter: column4 > 0
+│           └── • limit
+│               │ count: 1
 │               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • filter
+│                   │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+│                   │
+│                   └── • union all
+│                       │ limit: 3
+│                       │
+│                       ├── • scan
+│                       │     missing stats
+│                       │     table: regional_by_row_table@regional_by_row_table_b_key
+│                       │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                       │
+│                       └── • scan
+│                             missing stats
+│                             table: regional_by_row_table@regional_by_row_table_b_key
+│                             spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join
+│           │ table: regional_by_row_table@regional_by_row_table_pkey
+│           │ equality: (crdb_region, pk) = (crdb_region,pk)
+│           │ equality cols are key
+│           │
+│           └── • render
+│               │
+│               └── • limit
+│                   │ count: 1
+│                   │
+│                   └── • filter
+│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+│                       │
+│                       └── • union all
+│                           │ limit: 3
+│                           │
+│                           ├── • scan
+│                           │     missing stats
+│                           │     table: regional_by_row_table@uniq_idx (partial index)
+│                           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: regional_by_row_table@uniq_idx (partial index)
+│                                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+        └── • cross join (semi)
             │
-            └── • scan buffer
-                  label: buffer 1
+            ├── • values
+            │     size: 2 columns, 1 row
+            │
+            └── • filter
+                │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+                │
+                └── • union all
+                    │ limit: 3
+                    │
+                    ├── • scan
+                    │     missing stats
+                    │     table: regional_by_row_table@new_idx
+                    │     spans: [/'ap-southeast-2'/1/1 - /'ap-southeast-2'/1/1]
+                    │
+                    └── • scan
+                          missing stats
+                          table: regional_by_row_table@new_idx
+                          spans: [/'ca-central-1'/1/1 - /'ca-central-1'/1/1] [/'us-east-1'/1/1 - /'us-east-1'/1/1]
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(3\) already exists\.
 INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)
@@ -1804,23 +1896,36 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1
 ├── • insert
 │   │ into: regional_by_row_table_as(pk, a, b, crdb_region_col)
 │   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 5 columns, 1 row
+│   └── • values
+│         size: 5 columns, 1 row
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
-            │ lookup condition: (column3 = b) AND (crdb_region_col IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-            │ pred: (column1 != pk) OR (crdb_region_col_comp != crdb_region_col)
+        └── • cross join
             │
-            └── • scan buffer
-                  label: buffer 1
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • limit
+                │ count: 1
+                │
+                └── • filter
+                    │ filter: (pk != 1) OR (crdb_region_col != 'us-east-1')
+                    │
+                    └── • union all
+                        │ limit: 3
+                        │
+                        ├── • scan
+                        │     missing stats
+                        │     table: regional_by_row_table_as@regional_by_row_table_as_b_key
+                        │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+                        │
+                        └── • scan
+                              missing stats
+                              table: regional_by_row_table_as@regional_by_row_table_as_b_key
+                              spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_pkey"\nDETAIL: Key \(pk\)=\(1\) already exists\.
 INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
@@ -1864,67 +1969,69 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 ├── • insert
 │   │ into: regional_by_row_table_virt(pk, a, b, v, crdb_region, crdb_internal_idx_expr)
 │   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 7 columns, 1 row
+│   └── • values
+│         size: 7 columns, 1 row
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
-│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: crdb_region_default != crdb_region
+│       └── • cross join
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
+│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│                 limit: 1
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • cross join
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
-│               │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
-│               │ equality cols are key
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • limit
+│               │ count: 1
 │               │
-│               └── • cross join
-│                   │ estimated row count: 3
+│               └── • filter
+│                   │ filter: ((a + b) = 2) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
 │                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│                   └── • scan
+│                         missing stats
+│                         table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
+│                         spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
+        └── • cross join
             │
-            └── • lookup join
-                │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
-                │ equality: (lookup_join_const_col_@48, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ equality cols are key
-                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • limit
+                │ count: 1
                 │
-                └── • cross join
-                    │ estimated row count: 3
+                └── • filter
+                    │ filter: a = 1
                     │
-                    ├── • values
-                    │     size: 1 column, 3 rows
-                    │
-                    └── • scan buffer
-                          label: buffer 1
+                    └── • index join
+                        │ table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
+                        │
+                        └── • filter
+                            │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+                            │
+                            └── • scan
+                                  missing stats
+                                  table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
+                                  spans: [/'ap-southeast-2'/11 - /'ap-southeast-2'/11] [/'ca-central-1'/11 - /'ca-central-1'/11] [/'us-east-1'/11 - /'us-east-1'/11]
 
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
@@ -2042,71 +2149,85 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 ├── • insert
 │   │ into: regional_by_row_table_virt_partial(pk, a, b, v, crdb_region, crdb_internal_idx_expr)
 │   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 9 columns, 1 row
+│   └── • values
+│         size: 9 columns, 1 row
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
+│       └── • cross join
+│           │
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│                 limit: 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join
 │           │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: crdb_region_default != crdb_region
+│           │ equality: (crdb_region, pk) = (crdb_region,pk)
+│           │ equality cols are key
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           └── • render
+│               │
+│               └── • limit
+│                   │ count: 1
+│                   │
+│                   └── • filter
+│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+│                       │
+│                       └── • scan
+│                             missing stats
+│                             table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+│                             spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
-│           │ lookup condition: (v_comp = v) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│       └── • cross join
 │           │
-│           └── • filter
-│               │ estimated row count: 1
-│               │ filter: column2 > 0
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
-│           │ lookup condition: (v_comp = v) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           ├── • values
+│           │     size: 1 column, 1 row
 │           │
-│           └── • filter
-│               │ estimated row count: 1
-│               │ filter: v_comp > 0
+│           └── • limit
+│               │ count: 1
 │               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • filter
+│                   │ filter: ((a + b) = 2) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+│                         spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
-            │ lookup condition: (crdb_internal_idx_expr_comp = crdb_internal_idx_expr) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+        └── • cross join
             │
-            └── • filter
-                │ estimated row count: 1
-                │ filter: v_comp > 0
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • limit
+                │ count: 1
                 │
-                └── • scan buffer
-                      label: buffer 1
+                └── • filter
+                    │ filter: ((a = 1) AND (b > -1)) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
+                    │
+                    └── • scan
+                          missing stats
+                          table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+                          spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
