@@ -494,12 +494,12 @@ interface StatementLinkProps {
 export const StatementLinkTarget = (props: StatementLinkProps) => {
   let base: string;
   if (props.app && props.app.length > 0) {
-    base = `/statements/${props.app}`;
+    base = `/statements/${encodeURIComponent(props.app)}`;
   } else {
     base = `/statement`;
   }
   if (props.database && props.database.length > 0) {
-    base = base + `/${props.database}/${props.implicitTxn}`;
+    base = base + `/${encodeURIComponent(props.database)}/${props.implicitTxn}`;
   } else {
     base = base + `/${props.implicitTxn}`;
   }
