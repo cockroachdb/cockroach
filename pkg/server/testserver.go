@@ -631,9 +631,9 @@ func (t *TestTenant) SpanConfigReconciler() interface{} {
 	return t.SQLServer.spanconfigMgr.Reconciler
 }
 
-// SpanConfigSQLTranslator is part TestTenantInterface.
-func (t *TestTenant) SpanConfigSQLTranslator() interface{} {
-	return t.SQLServer.spanconfigSQLTranslator
+// SpanConfigSQLTranslatorFactory is part TestTenantInterface.
+func (t *TestTenant) SpanConfigSQLTranslatorFactory() interface{} {
+	return t.SQLServer.spanconfigSQLTranslatorFactory
 }
 
 // SpanConfigSQLWatcher is part TestTenantInterface.
@@ -1001,12 +1001,12 @@ func (ts *TestServer) SpanConfigReconciler() interface{} {
 	return ts.sqlServer.spanconfigMgr.Reconciler
 }
 
-// SpanConfigSQLTranslator is part of TestServerInterface.
-func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
-	if ts.sqlServer.spanconfigSQLTranslator == nil {
+// SpanConfigSQLTranslatorFactory is part of TestServerInterface.
+func (ts *TestServer) SpanConfigSQLTranslatorFactory() interface{} {
+	if ts.sqlServer.spanconfigSQLTranslatorFactory == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
-	return ts.sqlServer.spanconfigSQLTranslator
+	return ts.sqlServer.spanconfigSQLTranslatorFactory
 }
 
 // SpanConfigSQLWatcher is part of TestServerInterface.
