@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -137,6 +139,34 @@ func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (boo
 		return false, err
 	}
 	return bool(*s), nil
+}
+
+func intFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (int64, error) {
+	intDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if intDatum, err = tree.ParseDInt(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid integer value for %s", key)
+		}
+	}
+	s, err := DatumAsInt(evalCtx, key, intDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
+}
+
+func floatFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (float64, error) {
+	floatDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if floatDatum, err = tree.ParseDFloat(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid float value for %s", key)
+		}
+	}
+	s, err := DatumAsFloat(evalCtx, key, floatDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
 }
 
 type tableParam struct {
@@ -465,6 +495,18 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	cluster.AutoStatsEnabledSettingName: {
+		onSet:   boolTableSettingFunc,
+		onReset: tableSettingResetFunc,
+	},
+	cluster.AutoStatsMinStaleSettingName: {
+		onSet:   intTableSettingFunc(settings.NonNegativeInt),
+		onReset: tableSettingResetFunc,
+	},
+	cluster.AutoStatsFractionStaleSettingName: {
+		onSet:   floatTableSettingFunc(settings.NonNegativeFloat),
+		onReset: tableSettingResetFunc,
+	},
 }
 
 func init() {
@@ -506,6 +548,226 @@ func init() {
 			},
 		}
 	}
+}
+
+func boolTableSettingFunc(
+	ctx context.Context,
+	po *TableStorageParamObserver,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	datum tree.Datum,
+) error {
+	boolVal, err := boolFromDatum(evalCtx, key, datum)
+	if err != nil {
+		return err
+	}
+	if po.tableDesc.ClusterSettingsForTable == nil {
+		po.tableDesc.ClusterSettingsForTable = &catpb.ClusterSettingsForTable{}
+	}
+	return setBoolValue(key, boolVal, po.tableDesc.ClusterSettingsForTable)
+}
+
+func intTableSettingFunc(
+	validateFunc func(v int64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		intVal, err := intFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.ClusterSettingsForTable == nil {
+			po.tableDesc.ClusterSettingsForTable = &catpb.ClusterSettingsForTable{}
+		}
+		return setIntValue(key, intVal, po.tableDesc.ClusterSettingsForTable, validateFunc)
+	}
+}
+
+func floatTableSettingFunc(
+	validateFunc func(v float64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		floatVal, err := floatFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.ClusterSettingsForTable == nil {
+			po.tableDesc.ClusterSettingsForTable = &catpb.ClusterSettingsForTable{}
+		}
+		return setFloatValue(key, floatVal, po.tableDesc.ClusterSettingsForTable, validateFunc)
+	}
+}
+
+func tableSettingResetFunc(
+	po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string,
+) error {
+	if po.tableDesc.ClusterSettingsForTable == nil {
+		return nil
+	}
+	return resetValue(key, po.tableDesc.ClusterSettingsForTable)
+}
+
+func resetValue(settingName string, clusterSettingsForTable *catpb.ClusterSettingsForTable) error {
+	if clusterSettingsForTable == nil {
+		return errors.Newf("unable to reset table setting %s", settingName)
+	}
+	switch settingName {
+	case cluster.AutoStatsEnabledSettingName:
+		return resetBoolValue(&clusterSettingsForTable.SqlStatsAutomaticCollectionEnabled)
+	case cluster.AutoStatsMinStaleSettingName:
+		return resetIntValue(&clusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows)
+	case cluster.AutoStatsFractionStaleSettingName:
+		return resetFloatValue(&clusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows)
+	}
+	return errors.Newf("unable to reset table setting %s", settingName)
+}
+
+func resetBoolValue(settingHolder **bool) error {
+	if *settingHolder == nil {
+		// This setting is unset or has already been reset.
+		return nil
+	}
+	*settingHolder = nil
+	return nil
+}
+
+func resetIntValue(settingHolder **int64) error {
+	if *settingHolder == nil {
+		// This setting is unset or has already been reset.
+		return nil
+	}
+	*settingHolder = nil
+	return nil
+}
+
+func resetFloatValue(settingHolder **float64) error {
+	if *settingHolder == nil {
+		// This setting is unset or has already been reset.
+		return nil
+	}
+	*settingHolder = nil
+	return nil
+}
+
+func setBoolValue(
+	settingName string, boolVal bool, clusterSettingsForTable *catpb.ClusterSettingsForTable,
+) error {
+	if clusterSettingsForTable == nil {
+		return errors.Newf("unable to set table setting %s", settingName)
+	}
+	// settingHolder is the memory address holding the *bool setting.
+	var settingHolder **bool
+	switch settingName {
+	case cluster.AutoStatsEnabledSettingName:
+		settingHolder = &clusterSettingsForTable.SqlStatsAutomaticCollectionEnabled
+	default:
+		return errors.Newf("unable to set table setting %s", settingName)
+	}
+	// Get the actual setting value. Setting is nullable and optional,
+	// so may be nil.
+	setting := *settingHolder
+
+	if setting == nil {
+		// If this was never set before, make a pointer to the new value and assign
+		// it to the proper field in clusterSettingsForTable.
+		*settingHolder = &boolVal
+		return nil
+	} else if *setting == boolVal {
+		// If the current setting matches the value we're trying to set, there's
+		// nothing to do.  Just return.
+		return nil
+	}
+	// Update the current setting with the new value. We could have updated
+	// settingHolder directly, as in the `setting == nil` case which would
+	// have allocated new memory. Instead we're just overwriting the old value.
+	*setting = boolVal
+	return nil
+}
+
+func setIntValue(
+	settingName string,
+	intVal int64,
+	clusterSettingsForTable *catpb.ClusterSettingsForTable,
+	validateFunc func(v int64) error,
+) error {
+	if clusterSettingsForTable == nil {
+		return errors.Newf("unable to set table setting %s", settingName)
+	}
+	if err := validateFunc(intVal); err != nil {
+		return errors.Wrapf(err, "invalid integer value for %s", settingName)
+	}
+	// settingHolder is the memory address holding the *int64 setting.
+	var settingHolder **int64
+	switch settingName {
+	case cluster.AutoStatsMinStaleSettingName:
+		settingHolder = &clusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows
+	default:
+		return errors.Newf("unable to set table setting %s", settingName)
+	}
+	// Get the actual setting value. Setting is nullable and optional,
+	// so may be nil.
+	setting := *settingHolder
+
+	if setting == nil {
+		// If this was never set before, make a pointer to the new value and assign
+		// it to the proper field in clusterSettingsForTable.
+		*settingHolder = &intVal
+		return nil
+	} else if *setting == intVal {
+		// If the current setting matches the value we're trying to set, there's
+		// nothing to do.  Just return.
+		return nil
+	}
+	// Update the current setting with the new value. We could have updated
+	// settingHolder directly, as in the `setting == nil` case which would
+	// have allocated new memory. Instead we're just overwriting the old value.
+	*setting = intVal
+	return nil
+}
+
+func setFloatValue(
+	settingName string,
+	floatVal float64,
+	clusterSettingsForTable *catpb.ClusterSettingsForTable,
+	validateFunc func(v float64) error,
+) error {
+	if clusterSettingsForTable == nil {
+		return errors.Newf("unable to set table setting %s", settingName)
+	}
+	if err := validateFunc(floatVal); err != nil {
+		return errors.Wrapf(err, "invalid float value for %s", settingName)
+	}
+	// settingHolder is the memory address holding the *float64 setting.
+	var settingHolder **float64
+	switch settingName {
+	case cluster.AutoStatsFractionStaleSettingName:
+		settingHolder = &clusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows
+	default:
+		return errors.Newf("unable to set table setting %s", settingName)
+	}
+	// Get the actual setting value. Setting is nullable and optional,
+	// so may be nil.
+	setting := *settingHolder
+
+	if setting == nil {
+		// If this was never set before, make a pointer to the new value and assign
+		// it to the proper field in clusterSettingsForTable.
+		*settingHolder = &floatVal
+		return nil
+	} else if *setting == floatVal {
+		// If the current setting matches the value we're trying to set, there's
+		// nothing to do.  Just return.
+		return nil
+	}
+	// Update the current setting with the new value. We could have updated
+	// settingHolder directly, as in the `setting == nil` case which would
+	// have allocated new memory. Instead we're just overwriting the old value.
+	*setting = floatVal
+	return nil
 }
 
 // onSet implements the StorageParamObserver interface.
