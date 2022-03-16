@@ -1618,7 +1618,7 @@ func (ot *OptTester) encodeOptstepsURL(normDiff, exploreDiff string) (url.URL, e
 		Host:   "raduberinde.github.io",
 		Path:   "optsteps.html",
 	}
-	const githubPagesMaxURLLength = 8100
+	const githubPagesMaxURLLength = 7000
 	if compressed.Len() > githubPagesMaxURLLength {
 		// If the compressed data is longer than the maximum allowed URL length
 		// for the GitHub Pages server, we include it as a fragment. This
