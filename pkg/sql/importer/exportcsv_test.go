@@ -18,25 +18,38 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -521,4 +534,261 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 	zipFiles, err := ioutil.ReadDir(filepath.Join(dir, "foo-compressed"))
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(zipFiles), 6)
+}
+
+func populateRangeCache(t *testing.T, db *gosql.DB, tableName string) {
+	t.Helper()
+	_, err := db.Exec("SELECT count(1) FROM " + tableName)
+	require.NoError(t, err)
+}
+
+func getPGXConnAndCleanupFunc(
+	ctx context.Context, t *testing.T, servingSQLAddr string,
+) (*pgx.Conn, func()) {
+	t.Helper()
+	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(username.RootUser))
+	pgURL.Path = "test"
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
+	require.NoError(t, err)
+	defaultConn, err := pgx.ConnectConfig(ctx, pgxConfig)
+	require.NoError(t, err)
+	_, err = defaultConn.Exec(ctx, "set distsql='always'")
+	require.NoError(t, err)
+	return defaultConn, cleanup
+}
+
+// Test that processors either returns or retries a
+// ReadWithinUncertaintyIntervalError encountered by a remote node.
+//
+// The following test and related helper functions is based on
+// TestDrainingProcessorSwallowsUncertaintyError in pkg/sql/rowexec.
+func TestProcessorEncountersUncertaintyError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// We are going to EXPORT a table with 10 rows, with rows 1..5 located on node
+	// 0 and nodes 6..10 on node 1.
+	var (
+		// trapRead is set atomically once the test wants to block a read on the
+		// second node.
+		trapRead    int64
+		blockedRead struct {
+			syncutil.Mutex
+			unblockCond   *sync.Cond
+			shouldUnblock bool
+		}
+		allowOneWrite    chan struct{}
+		gotRWUIOnGateway chan struct{}
+	)
+
+	unblockRead := func() {
+		blockedRead.Lock()
+		// Set shouldUnblock to true to have any reads that would block return
+		// an uncertainty error. Signal the cond to wake up any reads that have
+		// already been blocked.
+		blockedRead.shouldUnblock = true
+		blockedRead.unblockCond.Signal()
+		blockedRead.Unlock()
+	}
+
+	waitForUnblock := func() {
+		blockedRead.Lock()
+		for !blockedRead.shouldUnblock {
+			blockedRead.unblockCond.Wait()
+		}
+		blockedRead.Unlock()
+	}
+
+	blockedRead.unblockCond = sync.NewCond(&blockedRead.Mutex)
+
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			<-allowOneWrite
+			_, _ = io.Copy(io.Discard, r.Body)
+		}
+	}))
+	defer s.Close()
+
+	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+			},
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				0: {
+					Knobs: base.TestingKnobs{
+						SQLExecutor: &sql.ExecutorTestingKnobs{
+							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+								if strings.Contains(query, "EXPORT") {
+									return func(_ rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
+										if meta != nil && meta.Err != nil {
+											if testutils.IsError(meta.Err, "ReadWithinUncertaintyIntervalError") {
+												close(gotRWUIOnGateway)
+											}
+										}
+									}
+								}
+								return nil
+							},
+						},
+					},
+					UseDatabase: "test",
+				},
+				1: {
+					Knobs: base.TestingKnobs{
+
+						Store: &kvserver.StoreTestingKnobs{
+							TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+								if atomic.LoadInt64(&trapRead) == 0 {
+									return nil
+								}
+								// We're going to trap a read for the rows [6,10].
+								req, ok := ba.GetArg(roachpb.Scan)
+								if !ok {
+									return nil
+								}
+								key := req.(*roachpb.ScanRequest).Key.String()
+								if strings.Contains(key, "/6") {
+									waitForUnblock()
+									return roachpb.NewError(
+										roachpb.NewReadWithinUncertaintyIntervalError(
+											ba.Timestamp,           /* readTs */
+											ba.Timestamp.Add(1, 0), /* existingTs */
+											hlc.Timestamp{},        /* localUncertaintyLimit */
+											ba.Txn))
+								}
+								return nil
+							},
+						},
+					},
+					UseDatabase: "test",
+				},
+			},
+		})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	origDB0 := tc.ServerConn(0)
+
+	sqlutils.CreateTable(t, origDB0, "t",
+		"x INT PRIMARY KEY",
+		10, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	// Split the table and move half of the rows to the 2nd node.
+	_, err := origDB0.Exec(fmt.Sprintf(`
+	ALTER TABLE "t" SPLIT AT VALUES (6);
+	ALTER TABLE "t" EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 6);
+	`,
+		tc.Server(0).GetFirstStoreID(),
+		tc.Server(1).GetFirstStoreID()))
+	require.NoError(t, err)
+	populateRangeCache(t, origDB0, "t")
+
+	t.Run("after result rows are emitted returns error", func(t *testing.T) {
+		// - The export is issued on node 0.
+		// - Node 1 is blocked on its read.
+		// - Node 0 is allowed to read and write a single file to the sink. We do this
+		//   to prevent an internal retry of the RWUI error.
+		// - Node 0 is then blocked writing the next file.
+		// - Node 1's read is unblocked and returns a RWUI error which eventually
+		//   makes it to the gateway.
+		//
+		// - Node 0's file write is unblocked, at which point it should see a
+		//   draining output and the RWUI error should be returned to the user.
+
+		// This is buffered so we can unblock the first write in advance.
+		allowOneWrite = make(chan struct{}, 1)
+		gotRWUIOnGateway = make(chan struct{})
+		// Disable results buffering - we want to ensure that the server doesn't do
+		// any automatic retries, and also we use the client to know when to unblock
+		// the read.
+		// NB: The session variable for this doesn't support SET.
+		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'")
+		require.NoError(t, err)
+		// Create a new connection that will use the new result buffer size.
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
+		defer cleanup()
+
+		atomic.StoreInt64(&trapRead, 1)
+		defer func() { atomic.StoreInt64(&trapRead, 0) }()
+		allowOneWrite <- struct{}{}
+		exportQuery := fmt.Sprintf("EXPORT INTO CSV '%s' WITH chunk_rows = '1' FROM SELECT * FROM t", s.URL)
+		rows, err := defaultConn.Query(ctx, exportQuery)
+		require.NoError(t, err)
+		defer rows.Close()
+		for rows.Next() {
+			// Now that we've read one row, unblock the read on node 1. Eventually, we expect
+			// a future EmitRow to fail.
+			unblockRead()
+			var (
+				filename string
+				rowCount int
+				size     int
+			)
+			require.NoError(t, rows.Scan(&filename, &rowCount, &size))
+			// Wait for the RWUI error to reach the distsql receiver on the gateway node.
+			<-gotRWUIOnGateway
+			// Unblock the next external storage write. The row emit that follows this should fail.
+			allowOneWrite <- struct{}{}
+		}
+		err = rows.Err()
+		require.Error(t, err)
+		require.True(t, testutils.IsError(err, "ReadWithinUncertaintyIntervalError"))
+	})
+
+	t.Run("before result rows are emitted retries", func(t *testing.T) {
+		// - The export is issued on node 0.
+		// - Node 1 will immediately return a RWUI error.
+		// - Node 0 is blocked writing the first file to external storage until the
+		//   RWUI error makes it to the gateway.
+		// - Node 0's file write is unblocked, at which point it should see a
+		//   draining output and the RWUI error should be retried.
+		// - On retry, no RWUI error is returned, so the export succeeds.
+
+		allowOneWrite = make(chan struct{})
+		gotRWUIOnGateway = make(chan struct{})
+		// Add a large result buffer as an extra hedge against getting any results row.
+		// NB: The session variable for this doesn't support SET.
+		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '524288'")
+		require.NoError(t, err)
+		// Create a new connection that will use the new results buffer size.
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
+		defer cleanup()
+
+		// Reads are trapped but not blocked, so node 1 should immediately return a
+		// RWUI error. Node 0 will be blocked waiting on allowOneWrite.
+		atomic.StoreInt64(&trapRead, 1)
+		unblockRead()
+
+		count := 0
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			exportQuery := fmt.Sprintf("EXPORT INTO CSV '%s' WITH chunk_rows = '1' FROM SELECT * FROM t", s.URL)
+			rows, err := defaultConn.Query(ctx, exportQuery)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var (
+					filename string
+					rowCount int
+					size     int
+				)
+				if err := rows.Scan(&filename, &rowCount, &size); err != nil {
+					return err
+				}
+				count++
+			}
+			return rows.Err()
+		})
+		<-gotRWUIOnGateway
+		// After this error, untrap reads and expect that the retry succeeds.
+		atomic.StoreInt64(&trapRead, 0)
+		close(allowOneWrite)
+		require.NoError(t, g.Wait())
+		require.Equal(t, 10, count)
+	})
 }
