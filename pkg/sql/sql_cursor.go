@@ -283,6 +283,13 @@ type sqlCursors interface {
 	list() map[string]*sqlCursor
 }
 
+type createdSequences interface {
+	// adds a sequence to the set of sequences created in the current transaction
+	addCreatedSequence(id uint32)
+	// checks if a sequence was created in the current transaction
+	isCreatedSequence(id uint32) bool
+}
+
 // cursorMap is a sqlCursors that's backed by an actual map.
 type cursorMap struct {
 	cursors map[string]*sqlCursor
@@ -352,6 +359,19 @@ func (c connExCursorAccessor) addCursor(s string, cursor *sqlCursor) error {
 
 func (c connExCursorAccessor) list() map[string]*sqlCursor {
 	return c.ex.extraTxnState.sqlCursors.list()
+}
+
+type connExCreatedSequencesAccessor struct {
+	ex *connExecutor
+}
+
+func (c connExCreatedSequencesAccessor) addCreatedSequence(id uint32) {
+	c.ex.extraTxnState.createdSequences[id] = struct{}{}
+}
+
+func (c connExCreatedSequencesAccessor) isCreatedSequence(id uint32) bool {
+	_, ok := c.ex.extraTxnState.createdSequences[id]
+	return ok
 }
 
 // checkNoConflictingCursors returns an error if the input schema changing
