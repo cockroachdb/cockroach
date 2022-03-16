@@ -390,6 +390,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&DropRoleNode{}):                     "drop user/role",
 	reflect.TypeOf(&dropViewNode{}):                     "drop view",
 	reflect.TypeOf(&errorIfRowsNode{}):                  "error if rows",
+	reflect.TypeOf(&lockNode{}):                         "lock table",
 	reflect.TypeOf(&explainPlanNode{}):                  "explain plan",
 	reflect.TypeOf(&explainVecNode{}):                   "explain vectorized",
 	reflect.TypeOf(&explainDDLNode{}):                   "explain ddl",

@@ -669,6 +669,17 @@ func (n *CreateSchema) StatementTag() string {
 func (*CreateSchema) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
+func (n *Lock) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Lock) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *Lock) StatementTag() string {
+	return "LOCK TABLE"
+}
+
+// StatementReturnType implements the Statement interface.
 func (n *CreateTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1864,6 +1875,7 @@ func (n *Export) String() string                         { return AsString(n) }
 func (n *FetchCursor) String() string                    { return AsString(n) }
 func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
+func (n *Lock) String() string                           { return AsString(n) }
 func (n *MoveCursor) String() string                     { return AsString(n) }
 func (n *Insert) String() string                         { return AsString(n) }
 func (n *Import) String() string                         { return AsString(n) }

@@ -843,9 +843,9 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCK LOCKED LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH MOVE
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODE MODIFYCLUSTERSETTING MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -1074,6 +1074,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.Statement> grant_stmt
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
+%type <tree.Statement> lock_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt pause_all_jobs_stmt
 %type <*tree.Select>   for_schedules_clause
 %type <tree.Statement> reassign_owned_by_stmt
@@ -4283,6 +4284,18 @@ analyze_target:
     $$.val = $1.unresolvedObjectName()
   }
 
+// %Help: LOCK - lock lock lock
+// %Category: Misc
+// %Text:
+// LOCK lock lock lock
+lock_stmt:
+  LOCK TABLE table_name IN ACCESS SHARE MODE
+  {
+    $$.val = &tree.Lock{
+      TableName: $3.unresolvedObjectName(),
+    }
+  }
+
 // %Help: EXPLAIN - show the logical plan of a query
 // %Category: Misc
 // %Text:
@@ -4368,6 +4381,7 @@ preparable_stmt:
 | delete_stmt    // EXTEND WITH HELP: DELETE
 | drop_stmt      // help texts in sub-rule
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN
+| lock_stmt      // EXTEND WITH HELP: LOCK
 | import_stmt    // EXTEND WITH HELP: IMPORT
 | insert_stmt    // EXTEND WITH HELP: INSERT
 | pause_stmt     // help texts in sub-rule
@@ -14044,6 +14058,7 @@ unreserved_keyword:
 | LINESTRINGZM
 | LIST
 | LOCAL
+| LOCK
 | LOCKED
 | LOGIN
 | LOCALITY
@@ -14057,6 +14072,7 @@ unreserved_keyword:
 | MINUTE
 | MINVALUE
 | MODIFYCLUSTERSETTING
+| MODE
 | MULTILINESTRING
 | MULTILINESTRINGM
 | MULTILINESTRINGZ

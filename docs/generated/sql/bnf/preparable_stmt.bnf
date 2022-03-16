@@ -6,6 +6,7 @@ preparable_stmt ::=
 	| delete_stmt
 	| drop_stmt
 	| explain_stmt
+	| lock_stmt
 	| import_stmt
 	| insert_stmt
 	| pause_stmt

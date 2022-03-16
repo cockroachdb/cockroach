@@ -1,0 +1,2 @@
+lock_stmt ::=
+	'LOCK' 'TABLE' table_name 'IN' 'ACCESS' 'SHARE' 'MODE'

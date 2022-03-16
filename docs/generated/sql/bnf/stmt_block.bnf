@@ -34,6 +34,7 @@ preparable_stmt ::=
 	| delete_stmt
 	| drop_stmt
 	| explain_stmt
+	| lock_stmt
 	| import_stmt
 	| insert_stmt
 	| pause_stmt
@@ -177,6 +178,9 @@ explain_stmt ::=
 	| 'EXPLAIN' 'ANALYSE' explainable_stmt
 	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' explainable_stmt
 	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' explainable_stmt
+
+lock_stmt ::=
+	'LOCK' 'TABLE' table_name 'IN' 'ACCESS' 'SHARE' 'MODE'
 
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
@@ -1062,6 +1066,7 @@ unreserved_keyword ::=
 	| 'LINESTRINGZM'
 	| 'LIST'
 	| 'LOCAL'
+	| 'LOCK'
 	| 'LOCKED'
 	| 'LOGIN'
 	| 'LOCALITY'
@@ -1075,6 +1080,7 @@ unreserved_keyword ::=
 	| 'MINUTE'
 	| 'MINVALUE'
 	| 'MODIFYCLUSTERSETTING'
+	| 'MODE'
 	| 'MULTILINESTRING'
 	| 'MULTILINESTRINGM'
 	| 'MULTILINESTRINGZ'
