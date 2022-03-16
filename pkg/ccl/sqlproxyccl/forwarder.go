@@ -148,15 +148,6 @@ func (f *forwarder) Close() {
 	serverConn.Close()
 }
 
-// RequestTransfer requests that the forwarder performs a best-effort connection
-// migration whenever it can. It is best-effort because this will be a no-op if
-// the forwarder is not in a state that is eligible for a connection migration.
-// If a transfer is already in progress, or has been requested, this is a no-op.
-func (f *forwarder) RequestTransfer() {
-	// Ignore the error here. These errors will be logged accordingly.
-	go func() { _ = f.runTransfer() }()
-}
-
 // resumeProcessors starts both the request and response processors
 // asynchronously. The forwarder will be closed if any of the processors
 // return an error while resuming. This is idempotent as resume() will return
