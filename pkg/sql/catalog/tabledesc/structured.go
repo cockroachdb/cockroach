@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -2565,6 +2566,24 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		appendStorageParam(`exclude_data_from_backup`, `true`)
 	}
+	if settings := desc.ClusterSettingsForTable; settings != nil {
+		// These need to be wrapped in double-quotes because they contain '.' chars.
+		if settings.SqlStatsAutomaticCollectionEnabled != nil {
+			value := *settings.SqlStatsAutomaticCollectionEnabled
+			appendStorageParam(fmt.Sprintf(`"%s"`, cluster.AutoStatsClusterSettingName),
+				fmt.Sprintf("%v", value))
+		}
+		if settings.SqlStatsAutomaticCollectionMinStaleRows != nil {
+			value := *settings.SqlStatsAutomaticCollectionMinStaleRows
+			appendStorageParam(fmt.Sprintf(`"%s"`, cluster.AutoStatsMinStaleSettingName),
+				strconv.FormatInt(value, 10))
+		}
+		if settings.SqlStatsAutomaticCollectionFractionStaleRows != nil {
+			value := *settings.SqlStatsAutomaticCollectionFractionStaleRows
+			appendStorageParam(fmt.Sprintf(`"%s"`, cluster.AutoStatsFractionStaleSettingName),
+				fmt.Sprintf("%g", value))
+		}
+	}
 	return storageParams
 }
 
@@ -2581,6 +2600,26 @@ func (desc *wrapper) GetMultiRegionEnumDependencyIfExists() bool {
 		return regionName != catpb.RegionName(tree.PrimaryRegionNotSpecifiedName)
 	}
 	return false
+}
+
+// NoClusterSettingsForTable implements the TableDescriptor interface.
+func (desc *wrapper) NoClusterSettingsForTable() bool {
+	return desc.TableDesc().NoClusterSettingsForTable()
+}
+
+// AutoStatsCollectionEnabled implements the TableDescriptor interface.
+func (desc *wrapper) AutoStatsCollectionEnabled() (enabled bool, ok bool) {
+	return desc.TableDesc().AutoStatsCollectionEnabled()
+}
+
+// AutoStatsMinStaleRows implements the TableDescriptor interface.
+func (desc *wrapper) AutoStatsMinStaleRows() (minStaleRows int64, ok bool) {
+	return desc.TableDesc().AutoStatsMinStaleRows()
+}
+
+// AutoStatsFractionStaleRows implements the TableDescriptor interface.
+func (desc *wrapper) AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool) {
+	return desc.TableDesc().AutoStatsFractionStaleRows()
 }
 
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to

@@ -678,6 +678,25 @@ type TableDescriptor interface {
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
 	GetStorageParams(spaceBetweenEqual bool) []string
+	// NoClusterSettingsForTable is true if no cluster settings are set at the
+	// table level for the given table.
+	NoClusterSettingsForTable() bool
+	// AutoStatsCollectionEnabled indicates if automatic statistics collection is
+	// explicitly enabled or disabled for this table. If ok is true, then
+	// enabled==false means auto stats collection is off for this table, and if
+	// true, auto stats are on for this table. If ok is false, there is no setting
+	// for this table.
+	AutoStatsCollectionEnabled() (enabled bool, ok bool)
+	// AutoStatsMinStaleRows indicates the setting of
+	// sql.stats.automatic_collection.min_stale_rows for this table.
+	// If ok is true, then the minStaleRows value is valid, otherwise this has not
+	// been set at the table level.
+	AutoStatsMinStaleRows() (minStaleRows int64, ok bool)
+	// AutoStatsFractionStaleRows indicates the setting of
+	// sql.stats.automatic_collection.fraction_stale_rows for this table.
+	// If ok is true, then the fractionStaleRows value is valid, otherwise this has
+	// not been set at the table level.
+	AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool)
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.

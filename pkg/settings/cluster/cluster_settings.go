@@ -78,6 +78,20 @@ func TelemetryOptOut() bool {
 // (for example, a CLI subcommand that does not connect to a cluster).
 var NoSettings *Settings // = nil
 
+const (
+	// AutoStatsClusterSettingName is the name of the automatic stats collection
+	// enabled cluster setting.
+	AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
+
+	// AutoStatsMinStaleSettingName is the name of the automatic stats collection
+	// min stale rows cluster setting.
+	AutoStatsMinStaleSettingName = "sql.stats.automatic_collection.min_stale_rows"
+
+	// AutoStatsFractionStaleSettingName is the name of the automatic stats
+	// collection fraction stale rows cluster setting.
+	AutoStatsFractionStaleSettingName = "sql.stats.automatic_collection.fraction_stale_rows"
+)
+
 // CPUProfileType tracks whether a CPU profile is in progress.
 type CPUProfileType int32
 

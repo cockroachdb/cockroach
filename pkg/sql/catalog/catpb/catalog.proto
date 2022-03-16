@@ -217,3 +217,15 @@ message RowLevelTTL {
   // the relation name.
   optional bool label_metrics = 10 [(gogoproto.nullable) = false];
 }
+
+// ClusterSettingsForTable represents cluster settings specified at the table
+// level. Each setting is nullable so queries of the descriptor in JSON form
+// only list values which have been set.
+message ClusterSettingsForTable {
+  option (gogoproto.equal) = true;
+  optional bool sql_stats_automatic_collection_enabled = 1;
+  optional int64 sql_stats_automatic_collection_min_stale_rows = 2;
+  optional double sql_stats_automatic_collection_fraction_stale_rows = 3;
+}
+
+

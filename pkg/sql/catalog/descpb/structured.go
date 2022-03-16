@@ -273,6 +273,55 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 	return tree.PersistencePermanent
 }
 
+// AutoStatsCollectionEnabled indicates if automatic statistics collection is
+// explicitly enabled or disabled for this table. If ok is true, then
+// enabled==false means auto stats collection is off for this table, and if
+// true, auto stats are on for this table. If ok is false, there is no setting
+// for this table.
+func (desc *TableDescriptor) AutoStatsCollectionEnabled() (enabled bool, ok bool) {
+	if desc.NoClusterSettingsForTable() {
+		return false, false
+	}
+	if desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionEnabled == nil {
+		return false, false
+	}
+	return *desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionEnabled, true
+}
+
+// AutoStatsMinStaleRows indicates the setting of
+// sql.stats.automatic_collection.min_stale_rows for this table.
+// If ok is true, then the minStaleRows value is valid, otherwise this has not
+// been set at the table level.
+func (desc *TableDescriptor) AutoStatsMinStaleRows() (minStaleRows int64, ok bool) {
+	if desc.NoClusterSettingsForTable() {
+		return 0, false
+	}
+	if desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows == nil {
+		return 0, false
+	}
+	return *desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows, true
+}
+
+// AutoStatsFractionStaleRows indicates the setting of
+// sql.stats.automatic_collection.fraction_stale_rows for this table.
+// If ok is true, then the fractionStaleRows value is valid, otherwise this has
+// not been set at the table level.
+func (desc *TableDescriptor) AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool) {
+	if desc.NoClusterSettingsForTable() {
+		return 0, false
+	}
+	if desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows == nil {
+		return 0, false
+	}
+	return *desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows, true
+}
+
+// NoClusterSettingsForTable is true if no cluster settings are set at the
+// table level for the given table.
+func (desc *TableDescriptor) NoClusterSettingsForTable() bool {
+	return desc.ClusterSettingsForTable == nil
+}
+
 // IsVirtualTable returns true if the TableDescriptor describes a
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.

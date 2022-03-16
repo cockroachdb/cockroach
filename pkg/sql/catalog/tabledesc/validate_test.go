@@ -131,6 +131,7 @@ var validationMap = []struct {
 			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
 			"NextConstraintID":              {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
+			"ClusterSettingsForTable":       {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -289,6 +290,14 @@ var validationMap = []struct {
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 		},
 	},
+	{
+		obj: catpb.ClusterSettingsForTable{},
+		fieldMap: map[string]validationStatusInfo{
+			"SqlStatsAutomaticCollectionEnabled":           {status: iSolemnlySwearThisFieldIsValidated},
+			"SqlStatsAutomaticCollectionMinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
+			"SqlStatsAutomaticCollectionFractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
 }
 
 type validationStatusInfo struct {
@@ -332,6 +341,9 @@ func TestValidateTableDesc(t *testing.T) {
 
 	computedExpr := "1 + 1"
 	generatedAsIdentitySequenceOptionExpr := " START 2 INCREMENT 3 CACHE 10"
+	boolTrue := true
+	negativeOne := int64(-1)
+	negativeOneFloat := float64(-1)
 
 	testData := []struct {
 		err  string
@@ -1869,6 +1881,79 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 			},
 		},
+		{`Setting sql.stats.automatic_collection.enabled may not be set on virtual table`,
+			descpb.TableDescriptor{
+				ID:            catconstants.MinVirtualID,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:            2,
+				ClusterSettingsForTable: &catpb.ClusterSettingsForTable{SqlStatsAutomaticCollectionEnabled: &boolTrue},
+			}},
+		{`Setting sql.stats.automatic_collection.enabled may not be set on a view or sequence`,
+			descpb.TableDescriptor{
+				ID:            51,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a", Type: types.Int},
+				},
+				SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
+					Increment: 1,
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"a"},
+					},
+				},
+				NextColumnID:            2,
+				NextFamilyID:            1,
+				NextIndexID:             5,
+				NextConstraintID:        2,
+				Privileges:              catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				ClusterSettingsForTable: &catpb.ClusterSettingsForTable{SqlStatsAutomaticCollectionEnabled: &boolTrue},
+			},
+		},
+		{`invalid value for sql.stats.automatic_collection.min_stale_rows: cannot be set to a negative value: -1`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:            2,
+				ClusterSettingsForTable: &catpb.ClusterSettingsForTable{SqlStatsAutomaticCollectionMinStaleRows: &negativeOne},
+			}},
+		{`invalid value for sql.stats.automatic_collection.fraction_stale_rows: cannot set to a negative value: -1.000000`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:            2,
+				ClusterSettingsForTable: &catpb.ClusterSettingsForTable{SqlStatsAutomaticCollectionFractionStaleRows: &negativeOneFloat},
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
@@ -1890,6 +1975,7 @@ func TestValidateTableDesc(t *testing.T) {
 func TestValidateCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	boolTrue := true
 
 	pointer := func(s string) *string {
 		return &s
@@ -1897,6 +1983,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	tests := []struct {
 		err        string
+		otherErr   string
+		testName   string
 		desc       descpb.TableDescriptor
 		otherDescs []descpb.TableDescriptor
 	}{
@@ -2116,6 +2204,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		},
 		// Views.
 		{ // 10
+			err: ``,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -2207,8 +2296,59 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				DependedOnBy: []descpb.TableDescriptor_Reference{{ID: 123}},
 			}},
 		},
-		// Sequences.
 		{ // 13
+			err:      ``,
+			testName: `Stats setting in view`,
+			otherErr: `relation "bar" (52): Setting sql.stats.automatic_collection.enabled may not be set on a view or sequence`,
+			desc: descpb.TableDescriptor{
+				ID:            51,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a", Type: types.Int},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"a"},
+					},
+				},
+				NextColumnID:     2,
+				NextFamilyID:     1,
+				NextIndexID:      5,
+				NextConstraintID: 2,
+				Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				ViewQuery:               "SELECT * FROM foo",
+				DependsOn:               []descpb.ID{51},
+				NextColumnID:            2,
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				Privileges:              catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				ClusterSettingsForTable: &catpb.ClusterSettingsForTable{SqlStatsAutomaticCollectionEnabled: &boolTrue},
+			}},
+		},
+		// Sequences.
+		{ // 14
 			err: `depended-on-by relation "bar" (52) does not have a column with ID 123`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -2258,6 +2398,20 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				}
 			} else if expectedErr != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
+			}
+			// Validate other descriptors for specific test cases.
+			if test.testName == "Stats setting in view" {
+				expectedErr = test.otherErr
+				nonTableDesc := NewBuilder(&test.otherDescs[0]).BuildImmutable()
+				err := validate.Self(clusterversion.TestingClusterVersion, nonTableDesc)
+				if expectedErr == "" && err != nil {
+					t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
+				} else if expectedErr != "" && err == nil {
+					t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr,
+						test.otherDescs[0])
+				} else if expectedErr != "" && expectedErr != err.Error() {
+					t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
+				}
 			}
 		})
 	}
