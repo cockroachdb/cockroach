@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
+// EmitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
 // It takes a row to emit and, if anything happens other than the normal
 // situation where the emitting succeeds and the consumer still needs rows, both
 // the (potentially many) inputs and the output are properly closed after
@@ -44,7 +44,7 @@ import (
 //
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
-func emitHelper(
+func EmitHelper(
 	ctx context.Context,
 	output execinfra.RowReceiver,
 	procOutputHelper *execinfra.ProcOutputHelper,
@@ -59,7 +59,7 @@ func emitHelper(
 	var consumerStatus execinfra.ConsumerStatus
 	if meta != nil {
 		if row != nil {
-			panic("both row data and metadata in the same emitHelper call")
+			panic("both row data and metadata in the same EmitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		foundErr := meta.Err != nil

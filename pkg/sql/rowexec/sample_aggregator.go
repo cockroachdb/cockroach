@@ -271,8 +271,8 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 						sr.Disable()
 					}
 				}
-			} else if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
-				// No cleanup required; emitHelper() took care of it.
+			} else if !EmitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				// No cleanup required; EmitHelper() took care of it.
 				return true, nil
 			}
 			continue

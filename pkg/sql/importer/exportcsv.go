@@ -15,6 +15,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -181,11 +182,12 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
 	uniqueID := builtins.GenerateUniqueInt(instanceID)
 
+	// TODO(dt): pick up tracing info in trailing meta
+	pushTrailingMeta := func(context.Context) {}
+
 	err := func() error {
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
-		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
-
 		alloc := &tree.DatumAlloc{}
 
 		writer := newCSVExporter(sp.spec)
@@ -213,9 +215,12 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
 				}
-				row, err := input.NextRow()
-				if err != nil {
-					return err
+				row, meta := sp.input.Next()
+				if meta != nil {
+					if !rowexec.EmitHelper(ctx, sp.output, &sp.out, nil /* row */, meta, pushTrailingMeta, sp.input) {
+						return nil
+					}
+					continue
 				}
 				if row == nil {
 					done = true
@@ -250,29 +255,16 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err := writer.Flush(); err != nil {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
-
-			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
-			if err != nil {
-				return err
+			// Close writer to ensure buffer and any compression footer is flushed.
+			if err := writer.Close(); err != nil {
+				return errors.Wrapf(err, "failed to close exporting writer")
 			}
-			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
 
 			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
 			chunk++
 			filename := writer.FileName(sp.spec, part)
-			// Close writer to ensure buffer and any compression footer is flushed.
-			err = writer.Close()
-			if err != nil {
-				return errors.Wrapf(err, "failed to close exporting writer")
-			}
-
 			size := writer.Len()
-
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
+			if err := sp.writeToExternalStorage(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
@@ -289,27 +281,32 @@ func (sp *csvWriter) Run(ctx context.Context) {
 					tree.NewDInt(tree.DInt(size)),
 				),
 			}
-
-			cs, err := sp.out.EmitRow(ctx, res, sp.output)
-			if err != nil {
-				return err
-			}
-			if cs != execinfra.NeedMoreRows {
-				// We don't return an error here because we want the error (if any) that
-				// actually caused the consumer to enter a closed/draining state to take precendence.
+			if !rowexec.EmitHelper(ctx, sp.output, &sp.out, res, nil /* meta */, pushTrailingMeta, sp.input) {
 				return nil
 			}
 			if done {
 				break
 			}
 		}
-
 		return nil
 	}()
+	execinfra.DrainAndClose(ctx, sp.output, err, pushTrailingMeta /* pushTrailingMeta */, sp.input)
+}
 
-	// TODO(dt): pick up tracing info in trailing meta
-	execinfra.DrainAndClose(
-		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+func (sp *csvWriter) writeToExternalStorage(
+	ctx context.Context, filename string, reader io.Reader,
+) error {
+	conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+	if err != nil {
+		return err
+	}
+	es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
+	if err != nil {
+		return err
+	}
+	defer es.Close()
+
+	return cloud.WriteFile(ctx, es, filename, reader)
 }
 
 func init() {

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"strings"
 	"time"
@@ -727,10 +728,11 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
 	uniqueID := builtins.GenerateUniqueInt(instanceID)
 
+	// TODO(dt): pick up tracing info in trailing meta
+	pushTrailingMeta := func(context.Context) {}
 	err := func() error {
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
-		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &tree.DatumAlloc{}
 
 		exporter, err := newParquetExporter(sp.spec, typs)
@@ -753,9 +755,12 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
 				}
-				row, err := input.NextRow()
-				if err != nil {
-					return err
+				row, meta := sp.input.Next()
+				if meta != nil {
+					if !rowexec.EmitHelper(ctx, sp.output, &sp.out, nil /* row */, meta, pushTrailingMeta, sp.input) {
+						return nil
+					}
+					continue
 				}
 				if row == nil {
 					done = true
@@ -791,30 +796,16 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 			if err := exporter.Flush(); err != nil {
 				return errors.Wrap(err, "failed to flush parquet exporter")
 			}
-
 			// Close exporter to ensure buffer and any compression footer is flushed.
-			err = exporter.Close()
-			if err != nil {
+			if err := exporter.Close(); err != nil {
 				return errors.Wrapf(err, "failed to close exporting exporter")
 			}
-
-			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
-			if err != nil {
-				return err
-			}
-			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-
 			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
 			chunk++
 			filename := exporter.FileName(sp.spec, part)
-
 			size := exporter.Len()
 
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(exporter.Bytes())); err != nil {
+			if err := sp.writeToExternalStorage(ctx, filename, bytes.NewReader(exporter.Bytes())); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
@@ -832,26 +823,33 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 				),
 			}
 
-			cs, err := sp.out.EmitRow(ctx, res, sp.output)
-			if err != nil {
-				return err
-			}
-			if cs != execinfra.NeedMoreRows {
-				// We don't return an error here because we want the error (if any) that
-				// actually caused the consumer to enter a closed/draining state to take precendence.
+			if !rowexec.EmitHelper(ctx, sp.output, &sp.out, res /* row */, nil /* meta */, pushTrailingMeta, sp.input) {
 				return nil
 			}
 			if done {
 				break
 			}
 		}
-
 		return nil
 	}()
 
-	// TODO(dt): pick up tracing info in trailing meta
-	execinfra.DrainAndClose(
-		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+	execinfra.DrainAndClose(ctx, sp.output, err, pushTrailingMeta, sp.input)
+}
+
+func (sp *parquetWriterProcessor) writeToExternalStorage(
+	ctx context.Context, filename string, reader io.Reader,
+) error {
+	conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+	if err != nil {
+		return err
+	}
+	es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
+	if err != nil {
+		return err
+	}
+	defer es.Close()
+
+	return cloud.WriteFile(ctx, es, filename, reader)
 }
 
 func init() {
