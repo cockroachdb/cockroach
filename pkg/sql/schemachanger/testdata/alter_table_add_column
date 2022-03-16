@@ -18,9 +18,6 @@ begin transaction #1
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 7 MutationType ops
-create job #1: "schema change job"
-  descriptor IDs: [106]
-write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -206,6 +203,9 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
+create job #1: "schema change job"
+  descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
 # begin PostCommitPhase
@@ -213,7 +213,6 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 4 with 4 MutationType ops
-update progress of schema change job #1
 upsert descriptor #106
   ...
        - PUBLIC
@@ -246,6 +245,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+update progress of schema change job #1
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
@@ -257,7 +257,6 @@ validate forward indexes [2] in table #106
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 4 with 8 MutationType ops
-update progress of schema change job #1
 upsert descriptor #106
   ...
          oid: 20
@@ -364,11 +363,10 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
+update progress of schema change job #1
 commit transaction #6
 begin transaction #7
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
-update progress of schema change job #1
-set schema change job #1 to non-cancellable
 upsert descriptor #106
   ...
        authorization: {}
@@ -389,12 +387,11 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
+update progress of schema change job #1
+set schema change job #1 to non-cancellable
 commit transaction #7
 begin transaction #8
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
-create job #2: "GC for dropping table 106 index 1"
-  descriptor IDs: [106]
-update progress of schema change job #1
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -552,5 +549,8 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
+create job #2: "GC for dropping table 106 index 1"
+  descriptor IDs: [106]
+update progress of schema change job #1
 commit transaction #8
 # end PostCommitPhase

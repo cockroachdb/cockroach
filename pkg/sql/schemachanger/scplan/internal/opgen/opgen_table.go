@@ -44,6 +44,11 @@ func init() {
 						DescID: this.TableID,
 					}
 				}),
+				emit(func(this *scpb.Table) scop.Op {
+					return &scop.RemoveAllTableComments{
+						TableID: this.TableID,
+					}
+				}),
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
