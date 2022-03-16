@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -132,6 +134,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalTransactionsTableID:           crdbInternalLocalTxnsTable,
 		catconstants.CrdbInternalLocalSessionsTableID:               crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:                crdbInternalLocalMetricsTable,
+		catconstants.CrdbInternalLocksTableID:                       crdbInternalLocksTable,
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
@@ -3093,6 +3096,85 @@ FROM crdb_internal.ranges_no_leases
 	},
 }
 
+func descriptorsByType(
+	descs []catalog.Descriptor, privCheckerFunc func(desc catalog.Descriptor) bool,
+) (
+	bool,
+	map[uint32]string,
+	map[uint32]string,
+	map[uint32]string,
+	map[uint32]map[uint32]string,
+	map[uint32]uint32,
+	map[uint32]uint32,
+) {
+	// TODO(knz): maybe this could use internalLookupCtx.
+	dbNames := make(map[uint32]string)
+	tableNames := make(map[uint32]string)
+	schemaNames := make(map[uint32]string)
+	indexNames := make(map[uint32]map[uint32]string)
+	schemaParents := make(map[uint32]uint32)
+	parents := make(map[uint32]uint32)
+	hasPermission := false
+	for _, desc := range descs {
+		id := uint32(desc.GetID())
+		if !privCheckerFunc(desc) {
+			continue
+		}
+		hasPermission = true
+		switch desc := desc.(type) {
+		case catalog.TableDescriptor:
+			parents[id] = uint32(desc.GetParentID())
+			schemaParents[id] = uint32(desc.GetParentSchemaID())
+			tableNames[id] = desc.GetName()
+			indexNames[id] = make(map[uint32]string)
+			for _, idx := range desc.PublicNonPrimaryIndexes() {
+				indexNames[id][uint32(idx.GetID())] = idx.GetName()
+			}
+		case catalog.DatabaseDescriptor:
+			dbNames[id] = desc.GetName()
+		case catalog.SchemaDescriptor:
+			schemaNames[id] = desc.GetName()
+		}
+	}
+
+	return hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents
+}
+
+func lookupNamesByKey(
+	p *planner,
+	key roachpb.Key,
+	dbNames, tableNames, schemaNames map[uint32]string,
+	indexNames map[uint32]map[uint32]string,
+	schemaParents, parents map[uint32]uint32,
+) (uint32, string, string, string, string) {
+	var dbName, schemaName, tableName, indexName string
+	var tableID uint32
+	var err error
+	if _, tableID, err = p.ExecCfg().Codec.DecodeTablePrefix(key); err == nil {
+		schemaParent := schemaParents[tableID]
+		if schemaParent != 0 {
+			schemaName = schemaNames[schemaParent]
+		} else {
+			// This case shouldn't happen - all schema ids should be available in the
+			// schemaParents map. If it's not, just assume the name of the schema
+			// is public to avoid problems.
+			schemaName = string(tree.PublicSchemaName)
+		}
+		parent := parents[tableID]
+		if parent != 0 {
+			tableName = tableNames[tableID]
+			dbName = dbNames[parent]
+			if _, _, idxID, err := p.ExecCfg().Codec.DecodeIndexPrefix(key); err == nil {
+				indexName = indexNames[tableID][idxID]
+			}
+		} else {
+			dbName = dbNames[tableID]
+		}
+	}
+
+	return tableID, dbName, schemaName, tableName, indexName
+}
+
 // crdbInternalRangesNoLeasesTable exposes all ranges in the system without the
 // `lease_holder` information.
 //
@@ -3132,37 +3214,18 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 		descs := all.OrderedDescriptors()
-		// TODO(knz): maybe this could use internalLookupCtx.
-		dbNames := make(map[uint32]string)
-		tableNames := make(map[uint32]string)
-		schemaNames := make(map[uint32]string)
-		indexNames := make(map[uint32]map[uint32]string)
-		schemaParents := make(map[uint32]uint32)
-		parents := make(map[uint32]uint32)
-		hasPermission := false
-		for _, desc := range descs {
-			id := uint32(desc.GetID())
-			if !hasAdmin {
-				if err := p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG); err != nil {
-					continue
-				}
+
+		privCheckerFunc := func(desc catalog.Descriptor) bool {
+			if hasAdmin {
+				return true
 			}
-			hasPermission = true
-			switch desc := desc.(type) {
-			case catalog.TableDescriptor:
-				parents[id] = uint32(desc.GetParentID())
-				schemaParents[id] = uint32(desc.GetParentSchemaID())
-				tableNames[id] = desc.GetName()
-				indexNames[id] = make(map[uint32]string)
-				for _, idx := range desc.PublicNonPrimaryIndexes() {
-					indexNames[id][uint32(idx.GetID())] = idx.GetName()
-				}
-			case catalog.DatabaseDescriptor:
-				dbNames[id] = desc.GetName()
-			case catalog.SchemaDescriptor:
-				schemaNames[id] = desc.GetName()
-			}
+
+			return p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) == nil
 		}
+
+		hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
+			descriptorsByType(descs, privCheckerFunc)
+
 		// if the user has no ZONECONFIG privilege on any table/schema/database
 		if !hasPermission {
 			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
@@ -3244,29 +3307,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
-			var dbName, schemaName, tableName, indexName string
-			var tableID uint32
-			if _, tableID, err = p.ExecCfg().Codec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
-				schemaParent := schemaParents[tableID]
-				if schemaParent != 0 {
-					schemaName = schemaNames[schemaParent]
-				} else {
-					// This case shouldn't happen - all schema ids should be available in the
-					// schemaParents map. If it's not, just assume the name of the schema
-					// is public to avoid problems.
-					schemaName = string(tree.PublicSchemaName)
-				}
-				parent := parents[tableID]
-				if parent != 0 {
-					tableName = tableNames[tableID]
-					dbName = dbNames[parent]
-					if _, _, idxID, err := p.ExecCfg().Codec.DecodeIndexPrefix(desc.StartKey.AsRawKey()); err == nil {
-						indexName = indexNames[tableID][idxID]
-					}
-				} else {
-					dbName = dbNames[tableID]
-				}
-			}
+			tableID, dbName, schemaName, tableName, indexName := lookupNamesByKey(
+				p, desc.StartKey.AsRawKey(), dbNames, tableNames, schemaNames,
+				indexNames, schemaParents, parents,
+			)
 
 			splitEnforcedUntil := tree.DNull
 			if !desc.GetStickyBit().IsEmpty() {
@@ -5632,5 +5676,195 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 			return nil
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+// crdbInternalLocksTable TODO(sarkesian): add comment
+var crdbInternalLocksTable = virtualSchemaTable{
+	comment: `cluster-wide locks held in lock tables. Querying this table is an
+		expensive operation since it creates a cluster-wide RPC-fanout.`,
+	schema: `
+CREATE TABLE crdb_internal.crdb_locks (
+    range_id						INT NOT NULL,
+    table_id            INT NOT NULL,
+    database_name       STRING,
+    schema_name         STRING,
+    table_name          STRING,
+    index_name          STRING,
+    lock_key            BYTES NOT NULL,
+    lock_key_pretty     STRING NOT NULL,
+    txn_id              UUID,
+    ts                  TIMESTAMP,
+    lock_strength       STRING,
+    durability          STRING,
+    granted             BOOL,
+    contended           BOOL,
+		duration					  INTERVAL
+);`,
+	indexes: nil, // TODO(sarkesian): add indexes
+	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		hasAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !hasViewActivityOrViewActivityRedacted {
+			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+		}
+
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return nil, nil, err
+		}
+		descs := all.OrderedDescriptors()
+
+		privCheckerFunc := func(desc catalog.Descriptor) bool {
+			if hasAdmin {
+				return true
+			}
+			return p.CheckAnyPrivilege(ctx, desc) != nil
+		}
+
+		_, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
+			descriptorsByType(descs, privCheckerFunc)
+
+		var resp *roachpb.QueryLocksResponse
+		var locks []roachpb.LockStateInfo
+		var resumeSpan *roachpb.Span
+
+		fetchLocks := func(key, endKey roachpb.Key) error {
+			b := kv.Batch{}
+			queryLocksRequest := &roachpb.QueryLocksRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    key,
+					EndKey: endKey,
+				},
+				IncludeUncontended: true,
+			}
+			b.AddRawRequest(queryLocksRequest)
+
+			// TODO(sarkesian): set key limits correctly, currently 5 used for testing.
+			b.Header.MaxSpanRequestKeys = 5
+			b.Header.TargetBytes = int64(rowinfra.DefaultBatchBytesLimit)
+
+			err := p.txn.Run(ctx, &b)
+			if err == nil {
+				resp = b.RawResponse().Responses[0].GetQueryLocks()
+				locks = resp.Locks
+				resumeSpan = resp.ResumeSpan
+			}
+
+			return err
+		}
+
+		// TODO(sarkesian): set start and end keys correctly. disjoint spans for tenants?
+		err = fetchLocks(keys.TableDataMin, keys.TableDataMax)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		lockIdx := 0
+		getNextLock := func() (*roachpb.LockStateInfo, error) {
+			// Once current response is exhausted, check if we have a ResumeSpan.
+			// If not, we are done.
+			if lockIdx >= len(locks) && resumeSpan != nil {
+				// Otherwise, we need to fetch more locks
+				err := fetchLocks(resumeSpan.Key, resumeSpan.EndKey)
+				if err != nil {
+					return nil, err
+				}
+				lockIdx = 0
+			}
+
+			if lockIdx < len(locks) {
+				nextLock := locks[lockIdx]
+				lockIdx++
+				return &nextLock, nil
+			}
+
+			return nil, nil
+		}
+
+		var curLock *roachpb.LockStateInfo
+		var fErr error
+		waiterIdx := -1
+		// Flatten response such that both lock holders and lock waiters are each
+		// individual rows in the final output. As such, we iterate through the
+		// locks received in the response and first output the lock holder, then
+		// each waiter, prior to moving onto the next lock (or fetching additional
+		// results as necessary).
+		return func() (tree.Datums, error) {
+			if curLock == nil || waiterIdx >= len(curLock.Waiters) {
+				curLock, fErr = getNextLock()
+				waiterIdx = -1
+			}
+
+			// If we couldn't get any more locks from getNextLock(), we are finished
+			// generating result rows.
+			if curLock == nil {
+				return nil, fErr
+			}
+
+			strengthDatum := tree.DNull
+			txnIDDatum := tree.DNull
+			tsDatum := tree.DNull
+			durationDatum := tree.DNull
+			granted := false
+			// Utilize -1 to indicate that the row represents the lock holder.
+			if waiterIdx < 0 {
+				if curLock.LockHolder != nil {
+					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
+					tsDatum = tree.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
+					strengthDatum = tree.NewDString(lock.Exclusive.String())
+					durationDatum = tree.NewDInterval(
+						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
+						types.DefaultIntervalTypeMetadata,
+					)
+					granted = true
+				}
+			} else {
+				waiter := curLock.Waiters[waiterIdx]
+				if waiter.WaitingTxn != nil {
+					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: waiter.WaitingTxn.ID})
+					tsDatum = tree.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
+				}
+				strengthDatum = tree.NewDString(waiter.Strength.String())
+				durationDatum = tree.NewDInterval(
+					duration.MakeDuration(waiter.WaitDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
+					types.DefaultIntervalTypeMetadata,
+				)
+			}
+
+			waiterIdx++
+
+			prettyKey := keys.PrettyPrint(nil /* valDirs */, curLock.Key)
+			tableID, dbName, schemaName, tableName, indexName := lookupNamesByKey(
+				p, curLock.Key, dbNames, tableNames, schemaNames,
+				indexNames, schemaParents, parents,
+			)
+
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(curLock.RangeID)),     /* range_id */
+				tree.NewDInt(tree.DInt(tableID)),             /* table_id */
+				tree.NewDString(dbName),                      /* database_name */
+				tree.NewDString(schemaName),                  /* schema_name */
+				tree.NewDString(tableName),                   /* table_name */
+				tree.NewDString(indexName),                   /* index_name */
+				tree.NewDBytes(tree.DBytes(curLock.Key)),     /* lock_key */
+				tree.NewDString(prettyKey),                   /* lock_key_pretty */
+				txnIDDatum,                                   /* txn_id */
+				tsDatum,                                      /* ts */
+				strengthDatum,                                /* lock_strength */
+				tree.NewDString(curLock.Durability.String()), /* durability */
+				tree.MakeDBool(tree.DBool(granted)),          /* granted */
+				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
+				durationDatum,                                /* duration */
+			}, nil
+
+		}, nil, nil
 	},
 }
