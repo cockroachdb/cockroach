@@ -1198,7 +1198,13 @@ message TableDescriptor {
   optional uint32 next_constraint_id = 49 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "NextConstraintID", (gogoproto.casttype) = "ConstraintID"];
 
-  // Next ID: 51
+  // ClusterSettingsForTable are cluster settings specified at the table level.
+  optional cockroach.sql.catalog.catpb.ClusterSettingsForTable cluster_settings_for_table = 51 [(gogoproto.customname)="ClusterSettingsForTable"];
+
+  // SessionSettingsForTable are session settings specified at the table level.
+  optional cockroach.sql.catalog.catpb.SessionSettingsForTable session_settings_for_table = 52 [(gogoproto.customname)="SessionSettingsForTable"];
+
+  // Next ID: 53
 }
 
 // SurvivalGoal is the survival goal for a database.

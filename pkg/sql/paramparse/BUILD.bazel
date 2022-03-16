@@ -12,6 +12,8 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/server/telemetry",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",

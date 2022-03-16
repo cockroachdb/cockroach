@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -83,7 +84,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// There are no stats yet, so this must refresh the statistics on table t
 	// even though rowsAffected=0.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -92,16 +93,44 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
+	// Setting minStaleRows for the table prevents refreshing from occurring.
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.min_stale_rows" = 100000000)`)
+	descA = desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA, 10 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a RESET ("sql.stats.automatic_collection.min_stale_rows")`)
+
+	// Setting fractionStaleRows for the table can also prevent refreshing from
+	// occurring, though this is a not a typical value for this setting.
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.fraction_stale_rows" = 100000000)`)
+	descA = desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA, 10 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a RESET ("sql.stats.automatic_collection.fraction_stale_rows")`)
+	descA = desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+
 	// With rowsAffected=10, refreshing should work. Since there are more rows
 	// updated than exist in the table, the probability of a refresh is 100%.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 2 /* expected */); err != nil {
 		t.Fatal(err)
@@ -112,13 +141,183 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// TODO(rytaft): Should not enqueue views to begin with.
 	descVW := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descVW.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descVW, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	select {
 	case <-refresher.mutations:
 		t.Fatal("refresher should not re-enqueue attempt to create stats over view")
 	default:
 	}
+}
+
+func BenchmarkMaybeRefreshStats(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	AutomaticStatisticsMinStaleRows.Override(ctx, &st.SV, 5)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(b,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a1 (k INT PRIMARY KEY);
+		CREATE TABLE t.a2 (k INT PRIMARY KEY);
+		CREATE TABLE t.a3 (k INT PRIMARY KEY);
+		CREATE TABLE t.a4 (k INT PRIMARY KEY);
+		CREATE TABLE t.a5 (k INT PRIMARY KEY);
+		CREATE TABLE t.a6 (k INT PRIMARY KEY);
+		CREATE TABLE t.a7 (k INT PRIMARY KEY);
+		CREATE TABLE t.a8 (k INT PRIMARY KEY);
+		CREATE TABLE t.a9 (k INT PRIMARY KEY);
+		CREATE TABLE t.a10 (k INT PRIMARY KEY);
+
+`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	tabDescrs := make([]catalog.TableDescriptor, 0, 10)
+	for i := 1; i <= 10; i++ {
+		tabDescrs = append(tabDescrs,
+			desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec,
+				"t", fmt.Sprintf("a%d", i)))
+	}
+
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		kvDB,
+		executor,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
+
+	// Run the operation 1000 times.
+	const numOps = 1000
+	runBench1 := func(b *testing.B) {
+		b.ResetTimer()
+		b.StartTimer()
+		for i := 0; i < b.N; i++ {
+			for j := 0; j < numOps; j++ {
+				for _, desc := range tabDescrs {
+					refresher.maybeRefreshStats(
+						ctx, s.Stopper(), desc, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+					)
+				}
+			}
+		}
+		b.StopTimer()
+	}
+	// This is the slower way to construct a copy of filters.
+	b.Run(`BenchmarkMaybeRefreshStats`, func(b *testing.B) {
+		runBench1(b)
+	})
+}
+
+func TestEnsureAllTablesQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		CREATE TABLE t.b (k INT PRIMARY KEY);`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		kvDB,
+		executor,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
+
+	if err := checkAllTablesCount(ctx, 2, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.enabled" = true)`)
+	if err := checkAllTablesCount(ctx, 2, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.b SET ("sql.stats.automatic_collection.enabled" = false)`)
+	if err := checkAllTablesCount(ctx, 1, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.enabled" = false)`)
+	if err := checkAllTablesCount(ctx, 0, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkAllTablesCount(ctx context.Context, expected int, r *Refresher) error {
+	const collectionDelay = time.Microsecond
+	getAllTablesQuery := fmt.Sprintf(
+		getAllTablesTemplateSQL,
+		collectionDelay,
+		systemschema.SystemDatabaseName,
+		autoStatsEnabledOrNotSpecifiedPredicate,
+	)
+	r.getApplicableTables(ctx, getAllTablesQuery,
+		"get-tables", true)
+	actual := r.getNumTablesEnsured()
+	if expected != actual {
+		return fmt.Errorf("expected %d table(s) but found %d", expected, actual)
+	}
+	return nil
+}
+
+func checkExplicitlyEnabledTablesCount(ctx context.Context, expected int, r *Refresher) error {
+	const collectionDelay = time.Microsecond
+	getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
+		getAllTablesTemplateSQL,
+		collectionDelay,
+		systemschema.SystemDatabaseName,
+		explicitlyEnabledTablesPredicate,
+	)
+	r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
+		"get-tables-with-autostats-explicitly-enabled", true)
+	actual := r.getNumTablesEnsured()
+	if expected != actual {
+		return fmt.Errorf("expected %d table(s) but found %d", expected, actual)
+	}
+	return nil
 }
 
 func TestAverageRefreshTime(t *testing.T) {
@@ -311,7 +510,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// the statistics on table t. With rowsAffected=0, the probability of refresh
 	// is 0.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), table.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), table, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
 		t.Fatal(err)
@@ -361,7 +560,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// remain (5 from column k and 10 from column v), since the old stats on k
 	// were deleted.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), table.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), table, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	if err := checkStatsCount(ctx, cache, table, 15 /* expected */); err != nil {
 		t.Fatal(err)
@@ -454,7 +653,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(
-		ctx, s.Stopper(), 100 /* tableID */, math.MaxInt32, time.Microsecond, /* asOfTime */
+		ctx, s.Stopper(), nil /* desc */, math.MaxInt32, time.Microsecond, /* asOfTime */
 	)
 
 	// Ensure that we will not try to refresh tableID 100 again.
