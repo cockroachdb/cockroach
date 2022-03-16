@@ -346,10 +346,7 @@ func newJoinReader(
 	default:
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
-	rightTypes := make([]*types.T, len(spec.FetchSpec.FetchedColumns))
-	for i := range rightTypes {
-		rightTypes[i] = spec.FetchSpec.FetchedColumns[i].Type
-	}
+	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 
 	if err := jr.joinerBase.init(
 		jr,
