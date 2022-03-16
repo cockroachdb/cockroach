@@ -77,6 +77,81 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
+func TestAlterChangefeedAddTargetFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
+		defer closeFeed(t, testFeed)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD foo FAMILY onlyb`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"b": "hello"}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [2]->{"after": {"b": "goodbye"}}`,
+		})
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestAlterChangefeedSwitchFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
+		defer closeFeed(t, testFeed)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD foo FAMILY onlyb DROP foo FAMILY onlya`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"b": "hello"}}`,
+			`foo: [2]->{"after": {"b": "goodbye"}}`,
+		})
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
 func TestAlterChangefeedDropTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -107,6 +182,40 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO bar VALUES(2)`)
 		assertPayloads(t, testFeed, nil)
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestAlterChangefeedDropTargetFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya, foo FAMILY onlyb`)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo FAMILY onlyb`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+		})
+
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn))
@@ -210,12 +319,16 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.ExpectErr(t,
-			`pq: target "baz" does not exist`,
+			`pq: target "TABLE baz" does not exist`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d ADD baz`, feed.JobID()),
 		)
 		sqlDB.ExpectErr(t,
-			`pq: target "baz" does not exist`,
+			`pq: target "TABLE baz" does not exist`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d DROP baz`, feed.JobID()),
+		)
+		sqlDB.ExpectErr(t,
+			`pq: target "TABLE bar" already not watched by changefeed`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar`, feed.JobID()),
 		)
 		sqlDB.ExpectErr(t,
 			`pq: invalid option "qux"`,

@@ -7,6 +7,14 @@ EXPERIMENTAL CHANGEFEED FOR TABLE foo -- literals removed
 EXPERIMENTAL CHANGEFEED FOR TABLE _ -- identifiers removed
 
 parse
+EXPERIMENTAL CHANGEFEED FOR TABLE foo FAMILY bar
+----
+EXPERIMENTAL CHANGEFEED FOR TABLE foo FAMILY bar
+EXPERIMENTAL CHANGEFEED FOR TABLE (foo) FAMILY bar -- fully parenthesized
+EXPERIMENTAL CHANGEFEED FOR TABLE foo FAMILY bar -- literals removed
+EXPERIMENTAL CHANGEFEED FOR TABLE _ FAMILY _ -- identifiers removed
+
+parse
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
 ----
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
@@ -31,12 +39,12 @@ CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
 CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
 
 parse
-CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'
+CREATE CHANGEFEED FOR TABLE foo, db.bar, foo FAMILY bar, schema.db.foo INTO 'sink'
 ----
-CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'
-CREATE CHANGEFEED FOR TABLE (foo), (db.bar), (schema.db.foo) INTO ('sink') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _, _._, _._._ INTO 'sink' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE foo, TABLE db.bar, TABLE foo FAMILY bar, TABLE schema.db.foo INTO 'sink' -- normalized!
+CREATE CHANGEFEED FOR TABLE (foo), TABLE (db.bar), TABLE (foo) FAMILY bar, TABLE (schema.db.foo) INTO ('sink') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE foo, TABLE db.bar, TABLE foo FAMILY bar, TABLE schema.db.foo INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _, TABLE _._, TABLE _ FAMILY _, TABLE _._._ INTO 'sink' -- identifiers removed
 
 parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
