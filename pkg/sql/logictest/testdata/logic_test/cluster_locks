@@ -25,21 +25,98 @@ NULL       /"d"     {1}       1
 /"d"       /"r"     {1}       1
 /"r"       NULL     {1}       1
 
-statement count 7
-BEGIN; UPDATE t SET v = concat(v, '_updated') WHERE k >= 'b' and k < 'z'
+statement ok
+BEGIN PRIORITY HIGH
+
+#statement ok
+#UPDATE t SET v = '_updated' WHERE k >= 'b' AND k < 'z' RETURNING NOTHING
+
+statement ok
+SELECT * FROM t WHERE k >= 'b' AND k < 'z' FOR UPDATE
 
 user testuser
 
 statement ok
 BEGIN
 
+# switch back to root, collect data needed for validation
+user root
+
+let $txn1
+SELECT txns.id FROM crdb_internal.cluster_transactions txns, crdb_internal.cluster_sessions s WHERE txns.session_id = s.session_id AND s.user_name='root'
+
+let $txn2
+SELECT txns.id FROM crdb_internal.cluster_transactions txns, crdb_internal.cluster_sessions s WHERE txns.session_id = s.session_id AND s.user_name='testuser'
+
+let $r1
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key='/"d"'
+
+let $r2
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key='/"r"'
+
+let $r3
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key IS NULL
+
+user testuser
+
 statement async readReq ok
-select * from t for update
+SELECT * FROM t
 
 user root
 
+# looking at each range and transaction separately, validate the expected results in the lock table
+query TTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn1' AND lock_key_pretty LIKE '/Table/%/0'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength durability    granted contended
+test          public      t           /Table/106/1/"b"/0  Exclusive     Unreplicated  true    true
+test          public      t           /Table/106/1/"c"/0  Exclusive     Unreplicated  true    false
+
+#query TTTTTBB colnames
+#SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id!='$txn1'
+#----
+#database_name schema_name table_name    lock_key_pretty     lock_strength granted contended
+#test          public      t             /Table/106/1/"b"/0  None          false    true
+
+#query TTTTTTBB colnames
+#select database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended from crdb_internal.cluster_locks where range_id=$r2 and txn_id='$txn1'
+#----
+#database_name schema_name table_name    lock_key_pretty     lock_strength durability  granted contended
+#test          public      t             /Table/106/1/"l"/0  Exclusive     Replicated  true    true
+#test          public      t             /Table/106/1/"m"/0  Exclusive     Replicated  true    false
+#test          public      t             /Table/106/1/"p"/0  Exclusive     Replicated  true    false
+
+#query TTTTTTBB colnames
+#select database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended from crdb_internal.cluster_locks where range_id=$r2 and txn_id='$txn2'
+#----
+#database_name schema_name table_name    lock_key_pretty     lock_strength durability  granted contended
+#test          public      t             /Table/106/1/"l"/0  None          Replicated  false    true
+
+#query TTTTTTBB colnames
+#select database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended from crdb_internal.cluster_locks where range_id=$r3 and txn_id='$txn1'
+#----
+#database_name schema_name table_name    lock_key_pretty     lock_strength durability  granted contended
+#test          public      t             /Table/106/1/"s"/0  Exclusive     Replicated  true    true
+#test          public      t             /Table/106/1/"t"/0  Exclusive     Replicated  true    false
+
+#query TTTTTTBB colnames
+#select database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended from crdb_internal.cluster_locks where range_id=$r3 and txn_id='$txn2'
+#----
+#database_name schema_name table_name    lock_key_pretty     lock_strength durability  granted contended
+#test          public      t             /Table/106/1/"s"/0  None          Replicated  false    true
+
+#query I
+#select count(*) from crdb_internal.cluster_locks where table_name = 't'
+#----
+#10
+
 statement ok
 ROLLBACK
+
+query I retry
+select count(*) from crdb_internal.cluster_locks where table_name = 't'
+----
+0
 
 user testuser
 
