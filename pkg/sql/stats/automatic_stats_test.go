@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -98,6 +99,31 @@ func TestMaybeRefreshStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Setting minStaleRows for the table prevents refreshing from occurring.
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.min_stale_rows" = 100000000)`)
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a RESET ("sql.stats.automatic_collection.min_stale_rows")`)
+
+	// Setting fractionStaleRows for the table can also prevent refreshing from
+	// occurring, though this is a not a typical value for this setting.
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.fraction_stale_rows" = 100000000)`)
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a RESET ("sql.stats.automatic_collection.fraction_stale_rows")`)
+
 	// With rowsAffected=10, refreshing should work. Since there are more rows
 	// updated than exist in the table, the probability of a refresh is 100%.
 	refresher.maybeRefreshStats(
@@ -119,6 +145,103 @@ func TestMaybeRefreshStats(t *testing.T) {
 		t.Fatal("refresher should not re-enqueue attempt to create stats over view")
 	default:
 	}
+}
+
+func TestEnsureAllTablesQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		CREATE TABLE t.b (k INT PRIMARY KEY);`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		kvDB,
+		executor,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
+
+	if err := checkAllTablesCount(ctx, 2, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.enabled" = true)`)
+	if err := checkAllTablesCount(ctx, 2, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.b SET ("sql.stats.automatic_collection.enabled" = false)`)
+	if err := checkAllTablesCount(ctx, 1, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
+		t.Fatal(err)
+	}
+	sqlRun.Exec(t,
+		`ALTER TABLE t.a SET ("sql.stats.automatic_collection.enabled" = false)`)
+	if err := checkAllTablesCount(ctx, 0, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkAllTablesCount(ctx context.Context, expected int, r *Refresher) error {
+	const collectionDelay = time.Microsecond
+	getAllTablesQuery := fmt.Sprintf(
+		getAllTablesTemplateSQL,
+		collectionDelay,
+		systemschema.SystemDatabaseName,
+		autoStatsEnableOrNotSpecifiedPredicate,
+	)
+	r.getApplicableTables(ctx, getAllTablesQuery,
+		"get-tables", true)
+	actual := r.getNumTablesEnsured()
+	if expected != actual {
+		return fmt.Errorf("expected %d table(s) but found %d", expected, actual)
+	}
+	return nil
+}
+
+func checkExplicitlyEnabledTablesCount(ctx context.Context, expected int, r *Refresher) error {
+	const collectionDelay = time.Microsecond
+	getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
+		getAllTablesTemplateSQL,
+		collectionDelay,
+		systemschema.SystemDatabaseName,
+		explicitlyEnabledTablesPredicate,
+	)
+	r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
+		"get-tables-with-autostats-explicitly-enabled", true)
+	actual := r.getNumTablesEnsured()
+	if expected != actual {
+		return fmt.Errorf("expected %d table(s) but found %d", expected, actual)
+	}
+	return nil
 }
 
 func TestAverageRefreshTime(t *testing.T) {

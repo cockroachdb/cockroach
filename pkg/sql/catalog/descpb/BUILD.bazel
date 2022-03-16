@@ -21,6 +21,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/parser",
