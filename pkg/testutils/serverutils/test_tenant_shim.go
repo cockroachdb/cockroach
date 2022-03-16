@@ -98,9 +98,9 @@ type TestTenantInterface interface {
 	// interface{}.
 	SpanConfigReconciler() interface{}
 
-	// SpanConfigSQLTranslator returns the underlying spanconfig.SQLTranslator as
-	// an interface{}.
-	SpanConfigSQLTranslator() interface{}
+	// SpanConfigSQLTranslatorFactory returns the underlying
+	// spanconfig.SQLTranslatorFactory as an interface{}.
+	SpanConfigSQLTranslatorFactory() interface{}
 
 	// SpanConfigSQLWatcher returns the underlying spanconfig.SQLWatcher as an
 	// interface{}.
