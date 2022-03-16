@@ -97,6 +97,8 @@ type Txn struct {
 	// remaining just use the zero value. The set of code paths that initialize
 	// this are expected to expand over time.
 	admissionHeader roachpb.AdmissionHeader
+
+	CreatedSequenceMap map[uint32]struct{}
 }
 
 // NewTxn returns a new RootTxn.
