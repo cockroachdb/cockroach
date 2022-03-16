@@ -12,6 +12,7 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -271,6 +272,55 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 		return tree.PersistenceTemporary
 	}
 	return tree.PersistencePermanent
+}
+
+// AutoStatsCollectionEnabled indicates if automatic statistics collection is
+// explicitly enabled or disabled for this table.
+func (desc *TableDescriptor) AutoStatsCollectionEnabled() cluster.BoolSetting {
+	if desc.NoClusterSettingOverrides() {
+		return cluster.NotSet
+	}
+	if desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionEnabled == nil {
+		return cluster.NotSet
+	}
+	if *desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionEnabled {
+		return cluster.True
+	}
+	return cluster.False
+}
+
+// AutoStatsMinStaleRows indicates the setting of
+// sql.stats.automatic_collection.min_stale_rows for this table.
+// If ok is true, then the minStaleRows value is valid, otherwise this has not
+// been set at the table level.
+func (desc *TableDescriptor) AutoStatsMinStaleRows() (minStaleRows int64, ok bool) {
+	if desc.NoClusterSettingOverrides() {
+		return 0, false
+	}
+	if desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows == nil {
+		return 0, false
+	}
+	return *desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows, true
+}
+
+// AutoStatsFractionStaleRows indicates the setting of
+// sql.stats.automatic_collection.fraction_stale_rows for this table.
+// If ok is true, then the fractionStaleRows value is valid, otherwise this has
+// not been set at the table level.
+func (desc *TableDescriptor) AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool) {
+	if desc.NoClusterSettingOverrides() {
+		return 0, false
+	}
+	if desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows == nil {
+		return 0, false
+	}
+	return *desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows, true
+}
+
+// NoClusterSettingOverrides is true if no cluster settings are set at the
+// table level for the given table.
+func (desc *TableDescriptor) NoClusterSettingOverrides() bool {
+	return desc.ClusterSettingsForTable == nil
 }
 
 // IsVirtualTable returns true if the TableDescriptor describes a
