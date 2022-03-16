@@ -55,6 +55,7 @@ distsql_workmem                                       64 MiB
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
+enable_implicit_transaction_for_batch_statements      on
 enable_insert_fast_path                               on
 enable_multiregion_placement_policy                   off
 enable_seqscan                                        on
@@ -424,8 +425,11 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE s
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
 
+statement ok
+CREATE INDEX ix ON foo(x)
+
 query TTTI colnames
-CREATE INDEX ix ON foo(x); SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1

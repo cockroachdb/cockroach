@@ -1,0 +1,200 @@
+send crdb_only
+Query {"String": "SET enable_implicit_transaction_for_batch_statements = 'true'"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS mytable"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE mytable(a INT8)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# All the statements in the batch should be executed with the same implicit
+# transaction. So no data should be inserted.
+send
+Query {"String": "INSERT INTO mytable VALUES(1); SELECT 1/0; INSERT INTO mytable VALUES(2);"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM mytable"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# A batch can also start and end an explicit transaction, but the statements
+# after the COMMIT are in a separate implicit transaction.
+send
+Query {"String": "BEGIN; INSERT INTO mytable VALUES(1); COMMIT; SELECT 1/0; INSERT INTO mytable VALUES(2);"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM mytable"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# A BEGIN in the middle of a batch upgrades the implicit txn to an explicit one.
+send
+Query {"String": "INSERT INTO mytable VALUES(2); BEGIN; INSERT INTO mytable VALUES(3); COMMIT; INSERT INTO mytable VALUES(4); SELECT 1/0; "}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM mytable"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# If an explicit txn fails during a batch, the txn state should end up as E
+# (for error).
+send
+Query {"String": "BEGIN; SELECT 1/0; COMMIT;"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execution of the Query message stops at the first error, so even the last
+# ROLLBACK below does not get executed.
+send
+Query {"String": "BEGIN; SELECT 1/0; ROLLBACK;"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SET enable_implicit_transaction_for_batch_statements = 'false'"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# With the enable_implicit_transaction_for_batch_statements setting off, the
+# following batch statement should now result in one INSERT succeeding.
+send crdb_only
+Query {"String": "INSERT INTO mytable VALUES(4); SELECT 1/0; INSERT INTO mytable VALUES(5);"}
+----
+
+until crdb_only ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SELECT * FROM mytable"}
+----
+
+until crdb_only ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 4"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

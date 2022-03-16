@@ -846,6 +846,8 @@ PARTITION "us-east-1" OF TABLE t_regional_by_row  ALTER PARTITION "us-east-1" OF
 
 statement ok
 CREATE DATABASE two_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2";
+
+statement ok
 USE two_region_test_db
 
 statement ok
@@ -876,6 +878,8 @@ ca-central-1    6
 
 statement ok
 CREATE DATABASE add_regions WITH PRIMARY REGION "ca-central-1";
+
+statement ok
 USE add_regions
 
 statement ok
@@ -1163,6 +1167,8 @@ DATABASE add_regions  ALTER DATABASE add_regions CONFIGURE ZONE USING
 
 statement ok
 CREATE DATABASE add_regions_in_txn WITH PRIMARY REGION "ca-central-1";
+
+statement ok
 USE add_regions_in_txn
 
 statement ok
@@ -1252,7 +1258,9 @@ regional_by_row_like                            CREATE TABLE public.regional_by_
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
-DROP TABLE regional_by_row_like;
+DROP TABLE regional_by_row_like
+
+statement ok
 CREATE TABLE regional_by_row_like (LIKE regional_by_row INCLUDING INDEXES)
 
 query TT
@@ -1269,6 +1277,8 @@ regional_by_row_like                            CREATE TABLE public.regional_by_
 
 statement ok
 DROP TABLE regional_by_row_like;
+
+statement ok
 CREATE TABLE regional_by_row_like (LIKE regional_by_row INCLUDING ALL)
 
 query TT
@@ -1392,13 +1402,19 @@ regional_by_row_fk          CREATE TABLE public.regional_by_row_fk (
 
 statement ok
 CREATE DATABASE drop_regions PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2";
+
+statement ok
 USE drop_regions;
+
+statement ok
 CREATE TABLE regional_by_row (
   pk INT PRIMARY KEY,
   i INT,
   INDEX(i),
   FAMILY (pk, i)
 ) LOCALITY REGIONAL BY ROW;
+
+statement ok
 CREATE TABLE regional_by_row_as (
   pk INT PRIMARY KEY,
   i INT,
@@ -1644,7 +1660,11 @@ ALTER DATABASE drop_regions DROP REGION "ca-central-1";
 # Drop the two regional by row tables and now the primary region can be removed.
 statement ok
 DROP TABLE regional_by_row;
+
+statement ok
 DROP TABLE regional_by_row_as;
+
+statement ok
 ALTER DATABASE drop_regions DROP REGION "ca-central-1";
 
 ##############################################

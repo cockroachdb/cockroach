@@ -708,8 +708,12 @@ SET application_name = 'test_max_retry'
 # become different from 0.
 statement OK
 CREATE SEQUENCE s;
-  SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h'::INTERVAL), 0);
-  DROP SEQUENCE s
+
+statement OK
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h'::INTERVAL), 0);
+
+statement OK
+DROP SEQUENCE s
 
 statement OK
 RESET application_name
