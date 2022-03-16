@@ -728,12 +728,12 @@ func TestDropWhileBackfill(t *testing.T) {
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if partialBackfillDone.Load().(bool) {
 					notifyBackfill()
-					// Returning DeadlineExceeded will result in the
-					// schema change being retried.
-					return context.DeadlineExceeded
 				}
 				partialBackfillDone.Store(true)
-				return nil
+				// Returning DeadlineExceeded will result in the
+				// schema change being retried and no data will be written
+				// to the new index.
+				return context.DeadlineExceeded
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
