@@ -150,7 +150,7 @@ func TestSplitFinderKey(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		finder := NewFinder(timeutil.Now())
+		finder := NewFinder(timeutil.Now(), DefaultRecordDurationThreshold)
 		finder.samples = test.reservoir
 		if splitByLoadKey := finder.Key(); !bytes.Equal(splitByLoadKey, test.splitByLoadKey) {
 			t.Errorf(
@@ -260,7 +260,7 @@ func TestSplitFinderRecorder(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		finder := NewFinder(timeutil.Now())
+		finder := NewFinder(timeutil.Now(), DefaultRecordDurationThreshold)
 		finder.samples = test.currReservoir
 		finder.count = test.currCount
 		finder.Record(test.recordSpan, test.intNFn)

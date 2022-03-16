@@ -49,9 +49,10 @@ const minQueriesPerSecondSampleDuration = time.Second
 // have consistently remained below a certain QPS threshold for a sufficiently
 // long period of time.
 type Decider struct {
-	intn         func(n int) int      // supplied to Init
-	qpsThreshold func() float64       // supplied to Init
-	qpsRetention func() time.Duration // supplied to Init
+	intn                    func(n int) int      // supplied to Init
+	qpsThreshold            func() float64       // supplied to Init
+	qpsRetention            func() time.Duration // supplied to Init
+	recordDurationThreshold func() time.Duration // supplied to Init
 
 	mu struct {
 		syncutil.Mutex
@@ -67,6 +68,11 @@ type Decider struct {
 		// Fields tracking split key suggestions.
 		splitFinder         *Finder   // populated when engaged or decided
 		lastSplitSuggestion time.Time // last stipulation to client to carry out split
+
+		// Setting to force a load based split. When forceLoadSplit is set to true
+		// collector will ignore the QPS threshold and force a split once enough data
+		// is collected.
+		forceSplitDecision bool
 	}
 }
 
@@ -79,10 +85,22 @@ func Init(
 	intn func(n int) int,
 	qpsThreshold func() float64,
 	qpsRetention func() time.Duration,
+	recordDurationThreshold func() time.Duration,
 ) {
 	lbs.intn = intn
 	lbs.qpsThreshold = qpsThreshold
 	lbs.qpsRetention = qpsRetention
+	lbs.recordDurationThreshold = recordDurationThreshold
+}
+
+// ForceSplitDecision forces the Decider to enable tracking of individual keys
+// to split on, which will result in a split happening once enough
+// data is collected. .
+func (d *Decider) ForceSplitDecision() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.mu.forceSplitDecision = true
 }
 
 // Record notifies the Decider that 'n' operations are being carried out which
@@ -123,9 +141,9 @@ func (d *Decider) recordLocked(now time.Time, n int, span func() roachpb.Span) b
 		// begin to Record requests so it can find a split point. If a
 		// splitFinder already exists, we check if a split point is ready
 		// to be used.
-		if d.mu.lastQPS >= d.qpsThreshold() {
+		if d.mu.lastQPS >= d.qpsThreshold() || d.mu.forceSplitDecision {
 			if d.mu.splitFinder == nil {
-				d.mu.splitFinder = NewFinder(now)
+				d.mu.splitFinder = NewFinder(now, d.recordDurationThreshold())
 			}
 		} else {
 			d.mu.splitFinder = nil
@@ -240,6 +258,7 @@ func (d *Decider) Reset(now time.Time) {
 	d.mu.maxQPS.reset(now, d.qpsRetention())
 	d.mu.splitFinder = nil
 	d.mu.lastSplitSuggestion = time.Time{}
+	d.mu.forceSplitDecision = false
 }
 
 // maxQPSTracker collects a series of queries-per-second measurement samples and

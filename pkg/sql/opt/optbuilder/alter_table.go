@@ -51,26 +51,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	checkInputColumns("SPLIT AT", inputScope, colNames, colTypes, 1)
 
 	// Build the expiration scalar.
-	var expiration opt.ScalarExpr
-	if split.ExpireExpr != nil {
-		emptyScope.context = exprKindAlterTableSplitAt
-		// We need to save and restore the previous value of the field in
-		// semaCtx in case we are recursively called within a subquery
-		// context.
-		defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-		b.semaCtx.Properties.Require(emptyScope.context.String(), tree.RejectSpecial)
-
-		texpr := emptyScope.resolveType(split.ExpireExpr, types.String)
-		expiration = b.buildScalar(
-			texpr,
-			emptyScope,
-			nil, /* outScope */
-			nil, /* outCol */
-			nil, /* colRefs */
-		)
-	} else {
-		expiration = b.factory.ConstructNull(types.String)
-	}
+	expiration := buildExpirationScalar(split.ExpireExpr, exprKindAlterTableSplitAt, b, emptyScope)
 
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, colinfo.AlterTableSplitColumns)
@@ -236,4 +217,27 @@ func checkInputColumns(
 			))
 		}
 	}
+}
+
+func buildExpirationScalar(
+	expireExpr tree.Expr, kind exprKind, b *Builder, emptyScope *scope,
+) opt.ScalarExpr {
+	if expireExpr != nil {
+		emptyScope.context = kind
+		// We need to save and restore the previous value of the field in
+		// semaCtx in case we are recursively called within a subquery
+		// context.
+		defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+		b.semaCtx.Properties.Require(emptyScope.context.String(), tree.RejectSpecial)
+
+		texpr := emptyScope.resolveType(expireExpr, types.String)
+		return b.buildScalar(
+			texpr,
+			emptyScope,
+			nil, /* outScope */
+			nil, /* outCol */
+			nil, /* colRefs */
+		)
+	}
+	return b.factory.ConstructNull(types.String)
 }

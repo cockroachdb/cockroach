@@ -415,6 +415,9 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
+	// LoadBasedSplitRecordDurationThreshold determines how long the load based
+	// splitter should collect per key statistics before deciding on a split point.
+	LoadBasedSplitRecordDurationThreshold time.Duration
 
 	// This method, if set, gets to see (and mutate, if desired) any local
 	// StoreDescriptor before it is being sent out on the Gossip network.

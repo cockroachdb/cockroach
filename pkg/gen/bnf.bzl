@@ -35,6 +35,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:alter_partition_stmt.bnf",
   "//docs/generated/sql/bnf:alter_primary_key.bnf",
   "//docs/generated/sql/bnf:alter_range_relocate_stmt.bnf",
+  "//docs/generated/sql/bnf:alter_range_split_load_stmt.bnf",
   "//docs/generated/sql/bnf:alter_range_stmt.bnf",
   "//docs/generated/sql/bnf:alter_rename_view_stmt.bnf",
   "//docs/generated/sql/bnf:alter_role_stmt.bnf",
