@@ -174,6 +174,18 @@ var generators = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	`pg_options_to_table`: makeBuiltin(
+		genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"options", types.MakeArray(types.String)},
+			},
+			optionsToOverloadGeneratorType,
+			makeOptionsToTableGenerator,
+			"Converts the options array format to a table.",
+			tree.VolatilityImmutable,
+		),
+	),
 
 	"regexp_split_to_table": makeBuiltin(
 		genProps(),
@@ -570,6 +582,66 @@ func (g *regexpSplitToTableGenerator) Next(_ context.Context) (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (g *regexpSplitToTableGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{tree.NewDString(g.words[g.curr])}, nil
+}
+
+type optionsToTableGenerator struct {
+	arr *tree.DArray
+	idx int
+}
+
+func makeOptionsToTableGenerator(_ *tree.EvalContext, d tree.Datums) (tree.ValueGenerator, error) {
+	arr := tree.MustBeDArray(d[0])
+	return &optionsToTableGenerator{arr: arr, idx: -1}, nil
+}
+
+var optionsToOverloadGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.String},
+	[]string{"option_name", "option_value"},
+)
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (*optionsToTableGenerator) ResolvedType() *types.T {
+	return optionsToOverloadGeneratorType
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (*optionsToTableGenerator) Close(_ context.Context) {}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *optionsToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *optionsToTableGenerator) Next(_ context.Context) (bool, error) {
+	g.idx++
+	if g.idx >= g.arr.Len() {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *optionsToTableGenerator) Values() (tree.Datums, error) {
+	elem := g.arr.Array[g.idx]
+
+	if elem == tree.DNull {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"null array element not allowed in this context",
+		)
+	}
+	s := string(tree.MustBeDString(elem))
+	split := strings.SplitN(s, "=", 2)
+	ret := make(tree.Datums, 2)
+
+	ret[0] = tree.NewDString(split[0])
+	if len(split) == 2 {
+		ret[1] = tree.NewDString(split[1])
+	} else {
+		ret[1] = tree.DNull
+	}
+	return ret, nil
 }
 
 // keywordsValueGenerator supports the execution of pg_get_keywords().
