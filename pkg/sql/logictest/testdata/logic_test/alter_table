@@ -2364,3 +2364,114 @@ COMMIT;
 
 statement ok
 ROLLBACK;
+
+subtest table_settings
+
+statement ok
+CREATE TABLE t5 (a int)
+
+# Turn on automatic stats collection
+statement ok
+ALTER TABLE t5 SET ("sql.stats.automatic_collection.enabled" = true)
+
+# Verify automatic collection is enabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'clusterSettingsForTable'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+    AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                                      d.descriptor, false)->'table'->'clusterSettingsForTable'
+                                      ->> 'sqlStatsAutomaticCollectionEnabled' = 'true'
+----
+{"sqlStatsAutomaticCollectionEnabled": true}
+
+# Strings in settings should be converted to the proper data type.
+statement ok
+ALTER TABLE t5 SET ("sql.stats.automatic_collection.enabled" = 'false')
+
+# Verify automatic collection is disabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'clusterSettingsForTable'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+    AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                                      d.descriptor, false)->'table'->'clusterSettingsForTable'
+                                      ->> 'sqlStatsAutomaticCollectionEnabled' = 'false'
+----
+{"sqlStatsAutomaticCollectionEnabled": false}
+
+# SHOW CREATE TABLE displays the value properly.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t5]
+----
+CREATE TABLE public.t5 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+) WITH ("sql.stats.automatic_collection.enabled" = false)
+
+statement error pq: parameter "sql.stats.automatic_collection.enabled" requires a Boolean value
+ALTER TABLE t5 SET ("sql.stats.automatic_collection.enabled" = 123)
+
+statement ok
+ALTER TABLE t5 RESET ("sql.stats.automatic_collection.enabled")
+
+# Verify the automatic collection setting is removed.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'clusterSettingsForTable'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+----
+{}
+
+statement error pq: invalid value for sql.stats.automatic_collection.fraction_stale_rows: could not parse "hello" as type float: strconv.ParseFloat: parsing "hello": invalid syntax
+ALTER TABLE t5 SET ("sql.stats.automatic_collection.fraction_stale_rows" = 'hello')
+
+statement error pq: invalid value for sql.stats.automatic_collection.min_stale_rows: could not parse "world" as type int: strconv.ParseInt: parsing "world": invalid syntax
+ALTER TABLE t5 SET ("sql.stats.automatic_collection.min_stale_rows" = 'world')
+
+# Verify strings can be converted to proper setting values.
+statement ok
+ALTER TABLE t5 SET ("sql.stats.automatic_collection.fraction_stale_rows" = '0.15',
+                    "sql.stats.automatic_collection.min_stale_rows" = '1234')
+
+# Verify settings
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'clusterSettingsForTable'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+----
+{"sqlStatsAutomaticCollectionFractionStaleRows": 0.15, "sqlStatsAutomaticCollectionMinStaleRows": "1234"}
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t5]
+----
+CREATE TABLE public.t5 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+) WITH ("sql.stats.automatic_collection.min_stale_rows" = 1234, "sql.stats.automatic_collection.fraction_stale_rows" = 0.15)
