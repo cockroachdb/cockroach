@@ -872,3 +872,73 @@ CREATE TABLE public.t_good_hash_indexes_2 (
    crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
    CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
 )
+
+subtest table_settings
+
+statement ok
+CREATE TABLE t1 (a int) WITH (sql_stats_automatic_collection_enabled = true)
+
+# Verify automatic collection is enabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'autoStatsSettings'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't1'
+    AND tbl.drop_time IS NULL
+----
+{"enabled": true}
+
+statement ok
+DROP TABLE t1
+
+statement ok
+CREATE TABLE t1 (a int) WITH (sql_stats_automatic_collection_fraction_stale_rows = 0.5,
+                              sql_stats_automatic_collection_min_stale_rows = 4000)
+
+# Verify settings
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'autoStatsSettings'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't1'
+    AND tbl.drop_time IS NULL
+----
+{"fractionStaleRows": 0.5, "minStaleRows": "4000"}
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1]
+----
+CREATE TABLE public.t1 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+) WITH (sql_stats_automatic_collection_min_stale_rows = 4000, sql_stats_automatic_collection_fraction_stale_rows = 0.5)
+
+statement ok
+CREATE TABLE t11 (a int) WITH (sql_stats_automatic_collection_enabled = true,
+                               sql_stats_automatic_collection_fraction_stale_rows = 1.797693134862315708145274237317043567981e+308,
+                               sql_stats_automatic_collection_min_stale_rows = 9223372036854775807)
+
+# Using max values for auto stats table settings
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t11]
+----
+CREATE TABLE public.t11 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t11_pkey PRIMARY KEY (rowid ASC)
+) WITH (sql_stats_automatic_collection_enabled = true, sql_stats_automatic_collection_min_stale_rows = 9223372036854775807, sql_stats_automatic_collection_fraction_stale_rows = 1.7976931348623157e+308)
+
+statement error pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000
+CREATE TABLE t22 (a int) WITH (sql_stats_automatic_collection_fraction_stale_rows = -1.0)
+
+statement error pq: invalid integer value for sql_stats_automatic_collection_min_stale_rows: cannot be set to a negative value: -1
+CREATE TABLE t22 (a int) WITH (sql_stats_automatic_collection_min_stale_rows = -1)
