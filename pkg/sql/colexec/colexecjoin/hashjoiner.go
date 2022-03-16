@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -568,7 +569,18 @@ func (hj *hashJoiner) exec() coldata.Batch {
 // congregate uses the probeIdx and buildIdx pairs to stitch together the
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
+//
+// This method should not be called for RIGHT SEMI and RIGHT ANTI joins because
+// they populate the output after probing is done, when in the hjEmittingRight
+// state.
 func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
+	if buildutil.CrdbTestBuild {
+		if !hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
+			panic(errors.AssertionFailedf(
+				"unexpectedly hashJoiner.congregate is called for RIGHT SEMI or RIGHT ANTI join",
+			))
+		}
+	}
 	hj.resetOutput(nResults)
 	// We have already fully built the hash table from the right input and now
 	// are only populating output one batch at a time. If we were to use a
@@ -576,19 +588,20 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 	// very hard to fall back to disk backed hash joiner because we might have
 	// already emitted partial output.
 	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
-		if hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
-			outCols := hj.output.ColVecs()[:len(hj.spec.Left.SourceTypes)]
-			for i := range hj.spec.Left.SourceTypes {
-				outCol := outCols[i]
-				valCol := batch.ColVec(i)
-				outCol.Copy(
-					coldata.SliceArgs{
-						Src:       valCol,
-						Sel:       hj.probeState.probeIdx,
-						SrcEndIdx: nResults,
-					},
-				)
-			}
+		// Populate the left output columns which are needed by all join types
+		// other than RIGHT SEMI and RIGHT ANTI joins, and those two types don't
+		// use this code path.
+		outCols := hj.output.ColVecs()[:len(hj.spec.Left.SourceTypes)]
+		for i := range hj.spec.Left.SourceTypes {
+			outCol := outCols[i]
+			valCol := batch.ColVec(i)
+			outCol.Copy(
+				coldata.SliceArgs{
+					Src:       valCol,
+					Sel:       hj.probeState.probeIdx,
+					SrcEndIdx: nResults,
+				},
+			)
 		}
 
 		if hj.spec.JoinType.ShouldIncludeRightColsInOutput() {
@@ -596,7 +609,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 			// If the hash table is empty, then there is nothing to copy. The nulls
 			// will be set below.
 			if hj.ht.Vals.Length() > 0 {
-				outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.Right.SourceTypes)]
+				outCols = hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.Right.SourceTypes)]
 				for i := range hj.spec.Right.SourceTypes {
 					outCol := outCols[i]
 					valCol := hj.ht.Vals.ColVec(i)
