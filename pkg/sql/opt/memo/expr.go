@@ -832,6 +832,52 @@ func (prj *ProjectExpr) InternalFDs() *props.FuncDepSet {
 	return &prj.internalFuncDeps
 }
 
+// FindInlinableConstants returns the set of input columns that are synthesized
+// constant value expressions: ConstOp, TrueOp, FalseOp, or NullOp. Constant
+// value expressions can often be inlined into referencing expressions. Only
+// Project and Values operators synthesize constant value expressions.
+func FindInlinableConstants(input RelExpr) opt.ColSet {
+	var cols opt.ColSet
+	if project, ok := input.(*ProjectExpr); ok {
+		for i := range project.Projections {
+			item := &project.Projections[i]
+			if opt.IsConstValueOp(item.Element) {
+				cols.Add(item.Col)
+			}
+		}
+	} else if values, ok := input.(*ValuesExpr); ok && len(values.Rows) == 1 {
+		tup := values.Rows[0].(*TupleExpr)
+		for i, scalar := range tup.Elems {
+			if opt.IsConstValueOp(scalar) {
+				cols.Add(values.Cols[i])
+			}
+		}
+	}
+	return cols
+}
+
+// ExtractColumnFromProjectOrValues searches a Project or Values input
+// expression for the column having the given id. It returns the expression for
+// that column.
+func ExtractColumnFromProjectOrValues(input RelExpr, col opt.ColumnID) opt.ScalarExpr {
+	if project, ok := input.(*ProjectExpr); ok {
+		for i := range project.Projections {
+			item := &project.Projections[i]
+			if item.Col == col {
+				return item.Element
+			}
+		}
+	} else if values, ok := input.(*ValuesExpr); ok && len(values.Rows) == 1 {
+		tup := values.Rows[0].(*TupleExpr)
+		for i, scalar := range tup.Elems {
+			if values.Cols[i] == col {
+				return scalar
+			}
+		}
+	}
+	panic(errors.AssertionFailedf("could not find column to extract"))
+}
+
 // ExprIsNeverNull makes a best-effort attempt to prove that the provided
 // scalar is always non-NULL, given the set of outer columns that are known
 // to be not null. This is particularly useful with check constraints.
