@@ -891,3 +891,21 @@ func (p *planner) QueryIteratorEx(
 	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	return rows.(tree.InternalRows), err
 }
+
+func (p *planner) addCreatedSequence(id descpb.ID) {
+	createdSequenceMap := p.txn.CreatedSequenceMap
+	if createdSequenceMap == nil {
+		createdSequenceMap = make(map[uint32]struct{})
+		p.txn.CreatedSequenceMap = createdSequenceMap
+	}
+	createdSequenceMap[uint32(id)] = struct{}{}
+}
+
+func (p *planner) isCreatedSequence(id descpb.ID) bool {
+	createdSequenceMap := p.txn.CreatedSequenceMap
+	if createdSequenceMap == nil {
+		return false
+	}
+	_, ok := createdSequenceMap[uint32(id)]
+	return ok
+}
