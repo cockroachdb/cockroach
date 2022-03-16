@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -35,109 +36,116 @@ var _ spanconfig.SQLTranslator = &SQLTranslator{}
 
 // SQLTranslator is the concrete implementation of spanconfig.SQLTranslator.
 type SQLTranslator struct {
-	execCfg *sql.ExecutorConfig
-	codec   keys.SQLCodec
-	knobs   *spanconfig.TestingKnobs
+	ptsProvider protectedts.Provider
+	codec       keys.SQLCodec
+	knobs       *spanconfig.TestingKnobs
+
+	txn      *kv.Txn
+	descsCol *descs.Collection
 }
 
-// New constructs and returns a SQLTranslator.
-func New(
-	execCfg *sql.ExecutorConfig, codec keys.SQLCodec, knobs *spanconfig.TestingKnobs,
-) *SQLTranslator {
+// Factory is used to construct transaction-scoped SQLTranslators.
+type Factory struct {
+	ptsProvider protectedts.Provider
+	codec       keys.SQLCodec
+	knobs       *spanconfig.TestingKnobs
+}
+
+// NewFactory constructs and returns a Factory.
+func NewFactory(
+	ptsProvider protectedts.Provider, codec keys.SQLCodec, knobs *spanconfig.TestingKnobs,
+) *Factory {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
+	return &Factory{
+		ptsProvider: ptsProvider,
+		codec:       codec,
+		knobs:       knobs,
+	}
+}
+
+// NewSQLTranslator constructs and returns a transaction-scoped
+// spanconfig.SQLTranslator. The caller must ensure that the collection passed
+// in is associated with the supplied transaction.
+func (f *Factory) NewSQLTranslator(txn *kv.Txn, descsCol *descs.Collection) *SQLTranslator {
 	return &SQLTranslator{
-		execCfg: execCfg,
-		codec:   codec,
-		knobs:   knobs,
+		ptsProvider: f.ptsProvider,
+		codec:       f.codec,
+		knobs:       f.knobs,
+		txn:         txn,
+		descsCol:    descsCol,
 	}
 }
 
 // Translate is part of the spanconfig.SQLTranslator interface.
 func (s *SQLTranslator) Translate(
 	ctx context.Context, ids descpb.IDs, generateSystemSpanConfigurations bool,
-) ([]spanconfig.Record, hlc.Timestamp, error) {
-	var records []spanconfig.Record
-	// txn used to translate the IDs, so that we can get its commit timestamp
-	// later.
-	var translateTxn *kv.Txn
-	if err := sql.DescsTxn(ctx, s.execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-	) error {
-		// We're in a retryable closure, so clear any records from previous
-		// attempts.
-		records = records[:0]
+) (records []spanconfig.Record, _ hlc.Timestamp, _ error) {
+	// Construct an in-memory view of the system.protected_ts_records table to
+	// populate the protected timestamp field on the emitted span configs.
+	//
+	// TODO(adityamaru): This does a full table scan of the
+	// `system.protected_ts_records` table. While this is not assumed to be very
+	// expensive given the limited number of concurrent users of the protected
+	// timestamp subsystem, and the internal limits to limit the size of this
+	// table, there is scope for improvement in the future. One option could be
+	// a rangefeed-backed materialized view of the system table.
+	ptsState, err := s.ptsProvider.GetState(ctx, s.txn)
+	if err != nil {
+		return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to get protected timestamp state")
+	}
+	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
 
-		// Construct an in-memory view of the system.protected_ts_records table to
-		// populate the protected timestamp field on the emitted span configs.
-		//
-		// TODO(adityamaru): This does a full table scan of the
-		// `system.protected_ts_records` table. While this is not assumed to be very
-		// expensive given the limited number of concurrent users of the protected
-		// timestamp subsystem, and the internal limits to limit the size of this
-		// table, there is scope for improvement in the future. One option could be
-		// a rangefeed-backed materialized view of the system table.
-		ptsState, err := s.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
+	if generateSystemSpanConfigurations {
+		records, err = s.generateSystemSpanConfigRecords(ptsStateReader)
 		if err != nil {
-			return errors.Wrap(err, "failed to get protected timestamp state")
+			return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to generate SystemTarget records")
 		}
-		ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
-
-		if generateSystemSpanConfigurations {
-			records, err = s.generateSystemSpanConfigRecords(ptsStateReader)
-			if err != nil {
-				return errors.Wrap(err, "failed to generate SystemTarget records")
-			}
-		}
-
-		// For every ID we want to translate, first expand it to descendant leaf
-		// IDs that have span configurations associated for them. We also
-		// de-duplicate leaf IDs to not generate redundant entries.
-		seen := make(map[descpb.ID]struct{})
-		var leafIDs descpb.IDs
-		for _, id := range ids {
-			descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, txn, descsCol)
-			if err != nil {
-				return err
-			}
-			for _, descendantLeafID := range descendantLeafIDs {
-				if _, found := seen[descendantLeafID]; !found {
-					seen[descendantLeafID] = struct{}{}
-					leafIDs = append(leafIDs, descendantLeafID)
-				}
-			}
-		}
-
-		pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, txn, ids)
-		if err != nil {
-			return err
-		}
-		records = append(records, pseudoTableRecords...)
-
-		scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, txn, ids)
-		if err != nil {
-			return err
-		}
-		if !scratchRangeRecord.IsEmpty() {
-			records = append(records, scratchRangeRecord)
-		}
-
-		// For every unique leaf ID, generate span configurations.
-		for _, leafID := range leafIDs {
-			translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol, ptsStateReader)
-			if err != nil {
-				return err
-			}
-			records = append(records, translatedRecords...)
-		}
-		translateTxn = txn
-		return nil
-	}); err != nil {
-		return nil, hlc.Timestamp{}, err
 	}
 
-	return records, translateTxn.CommitTimestamp(), nil
+	// For every ID we want to translate, first expand it to descendant leaf
+	// IDs that have span configurations associated for them. We also
+	// de-duplicate leaf IDs to not generate redundant entries.
+	seen := make(map[descpb.ID]struct{})
+	var leafIDs descpb.IDs
+	for _, id := range ids {
+		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, s.txn, s.descsCol)
+		if err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
+		for _, descendantLeafID := range descendantLeafIDs {
+			if _, found := seen[descendantLeafID]; !found {
+				seen[descendantLeafID] = struct{}{}
+				leafIDs = append(leafIDs, descendantLeafID)
+			}
+		}
+	}
+
+	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, s.txn, ids)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	records = append(records, pseudoTableRecords...)
+
+	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, s.txn, ids)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	if !scratchRangeRecord.IsEmpty() {
+		records = append(records, scratchRangeRecord)
+	}
+
+	// For every unique leaf ID, generate span configurations.
+	for _, leafID := range leafIDs {
+		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, s.txn, s.descsCol, ptsStateReader)
+		if err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
+		records = append(records, translatedRecords...)
+	}
+
+	return records, s.txn.CommitTimestamp(), nil
 }
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.
