@@ -2584,6 +2584,23 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		appendStorageParam(`exclude_data_from_backup`, `true`)
 	}
+	if settings := desc.AutoStatsSettings; settings != nil {
+		if settings.Enabled != nil {
+			value := *settings.Enabled
+			appendStorageParam(catpb.AutoStatsEnabledTableSettingName,
+				fmt.Sprintf("%v", value))
+		}
+		if settings.MinStaleRows != nil {
+			value := *settings.MinStaleRows
+			appendStorageParam(catpb.AutoStatsMinStaleTableSettingName,
+				fmt.Sprintf("%d", value))
+		}
+		if settings.FractionStaleRows != nil {
+			value := *settings.FractionStaleRows
+			appendStorageParam(catpb.AutoStatsFractionStaleTableSettingName,
+				fmt.Sprintf("%g", value))
+		}
+	}
 	return storageParams
 }
 
@@ -2600,6 +2617,43 @@ func (desc *wrapper) GetMultiRegionEnumDependencyIfExists() bool {
 		return regionName != catpb.RegionName(tree.PrimaryRegionNotSpecifiedName)
 	}
 	return false
+}
+
+// NoAutoStatsSettingsOverrides implements the TableDescriptor interface.
+func (desc *wrapper) NoAutoStatsSettingsOverrides() bool {
+	if desc.AutoStatsSettings == nil {
+		return true
+	}
+	return desc.AutoStatsSettings.NoAutoStatsSettingsOverrides()
+}
+
+// AutoStatsCollectionEnabled implements the TableDescriptor interface.
+func (desc *wrapper) AutoStatsCollectionEnabled() catpb.AutoStatsCollectionStatus {
+	if desc.AutoStatsSettings == nil {
+		return catpb.AutoStatsCollectionNotSet
+	}
+	return desc.AutoStatsSettings.AutoStatsCollectionEnabled()
+}
+
+// AutoStatsMinStaleRows implements the TableDescriptor interface.
+func (desc *wrapper) AutoStatsMinStaleRows() (minStaleRows int64, ok bool) {
+	if desc.AutoStatsSettings == nil {
+		return 0, false
+	}
+	return desc.AutoStatsSettings.AutoStatsMinStaleRows()
+}
+
+// AutoStatsFractionStaleRows implements the TableDescriptor interface.
+func (desc *wrapper) AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool) {
+	if desc.AutoStatsSettings == nil {
+		return 0, false
+	}
+	return desc.AutoStatsSettings.AutoStatsFractionStaleRows()
+}
+
+// GetAutoStatsSettings implements the TableDescriptor interface.
+func (desc *wrapper) GetAutoStatsSettings() *catpb.AutoStatsSettings {
+	return desc.AutoStatsSettings
 }
 
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
