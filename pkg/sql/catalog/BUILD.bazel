@@ -25,6 +25,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",

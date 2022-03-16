@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -678,6 +679,23 @@ type TableDescriptor interface {
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
 	GetStorageParams(spaceBetweenEqual bool) []string
+	// NoClusterSettingOverrides is true if no cluster settings are set at the
+	// table level for the given table, meaning no cluster settings are overridden
+	// for this table.
+	NoClusterSettingOverrides() bool
+	// AutoStatsCollectionEnabled indicates if automatic statistics collection is
+	// explicitly enabled or disabled for this table.
+	AutoStatsCollectionEnabled() cluster.BoolSetting
+	// AutoStatsMinStaleRows indicates the setting of
+	// sql.stats.automatic_collection.min_stale_rows for this table.
+	// If ok is true, then the minStaleRows value is valid, otherwise this has not
+	// been set at the table level.
+	AutoStatsMinStaleRows() (minStaleRows int64, ok bool)
+	// AutoStatsFractionStaleRows indicates the setting of
+	// sql.stats.automatic_collection.fraction_stale_rows for this table.
+	// If ok is true, then the fractionStaleRows value is valid, otherwise this has
+	// not been set at the table level.
+	AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool)
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
