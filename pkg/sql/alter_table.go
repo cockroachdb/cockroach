@@ -715,6 +715,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
+			oldTableHasAutoStatsSettings := n.tableDesc.GetAutoStatsSettings() != nil
 			var ttlBefore *catpb.RowLevelTTL
 			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
@@ -740,7 +741,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+			newTableHasAutoStatsSettings := n.tableDesc.GetAutoStatsSettings() != nil
+			if err := checkDisallowedAutoStatsSettingChange(
+				params, oldTableHasAutoStatsSettings, newTableHasAutoStatsSettings,
+			); err != nil {
+				return err
+			}
+
 		case *tree.AlterTableResetStorageParams:
+			oldTableHasAutoStatsSettings := n.tableDesc.GetAutoStatsSettings() != nil
 			var ttlBefore *catpb.RowLevelTTL
 			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
@@ -761,6 +770,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				n.tableDesc,
 				ttlBefore,
 				n.tableDesc.GetRowLevelTTL(),
+			); err != nil {
+				return err
+			}
+
+			newTableHasAutoStatsSettings := n.tableDesc.GetAutoStatsSettings() != nil
+			if err := checkDisallowedAutoStatsSettingChange(
+				params, oldTableHasAutoStatsSettings, newTableHasAutoStatsSettings,
 			); err != nil {
 				return err
 			}
@@ -1930,6 +1946,21 @@ func handleTTLStorageParamChange(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: before},
 			descpb.DescriptorMutation_DROP,
 		)
+	}
+
+	return nil
+}
+
+func checkDisallowedAutoStatsSettingChange(
+	params runParams, oldTableHasAutoStatsSettings, newTableHasAutoStatsSettings bool,
+) error {
+	if !oldTableHasAutoStatsSettings && !newTableHasAutoStatsSettings {
+		// Do not have to do anything here.
+		return nil
+	}
+
+	if err := checkAutoStatsTableSettingsEnabledForCluster(params.ctx, params.p.ExecCfg().Settings); err != nil {
+		return err
 	}
 
 	return nil
