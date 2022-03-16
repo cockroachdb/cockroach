@@ -28,7 +28,10 @@ SELECT * FROM kv
 a b
 c d
 
-# second statement returns an error, and causes the whole batch to rollbacl
+statement ok
+SET enable_implicit_transaction_for_batch_statements = true
+
+# second statement returns an error, and causes the whole batch to rollback
 statement error duplicate key value violates unique constraint "kv_pkey"\nDETAIL: Key \(k\)=\('a'\) already exists\.
 INSERT INTO kv (k,v) VALUES ('g', 'h'); INSERT INTO kv (k,v) VALUES ('a', 'b')
 

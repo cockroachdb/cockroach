@@ -85,6 +85,7 @@ eexpect 999
 eexpect root@
 
 # Two statements sent in a batch will have the same counter.
+send "SET enable_implicit_transaction_for_batch_statements = true;\r"
 send "SELECT 660+6; SELECT 660+6;\r"
 eexpect 666
 eexpect 666
