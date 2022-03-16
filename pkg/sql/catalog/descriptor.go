@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -678,6 +679,34 @@ type TableDescriptor interface {
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
 	GetStorageParams(spaceBetweenEqual bool) []string
+	// NoClusterSettingOverrides is true if no cluster settings are set at the
+	// table level for the given table, meaning no cluster settings are overridden
+	// for this table.
+	NoClusterSettingOverrides() bool
+	// NoAutoStatsSettingsOverrides is true if no auto stats related cluster
+	// settings are set at the table level for the given table.
+	NoAutoStatsSettingsOverrides() bool
+	// AutoStatsCollectionEnabled indicates if automatic statistics collection is
+	// explicitly enabled or disabled for this table.
+	AutoStatsCollectionEnabled() cluster.BoolSetting
+	// AutoStatsMinStaleRows indicates the setting of
+	// sql.stats.automatic_collection.min_stale_rows for this table.
+	// If ok is true, then the minStaleRows value is valid, otherwise this has not
+	// been set at the table level.
+	AutoStatsMinStaleRows() (minStaleRows int64, ok bool)
+	// AutoStatsFractionStaleRows indicates the setting of
+	// sql.stats.automatic_collection.fraction_stale_rows for this table. If ok is
+	// true, then the fractionStaleRows value is valid, otherwise this has not
+	// been set at the table level.
+	AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool)
+	// GetClusterSettingsForTable returns the cluster settings specified at
+	// the table level for this table. May return nil if none are set.
+	GetClusterSettingsForTable() *catpb.ClusterSettingsForTable
+	// AutoStatsClusterSettingOverridesEqual returns true if all auto stats
+	// related cluster setting overrides in this descriptor match those in the
+	// `otherClusterSettings`. An unset value must also be unset in the other's
+	// settings to be equal.
+	AutoStatsClusterSettingOverridesEqual(otherClusterSettings *catpb.ClusterSettingsForTable) bool
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.

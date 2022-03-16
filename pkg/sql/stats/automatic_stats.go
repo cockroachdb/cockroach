@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,15 +35,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// AutoStatsClusterSettingName is the name of the automatic stats collection
-// cluster setting.
-const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
-
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	settings.TenantWritable,
-	AutoStatsClusterSettingName,
+	cluster.AutoStatsEnabledSettingName,
 	"automatic statistics collection mode",
 	true,
 ).WithPublic()
@@ -81,7 +78,7 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
 var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
 		settings.TenantWritable,
-		"sql.stats.automatic_collection.fraction_stale_rows",
+		cluster.AutoStatsFractionStaleSettingName,
 		"target fraction of stale rows per table that will trigger a statistics refresh",
 		0.2,
 		settings.NonNegativeFloat,
@@ -96,7 +93,7 @@ var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
 var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
 	s := settings.RegisterIntSetting(
 		settings.TenantWritable,
-		"sql.stats.automatic_collection.min_stale_rows",
+		cluster.AutoStatsMinStaleSettingName,
 		"target minimum number of stale rows per table that will trigger a statistics refresh",
 		500,
 		settings.NonNegativeInt,
@@ -110,6 +107,10 @@ var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
 // NB: Updates to this value after Refresher.Start has been called will not
 // have any effect.
 var DefaultRefreshInterval = time.Minute
+
+// MinRefreshInterval is the minimum auto stats refresh interval allowed.
+// If a shorter interval is requested, MinRefreshInterval is used instead.
+const MinRefreshInterval = time.Microsecond
 
 // DefaultAsOfTime is a duration which is used to define the AS OF time for
 // automatic runs of CREATE STATISTICS. It is mutable for testing.
@@ -199,6 +200,10 @@ type Refresher struct {
 	// metadata about SQL mutations to the background Refresher thread.
 	mutations chan mutation
 
+	// settings is the buffered channel used to pass messages containing
+	// autostats setting override information to the background Refresher thread.
+	settings chan settingOverride
+
 	// asOfTime is a duration which is used to define the AS OF time for
 	// runs of CREATE STATISTICS by the Refresher.
 	asOfTime time.Duration
@@ -212,13 +217,28 @@ type Refresher struct {
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
 	mutationCounts map[descpb.ID]int64
+
+	// settingOverrides holds any autostats cluster setting overrides for each
+	// table.
+	settingOverrides map[descpb.ID]catpb.ClusterSettingsForTable
+
+	// numTablesEnsured is an internal counter for testing ensureAllTables.
+	numTablesEnsured int
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
 // the background refresher thread to (possibly) trigger a statistics refresh.
 type mutation struct {
-	tableID      descpb.ID
-	rowsAffected int
+	tableID             descpb.ID
+	rowsAffected        int
+	hasSettingOverrides bool
+}
+
+// settingOverride specifies the autostats setting override values to use in
+// place of the cluster settings.
+type settingOverride struct {
+	tableID  descpb.ID
+	settings catpb.ClusterSettingsForTable
 }
 
 // MakeRefresher creates a new Refresher.
@@ -232,16 +252,77 @@ func MakeRefresher(
 	randSource := rand.NewSource(rand.Int63())
 
 	return &Refresher{
-		AmbientContext: ambientCtx,
-		st:             st,
-		ex:             ex,
-		cache:          cache,
-		randGen:        makeAutoStatsRand(randSource),
-		mutations:      make(chan mutation, refreshChanBufferLen),
-		asOfTime:       asOfTime,
-		extraTime:      time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts: make(map[descpb.ID]int64, 16),
+		AmbientContext:   ambientCtx,
+		st:               st,
+		ex:               ex,
+		cache:            cache,
+		randGen:          makeAutoStatsRand(randSource),
+		mutations:        make(chan mutation, refreshChanBufferLen),
+		settings:         make(chan settingOverride, refreshChanBufferLen),
+		asOfTime:         asOfTime,
+		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
+		mutationCounts:   make(map[descpb.ID]int64, 16),
+		settingOverrides: make(map[descpb.ID]catpb.ClusterSettingsForTable),
 	}
+}
+
+func (r *Refresher) getNumTablesEnsured() int {
+	return r.numTablesEnsured
+}
+
+func (r *Refresher) autoStatsEnabled(desc catalog.TableDescriptor) bool {
+	if desc == nil {
+		// If the descriptor could not be accessed, defer to the cluster setting.
+		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
+	}
+	enabledForTable := desc.AutoStatsCollectionEnabled()
+	// The table-level setting of sql.stats.automatic_collection.enabled takes
+	// precedence over the cluster setting.
+	if enabledForTable == cluster.NotSet {
+		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
+	}
+	return enabledForTable == cluster.True
+}
+
+func (r *Refresher) autoStatsEnabledForTableID(
+	tableID descpb.ID, settingOverrides map[descpb.ID]catpb.ClusterSettingsForTable,
+) bool {
+	var setting catpb.ClusterSettingsForTable
+	var ok bool
+
+	if setting, ok = settingOverrides[tableID]; !ok {
+		// If there are no setting overrides, defer to the cluster setting.
+		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
+	}
+	autoStatsSettingValue := setting.AutoStatsCollectionEnabled()
+	if autoStatsSettingValue == cluster.NotSet {
+		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
+	}
+	// The table-level setting of sql.stats.automatic_collection.enabled takes
+	// precedence over the cluster setting.
+	return autoStatsSettingValue == cluster.True
+}
+
+func (r *Refresher) autoStatsMinStaleRows(explicitSettings *catpb.ClusterSettingsForTable) int64 {
+	if explicitSettings == nil {
+		return AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
+	}
+	if minStaleRows, ok := explicitSettings.AutoStatsMinStaleRows(); ok {
+		return minStaleRows
+	}
+	return AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
+}
+
+func (r *Refresher) autoStatsFractionStaleRows(
+	explicitSettings *catpb.ClusterSettingsForTable,
+) float64 {
+	if explicitSettings == nil {
+		return AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)
+	}
+	if fractionStaleRows, ok := explicitSettings.AutoStatsFractionStaleRows(); ok {
+		return fractionStaleRows
+	}
+	return AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)
 }
 
 // Start starts the stats refresher thread, which polls for messages about
@@ -252,6 +333,11 @@ func (r *Refresher) Start(
 ) error {
 	bgCtx := r.AnnotateCtx(context.Background())
 	_ = stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
+		// Make sure we never sleep for zero time. This ends up spinning the CPU.
+		if refreshInterval < MinRefreshInterval {
+			refreshInterval = MinRefreshInterval
+		}
+		// origRefreshInterval := refreshInterval  // msirek-temp
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime
@@ -273,7 +359,13 @@ func (r *Refresher) Start(
 				r.ensureAllTables(ctx, &r.st.SV, initialTableCollectionDelay)
 
 			case <-timer.C:
+				//if len(r.mutationCounts) == 0 {
+				//	timer.Reset(origRefreshInterval)
+				//	continue
+				//}  // msirek-temp
 				mutationCounts := r.mutationCounts
+				settingOverrides := r.settingOverrides
+
 				if err := stopper.RunAsyncTask(
 					ctx, "stats.Refresher: maybeRefreshStats", func(ctx context.Context) {
 						// Wait so that the latest changes will be reflected according to the
@@ -288,13 +380,16 @@ func (r *Refresher) Start(
 						}
 
 						for tableID, rowsAffected := range mutationCounts {
-							// Check the cluster setting before each refresh in case it was
-							// disabled recently.
-							if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
-								break
+							// Check the cluster setting and table setting before each refresh
+							// in case they were disabled recently.
+							if !r.autoStatsEnabledForTableID(tableID, settingOverrides) {
+								continue
 							}
-
-							r.maybeRefreshStats(ctx, stopper, tableID, rowsAffected, r.asOfTime)
+							var explicitSettings *catpb.ClusterSettingsForTable
+							if settings, ok := settingOverrides[tableID]; ok {
+								explicitSettings = &settings
+							}
+							r.maybeRefreshStats(ctx, tableID, explicitSettings, rowsAffected, r.asOfTime)
 
 							select {
 							case <-stopper.ShouldQuiesce():
@@ -308,12 +403,35 @@ func (r *Refresher) Start(
 					}); err != nil {
 					log.Errorf(ctx, "failed to refresh stats: %v", err)
 				}
+				// This clears out any tables that may have been added to the
+				// mutationCounts map by ensureAllTables. This is by design. We don't
+				// want to constantly refresh tables that are read-only.
 				r.mutationCounts = make(map[descpb.ID]int64, len(r.mutationCounts))
 
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
+				// The mutations channel also handles resetting of cluster setting
+				// overrides when none exist (so that we don't have to pass two messages
+				// when nothing is overridden).
+				if !mut.hasSettingOverrides {
+					delete(r.settingOverrides, mut.tableID)
+				}
+
+			case clusterSettingOverride := <-r.settings:
+				if oldSettings, ok := r.settingOverrides[clusterSettingOverride.tableID]; ok {
+					currentSettings := clusterSettingOverride.settings
+					// If the old cluster setting overrides don't match the current ones, update
+					// the hash map with the current settings.
+					if !currentSettings.AutoStatsSettingsEqual(&oldSettings) {
+						r.settingOverrides[clusterSettingOverride.tableID] = currentSettings
+					}
+				} else {
+					// There were no previous settings, to use the new ones.
+					r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
+				}
 
 			case <-stopper.ShouldQuiesce():
+				log.Info(ctx, "quiescing auto stats refresher")
 				return
 			}
 		}
@@ -321,19 +439,8 @@ func (r *Refresher) Start(
 	return nil
 }
 
-// ensureAllTables ensures that an entry exists in r.mutationCounts for each
-// table in the database.
-func (r *Refresher) ensureAllTables(
-	ctx context.Context, settings *settings.Values, initialTableCollectionDelay time.Duration,
-) {
-	if !AutomaticStatisticsClusterMode.Get(settings) {
-		// Automatic stats are disabled.
-		return
-	}
-
-	// Use a historical read so as to disable txn contention resolution.
-	getAllTablesQuery := fmt.Sprintf(
-		`
+const (
+	getAllTablesTemplateSQL = `
 SELECT
 	tbl.table_id
 FROM
@@ -346,16 +453,33 @@ WHERE
 	AND tbl.drop_time IS NULL
 	AND (
 			crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor, false)->'table'->>'viewQuery'
-		) IS NULL;`,
-		initialTableCollectionDelay,
-		systemschema.SystemDatabaseName,
-	)
+		) IS NULL
+	%s`
 
+	explicitlyEnabledTablesPredicate = `AND
+	(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+		d.descriptor, false)->'table'->'clusterSettingsForTable' ->> 'sqlStatsAutomaticCollectionEnabled' = 'true'
+	)`
+
+	autoStatsEnabledOrNotSpecifiedPredicate = `AND
+	(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+		d.descriptor, false)->'table'->'clusterSettingsForTable'->'sqlStatsAutomaticCollectionEnabled' IS NULL
+	 OR crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+		d.descriptor, false)->'table'->'clusterSettingsForTable' ->> 'sqlStatsAutomaticCollectionEnabled' = 'true'
+	)`
+)
+
+func (r *Refresher) getApplicableTables(
+	ctx context.Context, stmt string, opname string, forTesting bool,
+) {
+	if forTesting {
+		r.numTablesEnsured = 0
+	}
 	it, err := r.ex.QueryIterator(
 		ctx,
-		"get-tables",
+		opname,
 		nil, /* txn */
-		getAllTablesQuery,
+		stmt,
 	)
 	if err == nil {
 		var ok bool
@@ -366,6 +490,9 @@ WHERE
 			// The query already excludes views and system tables.
 			if !descpb.IsVirtualTable(tableID) {
 				r.mutationCounts[tableID] += 0
+				if forTesting {
+					r.numTablesEnsured++
+				}
 			}
 		}
 	}
@@ -376,7 +503,59 @@ WHERE
 		// entry is idempotent (i.e. we didn't mess up anything for the next
 		// call to this method).
 		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
+	}
+}
+
+// ensureAllTables ensures that an entry exists in r.mutationCounts for each
+// table in the database which has auto stats enabled, either explicitly via
+// a table-level setting, or implicitly via the cluster setting.
+func (r *Refresher) ensureAllTables(
+	ctx context.Context, settings *settings.Values, initialTableCollectionDelay time.Duration,
+) {
+	if !AutomaticStatisticsClusterMode.Get(settings) {
+		// Use a historical read so as to disable txn contention resolution.
+		// A table-level setting of sql.stats.automatic_collection.enabled=true is
+		// checked and only those tables are included in this scan.
+		getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
+			getAllTablesTemplateSQL,
+			initialTableCollectionDelay,
+			systemschema.SystemDatabaseName,
+			explicitlyEnabledTablesPredicate,
+		)
+		r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
+			"get-tables-with-autostats-explicitly-enabled", false)
 		return
+	}
+
+	// Use a historical read so as to disable txn contention resolution.
+	// A table-level setting of sql.stats.automatic_collection.enabled of null,
+	// meaning not set, or true qualifies rows we're interested in.
+	getAllTablesQuery := fmt.Sprintf(
+		getAllTablesTemplateSQL,
+		initialTableCollectionDelay,
+		systemschema.SystemDatabaseName,
+		autoStatsEnabledOrNotSpecifiedPredicate,
+	)
+	r.getApplicableTables(ctx, getAllTablesQuery,
+		"get-tables", false)
+}
+
+func copyAutoStatsSettings(
+	dest *catpb.ClusterSettingsForTable, src *catpb.ClusterSettingsForTable,
+) {
+	if src == nil || dest == nil {
+		return
+	}
+	autoStatsEnabledSetting := src.AutoStatsCollectionEnabled()
+	if autoStatsEnabledSetting != cluster.NotSet {
+		autoStatsEnabled := autoStatsEnabledSetting == cluster.True
+		dest.SqlStatsAutomaticCollectionEnabled = &autoStatsEnabled
+	}
+	if minStaleRows, ok := src.AutoStatsMinStaleRows(); ok {
+		dest.SqlStatsAutomaticCollectionMinStaleRows = &minStaleRows
+	}
+	if fractionStaleRows, ok := src.AutoStatsFractionStaleRows(); ok {
+		dest.SqlStatsAutomaticCollectionFractionStaleRows = &fractionStaleRows
 	}
 }
 
@@ -385,19 +564,46 @@ WHERE
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
 func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
-	if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
-		// Automatic stats are disabled.
+	if !r.autoStatsEnabled(table) {
 		return
 	}
+
 	if !hasStatistics(table) {
 		// Don't collect stats for this kind of table: system, virtual, view, etc.
 		return
 	}
 
+	hasSettingOverrides := !table.NoAutoStatsSettingsOverrides()
+
+	// Send setting override information over first, so it could take effect
+	// before the mutation is processed.
+	if hasSettingOverrides {
+		clusterSettingsForTable := table.GetClusterSettingsForTable()
+		autoStatsOverrides := catpb.ClusterSettingsForTable{}
+		copyAutoStatsSettings(&autoStatsOverrides, clusterSettingsForTable)
+		select {
+		case r.settings <- settingOverride{
+			tableID:  table.GetID(),
+			settings: autoStatsOverrides,
+		}:
+		default:
+			// Don't block if there is no room in the buffered channel.
+			if bufferedChanFullLogLimiter.ShouldLog() {
+				log.Warningf(context.TODO(),
+					"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
+					table.GetName(), table.GetID())
+			}
+		}
+	}
+
 	// Send mutation info to the refresher thread to avoid adding latency to
 	// the calling transaction.
 	select {
-	case r.mutations <- mutation{tableID: table.GetID(), rowsAffected: rowsAffected}:
+	case r.mutations <- mutation{
+		tableID:             table.GetID(),
+		rowsAffected:        rowsAffected,
+		hasSettingOverrides: hasSettingOverrides,
+	}:
 	default:
 		// Don't block if there is no room in the buffered channel.
 		if bufferedChanFullLogLimiter.ShouldLog() {
@@ -410,10 +616,12 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 
 // maybeRefreshStats implements the core logic described in the comment for
 // Refresher. It is called by the background Refresher thread.
+// explicitSettings, if non-nil, holds any autostats cluster setting overrides
+// for this table.
 func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
-	stopper *stop.Stopper,
 	tableID descpb.ID,
+	explicitSettings *catpb.ClusterSettingsForTable,
 	rowsAffected int64,
 	asOf time.Duration,
 ) {
@@ -453,15 +661,26 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	targetRows := int64(rowCount*AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)) +
-		AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
-	if !mustRefresh && rowsAffected < math.MaxInt32 && r.randGen.randInt(targetRows) >= rowsAffected {
+	statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
+	statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
+	targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
+	// randInt will panic if we pass it a value of 0.
+	randomTargetRows := int64(0)
+	if targetRows > 0 {
+		randomTargetRows = r.randGen.randInt(targetRows)
+	}
+	if !mustRefresh && rowsAffected < math.MaxInt32 && randomTargetRows >= rowsAffected {
 		// No refresh is happening this time.
 		return
 	}
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
 		if errors.Is(err, ConcurrentCreateStatsError) {
+			// Make sure we don't remove any explicitSettings from the
+			// settingOverrides map. An ALTER TABLE may have just occurred, creating
+			// new valid auto stats settings and a false value of hasSettingOverrides
+			// would remove those.
+			const dontRemoveSettings = true
 			// Another stats job was already running. Attempt to reschedule this
 			// refresh.
 			if mustRefresh {
@@ -471,14 +690,16 @@ func (r *Refresher) maybeRefreshStats(
 				// cycle so that we have another chance to trigger a refresh. We pass
 				// rowsAffected=0 so that we don't force a refresh if another node has
 				// already done it.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
+				r.mutations <- mutation{tableID: tableID, rowsAffected: 0,
+					hasSettingOverrides: dontRemoveSettings}
 			} else {
 				// If this refresh was caused by a "dice roll", we want to make sure
 				// that the refresh is rescheduled so that we adhere to the
 				// AutomaticStatisticsFractionStaleRows statistical ideal. We
 				// ensure that the refresh is triggered during the next cycle by
 				// passing a very large number for rowsAffected.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32,
+					hasSettingOverrides: dontRemoveSettings}
 			}
 			return
 		}

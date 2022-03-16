@@ -29,6 +29,7 @@ go_proto_library(
 go_library(
     name = "catpb",
     srcs = [
+        "catalog.go",
         "constraint.go",
         "default_privilege.go",
         "doc.go",
@@ -44,6 +45,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/security",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catid",
