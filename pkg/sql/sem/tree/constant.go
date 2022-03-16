@@ -491,6 +491,7 @@ var (
 		types.Interval,
 		types.Uuid,
 		types.DateArray,
+		types.MakeArray(types.Oid),
 		types.TimeArray,
 		types.TimeTZArray,
 		types.TimestampArray,
