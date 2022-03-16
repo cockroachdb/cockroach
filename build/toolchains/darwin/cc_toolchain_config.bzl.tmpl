@@ -34,35 +34,35 @@ def _impl(ctx):
     tool_paths = [
         tool_path(
             name = "gcc",
-            path = "bin/x86_64-apple-darwin19-cc",
+            path = "bin/%{target}-apple-darwin21.2-cc",
         ),
         tool_path(
             name = "ld",
-            path = "bin/x86_64-apple-darwin19-ld",
+            path = "bin/%{target}-apple-darwin21.2-ld",
         ),
         tool_path(
             name = "cpp",
-            path = "bin/x86_64-apple-darwin19-c++",
+            path = "bin/%{target}-apple-darwin21.2-c++",
         ),
         tool_path(
             name = "gcov",
-            path = "bin/x86_64-apple-darwin19-gcov",
+            path = "bin/%{target}-apple-darwin21.2-gcov",
         ),
         tool_path(
             name = "nm",
-            path = "bin/x86_64-apple-darwin19-nm",
+            path = "bin/%{target}-apple-darwin21.2-nm",
         ),
         tool_path(
             name = "objdump",
-            path = "bin/x86_64-apple-darwin19-objdump",
+            path = "bin/%{target}-apple-darwin21.2-objdump",
         ),
         tool_path(
             name = "strip",
-            path = "bin/x86_64-apple-darwin19-strip",
+            path = "bin/%{target}-apple-darwin21.2-strip",
         ),
         tool_path(
             name = "ar",
-            path = "bin/x86_64-apple-darwin19-ar",
+            path = "bin/%{target}-apple-darwin21.2-ar",
         ),
     ]
 
@@ -112,7 +112,7 @@ def _impl(ctx):
                         flags = [
                             "-g1",
                             "-Wall",
-                            "-I%{repo_path}/SDK/MacOSX10.15.sdk/usr/include/c++/v1",
+                            "-I%{repo_path}/SDK/MacOSX12.1.sdk/usr/include/c++/v1",
                         ],
                     ),
                 ]),
@@ -191,20 +191,20 @@ def _impl(ctx):
     return cc_common.create_cc_toolchain_config_info(
         ctx = ctx,
         features = features,
-        toolchain_identifier = "x86_64-apple-darwin19-cross-toolchain",
-        host_system_name = "x86_64-apple-darwin19",
-        target_system_name = "x86_64-apple-darwin19",
-        target_cpu = "x86_64-apple-darwin19",
+        toolchain_identifier = "%{target}-apple-darwin21.2-cross-toolchain",
+        host_system_name = "{host}-apple-darwin21.2",
+        target_system_name = "%{target}-apple-darwin21.2",
+        target_cpu = "%{target}-apple-darwin21.2",
         target_libc = "glibc-2.14",
         compiler = "clang",
         abi_version = "clang-10.0.0",
-        abi_libc_version = "x86_64-apple-darwin19",
+        abi_libc_version = "%{target}-apple-darwin21.2",
         tool_paths = tool_paths,
         cxx_builtin_include_directories = [
             "%sysroot%/usr/include",
             "/usr/lib/llvm-10/lib/clang/10.0.0/include",
         ],
-        builtin_sysroot = "%{repo_path}/SDK/MacOSX10.15.sdk",
+        builtin_sysroot = "%{repo_path}/SDK/MacOSX12.1.sdk",
     )
 
 cc_toolchain_config = rule(

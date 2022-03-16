@@ -3,14 +3,14 @@ package(default_visibility = ["//visibility:public"])
 load(":cc_toolchain_config.bzl", "cc_toolchain_config")
 
 exports_files([
-    "bin/x86_64-apple-darwin19-install_name_tool",
-    "bin/x86_64-apple-darwin19-otool",
+    "bin/%{target}-apple-darwin21.2-install_name_tool",
+    "bin/%{target}-apple-darwin21.2-otool",
 ])
 
 cc_toolchain_suite(
     name = "suite",
     toolchains = {
-        "k8": ":toolchain",
+        "%{host}": ":toolchain",
     },
 )
 
@@ -31,22 +31,22 @@ filegroup(
 filegroup(
     name = "compiler_files",
     srcs = [
-        "bin/x86_64-apple-darwin19-cc",
-        "bin/x86_64-apple-darwin19-c++",
+        "bin/%{target}-apple-darwin21.2-cc",
+        "bin/%{target}-apple-darwin21.2-c++",
     ],
 )
 
 filegroup(
     name = "ar_files",
     srcs = [
-        "bin/x86_64-apple-darwin19-ar",
+        "bin/%{target}-apple-darwin21.2-ar",
     ],
 )
 
 filegroup(
     name = "linker_files",
     srcs = [
-        "bin/x86_64-apple-darwin19-cc",
+        "bin/%{target}-apple-darwin21.2-cc",
         "bin/xcrun",
     ],
 )
@@ -54,20 +54,20 @@ filegroup(
 filegroup(
     name = "objcopy_files",
     srcs = [
-        "bin/x86_64-apple-darwin19-objcopy",
+        "bin/%{target}-apple-darwin21.2-objcopy",
     ],
 )
 
 filegroup(
     name = "strip_files",
     srcs = [
-        "bin/x86_64-apple-darwin19-strip",
+        "bin/%{target}-apple-darwin21.2-strip",
     ],
 )
 
 cc_toolchain(
     name = "toolchain",
-    toolchain_identifier = "x86_64-apple-darwin19-cross-toolchain",
+    toolchain_identifier = "%{target}-apple-darwin21.2-cross-toolchain",
     toolchain_config = ":toolchain_config",
     all_files = ":all_files",
     ar_files = ":ar_files",
