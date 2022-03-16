@@ -295,9 +295,9 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				return err
 			}
 			if cs != execinfra.NeedMoreRows {
-				// TODO(dt): presumably this is because our recv already closed due to
-				// another error... so do we really need another one?
-				return errors.New("unexpected closure of consumer")
+				// We don't return an error here because we want the error (if any) that
+				// actually caused the consumer to enter a closed/draining state to take precendence.
+				return nil
 			}
 			if done {
 				break
