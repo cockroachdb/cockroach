@@ -867,3 +867,43 @@ CREATE TABLE public.t_good_hash_indexes_2 (
    crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
    CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
 )
+
+subtest table_settings
+
+statement ok
+CREATE TABLE t1 (a int) WITH ("sql.stats.automatic_collection.enabled" = true)
+
+# Verify automatic collection is enabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'tableLevelSetting'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't1'
+    AND tbl.drop_time IS NULL
+----
+{"sqlStatsAutomaticCollectionEnabled": {"value": true}}
+
+statement ok
+DROP TABLE t1
+
+statement ok
+CREATE TABLE t1 (a int) WITH ("sql.stats.automatic_collection.fraction_stale_rows" = 0.5,
+                              "sql.stats.automatic_collection.min_stale_rows" = 4000)
+
+# Verify settings
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'tableLevelSetting'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't1'
+    AND tbl.drop_time IS NULL
+----
+{"sqlStatsAutomaticCollectionFractionStaleRows": {"value": 0.5}, "sqlStatsAutomaticCollectionMinStaleRows": {"value": "4000"}}

@@ -84,6 +84,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// even though rowsAffected=0.
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -93,6 +95,31 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// is 0, so refreshing will not succeed.
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
+	)
+	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Setting minStaleRows for the table prevents refreshing from occurring.
+	minStaleRowsForTable := int64(100000000)
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                                      /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, &minStaleRowsForTable, /* minStaleRowsForTable */
+	)
+	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Setting fractionStaleRows for the table can also prevent refreshing from
+	// occurring, though this is a not a typical value for this setting.
+	fractionStaleRowsForTable := float64(100000000)
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                                           /* enabledForTable */
+		&fractionStaleRowsForTable /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
@@ -102,6 +129,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// updated than exist in the table, the probability of a refresh is 100%.
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 2 /* expected */); err != nil {
 		t.Fatal(err)
@@ -113,6 +142,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descVW := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descVW.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 	select {
 	case <-refresher.mutations:
@@ -312,6 +343,8 @@ func TestAverageRefreshTime(t *testing.T) {
 	// is 0.
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), table.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 	if err := checkStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
 		t.Fatal(err)
@@ -362,6 +395,8 @@ func TestAverageRefreshTime(t *testing.T) {
 	// were deleted.
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), table.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 	if err := checkStatsCount(ctx, cache, table, 15 /* expected */); err != nil {
 		t.Fatal(err)
@@ -455,6 +490,8 @@ func TestNoRetryOnFailure(t *testing.T) {
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(
 		ctx, s.Stopper(), 100 /* tableID */, math.MaxInt32, time.Microsecond, /* asOfTime */
+		false,                                    /* enabledForTable */
+		nil /* fractionStaleRowsForTable */, nil, /* minStaleRowsForTable */
 	)
 
 	// Ensure that we will not try to refresh tableID 100 again.

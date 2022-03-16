@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -137,6 +139,34 @@ func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (boo
 		return false, err
 	}
 	return bool(*s), nil
+}
+
+func intFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (int64, error) {
+	intDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if intDatum, err = tree.ParseDInt(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid value for %s", key)
+		}
+	}
+	s, err := DatumAsInt(evalCtx, key, intDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
+}
+
+func floatFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (float64, error) {
+	floatDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if floatDatum, err = tree.ParseDFloat(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid value for %s", key)
+		}
+	}
+	s, err := DatumAsFloat(evalCtx, key, floatDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
 }
 
 type tableParam struct {
@@ -448,6 +478,18 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	stats.AutoStatsClusterSettingName: {
+		onSet:   boolTableSettingFunc,
+		onReset: tableSettingResetFunc(boolSetting),
+	},
+	`sql.stats.automatic_collection.min_stale_rows`: {
+		onSet:   intTableSettingFunc(settings.NonNegativeInt),
+		onReset: tableSettingResetFunc(intSetting),
+	},
+	`sql.stats.automatic_collection.fraction_stale_rows`: {
+		onSet:   floatTableSettingFunc(settings.NonNegativeFloat),
+		onReset: tableSettingResetFunc(floatSetting),
+	},
 }
 
 func init() {
@@ -489,6 +531,194 @@ func init() {
 			},
 		}
 	}
+}
+
+type settingDataType int
+
+const (
+	boolSetting = iota
+	intSetting
+	floatSetting
+)
+
+func boolTableSettingFunc(
+	ctx context.Context,
+	po *TableStorageParamObserver,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	datum tree.Datum,
+) error {
+	boolVal, err := boolFromDatum(evalCtx, key, datum)
+	if err != nil {
+		return err
+	}
+	if po.tableDesc.TableLevelSettings == nil {
+		po.tableDesc.TableLevelSettings = &catpb.TableLevelSettings{}
+	}
+	var settingPtr **catpb.Bool
+	var ok bool
+	if settingPtr, ok = settingValuePointer(key, po.tableDesc.TableLevelSettings).(**catpb.Bool); !ok {
+		return errors.Newf("table setting %s has unexpected type", key)
+	}
+	if settingPtr == nil {
+		return errors.Newf("unable to set table setting %s", key)
+	}
+	setting := *settingPtr
+	if setting == nil {
+		*settingPtr = &catpb.Bool{Value: boolVal}
+		return nil
+	} else if setting.Value == boolVal {
+		return nil
+	}
+	setting.Value = boolVal
+	return nil
+}
+
+func intTableSettingFunc(
+	validateFunc func(v int64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		intVal, err := intFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.TableLevelSettings == nil {
+			po.tableDesc.TableLevelSettings = &catpb.TableLevelSettings{}
+		}
+		var settingPtr **catpb.Int
+		var ok bool
+		if settingPtr, ok = settingValuePointer(key, po.tableDesc.TableLevelSettings).(**catpb.Int); !ok {
+			return errors.Newf("table setting %s has unexpected type", key)
+		}
+		if settingPtr == nil {
+			return errors.Newf("unable to set table setting %s", key)
+		}
+		if err = validateFunc(intVal); err != nil {
+			return errors.Wrapf(err, "invalid value for %s", key)
+		}
+		setting := *settingPtr
+		if setting == nil {
+			*settingPtr = &catpb.Int{Value: intVal}
+			return nil
+		} else if setting.Value == intVal {
+			return nil
+		}
+		setting.Value = intVal
+		return nil
+	}
+}
+
+func floatTableSettingFunc(
+	validateFunc func(v float64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		floatVal, err := floatFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.TableLevelSettings == nil {
+			po.tableDesc.TableLevelSettings = &catpb.TableLevelSettings{}
+		}
+		var settingPtr **catpb.Float
+		var ok bool
+		if settingPtr, ok = settingValuePointer(key, po.tableDesc.TableLevelSettings).(**catpb.Float); !ok {
+			return errors.Newf("table setting %s has unexpected type", key)
+		}
+		if settingPtr == nil {
+			return errors.Newf("unable to set table setting %s", key)
+		}
+		if err = validateFunc(floatVal); err != nil {
+			return errors.Wrapf(err, "invalid value for %s", key)
+		}
+		setting := *settingPtr
+		if setting == nil {
+			*settingPtr = &catpb.Float{Value: floatVal}
+			return nil
+		} else if setting.Value == floatVal {
+			return nil
+		}
+		setting.Value = floatVal
+		return nil
+	}
+}
+
+func tableSettingResetFunc(
+	settingDataType settingDataType,
+) func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+	return func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		if po.tableDesc.TableLevelSettings == nil {
+			return nil
+		}
+		settingPtr := settingValuePointer(key, po.tableDesc.TableLevelSettings)
+		if settingPtr == nil {
+			return errors.Newf("unable to reset table setting %s", key)
+		}
+		var ok bool
+		switch settingDataType {
+		case boolSetting:
+			var setting **catpb.Bool
+			if setting, ok = settingPtr.(**catpb.Bool); !ok {
+				return errors.Newf("unable to reset table setting %s", key)
+			}
+			if *setting == nil {
+				// This setting is unset or has already been reset.
+				return nil
+			}
+			*setting = nil
+		case intSetting:
+			var setting **catpb.Int
+			if setting, ok = settingPtr.(**catpb.Int); !ok {
+				return errors.Newf("unable to reset table setting %s", key)
+			}
+			if *setting == nil {
+				// This setting is unset or has already been reset.
+				return nil
+			}
+			*setting = nil
+		case floatSetting:
+			var setting **catpb.Float
+			if setting, ok = settingPtr.(**catpb.Float); !ok {
+				return errors.Newf("unable to reset table setting %s", key)
+			}
+			if *setting == nil {
+				// This setting is unset or has already been reset.
+				return nil
+			}
+			*setting = nil
+		default:
+			return errors.Newf("unable to reset table setting %s", key)
+		}
+		return nil
+	}
+}
+
+// tableSettingsDict provides the switch case to use in settingValuePointer for
+// finding the tableSettings element to mutate.
+var tableSettingsDict = map[string]int{
+	`sql.stats.automatic_collection.enabled`:             1,
+	`sql.stats.automatic_collection.min_stale_rows`:      2,
+	`sql.stats.automatic_collection.fraction_stale_rows`: 3,
+}
+
+func settingValuePointer(settingName string, tableSettings *catpb.TableLevelSettings) interface{} {
+	if idx, ok := tableSettingsDict[settingName]; ok {
+		switch idx {
+		case 1:
+			return &tableSettings.SqlStatsAutomaticCollectionEnabled
+		case 2:
+			return &tableSettings.SqlStatsAutomaticCollectionMinStaleRows
+		case 3:
+			return &tableSettings.SqlStatsAutomaticCollectionFractionStaleRows
+		default:
+			return nil
+		}
+	}
+	return nil
 }
 
 // onSet implements the StorageParamObserver interface.
