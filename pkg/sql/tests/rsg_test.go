@@ -560,11 +560,14 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		setups := []string{sqlsmith.RandTableSetupName, "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
-			if err := db.exec(t, ctx, randTables); err != nil {
-				return err
+			for _, stmt := range randTables {
+				if err := db.exec(t, ctx, stmt); err != nil {
+					return err
+				}
+				tableStmts = append(tableStmts, stmt)
+				t.Logf("%s;", stmt)
 			}
-			tableStmts = append(tableStmts, randTables)
-			t.Logf("%s;", randTables)
+
 		}
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())

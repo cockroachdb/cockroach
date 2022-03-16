@@ -37,12 +37,12 @@ func registerSQLSmith(r registry.Registry) {
 		"empty":                     sqlsmith.Setups["empty"],
 		"seed":                      sqlsmith.Setups["seed"],
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
-		"tpch-sf1": func(r *rand.Rand) string {
-			return `RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit' WITH into_db = 'defaultdb';`
+		"tpch-sf1": func(r *rand.Rand) []string {
+			return []string{`RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit' WITH into_db = 'defaultdb';`}
 		},
-		"tpcc": func(r *rand.Rand) string {
+		"tpcc": func(r *rand.Rand) []string {
 			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
-			var sb strings.Builder
+			var stmts []string
 			for _, t := range []string{
 				"customer",
 				"district",
@@ -54,9 +54,14 @@ func registerSQLSmith(r registry.Registry) {
 				"stock",
 				"warehouse",
 			} {
-				fmt.Fprintf(&sb, "RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s?AUTH=implicit' WITH into_db = 'defaultdb';\n", t, version)
+				stmts = append(
+					stmts,
+					fmt.Sprintf("RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s?AUTH=implicit' WITH into_db = 'defaultdb';",
+						t, version,
+					),
+				)
 			}
-			return sb.String()
+			return stmts
 		},
 	}
 	settings := map[string]sqlsmith.SettingFunc{
@@ -113,11 +118,13 @@ func registerSQLSmith(r registry.Registry) {
 		}
 		conn := allConns[0]
 		t.Status("executing setup")
-		t.L().Printf("setup:\n%s", setup)
-		if _, err := conn.Exec(setup); err != nil {
-			t.Fatal(err)
-		} else {
-			logStmt(setup)
+		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+		for _, stmt := range setup {
+			if _, err := conn.Exec(stmt); err != nil {
+				t.Fatal(err)
+			} else {
+				logStmt(stmt)
+			}
 		}
 
 		if settingName == "multi-region" {
