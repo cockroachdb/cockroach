@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
@@ -20,6 +21,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",

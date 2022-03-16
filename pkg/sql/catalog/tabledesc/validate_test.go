@@ -131,6 +131,7 @@ var validationMap = []struct {
 			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
 			"NextConstraintID":              {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
+			"TableLevelSettings":            {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -287,6 +288,14 @@ var validationMap = []struct {
 			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
+		},
+	},
+	{
+		obj: catpb.TableLevelSettings{},
+		fieldMap: map[string]validationStatusInfo{
+			"SqlStatsAutomaticCollectionEnabled":           {status: iSolemnlySwearThisFieldIsValidated},
+			"SqlStatsAutomaticCollectionMinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
+			"SqlStatsAutomaticCollectionFractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 }

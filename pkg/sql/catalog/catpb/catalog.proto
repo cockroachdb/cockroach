@@ -214,3 +214,33 @@ message RowLevelTTL {
   // rows on table) during row level TTL. If zero, no statistics are reported.
   optional int64 row_stats_poll_interval = 9 [(gogoproto.nullable)=false, (gogoproto.casttype)="time.Duration"];
 }
+
+// Create separate messages for setting values so we may access the
+// values directly via SQL.
+message Bool {
+  option (gogoproto.equal) = true;
+  optional bool value = 1 [(gogoproto.nullable)=false];
+}
+message Int {
+  option (gogoproto.equal) = true;
+  optional int64 value = 1 [(gogoproto.nullable)=false];
+}
+// Protobuf's double is float64 in Go.
+message Float {
+  option (gogoproto.equal) = true;
+  optional double value = 1 [(gogoproto.nullable)=false];
+}
+message String {
+  option (gogoproto.equal) = true;
+  optional string value = 1 [(gogoproto.nullable)=false];
+}
+
+// TableLevelSettings represents cluster or session settings specified at the
+// table level. Each SettingValue is nullable so queries of the descriptor in
+// JSON form only list values which have been set.
+message TableLevelSettings {
+  option (gogoproto.equal) = true;
+  optional Bool sql_stats_automatic_collection_enabled = 1;
+  optional Int sql_stats_automatic_collection_min_stale_rows = 2;
+  optional Float sql_stats_automatic_collection_fraction_stale_rows = 3;
+}

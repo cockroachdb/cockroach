@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -713,6 +714,8 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
 	ValidateOnUpdate(desc, vea.Report)
+
+	vea.Report(desc.validateTableLevelSettings())
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign
@@ -1500,4 +1503,47 @@ func (desc *wrapper) validatePartitioning() error {
 			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
+}
+
+// validateTableLevelSettings validates that any new table-level settings hold
+// a valid value.
+func (desc *wrapper) validateTableLevelSettings() error {
+	if desc.TableLevelSettings != nil {
+		if desc.TableLevelSettings.SqlStatsAutomaticCollectionEnabled != nil {
+			setting := "sql.stats.automatic_collection.enabled"
+			if desc.IsVirtualTable() {
+				return errors.Newf("Setting %s may not be set on virtual table", setting)
+			}
+			if !desc.IsTable() {
+				return errors.Newf("Setting %s may not be set on a view or sequence", setting)
+			}
+		}
+		if desc.TableLevelSettings.SqlStatsAutomaticCollectionMinStaleRows != nil {
+			setting := "sql.stats.automatic_collection.min_stale_rows"
+			if desc.IsVirtualTable() {
+				return errors.Newf("Setting %s may not be set on virtual table", setting)
+			}
+			if !desc.IsTable() {
+				return errors.Newf("Setting %s may not be set on a view or sequence", setting)
+			}
+			if err := settings.
+				NonNegativeInt(desc.TableLevelSettings.SqlStatsAutomaticCollectionMinStaleRows.Value); err != nil {
+				return errors.Wrapf(err, "invalid value for %s", setting)
+			}
+		}
+		if desc.TableLevelSettings.SqlStatsAutomaticCollectionFractionStaleRows != nil {
+			setting := "sql.stats.automatic_collection.fraction_stale_rows"
+			if desc.IsVirtualTable() {
+				return errors.Newf("Setting %s may not be set on virtual table", setting)
+			}
+			if !desc.IsTable() {
+				return errors.Newf("Setting %s may not be set on a view or sequence", setting)
+			}
+			if err := settings.
+				NonNegativeFloat(desc.TableLevelSettings.SqlStatsAutomaticCollectionFractionStaleRows.Value); err != nil {
+				return errors.Wrapf(err, "invalid value for %s", setting)
+			}
+		}
+	}
+	return nil
 }

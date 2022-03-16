@@ -273,6 +273,49 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 	return tree.PersistencePermanent
 }
 
+// AutoStatsCollectionEnabled indicates if automatic statistics collection is
+// explicitly enabled or disabled for this table. If ok is true, then
+// enabled==false means auto stats collection is off for this table, and if
+// true, auto stats are on for this table. If ok is false, there is no setting
+// for this table.
+func (desc *TableDescriptor) AutoStatsCollectionEnabled() (enabled bool, ok bool) {
+	if desc.TableLevelSettings == nil {
+		return false, false
+	}
+	if desc.TableLevelSettings.SqlStatsAutomaticCollectionEnabled == nil {
+		return false, false
+	}
+	return desc.TableLevelSettings.SqlStatsAutomaticCollectionEnabled.Value, true
+}
+
+// AutoStatsMinStaleRows indicates the setting of
+// sql.stats.automatic_collection.min_stale_rows for this table.
+// If ok is true, then the minStaleRows value is valid, otherwise this has not
+// been set at the table level.
+func (desc *TableDescriptor) AutoStatsMinStaleRows() (minStaleRows int64, ok bool) {
+	if desc.TableLevelSettings == nil {
+		return 0, false
+	}
+	if desc.TableLevelSettings.SqlStatsAutomaticCollectionMinStaleRows == nil {
+		return 0, false
+	}
+	return desc.TableLevelSettings.SqlStatsAutomaticCollectionMinStaleRows.Value, true
+}
+
+// AutoStatsFractionStaleRows indicates the setting of
+// sql.stats.automatic_collection.fraction_stale_rows for this table.
+// If ok is true, then the fractionStaleRows value is valid, otherwise this has
+// not been set at the table level.
+func (desc *TableDescriptor) AutoStatsFractionStaleRows() (fractionStaleRows float64, ok bool) {
+	if desc.TableLevelSettings == nil {
+		return 0, false
+	}
+	if desc.TableLevelSettings.SqlStatsAutomaticCollectionFractionStaleRows == nil {
+		return 0, false
+	}
+	return desc.TableLevelSettings.SqlStatsAutomaticCollectionFractionStaleRows.Value, true
+}
+
 // IsVirtualTable returns true if the TableDescriptor describes a
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.

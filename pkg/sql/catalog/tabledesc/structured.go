@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -2533,6 +2534,12 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	appendStorageParam := func(key, value string) {
 		storageParams = append(storageParams, key+spacing+`=`+spacing+value)
 	}
+	boolAsString := func(boolVal bool) string {
+		if boolVal {
+			return "true"
+		}
+		return "false"
+	}
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
 		appendStorageParam(`ttl`, `'on'`)
 		appendStorageParam(`ttl_automatic_column`, `'on'`)
@@ -2561,6 +2568,25 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		appendStorageParam(`exclude_data_from_backup`, `true`)
+	}
+	if desc.TableLevelSettings != nil {
+		settings := desc.TableLevelSettings
+		// These need to be wrapped in double-quotes because they contain '.' chars.
+		if settings.SqlStatsAutomaticCollectionEnabled != nil {
+			value := settings.SqlStatsAutomaticCollectionEnabled.Value
+			appendStorageParam(`"sql.stats.automatic_collection.enabled"`,
+				boolAsString(value))
+		}
+		if settings.SqlStatsAutomaticCollectionMinStaleRows != nil {
+			value := settings.SqlStatsAutomaticCollectionMinStaleRows.Value
+			appendStorageParam(`"sql.stats.automatic_collection.min_stale_rows"`,
+				strconv.FormatInt(value, 10))
+		}
+		if settings.SqlStatsAutomaticCollectionFractionStaleRows != nil {
+			value := settings.SqlStatsAutomaticCollectionFractionStaleRows.Value
+			appendStorageParam(`"sql.stats.automatic_collection.fraction_stale_rows"`,
+				fmt.Sprintf("%g", value)) //strconv.FormatFloat(value, 10))
+		}
 	}
 	return storageParams
 }
