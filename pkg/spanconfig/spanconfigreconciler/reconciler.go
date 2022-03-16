@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -31,9 +32,9 @@ import (
 // Reconciler is a concrete implementation of the spanconfig.Reconciler
 // interface.
 type Reconciler struct {
-	sqlWatcher    spanconfig.SQLWatcher
-	sqlTranslator spanconfig.SQLTranslator
-	kvAccessor    spanconfig.KVAccessor
+	sqlWatcher           spanconfig.SQLWatcher
+	sqlTranslatorFactory *spanconfigsqltranslator.Factory
+	kvAccessor           spanconfig.KVAccessor
 
 	execCfg *sql.ExecutorConfig
 	codec   keys.SQLCodec
@@ -51,7 +52,7 @@ var _ spanconfig.Reconciler = &Reconciler{}
 // New constructs a new Reconciler.
 func New(
 	sqlWatcher spanconfig.SQLWatcher,
-	sqlTranslator spanconfig.SQLTranslator,
+	sqlTranslatorFactory *spanconfigsqltranslator.Factory,
 	kvAccessor spanconfig.KVAccessor,
 	execCfg *sql.ExecutorConfig,
 	codec keys.SQLCodec,
@@ -62,9 +63,9 @@ func New(
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Reconciler{
-		sqlWatcher:    sqlWatcher,
-		sqlTranslator: sqlTranslator,
-		kvAccessor:    kvAccessor,
+		sqlWatcher:           sqlWatcher,
+		sqlTranslatorFactory: sqlTranslatorFactory,
+		kvAccessor:           kvAccessor,
 
 		execCfg: execCfg,
 		codec:   codec,
@@ -141,11 +142,12 @@ func (r *Reconciler) Reconcile(
 	}
 
 	full := fullReconciler{
-		sqlTranslator: r.sqlTranslator,
-		kvAccessor:    r.kvAccessor,
-		codec:         r.codec,
-		tenID:         r.tenID,
-		knobs:         r.knobs,
+		sqlTranslatorFactory: r.sqlTranslatorFactory,
+		kvAccessor:           r.kvAccessor,
+		execCfg:              r.execCfg,
+		codec:                r.codec,
+		tenID:                r.tenID,
+		knobs:                r.knobs,
 	}
 	latestStore, reconciledUpUntil, err := full.reconcile(ctx)
 	if err != nil {
@@ -162,13 +164,13 @@ func (r *Reconciler) Reconcile(
 
 	incrementalStartTS := reconciledUpUntil
 	incremental := incrementalReconciler{
-		sqlTranslator:       r.sqlTranslator,
-		sqlWatcher:          r.sqlWatcher,
-		kvAccessor:          r.kvAccessor,
-		storeWithKVContents: latestStore,
-		execCfg:             r.execCfg,
-		codec:               r.codec,
-		knobs:               r.knobs,
+		sqlTranslatorFactory: r.sqlTranslatorFactory,
+		sqlWatcher:           r.sqlWatcher,
+		kvAccessor:           r.kvAccessor,
+		storeWithKVContents:  latestStore,
+		execCfg:              r.execCfg,
+		codec:                r.codec,
+		knobs:                r.knobs,
 	}
 	return incremental.reconcile(ctx, incrementalStartTS, func(reconciledUpUntil hlc.Timestamp) error {
 		r.mu.Lock()
@@ -190,12 +192,13 @@ func (r *Reconciler) Checkpoint() hlc.Timestamp {
 // fullReconciler is a single-use orchestrator for the full reconciliation
 // process.
 type fullReconciler struct {
-	sqlTranslator spanconfig.SQLTranslator
-	kvAccessor    spanconfig.KVAccessor
+	sqlTranslatorFactory *spanconfigsqltranslator.Factory
+	kvAccessor           spanconfig.KVAccessor
 
-	codec keys.SQLCodec
-	tenID roachpb.TenantID
-	knobs *spanconfig.TestingKnobs
+	execCfg *sql.ExecutorConfig
+	codec   keys.SQLCodec
+	tenID   roachpb.TenantID
+	knobs   *spanconfig.TestingKnobs
 }
 
 // reconcile runs the full reconciliation process, returning:
@@ -212,8 +215,14 @@ func (f *fullReconciler) reconcile(
 	// Translate the entire SQL state to ensure KV reflects the most up-to-date
 	// view of things.
 	var records []spanconfig.Record
-	records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
-	if err != nil {
+
+	if err := sql.DescsTxn(ctx, f.execCfg, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		translator := f.sqlTranslatorFactory.SQLTranslator(txn, descsCol)
+		records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, translator)
+		return err
+	}); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 
@@ -364,10 +373,10 @@ func (f *fullReconciler) deleteExtraneousSpanConfigs(
 // incrementalReconciler is a single orchestrator for the incremental
 // reconciliation process.
 type incrementalReconciler struct {
-	sqlTranslator       spanconfig.SQLTranslator
-	sqlWatcher          spanconfig.SQLWatcher
-	kvAccessor          spanconfig.KVAccessor
-	storeWithKVContents *spanconfigstore.Store
+	sqlTranslatorFactory *spanconfigsqltranslator.Factory
+	sqlWatcher           spanconfig.SQLWatcher
+	kvAccessor           spanconfig.KVAccessor
+	storeWithKVContents  *spanconfigstore.Store
 
 	execCfg *sql.ExecutorConfig
 	codec   keys.SQLCodec
@@ -403,30 +412,35 @@ func (r *incrementalReconciler) reconcile(
 				}
 			}
 
-			// TODO(irfansharif): Would it be easier to just have the translator
-			// return the set of missing table IDs? We're using two transactions
-			// here, somewhat wastefully. An alternative would be to have a
-			// txn-scoped translator.
+			var missingTableIDs []descpb.ID
+			var missingProtectedTimestampTargets []spanconfig.SystemTarget
+			var records []spanconfig.Record
 
-			missingTableIDs, err := r.filterForMissingTableIDs(ctx, sqlUpdates)
-			if err != nil {
-				return err
-			}
+			if err := sql.DescsTxn(ctx, r.execCfg,
+				func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+					var err error
+					missingTableIDs, err = r.filterForMissingTableIDs(ctx, txn, descsCol, sqlUpdates)
+					if err != nil {
+						return err
+					}
 
-			missingProtectedTimestampTargets, err := r.filterForMissingProtectedTimestampSystemTargets(
-				ctx, sqlUpdates)
-			if err != nil {
-				return err
-			}
+					missingProtectedTimestampTargets, err = r.filterForMissingProtectedTimestampSystemTargets(
+						ctx, txn, sqlUpdates,
+					)
+					if err != nil {
+						return err
+					}
 
-			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
-			if err != nil {
+					translator := r.sqlTranslatorFactory.SQLTranslator(txn, descsCol)
+					records, _, err = translator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
+					return err
+				}); err != nil {
 				return err
 			}
 
 			updates := make([]spanconfig.Update, 0,
-				len(missingTableIDs)+len(missingProtectedTimestampTargets)+len(entries))
-			for _, entry := range entries {
+				len(missingTableIDs)+len(missingProtectedTimestampTargets)+len(records))
+			for _, entry := range records {
 				// Update span configs for SQL state that changed.
 				updates = append(updates, spanconfig.Update(entry))
 			}
@@ -467,7 +481,7 @@ func (r *incrementalReconciler) reconcile(
 // correspond to cluster or tenant target protected timestamp records that are
 // no longer found, because they've been released.
 func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
-	ctx context.Context, updates []spanconfig.SQLUpdate,
+	ctx context.Context, txn *kv.Txn, updates []spanconfig.SQLUpdate,
 ) ([]spanconfig.SystemTarget, error) {
 	seen := make(map[spanconfig.SystemTarget]struct{})
 	var missingSystemTargets []spanconfig.SystemTarget
@@ -477,68 +491,63 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 		return nil, err
 	}
 
-	if err := sql.DescsTxn(ctx, r.execCfg,
-		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			// Construct an in-memory view of the system.protected_ts_records table to
-			// populate the protected timestamp field on the emitted span configs.
-			//
-			// TODO(adityamaru): This does a full table scan of the
-			// `system.protected_ts_records` table. While this is not assumed to be very
-			// expensive given the limited number of concurrent users of the protected
-			// timestamp subsystem, and the internal limits to limit the size of this
-			// table, there is scope for improvement in the future. One option could be
-			// a rangefeed-backed materialized view of the system table.
-			ptsState, err := r.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
-			if err != nil {
-				return errors.Wrap(err, "failed to get protected timestamp state")
-			}
-			ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
-			clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
-			missingClusterProtection := len(clusterProtections) == 0
-			for _, update := range updates {
-				if update.IsDescriptorUpdate() {
-					continue // nothing to do
-				}
-
-				ptsUpdate := update.GetProtectedTimestampUpdate()
-				missingSystemTarget := spanconfig.SystemTarget{}
-				if ptsUpdate.IsClusterUpdate() && missingClusterProtection {
-					// For the host tenant a Cluster ProtectedTimestampUpdate corresponds
-					// to the entire keyspace (including secondary tenants).
-					if r.codec.ForSystemTenant() {
-						missingSystemTarget = spanconfig.MakeEntireKeyspaceTarget()
-					} else {
-						// For a secondary tenant a Cluster ProtectedTimestampUpdate
-						// corresponds to the tenants keyspace.
-						missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
-							sourceTenantID)
-						if err != nil {
-							return err
-						}
-					}
-				}
-
-				if ptsUpdate.IsTenantsUpdate() {
-					if !ptsStateReader.ProtectionExistsForTenant(ptsUpdate.TenantTarget) {
-						missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
-							ptsUpdate.TenantTarget)
-						if err != nil {
-							return err
-						}
-					}
-				}
-
-				if !missingSystemTarget.IsEmpty() {
-					if _, found := seen[missingSystemTarget]; !found {
-						seen[missingSystemTarget] = struct{}{}
-						missingSystemTargets = append(missingSystemTargets, missingSystemTarget)
-					}
-				}
-			}
-			return nil
-		}); err != nil {
-		return missingSystemTargets, err
+	// Construct an in-memory view of the system.protected_ts_records table to
+	// populate the protected timestamp field on the emitted span configs.
+	//
+	// TODO(adityamaru): This does a full table scan of the
+	// `system.protected_ts_records` table. While this is not assumed to be very
+	// expensive given the limited number of concurrent users of the protected
+	// timestamp subsystem, and the internal limits to limit the size of this
+	// table, there is scope for improvement in the future. One option could be
+	// a rangefeed-backed materialized view of the system table.
+	ptsState, err := r.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get protected timestamp state")
 	}
+	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+	clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
+	missingClusterProtection := len(clusterProtections) == 0
+	for _, update := range updates {
+		if update.IsDescriptorUpdate() {
+			continue // nothing to do
+		}
+
+		ptsUpdate := update.GetProtectedTimestampUpdate()
+		missingSystemTarget := spanconfig.SystemTarget{}
+		if ptsUpdate.IsClusterUpdate() && missingClusterProtection {
+			// For the host tenant a Cluster ProtectedTimestampUpdate corresponds
+			// to the entire keyspace (including secondary tenants).
+			if r.codec.ForSystemTenant() {
+				missingSystemTarget = spanconfig.MakeEntireKeyspaceTarget()
+			} else {
+				// For a secondary tenant a Cluster ProtectedTimestampUpdate
+				// corresponds to the tenants keyspace.
+				missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
+					sourceTenantID)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if ptsUpdate.IsTenantsUpdate() {
+			if !ptsStateReader.ProtectionExistsForTenant(ptsUpdate.TenantTarget) {
+				missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
+					ptsUpdate.TenantTarget)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if !missingSystemTarget.IsEmpty() {
+			if _, found := seen[missingSystemTarget]; !found {
+				seen[missingSystemTarget] = struct{}{}
+				missingSystemTargets = append(missingSystemTargets, missingSystemTarget)
+			}
+		}
+	}
+
 	return missingSystemTargets, nil
 }
 
@@ -549,50 +558,42 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 // [1]: Or if the ExcludeDroppedDescriptorsFromLookup testing knob is used,
 //      this includes dropped descriptors.
 func (r *incrementalReconciler) filterForMissingTableIDs(
-	ctx context.Context, updates []spanconfig.SQLUpdate,
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, updates []spanconfig.SQLUpdate,
 ) (descpb.IDs, error) {
 	seen := make(map[descpb.ID]struct{})
 	var missingIDs descpb.IDs
 
-	if err := sql.DescsTxn(ctx, r.execCfg,
-		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			for _, update := range updates {
-				if update.IsProtectedTimestampUpdate() {
-					continue // nothing to do
-				}
-				descriptorUpdate := update.GetDescriptorUpdate()
-				if descriptorUpdate.Type != catalog.Table {
-					continue // nothing to do
-				}
+	for _, update := range updates {
+		if update.IsProtectedTimestampUpdate() {
+			continue // nothing to do
+		}
+		descriptorUpdate := update.GetDescriptorUpdate()
+		if descriptorUpdate.Type != catalog.Table {
+			continue // nothing to do
+		}
 
-				desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, descriptorUpdate.ID, tree.CommonLookupFlags{
-					Required:       true, // we want to error out for missing descriptors
-					IncludeDropped: true,
-					IncludeOffline: true,
-					AvoidLeased:    true, // we want consistent reads
-				})
+		desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, descriptorUpdate.ID, tree.CommonLookupFlags{
+			Required:       true, // we want to error out for missing descriptors
+			IncludeDropped: true,
+			IncludeOffline: true,
+			AvoidLeased:    true, // we want consistent reads
+		})
 
-				considerAsMissing := false
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					considerAsMissing = true
-				} else if err != nil {
-					return err
-				} else if r.knobs.ExcludeDroppedDescriptorsFromLookup && desc.Dropped() {
-					considerAsMissing = true
-				}
+		considerAsMissing := false
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			considerAsMissing = true
+		} else if err != nil {
+			return nil, err
+		} else if r.knobs.ExcludeDroppedDescriptorsFromLookup && desc.Dropped() {
+			considerAsMissing = true
+		}
 
-				if considerAsMissing {
-					if _, found := seen[descriptorUpdate.ID]; !found {
-						seen[descriptorUpdate.ID] = struct{}{}
-						missingIDs = append(missingIDs, descriptorUpdate.ID) // accumulate the set of missing table IDs
-					}
-				}
+		if considerAsMissing {
+			if _, found := seen[descriptorUpdate.ID]; !found {
+				seen[descriptorUpdate.ID] = struct{}{}
+				missingIDs = append(missingIDs, descriptorUpdate.ID) // accumulate the set of missing table IDs
 			}
-
-			return nil
-		},
-	); err != nil {
-		return nil, err
+		}
 	}
 
 	return missingIDs, nil

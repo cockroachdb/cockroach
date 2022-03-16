@@ -19,11 +19,15 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -106,6 +110,7 @@ func TestDataDriven(t *testing.T) {
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		}
+		execCfg := tenant.ExecCfg()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var generateSystemSpanConfigs bool
@@ -150,13 +155,22 @@ func TestDataDriven(t *testing.T) {
 					d.Fatalf(t, "insufficient/improper args (%v) provided to translate", d.CmdArgs)
 				}
 
-				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				records, _, err := sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
+				var records []spanconfig.Record
+				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
+				err := sql.DescsTxn(ctx, &execCfg, func(
+					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+				) error {
+					sqlTranslator := sqlTranslatorFactory.SQLTranslator(txn, descsCol)
+					var err error
+					records, _, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
+					require.NoError(t, err)
+					return nil
+				})
 				require.NoError(t, err)
+
 				sort.Slice(records, func(i, j int) bool {
 					return records[i].GetTarget().Less(records[j].GetTarget())
 				})
-
 				var output strings.Builder
 				for _, record := range records {
 					switch {
@@ -173,8 +187,17 @@ func TestDataDriven(t *testing.T) {
 				return output.String()
 
 			case "full-translate":
-				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				records, _, err := spanconfig.FullTranslate(ctx, sqlTranslator)
+				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
+				var records []spanconfig.Record
+				err := sql.DescsTxn(ctx, &execCfg, func(
+					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+				) error {
+					sqlTranslator := sqlTranslatorFactory.SQLTranslator(txn, descsCol)
+					var err error
+					records, _, err = spanconfig.FullTranslate(ctx, sqlTranslator)
+					require.NoError(t, err)
+					return nil
+				})
 				require.NoError(t, err)
 
 				sort.Slice(records, func(i, j int) bool {
