@@ -1,5 +1,5 @@
 toolchain(
-    name = "cross_linux_toolchain",
+    name = "cross_x86_64_linux_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -24,7 +24,7 @@ platform(
 )
 
 toolchain(
-    name = "cross_windows_toolchain",
+    name = "cross_x86_64_windows_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -49,7 +49,7 @@ platform(
 )
 
 toolchain(
-    name = "cross_macos_toolchain",
+    name = "cross_x86_64_macos_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -61,7 +61,7 @@ toolchain(
     target_settings = [
         ":cross",
     ],
-    toolchain = "@toolchain_cross_x86_64-apple-darwin19//:toolchain",
+    toolchain = "@cross_x86_64_macos_toolchain//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
@@ -74,7 +74,32 @@ platform(
 )
 
 toolchain(
-    name = "cross_linux_arm_toolchain",
+    name = "cross_x86_64_macos_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_x86_64_macos_arm_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_macos_arm",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_linux_arm_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -96,6 +121,133 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:arm64",
     ],
+)
+
+platform(
+    name = "cross_linux_s390x",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_s390x_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_x86_64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_windows_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_x86_64-w64-mingw32//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_linux_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_s390x_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_macos_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_arm64_macos_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_macos_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_arm64_macos_arm_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
 toolchain(
@@ -148,6 +300,26 @@ config_setting(
     name = "is_cross_macos",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    define_values = {
+        "cockroach_cross": "y",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos_x86_64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin_amd64",
+    ],
+    define_values = {
+        "cockroach_cross": "y",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin_arm64",
     ],
     define_values = {
         "cockroach_cross": "y",
