@@ -37,6 +37,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:alter_primary_key.html",
   "//docs/generated/sql/bnf:alter_range.html",
   "//docs/generated/sql/bnf:alter_range_relocate.html",
+  "//docs/generated/sql/bnf:alter_range_split_load.html",
   "//docs/generated/sql/bnf:alter_rename_view.html",
   "//docs/generated/sql/bnf:alter_role.html",
   "//docs/generated/sql/bnf:alter_scatter.html",

@@ -1008,6 +1008,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
 %type <tree.Statement> alter_range_relocate_stmt
+%type <tree.Statement> alter_range_split_load_stmt
 
 // ALTER TABLE
 %type <tree.Statement> alter_onetable_stmt
@@ -2124,6 +2125,7 @@ alter_database_set_zone_config_extension_stmt:
 alter_range_stmt:
   alter_zone_range_stmt
 | alter_range_relocate_stmt
+| alter_range_split_load_stmt
 | ALTER RANGE error // SHOW HELP: ALTER RANGE
 
 // %Help: ALTER INDEX - change the definition of an index
@@ -2377,6 +2379,40 @@ alter_range_relocate_stmt:
       FromStoreID: $7.expr(),
       ToStoreID: $9.expr(),
       SubjectReplicas: $5.relocateSubject(),
+    }
+  }
+
+alter_range_split_load_stmt:
+ALTER RANGE SPLIT FOR select_stmt
+  {
+    $$.val = &tree.SplitRange{
+      Rows: $5.slct(),
+      ExpireExpr: tree.Expr(nil),
+    }
+  }
+| ALTER RANGE SPLIT FOR select_stmt WITH EXPIRATION a_expr
+	{
+		$$.val = &tree.SplitRange{
+			Rows: $5.slct(),
+		  ExpireExpr: $8.expr(),
+		}
+	}
+| ALTER RANGE a_expr SPLIT
+  {
+    $$.val = &tree.SplitRange{
+      Rows: &tree.Select{
+				Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+			},
+      ExpireExpr: tree.Expr(nil),
+    }
+  }
+| ALTER RANGE a_expr SPLIT WITH EXPIRATION a_expr
+  {
+    $$.val = &tree.SplitRange{
+      Rows: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      ExpireExpr: $7.expr(),
     }
   }
 

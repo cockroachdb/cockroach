@@ -766,3 +766,9 @@ define LiteralValues {
     Rows tree.ExprContainer
     Columns colinfo.ResultColumns
 }
+
+# AlterRangeSplit implements ALTER RANGE SPLIT.
+define AlterRangeSplit {
+    input exec.Node
+    Expiration tree.TypedExpr
+}

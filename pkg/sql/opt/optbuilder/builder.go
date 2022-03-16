@@ -284,7 +284,7 @@ func (b *Builder) buildStmt(
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
 			*tree.Split, *tree.Unsplit, *tree.Relocate, *tree.RelocateRange,
 			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions,
-			*tree.CreateFunction:
+			*tree.CreateFunction, *tree.SplitRange:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
 			))
@@ -352,6 +352,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.RelocateRange:
 		return b.buildAlterRangeRelocate(stmt, inScope)
+
+	case *tree.SplitRange:
+		return b.buildAlterRangeSplit(stmt, inScope)
 
 	case *tree.ControlJobs:
 		return b.buildControlJobs(stmt, inScope)

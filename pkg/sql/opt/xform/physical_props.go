@@ -75,6 +75,8 @@ func BuildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.AlterTableRelocateExpr).Props.Presentation
 	case opt.AlterRangeRelocateOp:
 		childProps.Presentation = parent.(*memo.AlterRangeRelocateExpr).Props.Presentation
+	case opt.AlterRangeSplitOp:
+		childProps.Presentation = parent.(*memo.AlterRangeSplitExpr).Props.Presentation
 	case opt.ControlJobsOp:
 		childProps.Presentation = parent.(*memo.ControlJobsExpr).Props.Presentation
 	case opt.CancelQueriesOp:

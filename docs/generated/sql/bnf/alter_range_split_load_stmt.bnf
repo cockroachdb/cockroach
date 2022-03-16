@@ -1,0 +1,5 @@
+alter_range_split_load_stmt ::=
+	'ALTER' 'RANGE' 'SPLIT' 'FOR' select_stmt
+	| 'ALTER' 'RANGE' 'SPLIT' 'FOR' select_stmt 'WITH' 'EXPIRATION' a_expr
+	| 'ALTER' 'RANGE' a_expr 'SPLIT'
+	| 'ALTER' 'RANGE' a_expr 'SPLIT' 'WITH' 'EXPIRATION' a_expr
