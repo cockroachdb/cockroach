@@ -135,16 +135,30 @@ func (p *planner) incrementSequenceUsingCache(
 ) (int64, error) {
 	seqOpts := descriptor.GetSequenceOpts()
 
-	cacheSize := seqOpts.EffectiveCacheSize()
+	sequenceId := descriptor.GetID()
+	createdInCurrentTxn := p.createdSequences.isCreatedSequence(uint32(sequenceId))
+	var cacheSize int64
+	if createdInCurrentTxn {
+		cacheSize = 1
+	} else {
+		cacheSize = seqOpts.EffectiveCacheSize()
+	}
 
 	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(sequenceId))
 
-		// We *do not* use the planner txn here, since nextval does not respect
-		// transaction boundaries. This matches the specification at
-		// https://www.postgresql.org/docs/14/functions-sequence.html
-		endValue, err := kv.IncrementValRetryable(
-			ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		var endValue int64
+		if createdInCurrentTxn {
+			var res kv.KeyValue
+			res, err = p.txn.Inc(ctx, seqValueKey, seqOpts.Increment*cacheSize)
+			endValue = res.ValueInt()
+		} else {
+			// We *do not* use the planner txn here, since nextval does not respect
+			// transaction boundaries. This matches the specification at
+			// https://www.postgresql.org/docs/14/functions-sequence.html
+			endValue, err = kv.IncrementValRetryable(
+				ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		}
 
 		if err != nil {
 			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
@@ -188,7 +202,7 @@ func (p *planner) incrementSequenceUsingCache(
 			return 0, err
 		}
 	} else {
-		val, err = p.GetOrInitSequenceCache().NextValue(uint32(descriptor.GetID()), uint32(descriptor.GetVersion()), fetchNextValues)
+		val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceId), uint32(descriptor.GetVersion()), fetchNextValues)
 		if err != nil {
 			return 0, err
 		}
@@ -351,7 +365,8 @@ func (p *planner) GetSequenceValue(
 	if desc.GetSequenceOpts() == nil {
 		return 0, errors.New("descriptor is not a sequence")
 	}
-	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.GetID())))
+	id := desc.GetID()
+	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(id)))
 	if err != nil {
 		return 0, err
 	}
