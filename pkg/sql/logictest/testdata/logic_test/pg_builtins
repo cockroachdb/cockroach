@@ -579,3 +579,34 @@ h      float8   53  2   NULL
 i      numeric  12  10  2
 j      numeric  4   10  4
 rowid  int8     64  2   0
+
+statement error null array element not allowed in this context
+SELECT * FROM pg_options_to_table(array['b', NULL, 'a']::text[])
+
+query TT colnames
+SELECT * FROM pg_options_to_table(array[]::text[]);
+----
+option_name  option_value
+
+query TT colnames
+SELECT * FROM pg_options_to_table(array['a', 'b=c', '=d', 'e=f=g']::text[]);
+----
+option_name  option_value
+a            NULL
+b            c
+·            d
+e            f=g
+
+query TT colnames
+SELECT * FROM pg_options_to_table(null)
+----
+option_name  option_value
+
+query TT colnames
+SELECT * FROM pg_options_to_table('{a, b=c, =d, e=f=g}')
+----
+option_name  option_value
+a            NULL
+b            c
+·            d
+e            f=g
