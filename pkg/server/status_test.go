@@ -1131,9 +1131,6 @@ func TestHotRanges2Response(t *testing.T) {
 	if err := postStatusJSONProto(ts, "v2/hotranges", &serverpb.HotRangesRequest{}, &hotRangesResp); err != nil {
 		t.Fatal(err)
 	}
-	if len(hotRangesResp.Ranges) == 0 {
-		t.Fatalf("didn't get hot range responses from any nodes")
-	}
 	lastQPS := math.MaxFloat64
 	for _, r := range hotRangesResp.Ranges {
 		if r.RangeID == 0 {
