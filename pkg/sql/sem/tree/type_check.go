@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 	"golang.org/x/text/language"
 )
 
@@ -622,11 +623,14 @@ func (expr *IndirectionExpr) TypeCheck(
 		return nil, err
 	}
 	typ := subExpr.ResolvedType()
-	if typ.Family() != types.ArrayFamily {
+	if typ.Oid() == oid.T_name {
+		expr.typ = types.String
+	} else if typ.Family() != types.ArrayFamily {
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array", typ)
+	} else {
+		expr.typ = typ.ArrayContents()
+		expr.Expr = subExpr
 	}
-	expr.Expr = subExpr
-	expr.typ = typ.ArrayContents()
 
 	telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
 	return expr, nil

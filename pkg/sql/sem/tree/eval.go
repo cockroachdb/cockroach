@@ -4172,6 +4172,10 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return d, nil
 	}
 
+	if d.ResolvedType().Oid() == oid.T_name {
+		return NewDString(string(MustBeDString(d)[subscriptIdx])), nil
+	}
+
 	// Index into the DArray, using 1-indexing.
 	arr := MustBeDArray(d)
 
