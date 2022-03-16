@@ -133,6 +133,7 @@ const (
 	exprKindWhere
 	exprKindWindowFrameStart
 	exprKindWindowFrameEnd
+	exprKindAlterRangeSplit
 )
 
 var exprKindName = [...]string{
@@ -154,6 +155,7 @@ var exprKindName = [...]string{
 	exprKindWhere:             "WHERE",
 	exprKindWindowFrameStart:  "WINDOW FRAME START",
 	exprKindWindowFrameEnd:    "WINDOW FRAME END",
+	exprKindAlterRangeSplit:   "ALTER RANGE SPLIT",
 }
 
 func (k exprKind) String() string {

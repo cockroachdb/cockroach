@@ -272,6 +272,7 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 
 var nodeNames = [...]string{
 	alterRangeRelocateOp:   "relocate range",
+	alterRangeSplitOp:      "split range",
 	alterTableRelocateOp:   "relocate table",
 	alterTableSplitOp:      "split",
 	alterTableUnsplitAllOp: "unsplit all",
@@ -852,6 +853,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.subjectReplicas != tree.RelocateLease {
 			ob.Expr("from", a.fromStoreID, nil /* columns */)
 		}
+
+	case alterRangeSplitOp:
+		a := n.args.(*alterRangeSplitArgs)
+		ob.Expr("expiration", a.Expiration, nil /* columns */)
 
 	case simpleProjectOp,
 		serializingProjectOp,

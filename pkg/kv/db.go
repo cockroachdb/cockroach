@@ -585,6 +585,25 @@ func (db *DB) AdminSplit(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// AdminLoadBasedSplit splits the range at the load based key as determined by the
+// range stats.
+//
+// expirationTime is the timestamp when the split expires and is eligible for
+// automatic merging by the merge queue. To specify that a split should
+// immediately be eligible for automatic merging, set expirationTime to
+// hlc.Timestamp{} (I.E. the zero timestamp). To specify that a split should
+// never be eligible, set expirationTime to hlc.MaxTimestamp.
+//
+func (db *DB) AdminLoadBasedSplit(
+	ctx context.Context,
+	startKey interface{},
+	expirationTime hlc.Timestamp,
+) error {
+	b := &Batch{}
+	b.adminLoadBasedSplit(startKey, expirationTime)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // SplitAndScatterResult carries wraps information about the SplitAndScatter
 // call, including how long each step took or stats for range scattered.
 type SplitAndScatterResult struct {

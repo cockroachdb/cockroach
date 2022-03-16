@@ -170,6 +170,9 @@ func getResultColumns(
 	case alterRangeRelocateOp:
 		return colinfo.AlterRangeRelocateColumns, nil
 
+	case alterRangeSplitOp:
+		return colinfo.AlterTableSplitColumns, nil
+
 	case exportOp:
 		return colinfo.ExportColumns, nil
 

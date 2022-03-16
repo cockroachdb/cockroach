@@ -57,6 +57,15 @@ func alterRangeRelocateBuildChildReqOrdering(
 	return parent.(*memo.AlterRangeRelocateExpr).Props.Ordering
 }
 
+func alterRangeSplitBuildChildReqOrdering(
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
+	if childIdx != 0 {
+		return props.OrderingChoice{}
+	}
+	return parent.(*memo.AlterRangeSplitExpr).Props.Ordering
+}
+
 func controlJobsBuildChildReqOrdering(
 	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {

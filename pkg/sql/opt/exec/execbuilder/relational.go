@@ -326,7 +326,10 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.AlterRangeRelocateExpr:
 		ep, err = b.buildAlterRangeRelocate(t)
 
-	case *memo.ControlJobsExpr:
+	case *memo.AlterRangeSplitExpr:
+		ep, err = b.buildAlterRangeSplit(t)
+
+		case *memo.ControlJobsExpr:
 		ep, err = b.buildControlJobs(t)
 
 	case *memo.ControlSchedulesExpr:
