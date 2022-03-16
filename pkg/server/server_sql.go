@@ -141,15 +141,15 @@ type SQLServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	// sqlLivenessSessionID will be populated with a non-zero value for non-system
 	// tenants.
-	sqlLivenessSessionID    sqlliveness.SessionID
-	sqlLivenessProvider     sqlliveness.Provider
-	sqlInstanceProvider     sqlinstance.Provider
-	metricsRegistry         *metric.Registry
-	diagnosticsReporter     *diagnostics.Reporter
-	spanconfigMgr           *spanconfigmanager.Manager
-	spanconfigSQLTranslator *spanconfigsqltranslator.SQLTranslator
-	spanconfigSQLWatcher    *spanconfigsqlwatcher.SQLWatcher
-	settingsWatcher         *settingswatcher.SettingsWatcher
+	sqlLivenessSessionID           sqlliveness.SessionID
+	sqlLivenessProvider            sqlliveness.Provider
+	sqlInstanceProvider            sqlinstance.Provider
+	metricsRegistry                *metric.Registry
+	diagnosticsReporter            *diagnostics.Reporter
+	spanconfigMgr                  *spanconfigmanager.Manager
+	spanconfigSQLTranslatorFactory *spanconfigsqltranslator.SQLTranslatorFactory
+	spanconfigSQLWatcher           *spanconfigsqlwatcher.SQLWatcher
+	settingsWatcher                *settingswatcher.SettingsWatcher
 
 	systemConfigWatcher *systemconfigwatcher.Cache
 
@@ -924,15 +924,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	spanConfig := struct {
-		manager       *spanconfigmanager.Manager
-		sqlTranslator *spanconfigsqltranslator.SQLTranslator
-		sqlWatcher    *spanconfigsqlwatcher.SQLWatcher
+		manager              *spanconfigmanager.Manager
+		sqlTranslatorFactory *spanconfigsqltranslator.SQLTranslatorFactory
+		sqlWatcher           *spanconfigsqlwatcher.SQLWatcher
 	}{}
 	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		spanConfig.sqlTranslator = spanconfigsqltranslator.New(execCfg, codec, spanConfigKnobs)
+		spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
+			execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
+		)
 		spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
 			codec,
 			cfg.Settings,
@@ -945,7 +947,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		)
 		spanConfigReconciler := spanconfigreconciler.New(
 			spanConfig.sqlWatcher,
-			spanConfig.sqlTranslator,
+			spanConfig.sqlTranslatorFactory,
 			cfg.spanConfigAccessor,
 			execCfg,
 			codec,
@@ -1011,35 +1013,35 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	return &SQLServer{
-		ambientCtx:              cfg.BaseConfig.AmbientCtx,
-		stopper:                 cfg.stopper,
-		sqlIDContainer:          cfg.nodeIDContainer,
-		pgServer:                pgServer,
-		distSQLServer:           distSQLServer,
-		execCfg:                 execCfg,
-		internalExecutor:        cfg.circularInternalExecutor,
-		leaseMgr:                leaseMgr,
-		blobService:             blobService,
-		tracingService:          tracingService,
-		tenantConnect:           cfg.tenantConnect,
-		sessionRegistry:         cfg.sessionRegistry,
-		jobRegistry:             jobRegistry,
-		statsRefresher:          statsRefresher,
-		temporaryObjectCleaner:  temporaryObjectCleaner,
-		internalMemMetrics:      internalMemMetrics,
-		sqlMemMetrics:           sqlMemMetrics,
-		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
-		sqlLivenessProvider:     cfg.sqlLivenessProvider,
-		sqlInstanceProvider:     cfg.sqlInstanceProvider,
-		metricsRegistry:         cfg.registry,
-		diagnosticsReporter:     reporter,
-		spanconfigMgr:           spanConfig.manager,
-		spanconfigSQLTranslator: spanConfig.sqlTranslator,
-		spanconfigSQLWatcher:    spanConfig.sqlWatcher,
-		settingsWatcher:         settingsWatcher,
-		systemConfigWatcher:     cfg.systemConfigWatcher,
-		isMeta1Leaseholder:      cfg.isMeta1Leaseholder,
-		cfg:                     cfg.BaseConfig,
+		ambientCtx:                     cfg.BaseConfig.AmbientCtx,
+		stopper:                        cfg.stopper,
+		sqlIDContainer:                 cfg.nodeIDContainer,
+		pgServer:                       pgServer,
+		distSQLServer:                  distSQLServer,
+		execCfg:                        execCfg,
+		internalExecutor:               cfg.circularInternalExecutor,
+		leaseMgr:                       leaseMgr,
+		blobService:                    blobService,
+		tracingService:                 tracingService,
+		tenantConnect:                  cfg.tenantConnect,
+		sessionRegistry:                cfg.sessionRegistry,
+		jobRegistry:                    jobRegistry,
+		statsRefresher:                 statsRefresher,
+		temporaryObjectCleaner:         temporaryObjectCleaner,
+		internalMemMetrics:             internalMemMetrics,
+		sqlMemMetrics:                  sqlMemMetrics,
+		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
+		sqlLivenessProvider:            cfg.sqlLivenessProvider,
+		sqlInstanceProvider:            cfg.sqlInstanceProvider,
+		metricsRegistry:                cfg.registry,
+		diagnosticsReporter:            reporter,
+		spanconfigMgr:                  spanConfig.manager,
+		spanconfigSQLTranslatorFactory: spanConfig.sqlTranslatorFactory,
+		spanconfigSQLWatcher:           spanConfig.sqlWatcher,
+		settingsWatcher:                settingsWatcher,
+		systemConfigWatcher:            cfg.systemConfigWatcher,
+		isMeta1Leaseholder:             cfg.isMeta1Leaseholder,
+		cfg:                            cfg.BaseConfig,
 	}, nil
 }
 

@@ -87,7 +87,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	}
 	tenExecCfg := tenantState.ExecutorConfig().(sql.ExecutorConfig)
 	tenKVAccessor := tenantState.SpanConfigKVAccessor().(spanconfig.KVAccessor)
-	tenSQLTranslator := tenantState.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
+	tenSQLTranslatorFactory := tenantState.SpanConfigSQLTranslatorFactory().(spanconfig.SQLTranslatorFactory)
 	tenSQLWatcher := tenantState.SpanConfigSQLWatcher().(spanconfig.SQLWatcher)
 
 	// TODO(irfansharif): We don't always care about these recordings -- should
@@ -95,7 +95,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	tenantState.recorder = spanconfigtestutils.NewKVAccessorRecorder(tenKVAccessor)
 	tenantState.reconciler = spanconfigreconciler.New(
 		tenSQLWatcher,
-		tenSQLTranslator,
+		tenSQLTranslatorFactory,
 		tenantState.recorder,
 		&tenExecCfg,
 		tenExecCfg.Codec,

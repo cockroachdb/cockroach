@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -84,6 +85,15 @@ type KVSubscriber interface {
 
 	LastUpdated() hlc.Timestamp
 	Subscribe(func(ctx context.Context, updated roachpb.Span))
+}
+
+// SQLTranslatorFactory constructs new SQLTranslators.
+type SQLTranslatorFactory interface {
+	// SQLTranslator constructs and returns a single-use, transaction-scoped
+	// SQLTranslator. The returned SQLTranslator is not safe for concurrent use.
+	// The caller must ensure that the passed in collection is associated with the
+	// supplied transaction.
+	SQLTranslator(txn *kv.Txn, collection *descs.Collection) SQLTranslator
 }
 
 // SQLTranslator translates SQL descriptors and their corresponding zone
