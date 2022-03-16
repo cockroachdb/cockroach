@@ -28,10 +28,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
         DescriptorID: 104
         Name: sq1
         SchemaID: 101
-    *scop.RemoveTableComment
-      TableID: 104
     *scop.MarkDescriptorAsDropped
       DescID: 104
+    *scop.RemoveAllTableComments
+      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -106,8 +106,6 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
         DescriptorID: 104
         Name: sq1
         SchemaID: 101
-    *scop.RemoveTableComment
-      TableID: 104
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 105
@@ -126,6 +124,8 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       - 104
     *scop.MarkDescriptorAsDropped
       DescID: 104
+    *scop.RemoveAllTableComments
+      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true

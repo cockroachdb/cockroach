@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -132,17 +134,31 @@ func executeStage(
 	p scplan.Plan,
 	stageIdx int,
 	stage scplan.Stage,
-) error {
+) (err error) {
 	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {
 			return err
 		}
 	}
 
-	log.Infof(ctx, "executing stage %d/%d in phase %v, %d ops of type %s (rollback=%v)",
+	log.Infof(ctx, "executing stage %d/%d in %v, %d ops of type %s (rollback=%v)",
 		stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback)
+	start := timeutil.Now()
+	defer func() {
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "executed stage %d/%d in %v, %d ops of type %s (rollback=%v) took %v: err = %v",
+				stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback,
+				timeutil.Since(start), err)
+		}
+	}()
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
-		return errors.Wrapf(p.DecorateErrorWithPlanDetails(err), "error executing %s", stage.String())
+		// Don't go through the effort to wrap the error if it's a retry or it's a
+		// cancelation.
+		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) &&
+			!errors.Is(err, context.Canceled) {
+			err = p.DecorateErrorWithPlanDetails(err)
+		}
+		return errors.Wrapf(err, "error executing %s", stage.String())
 	}
 	if knobs != nil && knobs.AfterStage != nil {
 		if err := knobs.AfterStage(p, stageIdx); err != nil {

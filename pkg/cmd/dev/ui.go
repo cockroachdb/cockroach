@@ -34,6 +34,7 @@ func makeUICmd(d *dev) *cobra.Command {
 	}
 
 	uiCmd.AddCommand(makeUIWatchCmd(d))
+	uiCmd.AddCommand(makeUILintCmd(d))
 
 	return uiCmd
 }
@@ -188,4 +189,50 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
 
 	return watchCmd
+}
+
+func makeUILintCmd(d *dev) *cobra.Command {
+	const (
+		verboseFlag = "verbose"
+	)
+
+	lintCmd := &cobra.Command{
+		Use:   "lint",
+		Short: "Runs linters, format-checkers, and other static analysis on UI-related files",
+		Long: `Runs linters (e.g. eslint), format-checkers (e.g. prettier), and other static analysis on UI-related files.
+
+Replaces 'make ui-lint'.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			ctx := cmd.Context()
+
+			isVerbose, err := cmd.Flags().GetBool(verboseFlag)
+			if err != nil {
+				return err
+			}
+
+			// Build prerequisites for db-console and cluster-ui
+			args := []string{
+				"test",
+				"//pkg/ui:lint",
+			}
+			args = append(args,
+				d.getTestOutputArgs(false /* stream */, isVerbose, false /* showLogs */)...,
+			)
+
+			logCommand("bazel", args...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+
+			if err != nil {
+				log.Fatalf("failed to lint UI projects: %v", err)
+				return err
+			}
+
+			return nil
+		},
+	}
+
+	lintCmd.Flags().Bool(verboseFlag, false, "show all linter output")
+
+	return lintCmd
 }

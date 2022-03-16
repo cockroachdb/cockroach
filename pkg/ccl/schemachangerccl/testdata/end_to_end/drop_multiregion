@@ -22,13 +22,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 15 MutationType ops
-create job #1: "schema change job"
-  descriptor IDs: [105 107 108]
-delete comment for descriptor #108 of type TableCommentType
-delete comment for descriptor #108 of type ColumnCommentType
-delete comment for descriptor #108 of type ColumnCommentType
-delete comment for descriptor #108 of type IndexCommentType
+## PreCommitPhase stage 1 of 1 with 12 MutationType ops
 delete object namespace entry {104 106 table_regional_by_row} -> 108
 upsert descriptor #105
    type:
@@ -372,6 +366,9 @@ upsert descriptor #108
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
+delete all comments for table descriptors [108]
+create job #1: "schema change job"
+  descriptor IDs: [105 107 108]
 # end PreCommitPhase
 commit transaction #1
 # begin PostCommitPhase
@@ -379,11 +376,6 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
-create job #2: "GC for dropping descriptor 108"
-  descriptor IDs: [108]
-write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
-update progress of schema change job #1
-set schema change job #1 to non-cancellable
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -717,6 +709,11 @@ upsert descriptor #108
      unexposedParentSchemaId: 106
   -  version: "2"
   +  version: "3"
+write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
+create job #2: "GC for dropping descriptor 108"
+  descriptor IDs: [108]
+update progress of schema change job #1
+set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase
 
@@ -738,12 +735,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 10 MutationType ops
-create job #1: "schema change job"
-  descriptor IDs: [105 109]
-delete comment for descriptor #109 of type TableCommentType
-delete comment for descriptor #109 of type ColumnCommentType
-delete comment for descriptor #109 of type IndexCommentType
+## PreCommitPhase stage 1 of 1 with 8 MutationType ops
 delete object namespace entry {104 106 table_regional_by_table} -> 109
 upsert descriptor #105
    type:
@@ -979,6 +971,9 @@ upsert descriptor #109
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
+delete all comments for table descriptors [109]
+create job #1: "schema change job"
+  descriptor IDs: [105 109]
 # end PreCommitPhase
 commit transaction #1
 # begin PostCommitPhase
@@ -986,11 +981,6 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
-create job #2: "GC for dropping descriptor 109"
-  descriptor IDs: [109]
-write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
-update progress of schema change job #1
-set schema change job #1 to non-cancellable
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -1218,6 +1208,11 @@ upsert descriptor #109
      unexposedParentSchemaId: 106
   -  version: "2"
   +  version: "3"
+write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
+create job #2: "GC for dropping descriptor 109"
+  descriptor IDs: [109]
+update progress of schema change job #1
+set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase
 
@@ -1232,11 +1227,6 @@ begin transaction #1
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 18 MutationType ops
-create job #1: "schema change job"
-  descriptor IDs: [104 105 106 107]
-delete comment for descriptor #104 of type DatabaseCommentType
-delete comment for descriptor #106 of type SchemaCommentType
-delete role settings for database on #104
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete object namespace entry {104 106 crdb_internal_region} -> 105
 delete schema namespace entry {104 0 public} -> 106
@@ -1667,6 +1657,11 @@ upsert descriptor #107
   -  version: "4"
   +  state: DROP
   +  version: "5"
+delete comment for descriptor #104 of type DatabaseCommentType
+delete comment for descriptor #106 of type SchemaCommentType
+delete role settings for database on #104
+create job #1: "schema change job"
+  descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
 commit transaction #1
 # begin PostCommitPhase
@@ -1674,13 +1669,13 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
-write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
-update progress of schema change job #1
-set schema change job #1 to non-cancellable
 delete descriptor #104
 delete descriptor #105
 delete descriptor #106
 delete descriptor #107
 deleting zone config for #104
+write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
+update progress of schema change job #1
+set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase

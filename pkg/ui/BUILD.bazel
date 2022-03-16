@@ -54,3 +54,11 @@ genrule(
     cmd = "cp ./$(location @npm//:node_modules/list.js/dist/list.min.js) $@",
     tools = ["@npm//list.js"],
 )
+
+test_suite(
+    name = "lint",
+    tests = [
+        "//pkg/ui/workspaces/cluster-ui:lint",
+        "//pkg/ui/workspaces/db-console:lint",
+    ],
+)
