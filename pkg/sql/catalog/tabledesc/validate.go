@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -519,6 +521,8 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 				"has depends-on-types references despite not being a view"))
 		}
 	}
+
+	desc.validateClusterSettingsForTable(vea)
 
 	if desc.IsSequence() {
 		return
@@ -1500,4 +1504,65 @@ func (desc *wrapper) validatePartitioning() error {
 			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
+}
+
+// validateClusterSettingsForTable validates that any new cluster settings at
+// the table level hold a valid value.
+func (desc *wrapper) validateClusterSettingsForTable(vea catalog.ValidationErrorAccumulator) {
+	if desc.NoClusterSettingOverrides() {
+		return
+	}
+	desc.validateBoolSetting(vea, desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionEnabled,
+		cluster.AutoStatsEnabledSettingName)
+	desc.validateIntSetting(vea, desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows,
+		cluster.AutoStatsMinStaleSettingName, settings.NonNegativeInt)
+	desc.validateFloatSetting(vea, desc.ClusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows,
+		cluster.AutoStatsFractionStaleSettingName, settings.NonNegativeFloat)
+}
+
+func (desc *wrapper) verifyProperTableForStatsSetting(
+	vea catalog.ValidationErrorAccumulator, settingName string,
+) {
+	if desc.IsVirtualTable() {
+		vea.Report(errors.Newf("Setting %s may not be set on virtual table", settingName))
+	}
+	if !desc.IsTable() {
+		vea.Report(errors.Newf("Setting %s may not be set on a view or sequence", settingName))
+	}
+}
+
+func (desc *wrapper) validateBoolSetting(
+	vea catalog.ValidationErrorAccumulator, value *bool, settingName string,
+) {
+	if value != nil {
+		desc.verifyProperTableForStatsSetting(vea, settingName)
+	}
+}
+
+func (desc *wrapper) validateIntSetting(
+	vea catalog.ValidationErrorAccumulator,
+	value *int64,
+	settingName string,
+	validateFunc func(v int64) error,
+) {
+	if value != nil {
+		desc.verifyProperTableForStatsSetting(vea, settingName)
+		if err := validateFunc(*value); err != nil {
+			vea.Report(errors.Wrapf(err, "invalid integer value for %s", settingName))
+		}
+	}
+}
+
+func (desc *wrapper) validateFloatSetting(
+	vea catalog.ValidationErrorAccumulator,
+	value *float64,
+	settingName string,
+	validateFunc func(v float64) error,
+) {
+	if value != nil {
+		desc.verifyProperTableForStatsSetting(vea, settingName)
+		if err := validateFunc(*value); err != nil {
+			vea.Report(errors.Wrapf(err, "invalid float value for %s", settingName))
+		}
+	}
 }
