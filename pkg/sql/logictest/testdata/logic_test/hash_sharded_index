@@ -1019,3 +1019,8 @@ SELECT * FROM t ORDER BY x
 x  duped
 1  true
 2  true
+
+# NOTE: Please keep this statement at the end this file.
+# This session variable has noop and is just kept for backward compatibility.
+statement ok
+set experimental_enable_hash_sharded_indexes = on
