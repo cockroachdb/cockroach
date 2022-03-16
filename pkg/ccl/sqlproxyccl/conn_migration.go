@@ -105,6 +105,15 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 
 var errTransferCannotStart = errors.New("transfer cannot be started")
 
+// runTransfer starts the connection migration process. If a transfer has
+// already been started, or the forwarder has been closed, runTransfer returns
+// an error.
+//
+// NOTE: If the forwarder hasn't been closed, runTransfer has an invariant
+// where the processors have been resumed prior to calling this method. When
+// runTransfer returns, it is guaranteed that processors will either be
+// re-resumed, or the forwarder will be closed (in the case of a non-recoverable
+// error).
 func (f *forwarder) runTransfer() (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
 	// return right away.
@@ -131,6 +140,10 @@ func (f *forwarder) runTransfer() (retErr error) {
 	// blocked I/Os as described above.
 	go func() {
 		<-ctx.Done()
+		// This Close call here in addition to the one in the defer callback
+		// below is on purpose. This would help unblock situations where we're
+		// blocked on sending/reading messages from connections that couldn't
+		// be handled with context.Context.
 		if !ctx.isRecoverable() {
 			f.Close()
 		}
@@ -151,9 +164,12 @@ func (f *forwarder) runTransfer() (retErr error) {
 		latencyDur := timeutil.Since(tBegin)
 		f.metrics.ConnMigrationAttemptedLatency.RecordValue(latencyDur.Nanoseconds())
 
+		// When runTransfer returns, it's either the forwarder has been closed,
+		// or the procesors have been resumed.
 		if !ctx.isRecoverable() {
 			log.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
+			f.Close()
 		} else {
 			// Transfer was successful.
 			if retErr == nil {
@@ -241,8 +257,9 @@ func transferConnection(
 	// TODO(jaylim-crl): There is a possibility where the same pod will get
 	// selected. Some ideas to solve this: pass in the remote address of
 	// serverConn to avoid choosing that pod, or maybe a filter callback?
-	// We can also consider adding a target pod as an argument to RequestTransfer.
-	// That way a central component gets to choose where the connections go.
+	// We can also consider adding a target pod as an argument to
+	// TransferConnection. That way a central component gets to choose where the
+	// connections go.
 	connectFn := connector.OpenTenantConnWithToken
 	if transferConnectionConnectorTestHook != nil {
 		connectFn = transferConnectionConnectorTestHook

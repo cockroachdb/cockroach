@@ -148,13 +148,19 @@ func (f *forwarder) Close() {
 	serverConn.Close()
 }
 
-// RequestTransfer requests that the forwarder performs a best-effort connection
-// migration whenever it can. It is best-effort because this will be a no-op if
-// the forwarder is not in a state that is eligible for a connection migration.
-// If a transfer is already in progress, or has been requested, this is a no-op.
-func (f *forwarder) RequestTransfer() {
-	// Ignore the error here. These errors will be logged accordingly.
-	go func() { _ = f.runTransfer() }()
+// TransferConnection attempts a best-effort connection migration to an
+// available SQL pod based on the load-balancing algorithm. If a transfer has
+// already been started, or the forwarder has been closed, this returns an
+// error. This is a best-effort process because there could be a situation
+// where the forwarder is not in a state that is eligible for a connection
+// migration.
+//
+// TODO(jaylim-crl): It would be nice to introduce transfer policies in the
+// future. That way, we could either transfer to another random SQL pod, or to
+// a specific SQL pod. If we do that, TransferConnection would take in some kind
+// of policy parameter(s).
+func (f *forwarder) TransferConnection() error {
+	return f.runTransfer()
 }
 
 // resumeProcessors starts both the request and response processors
