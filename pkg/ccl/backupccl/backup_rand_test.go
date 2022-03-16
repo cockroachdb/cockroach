@@ -51,8 +51,10 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	sqlDB.Exec(t, "CREATE DATABASE rand")
 
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rng)
-	if _, err := tc.Conns[0].Exec(setup); err != nil {
-		t.Fatal(err)
+	for _, stmt := range setup {
+		if _, err := tc.Conns[0].Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tables := sqlDB.Query(t, `SELECT name FROM crdb_internal.tables WHERE 
