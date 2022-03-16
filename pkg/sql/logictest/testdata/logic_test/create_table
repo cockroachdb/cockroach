@@ -867,3 +867,67 @@ CREATE TABLE public.t_good_hash_indexes_2 (
    crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
    CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
 )
+
+subtest table_settings
+
+statement ok
+CREATE TABLE t1 (a int) WITH ("sql.stats.automatic_collection.enabled" = true)
+
+# Verify automatic collection is enabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'clusterSettingsForTable'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't1'
+    AND tbl.drop_time IS NULL
+----
+{"sqlStatsAutomaticCollectionEnabled": true}
+
+statement ok
+DROP TABLE t1
+
+statement ok
+CREATE TABLE t1 (a int) WITH ("sql.stats.automatic_collection.fraction_stale_rows" = 0.5,
+                              "sql.stats.automatic_collection.min_stale_rows" = 4000)
+
+# Verify settings
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'clusterSettingsForTable'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't1'
+    AND tbl.drop_time IS NULL
+----
+{"sqlStatsAutomaticCollectionFractionStaleRows": 0.5, "sqlStatsAutomaticCollectionMinStaleRows": "4000"}
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1]
+----
+CREATE TABLE public.t1 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+) WITH ("sql.stats.automatic_collection.min_stale_rows" = 4000, "sql.stats.automatic_collection.fraction_stale_rows" = 0.5)
+
+statement ok
+CREATE TABLE t11 (a int) WITH ("sql.stats.automatic_collection.enabled" = true,
+                               "sql.stats.automatic_collection.fraction_stale_rows" = 1.797693134862315708145274237317043567981e+308,
+                               "sql.stats.automatic_collection.min_stale_rows" = 9223372036854775807)
+
+# Using max values for auto stats table settings
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t11]
+----
+CREATE TABLE public.t11 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t11_pkey PRIMARY KEY (rowid ASC)
+) WITH ("sql.stats.automatic_collection.enabled" = true, "sql.stats.automatic_collection.min_stale_rows" = 9223372036854775807, "sql.stats.automatic_collection.fraction_stale_rows" = 1.7976931348623157e+308)

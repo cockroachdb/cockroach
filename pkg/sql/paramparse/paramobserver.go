@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -137,6 +139,34 @@ func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (boo
 		return false, err
 	}
 	return bool(*s), nil
+}
+
+func intFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (int64, error) {
+	intDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if intDatum, err = tree.ParseDInt(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid value for %s", key)
+		}
+	}
+	s, err := DatumAsInt(evalCtx, key, intDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
+}
+
+func floatFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (float64, error) {
+	floatDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if floatDatum, err = tree.ParseDFloat(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid value for %s", key)
+		}
+	}
+	s, err := DatumAsFloat(evalCtx, key, floatDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
 }
 
 type tableParam struct {
@@ -448,6 +478,18 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	cluster.AutoStatsClusterSettingName: {
+		onSet:   boolTableSettingFunc,
+		onReset: tableSettingResetFunc(boolSetting),
+	},
+	cluster.AutoStatsMinStaleSettingName: {
+		onSet:   intTableSettingFunc(settings.NonNegativeInt),
+		onReset: tableSettingResetFunc(intSetting),
+	},
+	cluster.AutoStatsFractionStaleSettingName: {
+		onSet:   floatTableSettingFunc(settings.NonNegativeFloat),
+		onReset: tableSettingResetFunc(floatSetting),
+	},
 }
 
 func init() {
@@ -489,6 +531,184 @@ func init() {
 			},
 		}
 	}
+}
+
+type settingDataType int
+
+const (
+	boolSetting = iota
+	intSetting
+	floatSetting
+)
+
+func boolTableSettingFunc(
+	ctx context.Context,
+	po *TableStorageParamObserver,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	datum tree.Datum,
+) error {
+	boolVal, err := boolFromDatum(evalCtx, key, datum)
+	if err != nil {
+		return err
+	}
+	if po.tableDesc.ClusterSettingsForTable == nil {
+		po.tableDesc.ClusterSettingsForTable = &catpb.ClusterSettingsForTable{}
+	}
+	var settingPtr **bool
+	var ok bool
+	if settingPtr, ok = settingValuePointer(key, po.tableDesc.ClusterSettingsForTable).(**bool); !ok {
+		return errors.Newf("table setting %s has unexpected type", key)
+	}
+	if settingPtr == nil {
+		return errors.Newf("unable to set table setting %s", key)
+	}
+	setting := *settingPtr
+	if setting == nil {
+		*settingPtr = &boolVal
+		return nil
+	} else if *setting == boolVal {
+		return nil
+	}
+	*setting = boolVal
+	return nil
+}
+
+func intTableSettingFunc(
+	validateFunc func(v int64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		intVal, err := intFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.ClusterSettingsForTable == nil {
+			po.tableDesc.ClusterSettingsForTable = &catpb.ClusterSettingsForTable{}
+		}
+		var settingPtr **int64
+		var ok bool
+		if settingPtr, ok = settingValuePointer(key, po.tableDesc.ClusterSettingsForTable).(**int64); !ok {
+			return errors.Newf("table setting %s has unexpected type", key)
+		}
+		if settingPtr == nil {
+			return errors.Newf("unable to set table setting %s", key)
+		}
+		if err = validateFunc(intVal); err != nil {
+			return errors.Wrapf(err, "invalid value for %s", key)
+		}
+		setting := *settingPtr
+		if setting == nil {
+			*settingPtr = &intVal
+			return nil
+		} else if *setting == intVal {
+			return nil
+		}
+		*setting = intVal
+		return nil
+	}
+}
+
+func floatTableSettingFunc(
+	validateFunc func(v float64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		floatVal, err := floatFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.ClusterSettingsForTable == nil {
+			po.tableDesc.ClusterSettingsForTable = &catpb.ClusterSettingsForTable{}
+		}
+		var settingPtr **float64
+		var ok bool
+		if settingPtr, ok = settingValuePointer(key, po.tableDesc.ClusterSettingsForTable).(**float64); !ok {
+			return errors.Newf("table setting %s has unexpected type", key)
+		}
+		if settingPtr == nil {
+			return errors.Newf("unable to set table setting %s", key)
+		}
+		if err = validateFunc(floatVal); err != nil {
+			return errors.Wrapf(err, "invalid value for %s", key)
+		}
+		setting := *settingPtr
+		if setting == nil {
+			*settingPtr = &floatVal
+			return nil
+		} else if *setting == floatVal {
+			return nil
+		}
+		*setting = floatVal
+		return nil
+	}
+}
+
+func tableSettingResetFunc(
+	settingDataType settingDataType,
+) func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+	return func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		if po.tableDesc.ClusterSettingsForTable == nil {
+			return nil
+		}
+		settingPtr := settingValuePointer(key, po.tableDesc.ClusterSettingsForTable)
+		if settingPtr == nil {
+			return errors.Newf("unable to reset table setting %s", key)
+		}
+		var ok bool
+		switch settingDataType {
+		case boolSetting:
+			var setting **bool
+			if setting, ok = settingPtr.(**bool); !ok {
+				return errors.Newf("unable to reset table setting %s", key)
+			}
+			if *setting == nil {
+				// This setting is unset or has already been reset.
+				return nil
+			}
+			*setting = nil
+		case intSetting:
+			var setting **int64
+			if setting, ok = settingPtr.(**int64); !ok {
+				return errors.Newf("unable to reset table setting %s", key)
+			}
+			if *setting == nil {
+				// This setting is unset or has already been reset.
+				return nil
+			}
+			*setting = nil
+		case floatSetting:
+			var setting **float64
+			if setting, ok = settingPtr.(**float64); !ok {
+				return errors.Newf("unable to reset table setting %s", key)
+			}
+			if *setting == nil {
+				// This setting is unset or has already been reset.
+				return nil
+			}
+			*setting = nil
+		default:
+			return errors.Newf("unable to reset table setting %s", key)
+		}
+		return nil
+	}
+}
+
+func settingValuePointer(
+	settingName string, clusterSettingsForTable *catpb.ClusterSettingsForTable,
+) interface{} {
+	switch settingName {
+	case cluster.AutoStatsClusterSettingName:
+		return &clusterSettingsForTable.SqlStatsAutomaticCollectionEnabled
+	case cluster.AutoStatsMinStaleSettingName:
+		return &clusterSettingsForTable.SqlStatsAutomaticCollectionMinStaleRows
+	case cluster.AutoStatsFractionStaleSettingName:
+		return &clusterSettingsForTable.SqlStatsAutomaticCollectionFractionStaleRows
+	}
+	return nil
 }
 
 // onSet implements the StorageParamObserver interface.
