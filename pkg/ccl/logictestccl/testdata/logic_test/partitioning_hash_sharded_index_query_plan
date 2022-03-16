@@ -34,9 +34,9 @@ CREATE TABLE t_child_partitioned (
    PARTITION us_east VALUES IN (('new york'))
 );
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
+# TODO(mgartner): In the FK check there is a lookup join that searches every
+# shard, but only one shard needs to be searched. Inlining the insert values in
+# the FK check should improve this plan.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_child VALUES (123, 321);
 ----
@@ -81,9 +81,9 @@ vectorized: true
                       columns: (column1, column2)
                       label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
+# TODO(mgartner): In the FK check there is a lookup join that searches every
+# shard, but only one shard needs to be searched. Inlining the insert values in
+# the FK check should improve this plan.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_child_partitioned VALUES (123, 321, 'seattle');
 ----
@@ -116,23 +116,24 @@ vectorized: true
 │       │ columns: ()
 │       │
 │       └── • project
-│           │ columns: (column1)
-│           │ estimated row count: 0 (missing stats)
+│           │ columns: (id)
+│           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • lookup join (semi)
-│               │ columns: (column1, column3)
-│               │ estimated row count: 0 (missing stats)
-│               │ table: t_child_partitioned@t_child_partitioned_pkey
-│               │ lookup condition: (column1 = id) AND (part IN ('new york', 'seattle'))
-│               │ pred: column3 != part
+│           └── • cross join (inner)
+│               │ columns: (id, id, part)
+│               │ estimated row count: 1 (missing stats)
 │               │
-│               └── • project
-│                   │ columns: (column1, column3)
-│                   │ estimated row count: 1
-│                   │
-│                   └── • scan buffer
-│                         columns: (column1, column2, column3, check1)
-│                         label: buffer 1
+│               ├── • values
+│               │     columns: (id)
+│               │     size: 1 column, 1 row
+│               │     row 0, expr 0: 123
+│               │
+│               └── • scan
+│                     columns: (id, part)
+│                     estimated row count: 1 (missing stats)
+│                     table: t_child_partitioned@t_child_partitioned_pkey
+│                     spans: /"new york"/123/0
+│                     limit: 1
 │
 └── • constraint-check
     │
@@ -205,9 +206,6 @@ vectorized: true
               row 0, expr 1: '4321'
               row 0, expr 2: gen_random_uuid()
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val, part) VALUES (4321, 'seattle') ON CONFLICT DO NOTHING;
 ----
@@ -259,9 +257,6 @@ vectorized: true
                       row 0, expr 1: '4321'
                       row 0, expr 2: gen_random_uuid()
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val, part) VALUES (4321, 'seattle'), (8765, 'new york') ON CONFLICT DO NOTHING;
 ----
@@ -333,9 +328,6 @@ CREATE TABLE t_unique_hash_pk (
   PARTITION us_east VALUES IN (('new york'))
 );
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle');
 ----
@@ -350,18 +342,14 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, part)
 │   │
-│   └── • buffer
-│       │ columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-│             size: 5 columns, 1 row
-│             row 0, expr 0: 4321
-│             row 0, expr 1: 'seattle'
-│             row 0, expr 2: 9
-│             row 0, expr 3: true
-│             row 0, expr 4: true
+│   └── • values
+│         columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
+│         size: 5 columns, 1 row
+│         row 0, expr 0: 4321
+│         row 0, expr 1: 'seattle'
+│         row 0, expr 2: 9
+│         row 0, expr 3: true
+│         row 0, expr 4: true
 │
 └── • constraint-check
     │
@@ -369,27 +357,44 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column1)
-            │ estimated row count: 0 (missing stats)
+            │ columns: (id)
+            │ estimated row count: 1 (missing stats)
             │
-            └── • lookup join (semi)
-                │ columns: (crdb_internal_id_shard_16_comp, column1, column2)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                │ lookup condition: ((column1 = id) AND (part IN ('new york', 'seattle'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                │ pred: (crdb_internal_id_shard_16_comp != crdb_internal_id_shard_16) OR (column2 != part)
+            └── • cross join (inner)
+                │ columns: (id, crdb_internal_id_shard_16, id, part)
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • project
-                    │ columns: (crdb_internal_id_shard_16_comp, column1, column2)
-                    │ estimated row count: 1
+                ├── • values
+                │     columns: (id)
+                │     size: 1 column, 1 row
+                │     row 0, expr 0: 4321
+                │
+                └── • limit
+                    │ columns: (crdb_internal_id_shard_16, id, part)
+                    │ estimated row count: 1 (missing stats)
+                    │ count: 1
                     │
-                    └── • scan buffer
-                          columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-                          label: buffer 1
+                    └── • distinct
+                        │ columns: (crdb_internal_id_shard_16, id, part)
+                        │ estimated row count: 7 (missing stats)
+                        │ distinct on: id, part
+                        │
+                        └── • union all
+                            │ columns: (crdb_internal_id_shard_16, id, part)
+                            │ estimated row count: 2 (missing stats)
+                            │
+                            ├── • scan
+                            │     columns: (crdb_internal_id_shard_16, id, part)
+                            │     estimated row count: 1 (missing stats)
+                            │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
+                            │     spans
+                            │
+                            └── • scan
+                                  columns: (crdb_internal_id_shard_16, id, part)
+                                  estimated row count: 1 (missing stats)
+                                  table: t_unique_hash_pk@t_unique_hash_pk_pkey
+                                  spans: /"new york"/9/4321/0
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle') ON CONFLICT DO NOTHING;
 ----
@@ -430,9 +435,6 @@ vectorized: true
               spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
               parallel
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle'), (8765, 'new york') ON CONFLICT DO NOTHING;
 ----
@@ -517,9 +519,6 @@ vectorized: true
               spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
               parallel
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle'), (8765, 'new york') ON CONFLICT (id) DO NOTHING;
 ----
@@ -564,9 +563,6 @@ vectorized: true
                   row 1, expr 0: 8765
                   row 1, expr 1: 'new york'
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle') ON CONFLICT (id) DO UPDATE SET id = excluded.id
 ----
@@ -656,9 +652,6 @@ vectorized: true
                           columns: (crdb_internal_id_shard_16_comp, column1, column2, crdb_internal_id_shard_16, id, part, crdb_internal_id_shard_16_comp, column1, part, check1, check2, upsert_part)
                           label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle'), (8765, 'new york') ON CONFLICT (id) DO UPDATE SET id = excluded.id
 ----
@@ -799,9 +792,6 @@ vectorized: true
                   parallel
                   locking strength: for update
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle'), (8765, 'new york');
 ----
@@ -853,9 +843,6 @@ vectorized: true
                       row 1, expr 0: 8765
                       row 1, expr 1: 'new york'
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_pk SET id = 1234 WHERE id = 4321;
 ----
@@ -933,9 +920,6 @@ CREATE TABLE t_unique_hash_sec_key (
 statement ok
 CREATE UNIQUE INDEX idx_uniq_hash_email ON t_unique_hash_sec_key (email) USING HASH;
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle');
 ----
@@ -950,19 +934,15 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ into: t_unique_hash_sec_key(id, email, part, crdb_internal_email_shard_16)
 │   │
-│   └── • buffer
-│       │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│             size: 6 columns, 1 row
-│             row 0, expr 0: 4321
-│             row 0, expr 1: 'some_email'
-│             row 0, expr 2: 'seattle'
-│             row 0, expr 3: 13
-│             row 0, expr 4: true
-│             row 0, expr 5: true
+│   └── • values
+│         columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
+│         size: 6 columns, 1 row
+│         row 0, expr 0: 4321
+│         row 0, expr 1: 'some_email'
+│         row 0, expr 2: 'seattle'
+│         row 0, expr 3: 13
+│         row 0, expr 4: true
+│         row 0, expr 5: true
 │
 ├── • constraint-check
 │   │
@@ -970,23 +950,24 @@ vectorized: true
 │       │ columns: ()
 │       │
 │       └── • project
-│           │ columns: (column1)
-│           │ estimated row count: 0 (missing stats)
+│           │ columns: (id)
+│           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • lookup join (semi)
-│               │ columns: (column1, column3)
-│               │ estimated row count: 0 (missing stats)
-│               │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-│               │ lookup condition: (column1 = id) AND (part IN ('new york', 'seattle'))
-│               │ pred: column3 != part
+│           └── • cross join (inner)
+│               │ columns: (id, id, part)
+│               │ estimated row count: 1 (missing stats)
 │               │
-│               └── • project
-│                   │ columns: (column1, column3)
-│                   │ estimated row count: 1
-│                   │
-│                   └── • scan buffer
-│                         columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│                         label: buffer 1
+│               ├── • values
+│               │     columns: (id)
+│               │     size: 1 column, 1 row
+│               │     row 0, expr 0: 4321
+│               │
+│               └── • scan
+│                     columns: (id, part)
+│                     estimated row count: 1 (missing stats)
+│                     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+│                     spans: /"new york"/4321/0
+│                     limit: 1
 │
 └── • constraint-check
     │
@@ -994,27 +975,50 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column2)
-            │ estimated row count: 0 (missing stats)
+            │ columns: (email)
+            │ estimated row count: 1 (missing stats)
             │
-            └── • lookup join (semi)
-                │ columns: (column1, column2, column3)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@idx_uniq_hash_email
-                │ lookup condition: ((column2 = email) AND (part IN ('new york', 'seattle'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                │ pred: (column1 != id) OR (column3 != part)
+            └── • cross join (inner)
+                │ columns: (email, id, email, part)
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • project
-                    │ columns: (column1, column2, column3)
-                    │ estimated row count: 1
+                ├── • values
+                │     columns: (email)
+                │     size: 1 column, 1 row
+                │     row 0, expr 0: 'some_email'
+                │
+                └── • limit
+                    │ columns: (id, email, part)
+                    │ estimated row count: 1 (missing stats)
+                    │ count: 1
                     │
-                    └── • scan buffer
-                          columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-                          label: buffer 1
+                    └── • distinct
+                        │ columns: (id, email, part)
+                        │ estimated row count: 7 (missing stats)
+                        │ distinct on: id, part
+                        │
+                        └── • union all
+                            │ columns: (id, email, part)
+                            │ estimated row count: 2 (missing stats)
+                            │
+                            ├── • filter
+                            │   │ columns: (id, email, part)
+                            │   │ estimated row count: 1 (missing stats)
+                            │   │ filter: id != 4321
+                            │   │
+                            │   └── • scan
+                            │         columns: (id, email, part)
+                            │         estimated row count: 0 (missing stats)
+                            │         table: t_unique_hash_sec_key@idx_uniq_hash_email
+                            │         spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
+                            │         parallel
+                            │
+                            └── • scan
+                                  columns: (id, email, part)
+                                  estimated row count: 1 (missing stats)
+                                  table: t_unique_hash_sec_key@idx_uniq_hash_email
+                                  spans: /"new york"/13/"some_email"/0
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle') ON CONFLICT DO NOTHING;
 ----
@@ -1068,9 +1072,6 @@ vectorized: true
                       spans: /"new york"/4321/0 /"seattle"/4321/0
                       parallel
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle'), (8765, 'another_email', 'new york') ON CONFLICT DO NOTHING;
 ----
@@ -1141,42 +1142,38 @@ vectorized: true
 │   │ into: t_unique_hash_sec_key(id, email, part, crdb_internal_email_shard_16)
 │   │ arbiter constraints: idx_uniq_hash_email
 │   │
-│   └── • buffer
+│   └── • render
 │       │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│       │ label: buffer 1
+│       │ estimated row count: 0 (missing stats)
+│       │ render check1: column3 IN ('new york', 'seattle')
+│       │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+│       │ render column1: column1
+│       │ render column2: column2
+│       │ render column3: column3
+│       │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
 │       │
-│       └── • render
-│           │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
+│       └── • cross join (anti)
+│           │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
 │           │ estimated row count: 0 (missing stats)
-│           │ render check1: column3 IN ('new york', 'seattle')
-│           │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-│           │ render column1: column1
-│           │ render column2: column2
-│           │ render column3: column3
-│           │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
 │           │
-│           └── • cross join (anti)
-│               │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
-│               │ estimated row count: 0 (missing stats)
+│           ├── • values
+│           │     columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
+│           │     size: 4 columns, 1 row
+│           │     row 0, expr 0: 4321
+│           │     row 0, expr 1: 'some_email'
+│           │     row 0, expr 2: 'seattle'
+│           │     row 0, expr 3: 13
+│           │
+│           └── • project
+│               │ columns: ()
+│               │ estimated row count: 1 (missing stats)
 │               │
-│               ├── • values
-│               │     columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
-│               │     size: 4 columns, 1 row
-│               │     row 0, expr 0: 4321
-│               │     row 0, expr 1: 'some_email'
-│               │     row 0, expr 2: 'seattle'
-│               │     row 0, expr 3: 13
-│               │
-│               └── • project
-│                   │ columns: ()
-│                   │ estimated row count: 1 (missing stats)
-│                   │
-│                   └── • scan
-│                         columns: (email)
-│                         estimated row count: 1 (missing stats)
-│                         table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                         spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
-│                         parallel
+│               └── • scan
+│                     columns: (email)
+│                     estimated row count: 1 (missing stats)
+│                     table: t_unique_hash_sec_key@idx_uniq_hash_email
+│                     spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
+│                     parallel
 │
 └── • constraint-check
     │
@@ -1184,27 +1181,25 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column1)
-            │ estimated row count: 0 (missing stats)
+            │ columns: (id)
+            │ estimated row count: 1 (missing stats)
             │
-            └── • lookup join (semi)
-                │ columns: (column1, column3)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-                │ lookup condition: (column1 = id) AND (part IN ('new york', 'seattle'))
-                │ pred: column3 != part
+            └── • cross join (inner)
+                │ columns: (id, id, part)
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • project
-                    │ columns: (column1, column3)
-                    │ estimated row count: 0 (missing stats)
-                    │
-                    └── • scan buffer
-                          columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-                          label: buffer 1
+                ├── • values
+                │     columns: (id)
+                │     size: 1 column, 1 row
+                │     row 0, expr 0: 4321
+                │
+                └── • scan
+                      columns: (id, part)
+                      estimated row count: 1 (missing stats)
+                      table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+                      spans: /"new york"/4321/0
+                      limit: 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle'), (8765, 'another_email', 'new york') ON CONFLICT (email) DO NOTHING;
 ----
@@ -1283,9 +1278,6 @@ vectorized: true
                           columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
                           label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle') ON CONFLICT (email) DO UPDATE SET email = 'bad_email';
 ----
@@ -1417,9 +1409,6 @@ vectorized: true
                           columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, part, check1, check2, upsert_id, upsert_part)
                           label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle'), (8765, 'another_email', 'new york') ON CONFLICT (email) DO UPDATE SET email = 'bad_email';
 ----
@@ -1566,9 +1555,6 @@ vectorized: true
                           columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, part, check1, check2, upsert_id, upsert_part)
                           label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_sec_key VALUES (1, 'email1', 'seattle');
 ----
@@ -1657,9 +1643,6 @@ vectorized: true
                           columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, column2, column3, crdb_internal_email_shard_16_comp, part, check1, check2, upsert_id)
                           label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_sec_key VALUES (1, 'email1', 'seattle'), (8765, 'email2', 'new york');
 ----
@@ -1759,9 +1742,6 @@ vectorized: true
                           columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, column2, column3, crdb_internal_email_shard_16_comp, part, check1, check2, upsert_id)
                           label: buffer 1
 
-# TODO (mgartner): there is a lookup join with lookup condition checking every
-# single shard. This is unnecessary and could be improved by having the shard
-# number calculated instead of looking at all possible shards.
 query T
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_sec_key SET email = 'email1' WHERE id = 2;
 ----
