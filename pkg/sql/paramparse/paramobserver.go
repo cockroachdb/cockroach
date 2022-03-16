@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -137,6 +138,34 @@ func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (boo
 		return false, err
 	}
 	return bool(*s), nil
+}
+
+func intFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (int64, error) {
+	intDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if intDatum, err = tree.ParseDInt(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid integer value for %s", key)
+		}
+	}
+	s, err := DatumAsInt(evalCtx, key, intDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
+}
+
+func floatFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (float64, error) {
+	floatDatum := datum
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		if floatDatum, err = tree.ParseDFloat(stringVal); err != nil {
+			return 0, errors.Wrapf(err, "invalid float value for %s", key)
+		}
+	}
+	s, err := DatumAsFloat(evalCtx, key, floatDatum)
+	if err != nil {
+		return 0, err
+	}
+	return s, nil
 }
 
 type tableParam struct {
@@ -465,6 +494,18 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	catpb.AutoStatsEnabledTableSettingName: {
+		onSet:   autoStatsEnabledSettingFunc,
+		onReset: autoStatsTableSettingResetFunc,
+	},
+	catpb.AutoStatsMinStaleTableSettingName: {
+		onSet:   autoStatsMinStaleRowsSettingFunc(settings.NonNegativeInt),
+		onReset: autoStatsTableSettingResetFunc,
+	},
+	catpb.AutoStatsFractionStaleTableSettingName: {
+		onSet:   autoStatsFractionStaleRowsSettingFunc(settings.NonNegativeFloat),
+		onReset: autoStatsTableSettingResetFunc,
+	},
 }
 
 func init() {
@@ -506,6 +547,88 @@ func init() {
 			},
 		}
 	}
+}
+
+func autoStatsEnabledSettingFunc(
+	ctx context.Context,
+	po *TableStorageParamObserver,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	datum tree.Datum,
+) error {
+	boolVal, err := boolFromDatum(evalCtx, key, datum)
+	if err != nil {
+		return err
+	}
+	if po.tableDesc.AutoStatsSettings == nil {
+		po.tableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+	}
+	po.tableDesc.AutoStatsSettings.Enabled = &boolVal
+	return nil
+}
+
+func autoStatsMinStaleRowsSettingFunc(
+	validateFunc func(v int64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		intVal, err := intFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.AutoStatsSettings == nil {
+			po.tableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+		}
+		if err = validateFunc(intVal); err != nil {
+			return errors.Wrapf(err, "invalid integer value for %s", key)
+		}
+		po.tableDesc.AutoStatsSettings.MinStaleRows = &intVal
+		return nil
+	}
+}
+
+func autoStatsFractionStaleRowsSettingFunc(
+	validateFunc func(v float64) error,
+) func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	return func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		floatVal, err := floatFromDatum(evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		if po.tableDesc.AutoStatsSettings == nil {
+			po.tableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+		}
+		if err = validateFunc(floatVal); err != nil {
+			return errors.Wrapf(err, "invalid float value for %s", key)
+		}
+		po.tableDesc.AutoStatsSettings.FractionStaleRows = &floatVal
+		return nil
+	}
+}
+
+func autoStatsTableSettingResetFunc(
+	po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string,
+) error {
+	if po.tableDesc.AutoStatsSettings == nil {
+		return nil
+	}
+	autoStatsSettings := po.tableDesc.AutoStatsSettings
+	switch key {
+	case catpb.AutoStatsEnabledTableSettingName:
+		autoStatsSettings.Enabled = nil
+		return nil
+	case catpb.AutoStatsMinStaleTableSettingName:
+		autoStatsSettings.MinStaleRows = nil
+		return nil
+	case catpb.AutoStatsFractionStaleTableSettingName:
+		autoStatsSettings.FractionStaleRows = nil
+		return nil
+	}
+	return errors.Newf("unable to reset table setting %s", key)
 }
 
 // onSet implements the StorageParamObserver interface.

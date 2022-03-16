@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -228,7 +228,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	// Report tracked cluster settings via telemetry.
 	// TODO(justin): implement a more general mechanism for tracking these.
 	switch n.name {
-	case stats.AutoStatsClusterSettingName:
+	case catpb.AutoStatsEnabledSettingName:
 		switch expectedEncodedValue {
 		case "true":
 			telemetry.Inc(sqltelemetry.TurnAutoStatsOnUseCounter)
