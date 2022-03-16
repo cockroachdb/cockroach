@@ -189,7 +189,7 @@ type Index interface {
 
 	// GeoConfig returns a geospatial index configuration. If non-nil, it
 	// describes the configuration for this geospatial inverted index.
-	GeoConfig() *geoindex.Config
+	GeoConfig() geoindex.Config
 
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion

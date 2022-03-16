@@ -2195,10 +2195,10 @@ func NewTableDesc(
 		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
 			telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 			geoConfig := idx.GetGeoConfig()
-			if !geoindex.IsEmptyConfig(&geoConfig) {
-				if geoindex.IsGeographyConfig(&geoConfig) {
+			if !geoConfig.IsEmpty() {
+				if geoConfig.IsGeography() {
 					telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
-				} else if geoindex.IsGeometryConfig(&geoConfig) {
+				} else if geoConfig.IsGeometry() {
 					telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 				}
 			}
