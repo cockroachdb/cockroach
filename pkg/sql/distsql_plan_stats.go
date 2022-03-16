@@ -213,6 +213,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	var rowsExpected uint64
 	if len(tableStats) > 0 {
 		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
+		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
+			overhead = autoStatsFractionStaleRowsForTable
+		}
 		// Convert to a signed integer first to make the linter happy.
 		rowsExpected = uint64(int64(
 			// The total expected number of rows is the same number that was measured
