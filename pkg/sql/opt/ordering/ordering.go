@@ -266,6 +266,11 @@ func init() {
 		buildChildReqOrdering: alterRangeRelocateBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.AlterRangeSplitOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: alterRangeSplitBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 	funcMap[opt.ControlJobsOp] = funcs{
 		canProvideOrdering:    canNeverProvideOrdering,
 		buildChildReqOrdering: controlJobsBuildChildReqOrdering,

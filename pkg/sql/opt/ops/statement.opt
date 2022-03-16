@@ -317,3 +317,25 @@ define AlterRangeRelocatePrivate {
     # Props stores the required physical properties for the input expression.
     Props PhysProps
 }
+
+# AlterRangeSplit represents an `ALTER RANGE .. SPLIT ..` statement.
+[Relational, Mutation]
+define AlterRangeSplit {
+    # The input expression provides range IDs as integers.
+    Input RelExpr
+
+    # Expiration is a string scalar that indicates a timestamp after which the
+    # ranges are eligible for automatic merging (or Null if there is no
+    # expiration).
+    Expiration ScalarExpr
+    _ AlterRangeSplitPrivate
+}
+
+[Private]
+define AlterRangeSplitPrivate {
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
+
+    # Props stores the required physical properties for the input expression.
+    Props PhysProps
+}

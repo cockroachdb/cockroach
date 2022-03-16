@@ -1476,6 +1476,7 @@ alter_database_stmt ::=
 alter_range_stmt ::=
 	alter_zone_range_stmt
 	| alter_range_relocate_stmt
+	| alter_range_split_load_stmt
 
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
@@ -2031,6 +2032,12 @@ alter_range_relocate_stmt ::=
 	| 'ALTER' 'RANGE' a_expr relocate_kw 'LEASE' 'TO' a_expr
 	| 'ALTER' 'RANGE' relocate_kw relocate_subject_nonlease 'FROM' a_expr 'TO' a_expr 'FOR' select_stmt
 	| 'ALTER' 'RANGE' a_expr relocate_kw relocate_subject_nonlease 'FROM' a_expr 'TO' a_expr
+
+alter_range_split_load_stmt ::=
+	'ALTER' 'RANGE' 'SPLIT' 'FOR' select_stmt
+	| 'ALTER' 'RANGE' 'SPLIT' 'FOR' select_stmt 'WITH' 'EXPIRATION' a_expr
+	| 'ALTER' 'RANGE' a_expr 'SPLIT'
+	| 'ALTER' 'RANGE' a_expr 'SPLIT' 'WITH' 'EXPIRATION' a_expr
 
 alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config

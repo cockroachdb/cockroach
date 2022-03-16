@@ -1971,6 +1971,25 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	}, nil
 }
 
+// ConstructAlterRangeSplit is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterRangeSplit(
+	input exec.Node, expiration tree.TypedExpr,
+) (exec.Node, error) {
+	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+	}
+
+	expirationTime, err := parseExpirationTime(ef.planner.EvalContext(), expiration)
+	if err != nil {
+		return nil, err
+	}
+
+	return &splitRange{
+		rows:           input.(planNode),
+		expirationTime: expirationTime,
+	}, nil
+}
+
 // ConstructControlJobs is part of the exec.Factory interface.
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,

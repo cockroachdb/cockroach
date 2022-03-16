@@ -786,6 +786,10 @@ message AdminSplitRequest {
   // cause the split to be rejected. This can be used by a caller to effectively
   // send a "conditional split" request, i.e. a split if not already split.
   repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "Key"];
+
+  // If set indicates that the system should perform a load based split. If this
+  // option is used the splitKey should be null.
+  bool load_based = 6;
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

@@ -257,6 +257,23 @@ func (b *Builder) buildAlterRangeRelocate(relocate *memo.AlterRangeRelocateExpr)
 	return planWithColumns(node, relocate.Columns), nil
 }
 
+func (b *Builder) buildAlterRangeSplit(split *memo.AlterRangeSplitExpr) (execPlan, error) {
+	input, err := b.buildRelational(split.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	scalarCtx := buildScalarCtx{}
+	expiration, err := b.buildScalar(&scalarCtx, split.Expiration)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructAlterRangeSplit(input.root, expiration)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return planWithColumns(node, split.Columns), nil
+}
+
 func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) {
 	input, err := b.buildRelational(ctl.Input)
 	if err != nil {

@@ -130,7 +130,7 @@ func CanWriteData(stmt Statement) bool {
 	case *CopyFrom, *Import, *Restore:
 		return true
 	// CockroachDB extensions.
-	case *Split, *Unsplit, *Relocate, *RelocateRange, *Scatter:
+	case *Split, *Unsplit, *Relocate, *RelocateRange, *Scatter, *SplitRange:
 		return true
 	}
 	return false
@@ -1723,6 +1723,17 @@ func (*Split) StatementType() StatementType { return TypeDML }
 func (*Split) StatementTag() string { return "SPLIT" }
 
 // StatementReturnType implements the Statement interface.
+func (*SplitRange) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*SplitRange) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *SplitRange) StatementTag() string {
+	return "SPLIT"
+}
+
+// StatementReturnType implements the Statement interface.
 func (*StreamIngestion) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1947,6 +1958,7 @@ func (n *ShowFingerprints) String() string               { return AsString(n) }
 func (n *ShowDefaultPrivileges) String() string          { return AsString(n) }
 func (n *ShowCompletions) String() string                { return AsString(n) }
 func (n *Split) String() string                          { return AsString(n) }
+func (n *SplitRange) String() string                     { return AsString(n) }
 func (n *StreamIngestion) String() string                { return AsString(n) }
 func (n *Unsplit) String() string                        { return AsString(n) }
 func (n *Truncate) String() string                       { return AsString(n) }

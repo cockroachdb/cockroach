@@ -208,6 +208,7 @@ go_library(
         "show_zone_config.go",
         "sort.go",
         "split.go",
+        "split_range.go",
         "spool.go",
         "sql_cursor.go",
         "statement.go",

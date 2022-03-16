@@ -1095,6 +1095,12 @@ func (e *distSQLSpecExecFactory) ConstructAlterRangeRelocate(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter range relocate")
 }
 
+func (e *distSQLSpecExecFactory) ConstructAlterRangeSplit(
+	input exec.Node, expiration tree.TypedExpr,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter range relocate")
+}
+
 func (e *distSQLSpecExecFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: buffer")
 }

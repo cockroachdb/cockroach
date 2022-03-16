@@ -406,7 +406,9 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
-
+	// LoadBasedSplitRecordDurationThreshold determines how long the load based
+	// splitter should collect per key statistics before deciding on a split point.
+	LoadBasedSplitRecordDurationThreshold time.Duration
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 }

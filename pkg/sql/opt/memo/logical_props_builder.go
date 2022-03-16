@@ -1042,6 +1042,12 @@ func (b *logicalPropsBuilder) buildAlterRangeRelocateProps(
 	b.buildBasicProps(relocate, relocate.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildAlterRangeSplitProps(
+	split *AlterRangeSplitExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(split, split.Columns, rel)
+}
+
 func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
 }
