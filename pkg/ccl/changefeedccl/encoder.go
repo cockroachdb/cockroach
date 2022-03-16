@@ -113,6 +113,18 @@ type jsonEncoder struct {
 	alloc                   tree.DatumAlloc
 	buf                     bytes.Buffer
 	virtualColumnVisibility string
+
+	// columnMapCache caches the TableColMap for the latest version of the
+	// table descriptor thus far seen. It avoids the need to recompute the
+	// map per row, which, prior to the change introducing this cache, could
+	// amount for 10% of row processing time.
+	columnMapCache map[descpb.ID]*tableColumnMapCacheEntry
+}
+
+// tableColumnMapCacheEntry stores a TableColMap for a given descriptor version.
+type tableColumnMapCacheEntry struct {
+	version descpb.DescriptorVersion
+	catalog.TableColMap
 }
 
 var _ Encoder = &jsonEncoder{}
@@ -125,6 +137,7 @@ func makeJSONEncoder(
 		keyOnly:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
 		wrapped:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
 		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		columnMapCache:          map[descpb.ID]*tableColumnMapCacheEntry{},
 	}
 	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
 	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
@@ -162,7 +175,7 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error
 }
 
 func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
-	colIdxByID := catalog.ColumnIDToOrdinalMap(row.tableDesc.PublicColumns())
+	colIdxByID := e.getTableColMap(row.tableDesc)
 	primaryIndex := row.tableDesc.GetPrimaryIndex()
 	jsonEntries := make([]interface{}, primaryIndex.NumKeyColumns())
 	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
@@ -357,6 +370,29 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		}
 	}
 	return gojson.Marshal(jsonEntries)
+}
+
+// getTableColMap gets the TableColMap for the provided table descriptor,
+// optionally consulting its cache.
+func (e *jsonEncoder) getTableColMap(desc catalog.TableDescriptor) catalog.TableColMap {
+	ce, exists := e.columnMapCache[desc.GetID()]
+	if exists {
+		switch {
+		case ce.version == desc.GetVersion():
+			return ce.TableColMap
+		case ce.version > desc.GetVersion():
+			return catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
+		default:
+			// Construct a new entry.
+			delete(e.columnMapCache, desc.GetID())
+		}
+	}
+	ce = &tableColumnMapCacheEntry{
+		version:     desc.GetVersion(),
+		TableColMap: catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
+	}
+	e.columnMapCache[desc.GetID()] = ce
+	return ce.TableColMap
 }
 
 // confluentAvroEncoder encodes changefeed entries as Avro's binary or textual
