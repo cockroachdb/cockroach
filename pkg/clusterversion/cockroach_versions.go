@@ -318,6 +318,10 @@ const (
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
 
+	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
+	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
+	ClusterLocksVirtualTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -527,6 +531,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     IncrementalBackupSubdir,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
+	},
+	{
+		Key:     ClusterLocksVirtualTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
