@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,6 +63,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -2521,5 +2523,65 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 				return true
 			}, 10*time.Second, 100*time.Millisecond, "timed out waiting for gRPC error, got %s", err)
 		})
+	}
+}
+
+func TestAdminPrivilegeChecker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE USER withadmin")
+	sqlDB.Exec(t, "GRANT admin TO withadmin")
+	sqlDB.Exec(t, "CREATE USER withva")
+	sqlDB.Exec(t, "ALTER ROLE withva WITH VIEWACTIVITY")
+	sqlDB.Exec(t, "CREATE USER withvaredacted")
+	sqlDB.Exec(t, "ALTER ROLE withvaredacted WITH VIEWACTIVITYREDACTED")
+	sqlDB.Exec(t, "CREATE USER withvaandredacted")
+	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITY")
+	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITYREDACTED")
+	sqlDB.Exec(t, "CREATE USER withoutprivs")
+
+	underTest := &adminPrivilegeChecker{
+		ie: s.InternalExecutor().(*sql.InternalExecutor),
+	}
+
+	tests := []struct {
+		name            string
+		checkerFun      func(context.Context) error
+		usernameWantErr map[string]bool
+	}{
+		{
+			"requireViewActivityPermission",
+			underTest.requireViewActivityPermission,
+			map[string]bool{"withAdmin": true, "withva": false, "withvaredacted": true, "withvaandredacted": false, "withoutprivs": true},
+		},
+		{
+			"requireViewActivityOrViewActivityRedactedPermission",
+			underTest.requireViewActivityOrViewActivityRedactedPermission,
+			map[string]bool{"withAdmin": true, "withva": false, "withvaredacted": false, "withvaandredacted": false, "withoutprivs": true},
+		},
+		{
+			"requireViewActivityAndNoViewActivityRedactedPermission",
+			underTest.requireViewActivityAndNoViewActivityRedactedPermission,
+			map[string]bool{"withAdmin": true, "withva": false, "withvaredacted": true, "withvaandredacted": true, "withoutprivs": true},
+		},
+	}
+	for _, tt := range tests {
+		for userName, wantErr := range tt.usernameWantErr {
+			t.Run(fmt.Sprintf("%s-%s", tt.name, userName), func(t *testing.T) {
+				ctx := metadata.NewIncomingContext(ctx, metadata.New(map[string]string{"websessionuser": userName}))
+				err := tt.checkerFun(ctx)
+				if wantErr {
+					require.Error(t, err)
+					return
+				}
+				require.NoError(t, err)
+			})
+		}
 	}
 }
