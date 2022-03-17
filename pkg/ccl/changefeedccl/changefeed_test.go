@@ -1204,166 +1204,124 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	rnd, _ := randutil.NewPseudoRand()
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	s, db, stopServer := startTestServer(t, feedTestOptions{})
+	defer stopServer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
+	knobs := s.(*server.TestServer).Cfg.TestingKnobs.
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
 
-		// The rows are split into batches to denote spans advancing to different points in time
-		numRows := 1000
-		batchSize := int64(math.Ceil(float64(numRows) / 6))
+	// Initialize table with multiple ranges.
+	sqlDB.Exec(t, `
+  CREATE TABLE foo (key INT PRIMARY KEY);
+  INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
+  `)
 
-		// Initialize table
-		sqlDB.Exec(t, `CREATE TABLE foo(val INT PRIMARY KEY)`)
-		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (val) SELECT * FROM generate_series(1, %d)`, numRows))
+	// Checkpoint progress frequently, allow a large enough checkpoint, and
+	// reduce the lag threshold to allow lag checkpointing to trigger
+	changefeedbase.FrontierCheckpointFrequency.Override(
+		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
+	changefeedbase.FrontierCheckpointMaxBytes.Override(
+		context.Background(), &s.ClusterSettings().SV, 100<<20)
+	changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
+		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+	// We'll start changefeed with the cursor.
+	var tsStr string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp() from foo`).Scan(&tsStr)
+	cursor := parseTimeToHLC(t, tsStr)
 
-		// In order to simulate a span that will lag behind, piggy-back off of the
-		// backfill MaxSpanRequestKeys to isolate some subspan of keys in the tablespan
-		var laggingSpan roachpb.Span
-		laggingSpanFound := false
-		var otherSpans []roachpb.Span
-		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
-			b.Header.MaxSpanRequestKeys = batchSize
+	// Rangefeed will skip some of the checkpoints to simulate lagging spans.
+	var laggingSpans roachpb.SpanGroup
+	numLagging := 0
+	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *roachpb.RangeFeedCheckpoint) bool {
+		// Skip spans that were skipped before; otherwise skip some spans.
+		seenBefore := laggingSpans.Encloses(checkpoint.Span)
+		if seenBefore || (numLagging < 5 && rnd.Int()%3 == 0) {
+			if !seenBefore {
+				laggingSpans.Add(checkpoint.Span)
+				numLagging++
+			}
+			return true /* skip */
+		}
+		return false
+	}
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH resolved='50ms', no_initial_scan, cursor=$1`, tsStr,
+	).Scan(&jobID)
+
+	// Helper to read job progress
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
+	loadProgress := func() jobspb.Progress {
+		job, err := jobRegistry.LoadJob(context.Background(), jobID)
+		require.NoError(t, err)
+		return job.Progress()
+	}
+
+	// Should eventually checkpoint all spans around the lagging span
+	testutils.SucceedsSoon(t, func() error {
+		progress := loadProgress()
+		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && !p.Checkpoint.Timestamp.IsEmpty() {
 			return nil
 		}
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
-			// Pick a single span somewhere in the middle of the tableSpan to lag behind the rest
-			if !laggingSpanFound && !r.Span.Key.Equal(tableSpan.Key) && !r.Span.EndKey.Equal(tableSpan.EndKey) {
-				laggingSpan = r.Span
-				laggingSpanFound = true
-			} else if !r.Span.Equal(tableSpan) { // Skip the post-backfill full-table resolved events
-				otherSpans = append(otherSpans, r.Span)
-			}
-			return false
+		return errors.New("waiting for checkpoint")
+	})
+
+	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
+	waitForJobStatus(sqlDB, t, jobID, jobs.StatusPaused)
+
+	// We expect highwater to be 0 (because we skipped some spans) or exactly cursor
+	// (this is mostly due to racy updates sent from aggregators to the frontier.
+	// However, the checkpoint timestamp should be at least at the cursor.
+	progress := loadProgress()
+	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().EqOrdering(cursor),
+		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
+	require.NotNil(t, progress.GetChangefeed().Checkpoint)
+	require.Less(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
+	checkpointTS := progress.GetChangefeed().Checkpoint.Timestamp
+	require.True(t, cursor.LessEq(checkpointTS))
+
+	var incorrectCheckpointErr error
+	knobs.FeedKnobs.OnRangeFeedStart = func(spans []kvcoord.SpanTimePair) {
+		setErr := func(stp kvcoord.SpanTimePair, expectedTS hlc.Timestamp) {
+			incorrectCheckpointErr = errors.Newf(
+				"rangefeed for span %s expected to start @%s, started @%s instead",
+				stp.Span, expectedTS, stp.TS)
 		}
 
-		// Start a changefeed with a backfill
-		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', initial_scan`)
-		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
-		jobRegistry := f.Server().JobRegistry().(*jobs.Registry)
-
-		// Ensure events are consumed for sinks that don't buffer (ex: Kafka)
-		g := ctxgroup.WithContext(context.Background())
-		g.Go(func() error {
-			for {
-				_, err := baseFeed.Next()
-				if err != nil {
-					return err
+		for _, sp := range spans {
+			if laggingSpans.Encloses(sp.Span) {
+				if !sp.TS.Equal(cursor) {
+					setErr(sp, cursor)
+				}
+			} else {
+				if !sp.TS.Equal(checkpointTS) {
+					setErr(sp, checkpointTS)
 				}
 			}
-		})
-		defer func() {
-			closeFeed(t, baseFeed)
-			_ = g.Wait()
-		}()
-
-		// Helper to read job progress
-		loadProgress := func() jobspb.Progress {
-			jobID := jobFeed.JobID()
-			job, err := jobRegistry.LoadJob(context.Background(), jobID)
-			require.NoError(t, err)
-			return job.Progress()
 		}
+	}
 
-		// Wait for backfill to complete
-		testutils.SucceedsSoon(t, func() error {
-			prog := loadProgress()
-			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
-				return nil
-			}
-			return errors.New("waiting for highwater")
-		})
+	sqlDB.Exec(t, "RESUME JOB $1", jobID)
+	waitForJobStatus(sqlDB, t, jobID, jobs.StatusRunning)
 
-		// Pause job and setup overrides to force a checkpoint
-		require.NoError(t, jobFeed.Pause())
-
-		// Should have grabbed a span within the table
-		require.True(t, laggingSpan.Key.Compare(tableSpan.Key) == 1)
-		require.True(t, laggingSpan.EndKey.Compare(tableSpan.EndKey) == -1)
-
-		// Checkpoint progress frequently, allow a large enough checkpoint, and
-		// reduce the lag threshold to allow lag checkpointing to trigger
-		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 100<<20)
-		changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
-
-		// Resolve the non-lagging spans individually so that they have different
-		// frontier timestamps
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
-			r.Span = otherSpans[rnd.Intn(len(otherSpans))]
-			return false
-		}
-
-		require.NoError(t, jobFeed.Resume())
-
-		// Should eventually checkpoint all spans around the lagging span
-		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil {
-				var checkpointedSpans roachpb.SpanGroup
-				checkpointedSpans.Add(p.Checkpoint.Spans...)
-				for _, advancedSpan := range otherSpans {
-					if !checkpointedSpans.Encloses(advancedSpan) {
-						return errors.Newf("checkpoint missing non-lagging span (%+v)", p.Checkpoint.Spans)
-					}
-				}
-				return nil
-			}
-			return errors.New("waiting for checkpoint around missing span")
-		})
-
-		// Pause the job and read and verify the latest checkpoint information.
-		require.NoError(t, jobFeed.Pause())
+	// Wait until highwater advances past cursor.
+	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		jobCheckpoint := progress.GetChangefeed().Checkpoint
-		require.True(t, progress.GetHighWater().Less(jobCheckpoint.Timestamp))
-		// The contiguous spans on either side of the middle span should've been merged together
-		require.Equal(t, 2, len(jobCheckpoint.Spans))
-
-		var checkpointSpanGroup roachpb.SpanGroup
-		checkpointSpanGroup.Add(jobCheckpoint.Spans...)
-
-		// Allow the changefeed to catch up without re-emitting checkpointed spans
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
-			require.False(t, checkpointSpanGroup.Encloses(r.Span) && r.Timestamp.LessEq(jobCheckpoint.Timestamp))
-			return false
+		if hw := progress.GetHighWater(); hw != nil && cursor.LessEq(*hw) {
+			return nil
 		}
+		return errors.New("waiting for checkpoint advance")
+	})
 
-		require.NoError(t, jobFeed.Resume())
-
-		// Checkpoint should be cleared once the highwater starts moving again
-		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress()
-			if p := progress.GetChangefeed(); p == nil || p.Checkpoint == nil || len(p.Checkpoint.Spans) == 0 {
-				return nil
-			}
-			return errors.New("checkpoint still non-empty")
-		})
-	}
-
-	// TODO(ssd): Tenant testing disabled because of use of DB()
-	t.Run("enterprise", enterpriseTest(testFn, feedTestNoTenants))
-	t.Run("cloudstorage", cloudStorageTest(testFn, feedTestNoTenants))
-	t.Run("kafka", kafkaTest(testFn, feedTestNoTenants))
-
-	log.Flush()
-	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
-		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) > 0 {
-		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
-	}
+	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
+	waitForJobStatus(sqlDB, t, jobID, jobs.StatusPaused)
+	// Verify we didn't see incorrect timestamps when resuming.
+	require.NoError(t, incorrectCheckpointErr)
 }
 
 // Test checkpointing during schema change backfills that can be paused and
