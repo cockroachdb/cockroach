@@ -283,6 +283,16 @@ func (desc *immutable) RegionNamesIncludingTransitioning() (catpb.RegionNames, e
 	return regions, nil
 }
 
+// ZoneConfigExtensions implements the TypeDescriptorInterface.
+func (desc *immutable) ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return descpb.ZoneConfigExtensions{}, errors.AssertionFailedf(
+			"can not get the zone config extensions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	return desc.RegionConfig.ZoneConfigExtensions, nil
+}
+
 // SetDrainingNames implements the MutableDescriptor interface.
 //
 // Deprecated: Do not use.

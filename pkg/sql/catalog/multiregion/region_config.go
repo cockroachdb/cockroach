@@ -15,6 +15,7 @@ package multiregion
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -39,6 +40,7 @@ type RegionConfig struct {
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
 	superRegions         []descpb.SuperRegion
+	zoneCfgExtensions    descpb.ZoneConfigExtensions
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -54,6 +56,14 @@ func (r *RegionConfig) PrimaryRegion() catpb.RegionName {
 // Regions returns the list of regions added to the RegionConfig.
 func (r *RegionConfig) Regions() catpb.RegionNames {
 	return r.regions
+}
+
+// WithRegions returns a copy of the RegionConfig with only the provided
+// regions.
+func (r *RegionConfig) WithRegions(regions catpb.RegionNames) RegionConfig {
+	cpy := *r
+	cpy.regions = regions
+	return cpy
 }
 
 // IsMemberOfExplicitSuperRegion returns whether t the region is an explicit
@@ -123,9 +133,89 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+// WithPlacementDefault returns a copy of the RegionConfig with the data
+// placement strategy configured as placement default.
+func (r *RegionConfig) WithPlacementDefault() RegionConfig {
+	cpy := *r
+	cpy.placement = descpb.DataPlacement_DEFAULT
+	return cpy
+}
+
 // SuperRegions returns the list of super regions in the database.
 func (r *RegionConfig) SuperRegions() []descpb.SuperRegion {
 	return r.superRegions
+}
+
+// ApplyZoneConfigExtensionForGlobal applies the global table zone configuration
+// extensions to the provided zone configuration, returning the updated config.
+func (r *RegionConfig) ApplyZoneConfigExtensionForGlobal(zc zonepb.ZoneConfig) zonepb.ZoneConfig {
+	if ext := r.zoneCfgExtensions.Global; ext != nil {
+		zc = extendZoneCfg(zc, *ext)
+	}
+	return zc
+}
+
+// ApplyZoneConfigExtensionForRegionalIn applies the regional table zone
+// configuration extensions for the provided region to the provided zone
+// configuration, returning the updated config.
+func (r *RegionConfig) ApplyZoneConfigExtensionForRegionalIn(
+	zc zonepb.ZoneConfig, region catpb.RegionName,
+) zonepb.ZoneConfig {
+	if ext := r.zoneCfgExtensions.Regional; ext != nil {
+		zc = extendZoneCfg(zc, *ext)
+	}
+	if ext, ok := r.zoneCfgExtensions.RegionalIn[region]; ok {
+		zc = extendZoneCfg(zc, ext)
+	}
+	return zc
+}
+
+// "extending" a zone config means having the extension inherit any missing
+// fields from the zone config while replacing any set fields.
+func extendZoneCfg(zc, ext zonepb.ZoneConfig) zonepb.ZoneConfig {
+	ext.InheritFromParent(&zc)
+	return ext
+}
+
+// GlobalTablesInheritConstraints returns whether GLOBAL tables can inherit
+// replica constraints from their database zone configuration, or whether they
+// must set these constraints themselves.
+func (r *RegionConfig) GlobalTablesInheritConstraints() bool {
+	if r.placement == descpb.DataPlacement_RESTRICTED {
+		// Placement restricted does not apply to GLOBAL tables.
+		return false
+	}
+	if r.zoneCfgExtensions.Global != nil {
+		// Global tables have a zone config extension that will not be set at
+		// the database level.
+		return false
+	}
+	if r.zoneCfgExtensions.Regional != nil {
+		// Regional tables have a zone config extension that will be set at the
+		// database level but which should not apply to GLOBAL tables.
+		return false
+	}
+	if _, ok := r.zoneCfgExtensions.RegionalIn[r.primaryRegion]; ok {
+		// Regional tables in the primary region have a zone config extension that
+		// will be set at the database level but which should not apply to GLOBAL
+		// tables.
+		return false
+	}
+	return true
+}
+
+// RegionalInTablesInheritConstraints returns whether REGIONAL tables/partitions
+// with affinity to the specified region can inherit replica constraints from
+// their database zone configuration, or whether they must set these constraints
+// themselves.
+func (r *RegionConfig) RegionalInTablesInheritConstraints(region catpb.RegionName) bool {
+	if _, ok := r.zoneCfgExtensions.RegionalIn[r.primaryRegion]; ok {
+		// Regional tables in the primary region have a zone config extension that
+		// will be set at the database level but which should not apply to regional
+		// tables in any other region.
+		return r.primaryRegion == region
+	}
+	return true
 }
 
 // MakeRegionConfigOption is an option for MakeRegionConfig
@@ -147,15 +237,17 @@ func MakeRegionConfig(
 	regionEnumID descpb.ID,
 	placement descpb.DataPlacement,
 	superRegions []descpb.SuperRegion,
+	zoneCfgExtensions descpb.ZoneConfigExtensions,
 	opts ...MakeRegionConfigOption,
 ) RegionConfig {
 	ret := RegionConfig{
-		regions:       regions,
-		primaryRegion: primaryRegion,
-		survivalGoal:  survivalGoal,
-		regionEnumID:  regionEnumID,
-		placement:     placement,
-		superRegions:  superRegions,
+		regions:           regions,
+		primaryRegion:     primaryRegion,
+		survivalGoal:      survivalGoal,
+		regionEnumID:      regionEnumID,
+		placement:         placement,
+		superRegions:      superRegions,
+		zoneCfgExtensions: zoneCfgExtensions,
 	}
 	for _, opt := range opts {
 		opt(&ret)
