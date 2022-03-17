@@ -11,13 +11,14 @@
 package screl
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	types "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +32,7 @@ func TestAllElementsHaveDescID(t *testing.T) {
 	}
 }
 
-func TestAllDescIDs(t *testing.T) {
+func TestAllDescIDsAndContainsDescID(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		input    scpb.Element
@@ -90,6 +91,11 @@ func TestAllDescIDs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.ElementsMatch(t, tc.expected, AllDescIDs(tc.input).Ordered())
+			for _, id := range tc.expected {
+				require.Truef(t, ContainsDescID(tc.input, id), "contains %d", id)
+			}
+			require.False(t, ContainsDescID(tc.input, 0))
+			require.False(t, ContainsDescID(tc.input, math.MaxUint32))
 		})
 	}
 }
