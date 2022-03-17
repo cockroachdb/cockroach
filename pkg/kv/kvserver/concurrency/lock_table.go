@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -259,20 +258,16 @@ type lockTableImpl struct {
 	// between separate concurrency.Manager instances.
 	finalizedTxnCache txnCache
 
-	// timeProvider is used to track the lock hold and lock wait start times.
-	// It may be a timeutil.DefaultTimeSource, and measure the wall clock time
-	// using Go's built-in time functions, or a utility for deterministic testing.
-	timeProvider timeutil.TimeSource
+	// clock is used to track the lock hold and lock wait start times.
+	clock *hlc.Clock
 }
 
 var _ lockTable = &lockTableImpl{}
 
-func newLockTable(
-	maxLocks int64, rangeID roachpb.RangeID, timeProvider timeutil.TimeSource,
-) *lockTableImpl {
+func newLockTable(maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock) *lockTableImpl {
 	lt := &lockTableImpl{
-		rID:          rangeID,
-		timeProvider: timeProvider,
+		rID:   rangeID,
+		clock: clock,
 	}
 	lt.setMaxLocks(maxLocks)
 	return lt
@@ -654,7 +649,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 				// Else, past the lock where it stopped waiting. We may not
 				// encounter that lock since it may have been garbage collected.
 			}
-			wait, transitionedToFree := l.tryActiveWait(g, g.sa, notify, g.lt.timeProvider)
+			wait, transitionedToFree := l.tryActiveWait(g, g.sa, notify, g.lt.clock)
 			if transitionedToFree {
 				locksToGC[g.ss] = append(locksToGC[g.ss], l)
 			}
@@ -1505,7 +1500,7 @@ func (l *lockState) clearLockHolder() {
 // The return value is true iff it is actively waiting.
 // Acquires l.mu, g.mu.
 func (l *lockState) tryActiveWait(
-	g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool, timeProvider timeutil.TimeSource,
+	g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool, clock *hlc.Clock,
 ) (wait bool, transitionedToFree bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1702,7 +1697,7 @@ func (l *lockState) tryActiveWait(
 	// Make it an active waiter.
 	g.key = l.key
 	g.mu.startWait = true
-	g.mu.curLockWaitStart = timeProvider.Now()
+	g.mu.curLockWaitStart = clock.PhysicalTime()
 	if g.isSameTxnAsReservation(waitForState) {
 		state := waitForState
 		state.kind = waitSelf
@@ -1769,7 +1764,7 @@ func (l *lockState) acquireLock(
 	durability lock.Durability,
 	txn *enginepb.TxnMeta,
 	ts hlc.Timestamp,
-	timeProvider timeutil.TimeSource,
+	clock *hlc.Clock,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1886,7 +1881,7 @@ func (l *lockState) acquireLock(
 	l.holder.holder[durability].txn = txn
 	l.holder.holder[durability].ts = ts
 	l.holder.holder[durability].seqs = append([]enginepb.TxnSeq(nil), txn.Sequence)
-	l.holder.startTime = timeProvider.Now()
+	l.holder.startTime = clock.PhysicalTime()
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
 	l.releaseWritersFromTxn(txn)
@@ -1905,7 +1900,7 @@ func (l *lockState) discoveredLock(
 	g *lockTableGuardImpl,
 	sa spanset.SpanAccess,
 	notRemovable bool,
-	timeProvider timeutil.TimeSource,
+	clock *hlc.Clock,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1921,7 +1916,7 @@ func (l *lockState) discoveredLock(
 		}
 	} else {
 		l.holder.locked = true
-		l.holder.startTime = timeProvider.Now()
+		l.holder.startTime = clock.PhysicalTime()
 	}
 	holder := &l.holder.holder[lock.Replicated]
 	if holder.txn == nil {
@@ -2575,7 +2570,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa, notRemovableLock, g.lt.timeProvider)
+	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa, notRemovableLock, g.lt.clock)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	tree.mu.Unlock()
@@ -2646,7 +2641,7 @@ func (t *lockTableImpl) AcquireLock(
 			return nil
 		}
 	}
-	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp, t.timeProvider)
+	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp, t.clock)
 	tree.mu.Unlock()
 
 	if checkMaxLocks {
@@ -2890,7 +2885,7 @@ func (t *lockTableImpl) QueryLockTableState(
 		tree.mu.RUnlock()
 	}
 
-	now := t.timeProvider.Now()
+	now := t.clock.PhysicalTime()
 
 	lockTableState := make([]roachpb.LockStateInfo, 0, snap.Len())
 	resumeState := QueryLockTableResumeState{}
@@ -2950,7 +2945,7 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 		}
 
 		// Iterate and compute metrics.
-		now := t.timeProvider.Now()
+		now := t.clock.PhysicalTime()
 		iter := snap.MakeIter()
 		for iter.First(); iter.Valid(); iter.Next() {
 			iter.Cur().addToMetrics(&m, now)
