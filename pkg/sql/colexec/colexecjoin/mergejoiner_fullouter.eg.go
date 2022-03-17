@@ -15260,7 +15260,6 @@ func (o *mergeJoinFullOuterOp) buildFromBufferedGroup() (bufferedGroupComplete b
 		}
 		o.builderState.outCount += willEmit
 		bg.helper.builderState.numEmittedCurLeftBatch += willEmit
-		bg.helper.builderState.numEmittedTotal += willEmit
 		if o.builderState.outCount == o.outputCapacity {
 			return false
 		}

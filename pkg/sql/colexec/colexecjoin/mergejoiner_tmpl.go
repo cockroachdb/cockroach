@@ -1266,8 +1266,12 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildFromBufferedGroup() (bufferedGroupCo
 			// {{end}}
 		}
 		o.builderState.outCount += willEmit
+		// {{if or (or _JOIN_TYPE.IsInner _JOIN_TYPE.IsLeftOuter) _JOIN_TYPE.IsRightOuter}}
 		bg.helper.builderState.numEmittedCurLeftBatch += willEmit
+		// {{end}}
+		// {{if or (or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti) (and _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsSetOp)}}
 		bg.helper.builderState.numEmittedTotal += willEmit
+		// {{end}}
 		if o.builderState.outCount == o.outputCapacity {
 			return false
 		}
