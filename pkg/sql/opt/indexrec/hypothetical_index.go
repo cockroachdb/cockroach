@@ -11,7 +11,6 @@
 package indexrec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,7 +33,7 @@ type hypotheticalIndex struct {
 	indexOrdinal int
 
 	// zone stores the table's zone.
-	zone *zonepb.ZoneConfig
+	zone cat.Zone
 
 	// suffixKeyColsOrdList contains all implicit column ordinals. Implicit
 	// columns are columns that are in the table's primary key but are not already
@@ -57,7 +56,7 @@ func (hi *hypotheticalIndex) init(
 	cols []cat.IndexColumn,
 	indexOrd int,
 	inverted bool,
-	zone *zonepb.ZoneConfig,
+	zone cat.Zone,
 ) {
 	hi.tab = tab
 	hi.name = name
