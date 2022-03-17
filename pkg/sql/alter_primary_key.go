@@ -628,6 +628,7 @@ func (p *planner) shouldCreateIndexes(
 // * The new primary key isn't the same set of columns and directions
 //   other than hash sharding.
 // * There is no partitioning change.
+// * There is no existing secondary index on the old primary key columns.
 func shouldCopyPrimaryKey(
 	desc *tabledesc.Mutable,
 	newPK *descpb.IndexDescriptor,
@@ -659,11 +660,36 @@ func shouldCopyPrimaryKey(
 		}
 		return true
 	}
+	alreadyHasSecondaryIndexOnPKColumns := func(desc catalog.TableDescriptor) bool {
+		// Return whether any existing secondary index has identical key columns
+		// as the primary key columns.
+
+		pk := desc.GetPrimaryIndex()
+
+		for _, existingIndex := range desc.PublicNonPrimaryIndexes() {
+			if existingIndex.IsPartial() || !existingIndex.IsUnique() || pk.NumKeyColumns() > existingIndex.NumKeyColumns() {
+				continue
+			}
+			isDifferent := false
+			for i := 0; i < pk.NumKeyColumns(); i++ {
+				if pk.GetKeyColumnID(i) != existingIndex.GetKeyColumnID(i) ||
+					pk.GetKeyColumnDirection(i) != existingIndex.GetKeyColumnDirection(i) {
+					isDifferent = true
+					break
+				}
+			}
+			if !isDifferent {
+				return true
+			}
+		}
+		return false
+	}
 	oldPK := desc.GetPrimaryIndex().IndexDesc()
 	return alterPrimaryKeyLocalitySwap == nil &&
 		desc.HasPrimaryKey() &&
 		!desc.IsPrimaryIndexDefaultRowID() &&
-		!idsAndDirsMatch(oldPK, newPK)
+		!idsAndDirsMatch(oldPK, newPK) &&
+		!alreadyHasSecondaryIndexOnPKColumns(desc)
 }
 
 // addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given
