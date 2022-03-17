@@ -17,7 +17,14 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
+import {
+  Loading,
+  ColumnDescriptor,
+  SortedTable,
+  SortSetting,
+  util,
+} from "@cockroachlabs/cluster-ui";
 import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
@@ -28,12 +35,37 @@ interface SettingsOwnProps {
   refreshSettings: typeof refreshSettings;
 }
 
+interface IterableSetting {
+  key: string;
+  description?: string;
+  type?: string;
+  value?: string;
+  public?: boolean;
+  last_updated?: moment.Moment;
+}
+
+interface SettingsState {
+  sortSetting: {
+    ascending: boolean;
+    columnTitle: string;
+  };
+}
+
 type SettingsProps = SettingsOwnProps & RouteComponentProps;
 
 /**
  * Renders the Cluster Settings Report page.
  */
-export class Settings extends React.Component<SettingsProps> {
+export class Settings extends React.Component<SettingsProps, SettingsState> {
+  constructor(props: SettingsProps) {
+    super(props);
+    this.state = {
+      sortSetting: { ascending: true, columnTitle: "lastUpdated" },
+    };
+  }
+
+  sortSetting: { ascending: boolean; columnTitle: string | null };
+
   refresh(props = this.props) {
     props.refreshSettings(
       new protos.cockroach.server.serverpb.SettingsRequest(),
@@ -51,41 +83,63 @@ export class Settings extends React.Component<SettingsProps> {
     }
 
     const { key_values } = this.props.settings.data;
-    const data: any = _.keys(key_values);
+    const dataArray: IterableSetting[] = Object.keys(key_values)
+      .map(key => ({
+        key,
+        ...key_values[key],
+      }))
+      .map(obj => {
+        return {
+          ...obj,
+          last_updated: obj.last_updated
+            ? util.TimestampToMoment(obj.last_updated)
+            : null,
+        };
+      });
+    const columns: ColumnDescriptor<IterableSetting>[] = [
+      {
+        name: "name",
+        title: "Setting",
+        cell: (setting: IterableSetting) => setting.key,
+        sort: (setting: IterableSetting) => setting.key,
+      },
+      {
+        name: "value",
+        title: "Value",
+        cell: (setting: IterableSetting) => setting.value,
+      },
+      {
+        name: "lastUpdated",
+        title: "Last Updated",
+        cell: (setting: IterableSetting) =>
+          setting.last_updated
+            ? setting.last_updated.format(DATE_FORMAT_24_UTC)
+            : "No overrides",
+        sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
+      },
+      {
+        name: "description",
+        title: "Description",
+        cell: (setting: IterableSetting) => setting.description,
+      },
+    ];
 
     return (
-      <table className="settings-table">
-        <thead>
-          <tr className="settings-table__row settings-table__row--header">
-            <th className="settings-table__cell settings-table__cell--header">
-              Setting
-            </th>
-            <th className="settings-table__cell settings-table__cell--header">
-              Value
-            </th>
-            <th className="settings-table__cell settings-table__cell--header">
-              Description
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {_.chain(data)
-            .filter(key => key_values[key].public === wantPublic)
-            .sort()
-            .map((key: number) => (
-              <tr key={key} className="settings-table__row">
-                <td className="settings-table__cell">{key}</td>
-                <td className="settings-table__cell">
-                  {key_values[key].value}
-                </td>
-                <td className="settings-table__cell">
-                  {key_values[key].description}
-                </td>
-              </tr>
-            ))
-            .value()}
-        </tbody>
-      </table>
+      <SortedTable
+        data={dataArray.filter(obj =>
+          wantPublic ? obj.public : obj.public === undefined,
+        )}
+        columns={columns}
+        sortSetting={this.state.sortSetting}
+        onChangeSortSetting={(ss: SortSetting) =>
+          this.setState({
+            sortSetting: {
+              ascending: ss.ascending,
+              columnTitle: ss.columnTitle,
+            },
+          })
+        }
+      />
     );
   }
 
