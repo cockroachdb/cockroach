@@ -3851,7 +3851,7 @@ func RunLogicTestWithDefaultConfig(
 				path := path // Rebind range variable.
 				onlyNonMetamorphic := nonMetamorphic[i]
 				// Inner test: one per file path.
-				t.Run(filepath.Base(path), func(t *testing.T) {
+				t.Run(cutExt(filepath.Base(path)), func(t *testing.T) {
 					if *rewriteResultsInTestfiles {
 						if _, seen := seenPaths[path]; seen {
 							skip.IgnoreLint(t, "test file already rewritten")
@@ -4209,4 +4209,9 @@ func roundFloatsInString(s string) string {
 		}
 		return []byte(fmt.Sprintf("%.6g", f))
 	}))
+}
+
+func cutExt(fileName string) string {
+	extStart := len(fileName) - len(filepath.Ext(fileName))
+	return fileName[:extStart]
 }
