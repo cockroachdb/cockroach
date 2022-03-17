@@ -5,6 +5,7 @@ token-bucket-request tenant=5
 instance_id: 1
 consumption:
   ru: 10
+  kvru: 8
   read_req: 20
   read_bytes: 30
   write_req: 40
@@ -16,6 +17,7 @@ consumption:
 metrics
 tenant_id="5"
 ----
+tenant_consumption_kv_request_units{tenant_id="5"} 8
 tenant_consumption_pgwire_egress_bytes{tenant_id="5"} 70
 tenant_consumption_read_bytes{tenant_id="5"} 30
 tenant_consumption_read_requests{tenant_id="5"} 20
@@ -28,6 +30,7 @@ token-bucket-request tenant=5
 instance_id: 1
 consumption:
   ru: 100
+  kvru: 80
   read_req: 200
   read_bytes: 300
   write_req: 400
@@ -40,6 +43,7 @@ token-bucket-request tenant=5
 instance_id: 2
 consumption:
   ru: 1000
+  kvru: 800
   read_req: 2000
   read_bytes: 3000
   write_req: 4000
@@ -60,6 +64,7 @@ First active instance: 1
 metrics
 tenant_id="5"
 ----
+tenant_consumption_kv_request_units{tenant_id="5"} 888
 tenant_consumption_pgwire_egress_bytes{tenant_id="5"} 7770
 tenant_consumption_read_bytes{tenant_id="5"} 3330
 tenant_consumption_read_requests{tenant_id="5"} 2220
