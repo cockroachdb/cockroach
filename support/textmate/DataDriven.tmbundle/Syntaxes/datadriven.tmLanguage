@@ -175,7 +175,8 @@
             skipif |
             skip |
             traceon |
-            traceoff).*</string>
+            traceoff |
+            user).*</string>
           <key>captures</key>
           <dict>
             <key>1</key>
