@@ -66,9 +66,6 @@ import {
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import { TableStatistics } from "../tableStatistics";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
-
-type ISessionsResponse = protos.cockroach.server.serverpb.IListSessionsResponse;
 
 const statementsPageCx = classNames.bind(statementsPageStyles);
 const sessionsPageCx = classNames.bind(sessionPageStyles);
