@@ -26,6 +26,7 @@ import (
 // each tenant, as last reported to this node).
 type Metrics struct {
 	TotalRU                     *aggmetric.AggGaugeFloat64
+	TotalKVRU                   *aggmetric.AggGaugeFloat64
 	TotalReadRequests           *aggmetric.AggGauge
 	TotalReadBytes              *aggmetric.AggGauge
 	TotalWriteRequests          *aggmetric.AggGauge
@@ -53,6 +54,12 @@ var (
 	metaTotalRU = metric.Metadata{
 		Name:        "tenant.consumption.request_units",
 		Help:        "Total RU consumption",
+		Measurement: "Request Units",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalKVRU = metric.Metadata{
+		Name:        "tenant.consumption.kv_request_units",
+		Help:        "RU consumption attributable to KV",
 		Measurement: "Request Units",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -110,6 +117,7 @@ func (m *Metrics) init() {
 	b := aggmetric.MakeBuilder(multitenant.TenantIDLabel)
 	*m = Metrics{
 		TotalRU:                     b.GaugeFloat64(metaTotalRU),
+		TotalKVRU:                   b.GaugeFloat64(metaTotalKVRU),
 		TotalReadRequests:           b.Gauge(metaTotalReadRequests),
 		TotalReadBytes:              b.Gauge(metaTotalReadBytes),
 		TotalWriteRequests:          b.Gauge(metaTotalWriteRequests),
@@ -125,6 +133,7 @@ func (m *Metrics) init() {
 // tenantMetrics represent metrics for an individual tenant.
 type tenantMetrics struct {
 	totalRU                     *aggmetric.GaugeFloat64
+	totalKVRU                   *aggmetric.GaugeFloat64
 	totalReadRequests           *aggmetric.Gauge
 	totalReadBytes              *aggmetric.Gauge
 	totalWriteRequests          *aggmetric.Gauge
@@ -148,6 +157,7 @@ func (m *Metrics) getTenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 		tid := tenantID.String()
 		tm = tenantMetrics{
 			totalRU:                     m.TotalRU.AddChild(tid),
+			totalKVRU:                   m.TotalKVRU.AddChild(tid),
 			totalReadRequests:           m.TotalReadRequests.AddChild(tid),
 			totalReadBytes:              m.TotalReadBytes.AddChild(tid),
 			totalWriteRequests:          m.TotalWriteRequests.AddChild(tid),

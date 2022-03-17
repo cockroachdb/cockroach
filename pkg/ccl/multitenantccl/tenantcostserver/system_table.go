@@ -581,8 +581,9 @@ func InspectTenantMetadata(
 		tenant.Bucket.RUCurrent,
 		tenant.Bucket.CurrentShareSum,
 	)
-	fmt.Fprintf(&buf, "Consumption: ru=%.12g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes\n",
+	fmt.Fprintf(&buf, "Consumption: ru=%.12g kvru=%.12g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes\n",
 		tenant.Consumption.RU,
+		tenant.Consumption.KVRU,
 		tenant.Consumption.ReadRequests,
 		tenant.Consumption.ReadBytes,
 		tenant.Consumption.WriteRequests,
