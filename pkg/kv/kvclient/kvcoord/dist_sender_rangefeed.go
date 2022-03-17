@@ -422,7 +422,7 @@ func (ds *DistSender) singleRangeFeed(
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-
+	ds.metrics.RangefeedCatchupRanges.Inc(1)
 	finishCatchupScan := func() {
 		if catchupRes != nil {
 			catchupRes.Release()
