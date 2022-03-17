@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1597,7 +1596,7 @@ func countExpectedRowsForInvertedIndex(
 	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var stmt string
 		geoConfig := idx.GetGeoConfig()
-		if geoindex.IsEmptyConfig(&geoConfig) {
+		if geoConfig.IsEmpty() {
 			stmt = fmt.Sprintf(
 				`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%s, %d)), 0) FROM [%d AS t]`,
 				colNameOrExpr, idx.GetVersion(), desc.GetID(),

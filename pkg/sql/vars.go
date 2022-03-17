@@ -1575,6 +1575,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`experimental_enable_hash_sharded_indexes`: {
+		Hidden:       true,
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			_, err := paramparse.ParseBoolVar("experimental_enable_hash_sharded_indexes", s)
+			return err
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(true), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(true)
+		},
+	},
+
+	// CockroachDB extension.
 	`disallow_full_table_scans`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`disallow_full_table_scans`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

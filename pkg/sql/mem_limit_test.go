@@ -61,10 +61,6 @@ func TestMemoryLimit(t *testing.T) {
 	_, err = db.Exec("INSERT INTO foo SELECT 2, 10, repeat('a', 3000000)")
 	require.NoError(t, err)
 
-	// TODO(yuzefovich): remove this once the streamer is enabled by default.
-	_, err = db.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = true;")
-	require.NoError(t, err)
-
 	for _, tc := range []struct {
 		query       string
 		concurrency int
@@ -177,9 +173,6 @@ func TestStreamerTightBudget(t *testing.T) {
 	// Set the workmem limit to a low value such that it will allow the Streamer
 	// to have at most one request to be "in progress".
 	_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
-	require.NoError(t, err)
-	// TODO(yuzefovich): remove this once the streamer is enabled by default.
-	_, err = db.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = true;")
 	require.NoError(t, err)
 
 	// Perform an index join to read the blobs.

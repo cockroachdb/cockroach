@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "geoindex",
     srcs = [
+        "config.go",
         "geoindex.go",
         "s2_geography_index.go",
         "s2_geometry_index.go",

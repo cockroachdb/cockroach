@@ -2425,89 +2425,6 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	return plan, nil
 }
 
-// mappingHelperForLookupJoins creates slices etc. for the columns of
-// lookup-style joins (that involve an input that is used to lookup from a
-// table).
-func mappingHelperForLookupJoins(
-	plan *PhysicalPlan, input planNode, table *scanNode, addContinuationCol bool,
-) (
-	numInputNodeCols int,
-	planToStreamColMap []int,
-	post execinfrapb.PostProcessSpec,
-	outTypes []*types.T,
-) {
-	// The n.table node can be configured with an arbitrary set of columns. Apply
-	// the corresponding projection.
-	// The internal schema of the join reader is:
-	//    <input columns>... <table columns>...[continuation col]
-	inputTypes := plan.GetResultTypes()
-	numLeftCols := len(inputTypes)
-	numOutCols := numLeftCols + len(table.cols)
-	if addContinuationCol {
-		numOutCols++
-	}
-	post = execinfrapb.PostProcessSpec{Projection: true}
-
-	post.OutputColumns = make([]uint32, numOutCols)
-	outTypes = make([]*types.T, numOutCols)
-
-	for i := 0; i < numLeftCols; i++ {
-		outTypes[i] = inputTypes[i]
-		post.OutputColumns[i] = uint32(i)
-	}
-	for i := range table.cols {
-		outTypes[numLeftCols+i] = table.cols[i].GetType()
-		ord := tableOrdinal(table.desc, table.cols[i].GetID())
-		post.OutputColumns[numLeftCols+i] = uint32(numLeftCols + ord)
-	}
-	if addContinuationCol {
-		outTypes[numOutCols-1] = types.Bool
-		post.OutputColumns[numOutCols-1] = uint32(numLeftCols + len(table.desc.DeletableColumns()))
-	}
-
-	// Map the columns of the lookupJoinNode to the result streams of the
-	// JoinReader.
-	numInputNodeCols = len(planColumns(input))
-	lenPlanToStreamColMap := numInputNodeCols + len(table.cols)
-	if addContinuationCol {
-		lenPlanToStreamColMap++
-	}
-	planToStreamColMap = makePlanToStreamColMap(lenPlanToStreamColMap)
-	copy(planToStreamColMap, plan.PlanToStreamColMap)
-	for i := range table.cols {
-		planToStreamColMap[numInputNodeCols+i] = numLeftCols + i
-	}
-	if addContinuationCol {
-		planToStreamColMap[lenPlanToStreamColMap-1] = numLeftCols + len(table.cols)
-	}
-	return numInputNodeCols, planToStreamColMap, post, outTypes
-}
-
-func makeIndexVarMapForLookupJoins(
-	numInputNodeCols int, table *scanNode, plan *PhysicalPlan, post *execinfrapb.PostProcessSpec,
-) (indexVarMap []int) {
-	// Note that (regardless of the join type or the OutputColumns projection)
-	// the inverted expression and ON condition refers to the input columns with
-	// var indexes 0 to numInputNodeCols-1 and to table columns with var indexes
-	// starting from numInputNodeCols.
-	indexVarMap = makePlanToStreamColMap(numInputNodeCols + len(table.cols))
-	copy(indexVarMap, plan.PlanToStreamColMap)
-	numLeftCols := len(plan.GetResultTypes())
-	for i := range table.cols {
-		indexVarMap[numInputNodeCols+i] = int(post.OutputColumns[numLeftCols+i])
-	}
-	return indexVarMap
-}
-
-func truncateToInputForLookupJoins(
-	numInputNodeCols int, planToStreamColMap []int, outputColumns []uint32, outTypes []*types.T,
-) ([]int, []uint32, []*types.T) {
-	planToStreamColMap = planToStreamColMap[:numInputNodeCols]
-	outputColumns = outputColumns[:numInputNodeCols]
-	outTypes = outTypes[:numInputNodeCols]
-	return planToStreamColMap, outputColumns, outTypes
-}
-
 func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	planCtx *PlanningCtx, n *invertedJoinNode,
 ) (*PhysicalPlan, error) {
@@ -2517,18 +2434,30 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	}
 
 	invertedJoinerSpec := execinfrapb.InvertedJoinerSpec{
-		Table:                             *n.table.desc.TableDesc(),
 		Type:                              n.joinType,
 		MaintainOrdering:                  len(n.reqOrdering) > 0,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 	}
-	invertedJoinerSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
-	if err != nil {
+
+	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
+	for i := range n.table.cols {
+		fetchColIDs[i] = n.table.cols[i].GetID()
+	}
+	if err := rowenc.InitIndexFetchSpec(
+		&invertedJoinerSpec.FetchSpec,
+		planCtx.ExtendedEvalCtx.Codec,
+		n.table.desc,
+		n.table.index,
+		fetchColIDs,
+	); err != nil {
 		return nil, err
 	}
 
-	numInputNodeCols, planToStreamColMap, post, types :=
-		mappingHelperForLookupJoins(plan, n.input, n.table, n.isFirstJoinInPairedJoiner)
+	invCol, err := n.table.desc.FindColumnWithID(n.table.index.InvertedColumnID())
+	if err != nil {
+		return nil, err
+	}
+	invertedJoinerSpec.InvertedColumnOriginalType = invCol.GetType()
 
 	invertedJoinerSpec.PrefixEqualityColumns = make([]uint32, len(n.prefixEqCols))
 	for i, col := range n.prefixEqCols {
@@ -2538,31 +2467,43 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		invertedJoinerSpec.PrefixEqualityColumns[i] = uint32(plan.PlanToStreamColMap[col])
 	}
 
-	indexVarMap := makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
 	if invertedJoinerSpec.InvertedExpr, err = physicalplan.MakeExpression(
-		n.invertedExpr, planCtx, indexVarMap,
+		n.invertedExpr, planCtx, nil, /* indexVarMap */
 	); err != nil {
 		return nil, err
 	}
 	// Set the ON condition.
 	if n.onExpr != nil {
 		if invertedJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
-			n.onExpr, planCtx, indexVarMap,
+			n.onExpr, planCtx, nil, /* indexVarMap */
 		); err != nil {
 			return nil, err
 		}
 	}
 
-	if !n.joinType.ShouldIncludeRightColsInOutput() {
-		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
-			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
+	inputTypes := plan.GetResultTypes()
+	fetchedColumns := invertedJoinerSpec.FetchSpec.FetchedColumns
+
+	outTypes := inputTypes
+	planToStreamColMap := plan.PlanToStreamColMap
+	if n.joinType.ShouldIncludeRightColsInOutput() {
+		outTypes = make([]*types.T, len(inputTypes)+len(fetchedColumns))
+		copy(outTypes, inputTypes)
+		for i := range fetchedColumns {
+			outTypes[len(inputTypes)+i] = fetchedColumns[i].Type
+			planToStreamColMap = append(planToStreamColMap, len(inputTypes)+i)
+		}
+	}
+	if n.isFirstJoinInPairedJoiner {
+		outTypes = append(outTypes, types.Bool)
+		planToStreamColMap = append(planToStreamColMap, len(outTypes)-1)
 	}
 
 	// Instantiate one inverted joiner for every stream.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{InvertedJoiner: &invertedJoinerSpec},
-		post,
-		types,
+		execinfrapb.PostProcessSpec{},
+		outTypes,
 		dsp.convertOrdering(planReqOrdering(n), planToStreamColMap),
 	)
 	plan.PlanToStreamColMap = planToStreamColMap
