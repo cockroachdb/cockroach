@@ -73,8 +73,6 @@ func importBankDataSplit(
 	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster,
 ) string {
 	dest := destinationName(c)
-	// Randomize starting with encryption-at-rest enabled.
-	c.EncryptAtRandom(true)
 
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -122,9 +120,10 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: backupNodeRestartSpec,
+		Name:            fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         backupNodeRestartSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -142,9 +141,10 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: backupNodeRestartSpec,
+		Name:            fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         backupNodeRestartSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -166,9 +166,10 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 func registerBackupMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "backup/mixed-version",
-		Owner:   registry.OwnerBulkIO,
-		Cluster: r.MakeClusterSpec(4),
+		Name:            "backup/mixed-version",
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(4),
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// An empty string means that the cockroach binary specified by flag
 			// `cockroach` will be used.
@@ -248,9 +249,10 @@ func registerBackup(r registry.Registry) {
 
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: backup2TBSpec,
+		Name:            fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         backup2TBSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if c.IsLocal() {
@@ -295,9 +297,10 @@ func registerBackup(r registry.Registry) {
 	} {
 		item := item
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("backup/KMS/%s/%s", item.kmsProvider, KMSSpec.String()),
-			Owner:   registry.OwnerBulkIO,
-			Cluster: KMSSpec,
+			Name:            fmt.Sprintf("backup/KMS/%s/%s", item.kmsProvider, KMSSpec.String()),
+			Owner:           registry.OwnerBulkIO,
+			Cluster:         KMSSpec,
+			EncryptAtRandom: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
@@ -427,13 +430,12 @@ func registerBackup(r registry.Registry) {
 	// and incremental after more time. It then restores the two backups and
 	// verifies them with a fingerprint.
 	r.Add(registry.TestSpec{
-		Name:    `backupTPCC`,
-		Owner:   registry.OwnerBulkIO,
-		Cluster: r.MakeClusterSpec(3),
-		Timeout: 1 * time.Hour,
+		Name:            `backupTPCC`,
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(3),
+		Timeout:         1 * time.Hour,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// Randomize starting with encryption-at-rest enabled.
-			c.EncryptAtRandom(true)
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())

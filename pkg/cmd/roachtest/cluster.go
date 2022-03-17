@@ -634,15 +634,7 @@ type clusterImpl struct {
 	// the cluster is running in insecure mode.
 	localCertsDir string
 	expiration    time.Time
-	// encryption tracks whether encryption-at-rest is used. This is off by default
-	// but tests can opt into randomly enabling encryption by calling EncryptAtRandom,
-	// which will set this value to 1. The first call to Start will roll the dice
-	// and change the value to 1 (enabled) or 2 (disabled).
-	//
-	// 0: off
-	// 1: on
-	// 2: roll the dice on c.Start
-	encryption int
+	encAtRest     bool // use encryption at rest
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
@@ -651,12 +643,6 @@ type clusterImpl struct {
 // Name returns the cluster name, i.e. something like `teamcity-....`
 func (c *clusterImpl) Name() string {
 	return c.name
-}
-
-// EncryptAtRandom sets whether the cluster will start new nodes with
-// encryption enabled.
-func (c *clusterImpl) EncryptAtRandom(b bool) {
-	c.encryption = 2
 }
 
 // Spec returns the spec underlying the cluster.
@@ -888,13 +874,7 @@ func (f *clusterFactory) newCluster(
 			name:       f.genName(cfg),
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
-			encryption: func() int {
-				if encrypt.asBool() {
-					return 1
-				}
-				return 0
-			}(),
-			r: f.r,
+			r:          f.r,
 			destroyState: destroyState{
 				owned: true,
 				alloc: cfg.alloc,
@@ -975,12 +955,6 @@ func attachToExistingCluster(
 		spec:       spec,
 		l:          l,
 		expiration: exp,
-		encryption: func() int {
-			if encrypt.asBool() {
-				return 1
-			}
-			return 0
-		}(),
 		destroyState: destroyState{
 			// If we're attaching to an existing cluster, we're not going to destroy it.
 			owned: false,
@@ -1819,17 +1793,10 @@ func (c *clusterImpl) StartE(
 	c.setStatusForClusterOpt("starting", startOpts.RoachtestOpts.Worker, opts...)
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
-	if startOpts.RoachtestOpts.DontEncrypt || c.encryption == 0 {
+	if startOpts.RoachtestOpts.DontEncrypt || !c.encAtRest {
 		startOpts.RoachprodOpts.EncryptedStores = false
-	} else if c.encryption == 1 {
+	} else if c.encAtRest {
 		startOpts.RoachprodOpts.EncryptedStores = true
-	} else {
-		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		if rng.Intn(2) == 1 {
-			// Force encryption in future calls of Start with the same cluster.
-			c.encryption = 1
-			startOpts.RoachprodOpts.EncryptedStores = true
-		}
 	}
 
 	// Set some env vars. The first two also the default for `roachprod start`,
