@@ -153,7 +153,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 
 func undroppedBackrefs(b BuildCtx, id catid.DescID) ElementResultSet {
 	return b.BackReferences(id).Filter(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
-		return target != scpb.ToAbsent && screl.AllDescIDs(e).Contains(id)
+		return target != scpb.ToAbsent && screl.ContainsDescID(e, id)
 	})
 }
 
