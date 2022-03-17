@@ -1205,7 +1205,6 @@ t1_pkey        name   N/A
 t1_pkey        rowid  N/A
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
 
 
 statement ok
@@ -1220,7 +1219,6 @@ t1_pkey        name   N/A
 t1_pkey        rowid  N/A
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1234,7 +1232,6 @@ t1_pkey        name   N/A
 t1_pkey        rowid  N/A
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
 
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count=10)
@@ -1247,13 +1244,11 @@ t1_pkey        id                         ASC
 t1_pkey        id2                        N/A
 t1_pkey        name                       N/A
 t1_pkey        rowid                      N/A
-t1_id_key1     id                         DESC
-t1_id_key1     crdb_internal_id_shard_10  ASC
+t1_id_key      id                         DESC
+t1_id_key      crdb_internal_id_shard_10  ASC
 t1_id_id2_key  id                         ASC
 t1_id_id2_key  id2                        ASC
 t1_id_id2_key  crdb_internal_id_shard_10  ASC
-t1_id_key      id                         ASC
-t1_id_key      crdb_internal_id_shard_10  ASC
 
 statement ok
 CREATE TABLE table_with_virtual_cols (
@@ -1585,3 +1580,42 @@ SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON CONSTRAINT pkey_comment_a_b_key ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+
+subtest test-index-deduplication
+
+# Regression for #78046: `ALTER PRIMARY KEY` should not create a secondary
+# index on the (old) primary key columns when there is already a secondary
+# index thereof.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_key (a));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+query TTT
+select index_name,column_name,direction from [show indexes from t];
+----
+t_pkey     b   ASC
+t_pkey     a   N/A
+t_a_key    a   ASC
+t_a_key    b   ASC
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_b_key (a, b));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+query TTT
+select index_name,column_name,direction from [show indexes from t];
+----
+t_pkey       b   ASC
+t_pkey       a   N/A
+t_a_b_key    a   ASC
+t_a_b_key    b   ASC
