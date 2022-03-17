@@ -1289,6 +1289,7 @@ PreCommitPhase stage 1 of 1 with 62 MutationType ops
       - 112
       - 113
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP SCHEMA defaultdb.sc1 CASCADE
         redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE

@@ -523,12 +523,16 @@ func (mvs *mutationVisitorState) AddNewGCJobForIndex(
 }
 
 func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
-	jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptorIDs descpb.IDs,
+	jobID jobspb.JobID,
+	stmts []scpb.Statement,
+	isNonCancelable bool,
+	auth scpb.Authorization,
+	descriptorIDs descpb.IDs,
 ) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(jobID, stmts, auth, descriptorIDs)
+	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(jobID, stmts, isNonCancelable, auth, descriptorIDs)
 	return nil
 }
 
@@ -542,7 +546,11 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 // at the outset of the job, an error will be returned to move the job into
 // the reverting state.
 func MakeDeclarativeSchemaChangeJobRecord(
-	jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptorIDs descpb.IDs,
+	jobID jobspb.JobID,
+	stmts []scpb.Statement,
+	isNonCancelable bool,
+	auth scpb.Authorization,
+	descriptorIDs descpb.IDs,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
@@ -565,7 +573,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 
 		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
 		RunningStatus: "",
-		NonCancelable: false, // TODO(ajwerner): Set this appropriately
+		NonCancelable: isNonCancelable,
 	}
 	return rec
 }

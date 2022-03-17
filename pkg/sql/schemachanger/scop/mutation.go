@@ -403,6 +403,10 @@ type CreateSchemaChangerJob struct {
 	Authorization scpb.Authorization
 	Statements    []scpb.Statement
 	DescriptorIDs []descpb.ID
+
+	// NonCancelable maps to the job's property, but in the schema changer can
+	// be thought of as !Revertible.
+	NonCancelable bool
 }
 
 // RemoveAllTableComments is used to delete all comments associated with a

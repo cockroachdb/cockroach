@@ -40,6 +40,7 @@ upsert descriptor #106
   +          NULL DEFAULT ‹42›
   +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
   +        statementTag: ALTER TABLE
+  +    revertible: true
   +    targetRanks:
   +    - 0
   +    - 1
@@ -204,7 +205,7 @@ upsert descriptor #106
   -  version: "1"
   +  version: "2"
 write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
-create job #1: "schema change job"
+create job #1 (non-cancelable: false): "schema change job"
   descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
@@ -288,6 +289,12 @@ upsert descriptor #106
        jobId: "1"
        relevantStatements:
   ...
+           statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks:
+       - 0
+  ...
        columnNames:
        - i
   -    - crdb_internal_column_2_name_placeholder
@@ -364,6 +371,7 @@ upsert descriptor #106
   -  version: "3"
   +  version: "4"
 update progress of schema change job #1
+set schema change job #1 to non-cancellable
 commit transaction #6
 begin transaction #7
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
@@ -388,7 +396,6 @@ upsert descriptor #106
   -  version: "4"
   +  version: "5"
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #7
 begin transaction #8
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
@@ -549,7 +556,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
-create job #2: "GC for dropping table 106 index 1"
+create job #2 (non-cancelable: true): "GC for dropping table 106 index 1"
   descriptor IDs: [106]
 update progress of schema change job #1
 commit transaction #8

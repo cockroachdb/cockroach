@@ -60,6 +60,7 @@ PreCommitPhase stage 1 of 1 with 8 MutationType ops
       - 104
       - 105
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP VIEW defaultdb.v1
         redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
@@ -433,6 +434,7 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
       - 110
       - 111
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP VIEW defaultdb.v1 CASCADE
         redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE

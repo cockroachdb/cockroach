@@ -741,8 +741,9 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 	}
 	record.JobID = jobspb.JobID(1 + len(s.jobs))
 	s.jobs = append(s.jobs, record)
-	s.LogSideEffectf("create job #%d: %q\n  descriptor IDs: %v",
+	s.LogSideEffectf("create job #%d (non-cancelable: %v): %q\n  descriptor IDs: %v",
 		record.JobID,
+		record.NonCancelable,
 		record.Description,
 		record.DescriptorIDs,
 	)
