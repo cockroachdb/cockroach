@@ -123,6 +123,7 @@ func (s *instance) TokenBucketRequest(
 
 	// Report current consumption.
 	metrics.totalRU.Update(consumption.RU)
+	metrics.totalKVRU.Update(consumption.KVRU)
 	metrics.totalReadRequests.Update(int64(consumption.ReadRequests))
 	metrics.totalReadBytes.Update(int64(consumption.ReadBytes))
 	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
