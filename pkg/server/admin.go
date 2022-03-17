@@ -1686,11 +1686,40 @@ func (s *adminServer) Settings(
 		lookupPurpose = settings.LookupForReporting
 	}
 
+	// Read the system.settings table to determine the settings for which we have
+	// explicitly set values -- the in-memory SV has the set and default values
+	// flattened for quick reads, but we'd only need the non-defaults for comparison.
+	alteredSettings := make(map[string]*time.Time)
+	if it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
+		ctx, "read-setting", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		`SELECT name, "lastUpdated" FROM system.settings`,
+	); err != nil {
+		log.Warningf(ctx, "failed to read settings: %s", err)
+	} else {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+			name := string(tree.MustBeDString(row[0]))
+			lastUpdated := row[1].(*tree.DTimestamp)
+			alteredSettings[name] = &lastUpdated.Time
+		}
+		if err != nil {
+			// No need to clear AlteredSettings map since we only make best
+			// effort to populate it.
+			log.Warningf(ctx, "failed to read settings: %s", err)
+		}
+	}
+
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
 		v, ok := settings.Lookup(k, lookupPurpose)
 		if !ok {
 			continue
+		}
+		var altered *time.Time
+		if val, ok := alteredSettings[k]; ok {
+			altered = val
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type: v.Typ(),
@@ -1698,9 +1727,9 @@ func (s *adminServer) Settings(
 			Value:       v.String(&s.server.st.SV),
 			Description: v.Description(),
 			Public:      v.Visibility() == settings.Public,
+			LastUpdated: altered,
 		}
 	}
-
 	return &resp, nil
 }
 
