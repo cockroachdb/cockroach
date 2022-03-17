@@ -91,6 +91,10 @@ type BulkAdder interface {
 	Close(ctx context.Context)
 	// SetOnFlush sets a callback function called after flushing the buffer.
 	SetOnFlush(func(summary roachpb.BulkOpSummary))
+	// Reset resets the BulkAdder for adding a new batch of input such as a new
+	// file, which may leave some state as-is such as aggregate statistics, but
+	// should reset all behavior-affecting state.
+	Reset()
 }
 
 // DuplicateKeyError represents a failed attempt to ingest the same key twice

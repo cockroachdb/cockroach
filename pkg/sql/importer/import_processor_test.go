@@ -220,6 +220,7 @@ func (*doNothingKeyAdder) CurrentBufferFill() float32                   { return
 func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary            { return roachpb.BulkOpSummary{} }
 func (*doNothingKeyAdder) Close(_ context.Context)                      {}
 func (a *doNothingKeyAdder) SetOnFlush(f func(_ roachpb.BulkOpSummary)) { a.onFlush = f }
+func (a *doNothingKeyAdder) Reset()                                     {}
 
 var eofOffset int64 = math.MaxInt64
 

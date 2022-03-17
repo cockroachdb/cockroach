@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,8 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -50,9 +54,6 @@ func runImport(
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	seqChunkProvider *row.SeqChunkProvider,
 ) (*roachpb.BulkOpSummary, error) {
-	// Used to send ingested import rows to the KV layer.
-	kvCh := make(chan row.KVBatch, 10)
-
 	// Install type metadata in all of the import tables.
 	importResolver := newImportTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
@@ -68,68 +69,208 @@ func runImport(
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = importResolver
-	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider)
+
+	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
+	writeAtBatchTimestamp := true
+	if !importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
+		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster setting")
+		writeAtBatchTimestamp = false
+	} else if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
+		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster version")
+		writeAtBatchTimestamp = false
+	}
+
+	var pkAdderName, indexAdderName = "rows", "indexes"
+	if len(spec.Tables) == 1 {
+		for k := range spec.Tables {
+			pkAdderName = fmt.Sprintf("%s rows", k)
+			indexAdderName = fmt.Sprintf("%s indexes", k)
+		}
+	}
+	// We create two bulk adders so as to combat the excessive flushing of small
+	// SSTs which was observed when using a single adder for both primary and
+	// secondary index kvs. The number of secondary index kvs are small, and so we
+	// expect the indexAdder to flush much less frequently than the pkIndexAdder.
+	//
+	// It is highly recommended that the cluster setting controlling the max size
+	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
+	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
+	// will hog memory as it tries to grow more aggressively.
+	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
+		true /* isPKAdder */)
+	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+		Name:                     pkAdderName,
+		DisallowShadowingBelow:   writeTS,
+		SkipDuplicates:           true,
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		InitialSplitsIfUnordered: int(spec.InitialSplits),
+		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer pkIndexAdder.Close(ctx)
 
-	// This group holds the go routines that are responsible for producing KV batches.
-	// and ingesting produced KVs.
-	// Depending on the import implementation both conv.start and conv.readFiles can
-	// produce KVs so we should close the channel only after *both* are finished.
-	group := ctxgroup.WithContext(ctx)
-	conv.start(group)
+	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
+		false /* isPKAdder */)
+	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+		Name:                     indexAdderName,
+		DisallowShadowingBelow:   writeTS,
+		SkipDuplicates:           true,
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		InitialSplitsIfUnordered: int(spec.InitialSplits),
+		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer indexAdder.Close(ctx)
 
-	// Read input files into kvs
-	group.GoCtx(func(ctx context.Context) error {
-		defer close(kvCh)
-		ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
-		defer span.Finish()
-		var inputs map[int32]string
-		if spec.ResumePos != nil {
-			// Filter out files that were completely processed.
-			inputs = make(map[int32]string)
-			for id, name := range spec.Uri {
-				if seek, ok := spec.ResumePos[id]; !ok || seek < math.MaxInt64 {
-					inputs[id] = name
-				}
-			}
-		} else {
-			inputs = spec.Uri
+	var summary roachpb.BulkOpSummary
+
+	// Setup progress tracking:
+	//  - offsets maps source file IDs to offsets in the slices below.
+	//  - writtenRow contains LastRow of batch most recently added to the buffer.
+	//  - writtenFraction contains % of the input finished as of last batch.
+	//  - pkFlushedRow contains `writtenRow` as of the last pk adder flush.
+	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
+	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
+	// `atomic` so the progress reporting go goroutine can read them.
+	writtenRow := make([]int64, len(spec.Uri))
+	writtenFraction := make([]uint32, len(spec.Uri))
+
+	pkFlushedRow := make([]int64, len(spec.Uri))
+	idxFlushedRow := make([]int64, len(spec.Uri))
+
+	bulkSummaryMu := &struct {
+		syncutil.Mutex
+		summary roachpb.BulkOpSummary
+	}{}
+
+	// When the PK adder flushes, everything written has been flushed, so we set
+	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
+	// can treat it as flushed as well (in case we're not adding anything to it).
+	pkIndexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
+		for i, emitted := range writtenRow {
+			atomic.StoreInt64(&pkFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
 		}
-
-		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage,
-			spec.User())
+		if indexAdder.IsEmpty() {
+			for i, emitted := range writtenRow {
+				atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			}
+		}
+	})
+	indexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
+		for i, emitted := range writtenRow {
+			atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			bulkSummaryMu.Lock()
+			bulkSummaryMu.summary.Add(summary)
+			bulkSummaryMu.Unlock()
+		}
 	})
 
-	// Ingest the KVs that the producer group emitted to the chan and the row result
-	// at the end is one row containing an encoded BulkOpSummary.
-	var summary *roachpb.BulkOpSummary
-	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
-		if err != nil {
-			return err
-		}
+	// offsets maps input file ID to a slot in our progress tracking slices.
+	offsets := make(map[int32]int, len(spec.Uri))
+	var offset int
+	for i := range spec.Uri {
+		offsets[i] = offset
+		offset++
+	}
+
+	updateBuffered := func(src int32, lastRow int64, progress float32) {
+		offset := offsets[src]
+		writtenRow[offset] = lastRow
+		atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(progress))
+	}
+
+	pushProgress := func() {
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
-		for i := range spec.Uri {
-			prog.CompletedFraction[i] = 1.0
-			prog.ResumePos[i] = math.MaxInt64
+		for file, offset := range offsets {
+			pk := atomic.LoadInt64(&pkFlushedRow[offset])
+			idx := atomic.LoadInt64(&idxFlushedRow[offset])
+			// On resume we'll be able to skip up the last row for which both the
+			// PK and index adders have flushed KVs.
+			if idx > pk {
+				prog.ResumePos[file] = pk
+			} else {
+				prog.ResumePos[file] = idx
+			}
+			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+			// Write down the summary of how much we've ingested since the last update.
+			bulkSummaryMu.Lock()
+			prog.BulkSummary = bulkSummaryMu.summary
+			bulkSummaryMu.summary.Reset()
+			bulkSummaryMu.Unlock()
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case progCh <- prog:
-			return nil
-		}
-	})
-
-	if err = group.Wait(); err != nil {
-		return nil, err
+		progCh <- prog
 	}
 
-	return summary, nil
+	for fileNum, uri := range spec.Uri {
+		if seek, ok := spec.ResumePos[fileNum]; ok && seek == math.MaxInt64 {
+			continue
+		}
+
+		// Used to send ingested import rows to the KV layer.
+		kvCh := make(chan row.KVBatch, 10)
+
+		conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider)
+		if err != nil {
+			return nil, err
+		}
+
+		// This group holds the go routines that are responsible for producing KV batches.
+		// and ingesting produced KVs.
+		// Depending on the import implementation both conv.start and conv.readFiles can
+		// produce KVs so we should close the channel only after *both* are finished.
+		group := ctxgroup.WithContext(ctx)
+		conv.start(group)
+
+		// Read input files into kvs
+		group.GoCtx(func(ctx context.Context) error {
+			defer close(kvCh)
+			ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
+			defer span.Finish()
+			inputs := map[int32]string{fileNum: uri}
+			return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage,
+				spec.User())
+		})
+
+		// Ingest the KVs that the producer group emitted to the chan and the row result
+		// at the end is one row containing an encoded BulkOpSummary.
+		group.GoCtx(func(ctx context.Context) error {
+			fileSummary, err := ingestKvs(ctx, flowCtx, spec, kvCh, pkIndexAdder, indexAdder, updateBuffered, pushProgress)
+			if err != nil {
+				return err
+			}
+			summary.Add(*fileSummary)
+			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+			prog.ResumePos = make(map[int32]int64)
+			prog.CompletedFraction = make(map[int32]float32)
+			for i := range spec.Uri {
+				prog.CompletedFraction[i] = 1.0
+				prog.ResumePos[i] = math.MaxInt64
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case progCh <- prog:
+				return nil
+			}
+		})
+
+		if err = group.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
+	return &summary, nil
 }
 
 type readFileFunc func(context.Context, *fileReader, int32, int64, chan string) error

@@ -12,13 +12,9 @@ package importer
 
 import (
 	"context"
-	"fmt"
-	"math"
 	"runtime"
-	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -35,10 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -341,150 +335,17 @@ func ingestKvs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
-	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
+	pkIndexAdder, indexAdder kvserverbase.BulkAdder,
+	updateBuffered func(int32, int64, float32),
+	pushProgress func(),
 ) (*roachpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
-	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-	writeAtBatchTimestamp := true
-	if !importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
-		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster setting")
-		writeAtBatchTimestamp = false
-	} else if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
-		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster version")
-		writeAtBatchTimestamp = false
-	}
-
-	var pkAdderName, indexAdderName = "rows", "indexes"
-	if len(spec.Tables) == 1 {
-		for k := range spec.Tables {
-			pkAdderName = fmt.Sprintf("%s rows", k)
-			indexAdderName = fmt.Sprintf("%s indexes", k)
-		}
-	}
-
 	isPK := make(map[tableAndIndex]bool, len(spec.Tables))
 	for _, t := range spec.Tables {
 		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = true
-	}
-
-	// We create two bulk adders so as to combat the excessive flushing of small
-	// SSTs which was observed when using a single adder for both primary and
-	// secondary index kvs. The number of secondary index kvs are small, and so we
-	// expect the indexAdder to flush much less frequently than the pkIndexAdder.
-	//
-	// It is highly recommended that the cluster setting controlling the max size
-	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
-	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
-	// will hog memory as it tries to grow more aggressively.
-	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
-		true /* isPKAdder */)
-	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     pkAdderName,
-		DisallowShadowingBelow:   writeTS,
-		SkipDuplicates:           true,
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer pkIndexAdder.Close(ctx)
-
-	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
-		false /* isPKAdder */)
-	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     indexAdderName,
-		DisallowShadowingBelow:   writeTS,
-		SkipDuplicates:           true,
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer indexAdder.Close(ctx)
-
-	// Setup progress tracking:
-	//  - offsets maps source file IDs to offsets in the slices below.
-	//  - writtenRow contains LastRow of batch most recently added to the buffer.
-	//  - writtenFraction contains % of the input finished as of last batch.
-	//  - pkFlushedRow contains `writtenRow` as of the last pk adder flush.
-	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
-	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
-	// `atomic` so the progress reporting go goroutine can read them.
-	writtenRow := make([]int64, len(spec.Uri))
-	writtenFraction := make([]uint32, len(spec.Uri))
-
-	pkFlushedRow := make([]int64, len(spec.Uri))
-	idxFlushedRow := make([]int64, len(spec.Uri))
-
-	bulkSummaryMu := &struct {
-		syncutil.Mutex
-		summary roachpb.BulkOpSummary
-	}{}
-
-	// When the PK adder flushes, everything written has been flushed, so we set
-	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
-	// can treat it as flushed as well (in case we're not adding anything to it).
-	pkIndexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
-		for i, emitted := range writtenRow {
-			atomic.StoreInt64(&pkFlushedRow[i], emitted)
-			bulkSummaryMu.Lock()
-			bulkSummaryMu.summary.Add(summary)
-			bulkSummaryMu.Unlock()
-		}
-		if indexAdder.IsEmpty() {
-			for i, emitted := range writtenRow {
-				atomic.StoreInt64(&idxFlushedRow[i], emitted)
-			}
-		}
-	})
-	indexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
-		for i, emitted := range writtenRow {
-			atomic.StoreInt64(&idxFlushedRow[i], emitted)
-			bulkSummaryMu.Lock()
-			bulkSummaryMu.summary.Add(summary)
-			bulkSummaryMu.Unlock()
-		}
-	})
-
-	// offsets maps input file ID to a slot in our progress tracking slices.
-	offsets := make(map[int32]int, len(spec.Uri))
-	var offset int
-	for i := range spec.Uri {
-		offsets[i] = offset
-		offset++
-	}
-
-	pushProgress := func() {
-		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-		prog.ResumePos = make(map[int32]int64)
-		prog.CompletedFraction = make(map[int32]float32)
-		for file, offset := range offsets {
-			pk := atomic.LoadInt64(&pkFlushedRow[offset])
-			idx := atomic.LoadInt64(&idxFlushedRow[offset])
-			// On resume we'll be able to skip up the last row for which both the
-			// PK and index adders have flushed KVs.
-			if idx > pk {
-				prog.ResumePos[file] = pk
-			} else {
-				prog.ResumePos[file] = idx
-			}
-			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
-			// Write down the summary of how much we've ingested since the last update.
-			bulkSummaryMu.Lock()
-			prog.BulkSummary = bulkSummaryMu.summary
-			bulkSummaryMu.summary.Reset()
-			bulkSummaryMu.Unlock()
-		}
-		progCh <- prog
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -557,9 +418,8 @@ func ingestKvs(
 					}
 				}
 			}
-			offset := offsets[kvBatch.Source]
-			writtenRow[offset] = kvBatch.LastRow
-			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
+			updateBuffered(kvBatch.Source, kvBatch.LastRow, kvBatch.Progress)
+
 			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
 				_ = pkIndexAdder.Flush(ctx)
 				_ = indexAdder.Flush(ctx)
@@ -589,6 +449,10 @@ func ingestKvs(
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
+
+	pkIndexAdder.Reset()
+	indexAdder.Reset()
+
 	return &addedSummary, nil
 }
 
