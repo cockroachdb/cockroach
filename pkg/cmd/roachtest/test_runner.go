@@ -597,6 +597,14 @@ func (r *testRunner) runWorker(
 			// test".
 			c.status("running test")
 			c.setTest(t)
+
+			// If randomized encryption-at-rest was requested, roll the dice now.
+			var encAtRest bool
+			if t.Spec().(*registry.TestSpec).EncryptAtRandom && rand.Intn(2) != 0 {
+				encAtRest = true
+			}
+			c.encAtRest = encAtRest
+
 			wStatus.SetCluster(c)
 			wStatus.SetTest(t, testToRun)
 			wStatus.SetStatus("running test")
