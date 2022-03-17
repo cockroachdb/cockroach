@@ -415,22 +415,14 @@ func (ds *DistSender) singleRangeFeed(
 	}
 	defer transport.Release()
 
-	var catchupRes limit.Reservation
-	startCatchupScan := func() error {
-		if catchupRes != nil {
-			return errors.AssertionFailedf("expected catchup scan reservation to be nil")
-		}
-
-		// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
-		// opportunity to update semaphore limit.
-		catchupSem.SetLimit(maxConcurrentCatchupScans(&ds.st.SV))
-		res, err := catchupSem.Begin(ctx)
-		if err == nil {
-			catchupRes = res
-			ds.metrics.RangefeedCatchupRanges.Inc(1)
-		}
-		return err
+	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
+	// opportunity to update semaphore limit.
+	catchupSem.SetLimit(maxConcurrentCatchupScans(&ds.st.SV))
+	catchupRes, err := catchupSem.Begin(ctx)
+	if err != nil {
+		return hlc.Timestamp{}, err
 	}
+
 	finishCatchupScan := func() {
 		if catchupRes != nil {
 			catchupRes.Release()
@@ -452,9 +444,6 @@ func (ds *DistSender) singleRangeFeed(
 		if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			continue
-		}
-		if err := startCatchupScan(); err != nil {
-			return hlc.Timestamp{}, err
 		}
 
 		log.VEventf(ctx, 3, "attempting to create a RangeFeed over replica %s", args.Replica)
