@@ -245,6 +245,7 @@ func showBackupPlanHook(
 		backupOptWithDebugIDs:     sql.KVStringOptRequireNoValue,
 		backupOptIncStorage:       sql.KVStringOptRequireValue,
 		backupOptDebugMetadataSST: sql.KVStringOptRequireNoValue,
+		backupOptEncDir:           sql.KVStringOptRequireValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -324,9 +325,26 @@ func showBackupPlanHook(
 		}
 		defer store.Close()
 
+		// A user that calls SHOW BACKUP TO <incremental_dir> on an encrypted incremental
+		// backup will need to pass their full backup's directory to the
+		// encryption_info_dir parameter because the `ENCRYPTION-INFO` file
+		// necessary to decode the incremental backup lives in the full backup dir.
+		encStore := store
+		if encDir, ok := opts[backupOptEncDir]; ok {
+			encStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, encDir, p.User())
+			if err != nil {
+				return errors.Wrapf(err, "make storage")
+			}
+			defer encStore.Close()
+		}
 		var encryption *jobspb.BackupEncryptionOptions
+		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
+you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			opts, err := readEncryptionOptions(ctx, store)
+			opts, err := readEncryptionOptions(ctx, encStore)
+			if errors.Is(err, errEncryptionInfoRead) {
+				return errors.WithHint(err, showEncErr)
+			}
 			if err != nil {
 				return err
 			}
@@ -336,7 +354,10 @@ func showBackupPlanHook(
 				Key:  encryptionKey,
 			}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
-			opts, err := readEncryptionOptions(ctx, store)
+			opts, err := readEncryptionOptions(ctx, encStore)
+			if errors.Is(err, errEncryptionInfoRead) {
+				return errors.WithHintf(err, showEncErr)
+			}
 			if err != nil {
 				return err
 			}
