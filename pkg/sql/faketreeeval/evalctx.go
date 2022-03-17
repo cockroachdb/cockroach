@@ -520,3 +520,8 @@ func (ps *DummyPreparedStatementState) HasActivePortals() bool {
 func (ps *DummyPreparedStatementState) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	return nil
 }
+
+// HasPortal is part of the tree.PreparedStatementState interface.
+func (ps *DummyPreparedStatementState) HasPortal(_ string) bool {
+	return false
+}

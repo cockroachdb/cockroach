@@ -3392,8 +3392,12 @@ type EvalSessionAccessor interface {
 // PreparedStatementState is a limited interface that exposes metadata about
 // prepared statements.
 type PreparedStatementState interface {
+	// HasActivePortals returns true if there are portals in the session.
 	HasActivePortals() bool
+	// MigratablePreparedStatements returns a mapping of all prepared statements.
 	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
+	// HasPortal returns true if there exists a given named portal in the session.
+	HasPortal(s string) bool
 }
 
 // ClientNoticeSender is a limited interface to send notices to the
