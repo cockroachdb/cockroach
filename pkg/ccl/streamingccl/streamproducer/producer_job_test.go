@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -186,7 +187,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			sql.CheckQueryResultsRetry(t, jobsQuery(jr.JobID), [][]string{{"failed"}})
 			// Ensures the protected timestamp record is released.
 			_, err := getPTSRecord(ptsID)
-			require.Error(t, err, "protected timestamp record does not exist")
+			require.True(t, testutils.IsError(err, "protected timestamp record does not exist"), err)
 
 			var status streampb.StreamReplicationStatus
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -243,7 +244,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			require.True(t, status == "reverting" || status == "failed")
 			// Ensures the protected timestamp record is released.
 			_, err = getPTSRecord(ptsID)
-			require.Error(t, err, "protected timestamp record does not exist")
+			// need to change
+			require.True(t, testutils.IsError(err, "protected timestamp record does not exist"), err)
 		}
 	})
 }
