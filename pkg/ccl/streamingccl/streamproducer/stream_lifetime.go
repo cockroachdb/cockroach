@@ -218,3 +218,56 @@ func heartbeatReplicationStream(
 	return updateReplicationStreamProgress(evalCtx.Ctx(),
 		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, streamID, frontier, txn)
 }
+
+// getReplicationStreamSpec gets a replication stream specification for the specified stream.
+func getReplicationStreamSpec(
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
+) (*streampb.ReplicationStreamSpec, error) {
+	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
+	// Returns error if the replication stream is not active
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
+	if err != nil {
+		return nil, errors.Wrapf(err, "Replication stream %d has error", streamID)
+	}
+	if j.Status() != jobs.StatusRunning {
+		return nil, errors.Errorf("Replication stream %d is not running", streamID)
+	}
+
+	// Partition the spans with SQLPlanner
+	var noTxn *kv.Txn
+	dsp := jobExecCtx.DistSQLPlanner()
+	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(),
+		nil /* planner */, noTxn, sql.DistributionTypeSystemTenantOnly)
+
+	replicatedSpans := j.Details().(jobspb.StreamReplicationDetails).Spans
+	spans := make([]roachpb.Span, 0, len(replicatedSpans))
+	for _, span := range replicatedSpans {
+		spans = append(spans, *span)
+	}
+	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &streampb.ReplicationStreamSpec{
+		Partitions: make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
+	}
+	for _, sp := range spanPartitions {
+		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SQLInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		res.Partitions = append(res.Partitions, streampb.ReplicationStreamSpec_Partition{
+			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
+			SQLAddress: nodeInfo.SQLAddress,
+			Locality:   nodeInfo.Locality,
+			PartitionSpec: &streampb.StreamPartitionSpec{
+				Spans: sp.Spans,
+				Config: streampb.StreamPartitionSpec_ExecutionConfig{
+					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+				},
+			},
+		})
+	}
+	return res, nil
+}
