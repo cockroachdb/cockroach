@@ -16,6 +16,7 @@ option go_package = "descpb";
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 import "sql/catalog/descpb/structured.proto";
+import "geo/geoindex/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
@@ -86,6 +87,9 @@ message IndexFetchSpec {
 
   optional bool is_secondary_index = 6 [(gogoproto.nullable) = false];
   optional bool is_unique_index = 7 [(gogoproto.nullable) = false];
+
+  // GeoConfig is used if we are fetching an inverted geospatial index.
+  optional geo.geoindex.Config geo_config = 16 [(gogoproto.nullable) = false];
 
   // EncodingType represents what sort of k/v encoding is used to store the
   // table data.

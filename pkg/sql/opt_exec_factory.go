@@ -784,11 +784,6 @@ func (ef *execFactory) ConstructInvertedJoin(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
-	// NB: lookupCols does not include the inverted column, which is only a partial
-	// representation of the original table column. This scan configuration does not
-	// affect what the invertedJoiner implementation retrieves from the inverted
-	// index (which includes the inverted column). This scan configuration is used
-	// later for computing the output from the inverted join.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
