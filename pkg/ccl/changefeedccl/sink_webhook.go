@@ -655,6 +655,7 @@ func (s *webhookSink) EmitRow(
 			emitTime: timeutil.Now(),
 			mvcc:     mvcc,
 		}}:
+		s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	}
 	return nil
 }
