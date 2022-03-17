@@ -39,6 +39,7 @@ upsert descriptor #105
   -  - 108
      regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "2"
   +  version: "3"
 upsert descriptor #107
@@ -375,8 +376,8 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "3"
   +  version: "4"
 upsert descriptor #107
@@ -731,6 +732,7 @@ upsert descriptor #105
   -  - 109
      regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "5"
   +  version: "6"
 upsert descriptor #109
@@ -959,8 +961,8 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "6"
   +  version: "7"
 upsert descriptor #109
@@ -1395,8 +1397,8 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "7"
   +  state: DROP
   +  version: "8"
