@@ -3,7 +3,7 @@
 source [file join [file dirname $argv0] common.tcl]
 
 start_test "Check that demo insecure says hello properly"
-spawn $argv demo --insecure=true
+spawn $argv demo --insecure=true --multitenant=true
 # Be polite.
 eexpect "Welcome"
 # Warn the user that they won't get persistence.
@@ -43,7 +43,7 @@ start_test "Check that demo insecure says hello properly"
 
 # With env var.
 set ::env(COCKROACH_INSECURE) "true"
-spawn $argv demo --no-example-database
+spawn $argv demo --no-example-database --multitenant=true
 eexpect "Welcome"
 eexpect "defaultdb>"
 
@@ -98,7 +98,7 @@ start_test "Check that demo secure says hello properly"
 
 # With env var.
 set ::env(COCKROACH_INSECURE) "false"
-spawn $argv demo --no-example-database
+spawn $argv demo --no-example-database --multitenant=true
 eexpect "Welcome"
 eexpect "Username: \"demo\", password"
 eexpect "Directory with certificate files"
@@ -211,7 +211,7 @@ end_test
 
 start_test "Check that the port numbers can be overridden from the command line."
 
-spawn $argv demo --no-example-database --nodes 3 --http-port 8000
+spawn $argv demo --no-example-database --nodes 3 --http-port 8000 --multitenant=true
 eexpect "Welcome"
 eexpect "defaultdb>"
 
@@ -228,7 +228,7 @@ eexpect "defaultdb>"
 send_eof
 eexpect eof
 
-spawn $argv demo --no-example-database --nodes 3 --sql-port 23000
+spawn $argv demo --no-example-database --nodes 3 --sql-port 23000 --multitenant=true
 eexpect "Welcome"
 eexpect "defaultdb>"
 
