@@ -415,6 +415,11 @@ func (m *randomStreamClient) Subscribe(
 	}, nil
 }
 
+// Complete implements the streamclient.Client interface.
+func (m *randomStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+	return nil
+}
+
 type randomStreamSubscription struct {
 	receiveFn func(ctx context.Context) error
 	eventCh   chan streamingccl.Event

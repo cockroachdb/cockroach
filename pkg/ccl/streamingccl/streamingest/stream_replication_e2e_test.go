@@ -82,10 +82,8 @@ func (c *tenantStreamingClusters) cutover(
 	// Cut over the ingestion job and the job will stop eventually.
 	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-	// TODO(casper): Make producer job exit normally in the cutover scenario.
 	c.srcSysSQL.CheckQueryResultsRetry(c.t,
-		fmt.Sprintf("SELECT status, error FROM [SHOW JOBS] WHERE job_id = %d", producerJobID),
-		[][]string{{"failed", fmt.Sprintf("replication stream %d timed out", producerJobID)}})
+		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", producerJobID), [][]string{{"succeeded"}})
 }
 
 // Returns producer job ID and ingestion job ID.
@@ -159,7 +157,7 @@ var srcClusterSetting = `
 	SET CLUSTER SETTING kv.rangefeed.enabled = true;
 	SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 	SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-  SET CLUSTER SETTING stream_replication.job_liveness_timeout = '3s';
+  SET CLUSTER SETTING stream_replication.job_liveness_timeout = '20s';
   SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';
   SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
 `
