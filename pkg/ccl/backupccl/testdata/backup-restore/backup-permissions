@@ -9,12 +9,20 @@ CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
 
+exec-sql
+SET enable_implicit_transaction_for_batch_statements = true
+----
+
 # BACKUP is not allowed in a batch-statement.
 exec-sql
 BACKUP TO 'nodelocal://0/test-root/';
 SELECT 1;
 ----
 pq: BACKUP cannot be used inside a multi-statement transaction without DETACHED option
+
+exec-sql
+SET enable_implicit_transaction_for_batch_statements = false
+----
 
 # Cluster backup should succeed as a root user.
 exec-sql

@@ -5,7 +5,7 @@
 # TODO(yuzefovich): clean up the tracing in the vectorized engine and remove
 # adjustment of vectorize mode (#55821).
 statement ok
-SET vectorize=off; SET tracing = on
+SET enable_implicit_transaction_for_batch_statements=true; SET vectorize=off; SET tracing = on
 
 statement ok
 BEGIN; SELECT 1; COMMIT; SELECT 2

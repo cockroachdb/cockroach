@@ -4086,7 +4086,7 @@ distsql_workmem                                       64 MiB              NULL  
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
 enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                     on                  NULL      NULL        NULL        string
-enable_implicit_transaction_for_batch_statements      on                  NULL      NULL        NULL        string
+enable_implicit_transaction_for_batch_statements      off                 NULL      NULL        NULL        string
 enable_insert_fast_path                               on                  NULL      NULL        NULL        string
 enable_multiregion_placement_policy                   off                 NULL      NULL        NULL        string
 enable_seqscan                                        on                  NULL      NULL        NULL        string
@@ -4205,7 +4205,7 @@ distsql_workmem                                       64 MiB              NULL  
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
 enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                     on                  NULL  user     NULL      on                  on
-enable_implicit_transaction_for_batch_statements      on                  NULL  user     NULL      on                  on
+enable_implicit_transaction_for_batch_statements      off                 NULL  user     NULL      off                 off
 enable_insert_fast_path                               on                  NULL  user     NULL      on                  on
 enable_multiregion_placement_policy                   off                 NULL  user     NULL      off                 off
 enable_seqscan                                        on                  NULL  user     NULL      on                  on
