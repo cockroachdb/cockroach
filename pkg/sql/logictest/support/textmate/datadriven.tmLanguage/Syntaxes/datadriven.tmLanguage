@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>fileTypes</key>
+	<array>
+		<string>ddt</string>
+	</array>
+	<key>name</key>
+	<string>Datadriven</string>
+	<key>scopeName</key>
+	<string>source.datadriven</string>
+	<key>patterns</key>
+	<array>
+		<key>comment</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>begin</key>
+					<string>^#</string>
+					<key>end</key>
+					<string>\n</string>
+                <key>name</key>
+					<string>comment.line.number-sign.datadriven</string>
+				</dict>
+			</array>
+		</dict>
+		<key>subtest</key>
+        <dict>
+           <key>patterns</key>
+           <array>
+              <dict>
+                 <key>match</key>
+                 <string>^(subtest)\b</string>
+                 <key>name</key>
+                 <string>storage.type.datadriven</string>
+              </dict>
+           </array>
+        </dict>
+	</array>
+	<key>uuid</key>
+	<string>752CE5A6-4179-4742-B091-ED2EE51B7245</string>
+</dict>
+</plist>

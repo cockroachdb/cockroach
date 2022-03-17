@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>fileTypes</key>
+	<array>
+		<string>lt</string>
+	</array>
+	<key>name</key>
+	<string>LogicTest</string>
+	<key>scopeName</key>
+	<string>source.logictest</string>
+	<key>patterns</key>
+	<array>
+		<dict>
+			<key>include</key>
+			<string>source.datadriven</string>
+		</dict>
+		<key>command</key>
+        <dict>
+           <key>patterns</key>
+           <array>
+              <dict>
+                 <key>match</key>
+                 <string>(?x)^(
+                    statement |
+                    query |
+                    let |
+                    repeat |
+                    skip_on_retry |
+                    sleep |
+                    halt |
+                    halt_threshold |
+                    user |
+                    skip |
+                    skipif |
+                    onlyif |
+                    traceon |
+                    traceoff)\b</string>
+                 <key>name</key>
+                 <string>storage.type.logictest</string>
+              </dict>
+           </array>
+        </dict>
+	</array>
+	<key>uuid</key>
+	<string>3C8F5448-5EC6-4E0F-9E1D-02CE2CA41E00</string>
+</dict>
+</plist>
