@@ -738,6 +738,9 @@ type TypeDescriptor interface {
 	TransitioningRegionNames() (catpb.RegionNames, error)
 	// SuperRegions returns the list of super regions.
 	SuperRegions() ([]descpb.SuperRegion, error)
+	// ZoneConfigExtensions returns the zone configuration extensions on the
+	// multi-region enum.
+	ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error)
 
 	// The following fields are set if the type is an enum or a multi-region enum.
 
