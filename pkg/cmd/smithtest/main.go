@@ -204,8 +204,10 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 	fmt.Println("worker started")
 
 	initSQL := sqlsmith.Setups[sqlsmith.RandSetup(rnd)](rnd)
-	if _, err := pgdb.Exec(ctx, initSQL); err != nil {
-		return errors.Wrap(err, "init")
+	for _, stmt := range initSQL {
+		if _, err := pgdb.Exec(ctx, stmt); err != nil {
+			return errors.Wrap(err, "init")
+		}
 	}
 
 	setting := sqlsmith.Settings[sqlsmith.RandSetting(rnd)](rnd)
@@ -288,7 +290,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 // failure de-duplicates, reduces, and files errors. It generally returns nil
 // indicating that this was successfully filed and we should continue looking
 // for errors.
-func (s WorkerSetup) failure(ctx context.Context, initSQL, stmt string, err error) error {
+func (s WorkerSetup) failure(ctx context.Context, initSQL []string, stmt string, err error) error {
 	var message, stack string
 	var pqerr pgconn.PgError
 	if errors.As(err, &pqerr) {
@@ -315,7 +317,7 @@ func (s WorkerSetup) failure(ctx context.Context, initSQL, stmt string, err erro
 		return nil
 	}
 	fmt.Println("found", message)
-	input := fmt.Sprintf("%s\n\n%s;", initSQL, stmt)
+	input := fmt.Sprintf("%s\n\n%s;", strings.Join(initSQL, "\n"), stmt)
 	fmt.Printf("SQL:\n%s\n\n", input)
 
 	// Run reducer.

@@ -77,7 +77,10 @@ func loadTPCHDataset(
 
 	t.L().Printf("restoring tpch scale factor %d\n", sf)
 	tpchURL := fmt.Sprintf("gs://cockroach-fixtures/workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf)
-	query := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS tpch; RESTORE tpch.* FROM '%s' WITH into_db = 'tpch';`, tpchURL)
+	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
+		return err
+	}
+	query := fmt.Sprintf(`RESTORE tpch.* FROM '%s' WITH into_db = 'tpch';`, tpchURL)
 	_, err := db.ExecContext(ctx, query)
 	return err
 }
