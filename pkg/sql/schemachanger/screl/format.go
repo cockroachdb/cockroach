@@ -11,7 +11,9 @@
 package screl
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -51,6 +53,24 @@ func ElementString(e scpb.Element) string {
 		return fmt.Sprintf("failed for format element %T: %v", e, err)
 	}
 	return v.String()
+}
+
+type ElementKey = [sha256.Size]byte
+
+func MakeElementKey(e scpb.Element) (ret ElementKey) {
+	h := sha256.New()
+	write := func(s string) { _, _ = io.WriteString(h, s) }
+	write(reflect.TypeOf(e).Elem().Name())
+	if err := Schema.IterateAttributes(e, func(attr rel.Attr, value interface{}) error {
+		write(attr.String())
+		write(":")
+		_, err := fmt.Fprintf(h, "%v", value)
+		return err
+	}); err != nil {
+		panic(err)
+	}
+	h.Sum(ret[0:0:sha256.Size])
+	return ret
 }
 
 // FormatElement formats the element into the SafeWriter.

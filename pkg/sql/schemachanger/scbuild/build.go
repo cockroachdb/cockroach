@@ -151,7 +151,7 @@ type cachedDesc struct {
 	//
 	// This map ends up being very important to make sure that Ensure does
 	// not become O(N) where N is the number of elements in the descriptor.
-	elementIndexMap map[string]int
+	elementIndexMap map[screl.ElementKey]int
 }
 
 // newBuilderState constructs a builderState.

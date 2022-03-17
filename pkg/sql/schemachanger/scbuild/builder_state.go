@@ -61,7 +61,7 @@ func (b *builderState) Ensure(
 	id := screl.GetDescID(e)
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
-	key := screl.ElementString(e)
+	key := screl.MakeElementKey(e)
 	if i, ok := c.elementIndexMap[key]; ok {
 		es := &b.output[i]
 		if !screl.EqualElements(es.element, e) {
@@ -711,7 +711,7 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    b.hasAdmin,
 		ers:             &elementResultSet{b: b},
-		elementIndexMap: map[string]int{},
+		elementIndexMap: map[screl.ElementKey]int{},
 	}
 	// Collect privileges
 	if !c.hasOwnership {
@@ -728,7 +728,7 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	}
 	visitorFn := func(status scpb.Status, e scpb.Element) {
 		c.ers.indexes = append(c.ers.indexes, len(b.output))
-		key := screl.ElementString(e)
+		key := screl.MakeElementKey(e)
 		c.elementIndexMap[key] = len(b.output)
 		b.output = append(b.output, elementState{
 			element: e,
