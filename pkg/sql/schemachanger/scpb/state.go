@@ -112,17 +112,25 @@ func (m *DescriptorState) Clone() *DescriptorState {
 // MakeCurrentStateFromDescriptors constructs a CurrentState object from a
 // slice of DescriptorState object from which the current state has been
 // decomposed.
-func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (CurrentState, error) {
+func MakeCurrentStateFromDescriptors(
+	descriptorStates []*DescriptorState,
+) (_ CurrentState, nonCancelable bool, _ error) {
 	var s CurrentState
 	var targetRanks []uint32
-	var rollback bool
+	var rollback, revertible bool
 	stmts := make(map[uint32]Statement)
 	for i, cs := range descriptorStates {
 		if i == 0 {
 			rollback = cs.InRollback
+			revertible = cs.Revertible
 		} else if rollback != cs.InRollback {
-			return CurrentState{}, errors.AssertionFailedf(
+			return CurrentState{}, false, errors.AssertionFailedf(
 				"job %d: conflicting rollback statuses between descriptors",
+				cs.JobID,
+			)
+		} else if revertible != cs.Revertible {
+			return CurrentState{}, false, errors.AssertionFailedf(
+				"job %d: conflicting revertability statuses between descriptors",
 				cs.JobID,
 			)
 		}
@@ -132,7 +140,7 @@ func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (Curre
 		for _, stmt := range cs.RelevantStatements {
 			if existing, ok := stmts[stmt.StatementRank]; ok {
 				if existing.Statement != stmt.Statement.Statement {
-					return CurrentState{}, errors.AssertionFailedf(
+					return CurrentState{}, false, errors.AssertionFailedf(
 						"job %d: statement %q does not match %q for rank %d",
 						cs.JobID,
 						existing.Statement,
@@ -154,7 +162,7 @@ func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (Curre
 	sort.Sort(&sr)
 	s.Statements = sr.stmts
 	s.InRollback = rollback
-	return s, nil
+	return s, !revertible || rollback, nil
 }
 
 type stateAndRanks struct {

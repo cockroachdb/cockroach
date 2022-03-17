@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -199,14 +200,16 @@ func makeState(
 	}); err != nil {
 		return scpb.CurrentState{}, err
 	}
-	state, err := scpb.MakeCurrentStateFromDescriptors(descriptorStates)
+	state, _, err := scpb.MakeCurrentStateFromDescriptors(descriptorStates)
 	if err != nil {
 		return scpb.CurrentState{}, err
 	}
 	if !rollback && state.InRollback {
-		return scpb.CurrentState{}, errors.Errorf(
+		// If we do not mark the error as permanent, but we've configured the job to
+		// be non-cancelable, we'll never make it to the reverting state.
+		return scpb.CurrentState{}, jobs.MarkAsPermanentJobError(errors.Errorf(
 			"job in running state but schema change in rollback, " +
-				"returning an error to restart in the reverting state")
+				"returning an error to restart in the reverting state"))
 	}
 	if rollback && !state.InRollback {
 		state.Rollback()

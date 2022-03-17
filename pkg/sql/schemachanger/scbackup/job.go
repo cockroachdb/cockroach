@@ -54,8 +54,7 @@ func CreateDeclarativeSchemaChangeJobs(
 			ds.JobID = newID
 			descriptorStates = append(descriptorStates, ds)
 		}
-		// TODO(ajwerner): Deal with rollback and revertibility.
-		currentState, err := scpb.MakeCurrentStateFromDescriptors(
+		currentState, isNonCancelable, err := scpb.MakeCurrentStateFromDescriptors(
 			descriptorStates,
 		)
 		if err != nil {
@@ -64,6 +63,7 @@ func CreateDeclarativeSchemaChangeJobs(
 		records = append(records, scexec.MakeDeclarativeSchemaChangeJobRecord(
 			newID,
 			currentState.Statements,
+			isNonCancelable,
 			currentState.Authorization,
 			screl.AllTargetDescIDs(currentState.TargetState).Ordered(),
 		))

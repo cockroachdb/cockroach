@@ -403,6 +403,7 @@ type CreateSchemaChangerJob struct {
 	Authorization scpb.Authorization
 	Statements    []scpb.Statement
 	DescriptorIDs []descpb.ID
+	NonCancelable bool
 }
 
 // RemoveAllTableComments is used to delete all comments associated with a
