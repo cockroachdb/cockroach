@@ -1,12 +1,10 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package backupccl
 
@@ -20,10 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -68,18 +69,22 @@ type sqlDBKey struct {
 }
 
 type datadrivenTestState struct {
-	servers      map[string]serverutils.TestServerInterface
-	dataDirs     map[string]string
-	sqlDBs       map[sqlDBKey]*gosql.DB
-	noticeBuffer []string
-	cleanupFns   []func()
+	servers           map[string]serverutils.TestServerInterface
+	dataDirs          map[string]string
+	sqlDBs            map[sqlDBKey]*gosql.DB
+	jobTags           map[string]jobspb.JobID
+	clusterTimestamps map[string]string
+	noticeBuffer      []string
+	cleanupFns        []func()
 }
 
 func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
-		servers:  make(map[string]serverutils.TestServerInterface),
-		dataDirs: make(map[string]string),
-		sqlDBs:   make(map[sqlDBKey]*gosql.DB),
+		servers:           make(map[string]serverutils.TestServerInterface),
+		dataDirs:          make(map[string]string),
+		sqlDBs:            make(map[sqlDBKey]*gosql.DB),
+		jobTags:           make(map[string]jobspb.JobID),
+		clusterTimestamps: make(map[string]string),
 	}
 }
 
@@ -109,7 +114,13 @@ type serverCfg struct {
 func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
-	params := base.TestClusterArgs{}
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 	if cfg.tempCleanupFrequency != "" {
 		duration, err := time.ParseDuration(cfg.tempCleanupFrequency)
@@ -122,7 +133,7 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 		params.ServerArgs.Settings = settings
 	}
 
-	clusterSize := singleNode
+	clusterSize := cfg.nodes
 
 	if cfg.localities != "" {
 		cfgs := strings.Split(cfg.localities, ",")
@@ -193,46 +204,84 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   Supported arguments:
 //
-//   - share-io-dir: can be specified to share an IO directory with an existing
+//   + share-io-dir: can be specified to share an IO directory with an existing
 //   server. This is useful when restoring from a backup taken in another
 //   server.
 //
-//   - allow-implicit-access: can be specified to set
+//   + allow-implicit-access: can be specified to set
 //   `EnableNonAdminImplicitAndArbitraryOutbound` to true
 //
-//   - disable-http: disables use of external HTTP endpoints.
+//   + disable-http: disables use of external HTTP endpoints.
 //
-//   - temp-cleanup-freq: specifies the frequency with which the temporaru table
+//   + temp-cleanup-freq: specifies the frequency with which the temporaru table
 //   cleanup reconciliation job runs
 //
-//   - localities: specifies the localities that will be used when starting up
+//   + localities: specifies the localities that will be used when starting up
 //   the test cluster. The cluster will have len(localities) nodes, with each
 //   node assigned a locality config corresponding to the locality. Please
 //   update the `localityCfgs` map when adding new localities.
 //
-//   - nodes: specifies the number of nodes in the test cluster.
+//   + nodes: specifies the number of nodes in the test cluster.
 //
-// - "exec-sql server=<name> [args]"
+//   + splits: specifies the number of ranges the bank table is split into.
+//
+// - "exec-sql [server=<name>] [user=<name>] [args]"
 //   Executes the input SQL query on the target server. By default, server is
 //   the last created server.
 //
 //   Supported arguments:
 //
-//   - expect-pausepoint: expects the executed job to return a pause point error
-//   that will be printed to output.
-//
-//   - expect-error-ignore: expects the query to return an error, but we will
+//   + expect-error-ignore: expects the query to return an error, but we will
 //   ignore it.
 //
-// - "query-sql server=<name>"
+// - "query-sql [server=<name>] [user=<name>]"
 //   Executes the input SQL query and print the results.
 //
 // - "reset"
 //    Clear all state associated with the test.
+//
+// - "job" [server=<name>] [user=<name>] [args]
+//   Executes job specific operations.
+//
+//   Supported arguments:
+//
+//   + cancel=<tag>: cancels the job referenced by the tag and waits for it to
+//   reach a CANCELED state.
+//
+// - "backup" [args]
+//   Executes backup specific operations.
+//
+//   Supported arguments:
+//
+//   + tag=<tag>: tag the backup job to reference it in the future.
+//
+//   + expect-pausepoint: expects the backup job to end up in a paused state because
+//   of a pausepoint error.
+//
+// - "restore" [args]
+//   Executes restore specific operations.
+//
+//   Supported arguments:
+//
+//   + tag=<tag>: tag the restore job to reference it in the future.
+//
+//   + expect-pausepoint: expects the restore job to end up in a paused state because
+//   of a pausepoint error.
+//
+// - "schema" [args]
+//   Executes schema change specific operations.
+//
+//   Supported arguments:
+//
+//   + tag=<tag>: tag the schema change job to reference it in the future.
+//
+//   + expect-pausepoint: expects the schema change job to end up in a paused state because
+//   of a pausepoint error.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes >1 min under race")
+
+	skip.UnderRace(t, "takes ~3mins to run")
 
 	// This test uses this mock HTTP server to pass the backup files between tenants.
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
@@ -244,6 +293,7 @@ func TestDataDriven(t *testing.T) {
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+
 			switch d.Cmd {
 			case "sleep":
 				var sleepDuration string
@@ -254,13 +304,16 @@ func TestDataDriven(t *testing.T) {
 				}
 				time.Sleep(duration)
 				return ""
+
 			case "reset":
 				ds.cleanup(ctx)
 				ds = newDatadrivenTestState()
 				return ""
+
 			case "new-server":
 				var name, shareDirWith, iodir, tempCleanupFrequency, localities string
-				var nodes, splits int
+				var splits int
+				nodes := singleNode
 				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
@@ -302,6 +355,7 @@ func TestDataDriven(t *testing.T) {
 					return err.Error()
 				}
 				return ""
+
 			case "exec-sql":
 				server := lastCreatedServer
 				user := "root"
@@ -320,12 +374,18 @@ func TestDataDriven(t *testing.T) {
 				// Check if we are expecting a pausepoint error.
 				if d.HasArg("expect-pausepoint") {
 					require.NotNilf(t, err, "expected pause point error")
-					errMsg := err.Error()
-					if i := strings.Index(err.Error(), "pause point"); i != -1 {
-						ret = append(ds.noticeBuffer, err.Error()[i:])
-					} else {
-						t.Fatalf("expected pause point error but got %s", errMsg)
-					}
+					require.True(t, strings.Contains(err.Error(), "job requested it be paused"))
+
+					// Find job ID of the pausepoint job.
+					var jobID jobspb.JobID
+					require.NoError(t,
+						ds.getSQLDB(t, server, user).QueryRow(
+							`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID))
+					fmt.Printf("expecting pausepoint, found job ID %d\n\n\n", jobID)
+
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					jobutils.WaitForJobToPause(t, runner, jobID)
+					ret = append(ds.noticeBuffer, "job paused at pausepoint")
 					ret = append(ret, "")
 					return strings.Join(ret, "\n")
 				}
@@ -352,6 +412,7 @@ func TestDataDriven(t *testing.T) {
 					}
 				}
 				return strings.Join(ret, "\n")
+
 			case "query-sql":
 				server := lastCreatedServer
 				user := "root"
@@ -368,9 +429,184 @@ func TestDataDriven(t *testing.T) {
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
 				return output
+
+			case "backup":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "BACKUP"
+
+				// First, run the backup.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
+			case "restore":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "RESTORE"
+
+				if d.HasArg("aost") {
+					var aost string
+					d.ScanArgs(t, "aost", &aost)
+					var ts string
+					var ok bool
+					if ts, ok = ds.clusterTimestamps[aost]; !ok {
+						t.Fatalf("no cluster timestamp found for %s", aost)
+					}
+
+					// Replace the ts tag with the actual timestamp.
+					d.Input = strings.Replace(d.Input, aost,
+						fmt.Sprintf("'%s'", ts), 1)
+				}
+
+				// First, run the restore.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if the job must be run aost.
+				if d.HasArg("aost") {
+					var aost string
+					d.ScanArgs(t, "aost", &aost)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
+			case "schema-change":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "SCHEMA CHANGE"
+
+				// First, run the schema change.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if the job must be run aost.
+				if d.HasArg("aost") {
+					var aost string
+					d.ScanArgs(t, "aost", &aost)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
+			case "job":
+				server := lastCreatedServer
+				user := "root"
+
+				if d.HasArg("cancel") {
+					var cancelJobTag string
+					d.ScanArgs(t, "cancel", &cancelJobTag)
+					var jobID jobspb.JobID
+					var ok bool
+					if jobID, ok = ds.jobTags[cancelJobTag]; !ok {
+						t.Fatalf("could not find job with tag %s", cancelJobTag)
+					}
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					runner.Exec(t, `CANCEL JOB $1`, jobID)
+					jobutils.WaitForJobToCancel(t, runner, jobID)
+				}
+				return ""
+
+			case "save-cluster-ts":
+				server := lastCreatedServer
+				user := "root"
+				var timestampTag string
+				d.ScanArgs(t, "tag", &timestampTag)
+				if _, ok := ds.clusterTimestamps[timestampTag]; ok {
+					t.Fatalf("cannot reuse cluster ts tag %s", timestampTag)
+				}
+				var ts string
+				err := ds.getSQLDB(t, server, user).QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
+				require.NoError(t, err)
+				ds.clusterTimestamps[timestampTag] = ts
+				return ""
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
 	})
+}
+
+// findMostRecentJobWithType returns the most recently created job of `job_type`
+// jobType.
+func findMostRecentJobWithType(
+	t *testing.T, ds datadrivenTestState, server, user string, jobType string,
+) jobspb.JobID {
+	var jobID jobspb.JobID
+	require.NoError(
+		t, ds.getSQLDB(t, server, user).QueryRow(
+			fmt.Sprintf(
+				`SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`,
+				jobType)).Scan(&jobID))
+	return jobID
+}
+
+// expectPausepoint waits for the job to hit a pausepoint and enter a paused
+// state.
+func expectPausepoint(
+	t *testing.T, err error, jobType, server, user string, ds datadrivenTestState,
+) {
+	// Check if we are expecting a pausepoint error.
+	require.NotNilf(t, err, "expected pause point error")
+
+	runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+	jobutils.WaitForJobToPause(t, runner,
+		findMostRecentJobWithType(t, ds, server, user, jobType))
+}
+
+// tagJob stores the jobID of the most recent job of `jobType`. Users can use
+// the tag to refer to the job in the future.
+func tagJob(
+	t *testing.T, server, user, jobType string, ds datadrivenTestState, d *datadriven.TestData,
+) {
+	var jobTag string
+	d.ScanArgs(t, "tag", &jobTag)
+	if _, exists := ds.jobTags[jobTag]; exists {
+		t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
+	}
+	ds.jobTags[jobTag] = findMostRecentJobWithType(t, ds, server, user, jobType)
+}
+
+func runAOST() {
+
 }
