@@ -28,6 +28,7 @@ upsert descriptor #104
   +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›)
   +        statement: CREATE INDEX idx1 ON t (v)
   +        statementTag: CREATE INDEX
+  +    revertible: true
   +    targetRanks:
   +    - 0
   +    - 1
@@ -100,7 +101,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-create job #1: "schema change job"
+create job #1 (non-cancelable: false): "schema change job"
   descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
@@ -156,6 +157,7 @@ upsert descriptor #104
   -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›)
   -        statement: CREATE INDEX idx1 ON t (v)
   -        statementTag: CREATE INDEX
+  -    revertible: true
   -    targetRanks:
   -    - 0
   -    - 1
@@ -243,5 +245,6 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 update progress of schema change job #1
+set schema change job #1 to non-cancellable
 commit transaction #6
 # end PostCommitPhase
