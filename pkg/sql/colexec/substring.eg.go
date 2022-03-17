@@ -10,6 +10,8 @@
 package colexec
 
 import (
+	"unicode/utf8"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -98,7 +100,7 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -133,30 +135,56 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -177,7 +205,7 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -212,30 +240,56 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -256,7 +310,7 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -291,30 +345,56 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -335,7 +415,7 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int16()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -370,30 +450,56 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -414,7 +520,7 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int16()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -449,30 +555,56 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -493,7 +625,7 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int16()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -528,30 +660,56 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -572,7 +730,7 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int32()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -607,30 +765,56 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -651,7 +835,7 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int32()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -686,30 +870,56 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
@@ -730,7 +940,7 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int32()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
@@ -765,30 +975,56 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 					continue
 				}
 
-				runes := runeVec.Get(rowIdx)
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
+				bytes := bytesVec.Get(rowIdx)
+				// Substring startCharIdx is 1 indexed.
+				startCharIdx := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
-				end := start + length
+				endCharIdx := startCharIdx + length
 				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
+				if endCharIdx < startCharIdx {
+					endCharIdx = len(bytes)
+				} else if endCharIdx < 0 {
+					endCharIdx = 0
+				} else if endCharIdx > len(bytes) {
+					endCharIdx = len(bytes)
 				}
 
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
+				if startCharIdx < 0 {
+					startCharIdx = 0
+				} else if startCharIdx > len(bytes) {
+					startCharIdx = len(bytes)
 				}
-				outputCol.Set(rowIdx, runes[start:end])
+				startBytesIdx := startCharIdx
+				endBytesIdx := endCharIdx
+
+				// If there is a rune that uses more than 1 byte in the substring or in
+				// the bytes leading up to the substring, then we must adjust the start
+				// and end indices to the rune boundaries. However, we have to test the
+				// entire bytes slice instead of a subset, since RuneCount will treat an
+				// incomplete encoding as a single byte rune.
+				if utf8.RuneCount(bytes) != len(bytes) {
+					count := 0
+					totalSize := 0
+					// Find the substring startCharIdx in bytes offset.
+					for count < startCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					startBytesIdx = totalSize
+					// Find the substring endCharIdx in bytes offset.
+					for count < endCharIdx && totalSize < len(bytes) {
+						_, size := utf8.DecodeRune(bytes[totalSize:])
+						totalSize += size
+						count++
+					}
+					endBytesIdx = totalSize
+				}
+				outputCol.Set(rowIdx, bytes[startBytesIdx:endBytesIdx])
 			}
 		},
 	)
