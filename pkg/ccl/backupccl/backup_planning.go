@@ -67,6 +67,7 @@ const (
 	localityURLParam          = "COCKROACH_LOCALITY"
 	defaultLocalityValue      = "default"
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
+	backupOptEncDir           = "encryption_dir"
 )
 
 type tableAndIndex struct {

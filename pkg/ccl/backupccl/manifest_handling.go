@@ -1098,8 +1098,11 @@ func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
 ) ([]jobspb.EncryptionInfo, error) {
 	files, err := getEncryptionInfoFiles(ctx, src)
+	wrappedError := `could not find or read encryption information. 
+NOTE: If you are running SHOW BACKUP exclusively on an incremental backup, 
+you must pass the 'enc_dir' parameter that points to the directory of your full backup`
 	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+		return nil, errors.Wrap(err, wrappedError)
 	}
 	var encInfo []jobspb.EncryptionInfo
 	// The user is more likely to pass in a KMS URI that was used to
@@ -1108,13 +1111,13 @@ func readEncryptionOptions(
 	for i := len(files) - 1; i >= 0; i-- {
 		r, err := src.ReadFile(ctx, files[i])
 		if err != nil {
-			return nil, errors.Wrap(err, "could not find or read encryption information")
+			return nil, errors.Wrap(err, wrappedError)
 		}
 		defer r.Close(ctx)
 
 		encInfoBytes, err := ioctx.ReadAll(ctx, r)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not find or read encryption information")
+			return nil, errors.Wrap(err, wrappedError)
 		}
 		var currentEncInfo jobspb.EncryptionInfo
 		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {

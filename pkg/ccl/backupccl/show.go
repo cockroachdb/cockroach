@@ -245,6 +245,7 @@ func showBackupPlanHook(
 		backupOptWithDebugIDs:     sql.KVStringOptRequireNoValue,
 		backupOptIncStorage:       sql.KVStringOptRequireValue,
 		backupOptDebugMetadataSST: sql.KVStringOptRequireNoValue,
+		backupOptEncDir:           sql.KVStringOptRequireValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -324,9 +325,16 @@ func showBackupPlanHook(
 		}
 		defer store.Close()
 
+		encStore := store
+		if encDir, ok := opts[backupOptEncDir]; ok {
+			encStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, encDir, p.User())
+			if err != nil {
+				return errors.Wrapf(err, "make storage")
+			}
+		}
 		var encryption *jobspb.BackupEncryptionOptions
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			opts, err := readEncryptionOptions(ctx, store)
+			opts, err := readEncryptionOptions(ctx, encStore)
 			if err != nil {
 				return err
 			}
@@ -336,7 +344,7 @@ func showBackupPlanHook(
 				Key:  encryptionKey,
 			}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
-			opts, err := readEncryptionOptions(ctx, store)
+			opts, err := readEncryptionOptions(ctx, encStore)
 			if err != nil {
 				return err
 			}
