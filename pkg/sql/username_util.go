@@ -58,7 +58,7 @@ func GetUserIDWithCache(
 		if roleMembersCache.tableVersion != tableVersion {
 			// Update version and drop the map.
 			roleMembersCache.tableVersion = tableVersion
-			roleMembersCache.userCache = make(map[security.SQLUsername]userRoleMembership)
+			roleMembersCache.userCache = make(map[uuid.UUID]userRoleMembership)
 			roleMembersCache.userIDCache = make(map[security.SQLUsername]uuid.UUID)
 			roleMembersCache.boundAccount.Empty(ctx)
 		}

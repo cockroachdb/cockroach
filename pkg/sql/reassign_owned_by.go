@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -80,7 +81,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// the current user is a member of both the new roles and all the
 	// old roles.
 	if !hasAdminRole {
-		memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
+		memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: p.User(), UserID: uuid.Nil})
 		if err != nil {
 			return nil, err
 		}

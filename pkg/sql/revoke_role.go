@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -52,7 +53,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 	// check permissions on each role.
-	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), uuid.Nil})
 	if err != nil {
 		return nil, err
 	}

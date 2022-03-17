@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -138,7 +139,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		// by yourself or by roles that you are a member of.
 		for _, targetRole := range targetRoles {
 			if targetRole != params.p.User() {
-				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, params.p.User())
+				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, security.SQLUserInfo{params.p.User(), uuid.Nil})
 				if err != nil {
 					return err
 				}

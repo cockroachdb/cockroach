@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"strings"
 	"time"
 
@@ -2376,7 +2377,7 @@ func isMemberOfRole(
 		return tree.HasPrivilege, nil
 	}
 
-	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, security.SQLUserInfo{user, uuid.Nil})
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}
@@ -2443,7 +2444,7 @@ func isAdminOfRole(
 		return tree.HasNoPrivilege, nil
 	}
 
-	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, security.SQLUserInfo{user, uuid.Nil})
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}

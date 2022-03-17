@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -137,7 +138,7 @@ func GetUserSessionInitInfo(
 					ie,
 					descsCol,
 					txn,
-					username,
+					security.SQLUserInfo{username, uuid.Nil},
 				)
 				if err != nil {
 					return err
@@ -601,7 +602,7 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 		)
 	}
 
-	memberships, err := p.MemberOfWithAdminOption(ctx, sessionUser)
+	memberships, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{sessionUser, uuid.Nil})
 	if err != nil {
 		return err
 	}
