@@ -14,6 +14,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -45,9 +46,11 @@ func TestSetups(t *testing.T) {
 			rnd, _ := randutil.NewTestRand()
 
 			sql := setup(rnd)
-			if _, err := sqlDB.Exec(sql); err != nil {
-				t.Log(sql)
-				t.Fatal(err)
+			for _, stmt := range sql {
+				if _, err := sqlDB.Exec(stmt); err != nil {
+					t.Log(stmt)
+					t.Fatal(err)
+				}
 			}
 		})
 	}
@@ -85,9 +88,11 @@ func TestRandTableInserts(t *testing.T) {
 	rnd, _ := randutil.NewTestRand()
 
 	setup := randTablesN(rnd, 10)
-	if _, err := sqlDB.Exec(setup); err != nil {
-		t.Log(setup)
-		t.Fatal(err)
+	for _, stmt := range setup {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Log(stmt)
+			t.Fatal(err)
+		}
 	}
 
 	insertOnly := simpleOption("insert only", func(s *Smither) {
@@ -168,8 +173,10 @@ func TestGenerateParse(t *testing.T) {
 	settings := setting(rnd)
 	t.Log("setting:", settingName, settings.Options)
 	setupSQL := setup(rnd)
-	t.Log(setupSQL)
-	db.Exec(t, setupSQL)
+	t.Log(strings.Join(setupSQL, "\n"))
+	for _, stmt := range setupSQL {
+		db.Exec(t, stmt)
+	}
 
 	smither, err := NewSmither(sqlDB, rnd, settings.Options...)
 	if err != nil {

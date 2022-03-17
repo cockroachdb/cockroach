@@ -117,11 +117,13 @@ func runOneTLP(
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
 
 	t.Status("executing setup")
-	t.L().Printf("setup:\n%s", setup)
-	if _, err := conn.Exec(setup); err != nil {
-		t.Fatal(err)
-	} else {
-		logStmt(setup)
+	t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+	for _, stmt := range setup {
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		} else {
+			logStmt(stmt)
+		}
 	}
 
 	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
