@@ -12,146 +12,111 @@ package persistedsqlstats
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/errors"
 )
 
 // CombinedStmtStatsIterator is an iterator that iterates through both
 // in-memory and persisted stmt stats provided by the in-memory iterator and
 // the on-disk iterator.
 type CombinedStmtStatsIterator struct {
-	nextToRead     *roachpb.CollectedStatementStatistics
-	expectedColCnt int
+	// state dictates which of the two underlying iterators will be used by Cur()
+	// and advanced by Next().
+	state iterState
 
 	mem struct {
-		canBeAdvanced bool
-		paused        bool
-		it            *memStmtStatsIterator
+		// valid is set if the mem iterator has not been exhausted.
+		valid bool
+		it    *memStmtStatsIterator
 	}
 
 	disk struct {
-		canBeAdvanced bool
-		paused        bool
-		it            sqlutil.InternalRows
+		// valid is set if the disk iterator has not been exhausted.
+		valid bool
+		it    sqlutil.InternalRows
 	}
 }
 
 // NewCombinedStmtStatsIterator returns a new instance of
 // CombinedStmtStatsIterator.
 func NewCombinedStmtStatsIterator(
-	memIter *memStmtStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+	memIter *memStmtStatsIterator, diskIter sqlutil.InternalRows,
 ) *CombinedStmtStatsIterator {
 	c := &CombinedStmtStatsIterator{
-		expectedColCnt: expectedColCnt,
+		// We start in stateEqual so that the first Next() call will advance both
+		// iterators.
+		state: stateEqual,
 	}
-
 	c.mem.it = memIter
-	c.mem.canBeAdvanced = true
-
 	c.disk.it = diskIter
-	c.disk.canBeAdvanced = true
-
 	return c
 }
+
+func (c *CombinedStmtStatsIterator) advanceMem() {
+	c.mem.valid = c.mem.it.Next()
+}
+
+func (c *CombinedStmtStatsIterator) advanceDisk(ctx context.Context) error {
+	var err error
+	c.disk.valid, err = c.disk.it.Next(ctx)
+	return err
+}
+
+type iterState int
+
+const (
+	stateEqual iterState = iota
+	stateMemSmaller
+	stateDiskSmaller
+)
 
 // Next increments the internal counter of the CombinedStmtStatsIterator. It
 // returns true if the following Cur() call will be valid, false otherwise.
 func (c *CombinedStmtStatsIterator) Next(ctx context.Context) (bool, error) {
-	var err error
-
-	if c.mem.canBeAdvanced && !c.mem.paused {
-		c.mem.canBeAdvanced = c.mem.it.Next()
-	}
-
-	if c.disk.canBeAdvanced && !c.disk.paused {
-		c.disk.canBeAdvanced, err = c.disk.it.Next(ctx)
-		if err != nil {
+	switch c.state {
+	case stateEqual:
+		c.advanceMem()
+		if err := c.advanceDisk(ctx); err != nil {
 			return false, err
 		}
+	case stateMemSmaller:
+		c.advanceMem()
+	case stateDiskSmaller:
+		if err := c.advanceDisk(ctx); err != nil {
+			return false, err
+		}
+	default:
+		panic(fmt.Sprintf("unexpected state: %v", c.state))
 	}
 
-	// Both iterators are exhausted, no new value can be produced.
-	if !c.mem.canBeAdvanced && !c.disk.canBeAdvanced {
-		// Sanity check.
-		if c.mem.paused || c.disk.paused {
-			return false, errors.AssertionFailedf("bug: leaked iterator")
-		}
+	if !c.mem.valid && !c.disk.valid {
 		return false, nil
 	}
 
-	// If memIter is exhausted, but disk iterator can still move forward.
-	// We promote the disk.Cur() and resume the disk iterator if it was paused.
-	if !c.mem.canBeAdvanced {
-		row := c.disk.it.Cur()
-		if row == nil {
-			return false, errors.New("unexpected nil row")
-		}
-
-		if len(row) != c.expectedColCnt {
-			return false, errors.AssertionFailedf("unexpectedly received %d columns", len(row))
-		}
-
-		c.nextToRead, err = rowToStmtStats(c.disk.it.Cur())
-		if err != nil {
-			return false, err
-		}
-
-		if c.disk.canBeAdvanced {
-			c.disk.paused = false
-		}
+	if !c.mem.valid {
+		c.state = stateDiskSmaller
+		return true, nil
+	}
+	if !c.disk.valid {
+		c.state = stateMemSmaller
 		return true, nil
 	}
 
-	// If diskIter is exhausted, but mem iterator can still move forward.
-	// We promote the mem.Cur() and resume the mem iterator if it was paused.
-	if !c.disk.canBeAdvanced {
-		c.nextToRead = c.mem.it.Cur()
-
-		if c.mem.canBeAdvanced {
-			c.mem.paused = false
-		}
-		return true, nil
-	}
-
-	// Both iterators can be moved forward. Now we check the value of Cur()
-	// for both iterators. We will have a few scenarios:
-	// 1. mem.Cur() < disk.Cur():
-	//    we promote mem.Cur() to c.nextToRead. We then pause
-	//    the disk iterator and resume the mem iterator for next iteration.
-	// 2. mem.Cur() == disk.Cur():
-	//    we promote both mem.Cur() and disk.Cur() by merging both
-	//    stats. We resume both iterators for next iteration.
-	// 3. mem.Cur() > disk.Cur():
-	//    we promote disk.Cur() to c.nextToRead. We then pause
-	//    mem iterator and resume disk iterator for next iteration.
-	memCurVal := c.mem.it.Cur()
-	diskCurVal, err := rowToStmtStats(c.disk.it.Cur())
+	memVal := c.mem.it.Cur()
+	diskVal, err := rowToStmtStats(c.disk.it.Cur())
 	if err != nil {
 		return false, err
 	}
-
-	switch compareStmtStats(memCurVal, diskCurVal) {
-	case -1:
-		// First Case.
-		c.nextToRead = memCurVal
-		c.mem.paused = false
-		c.disk.paused = true
-	case 0:
-		// Second Case.
-		c.nextToRead = memCurVal
-		c.nextToRead.Stats.Add(&diskCurVal.Stats)
-		c.mem.paused = false
-		c.disk.paused = false
-	case 1:
-		// Third Case.
-		c.nextToRead = diskCurVal
-		c.mem.paused = true
-		c.disk.paused = false
-	default:
-		return false, errors.AssertionFailedf("bug: impossible state")
+	cmp := compareStmtStats(memVal, diskVal)
+	if cmp < 0 {
+		c.state = stateMemSmaller
+	} else if cmp == 0 {
+		c.state = stateEqual
+	} else {
+		c.state = stateDiskSmaller
 	}
 
 	return true, nil
@@ -159,8 +124,28 @@ func (c *CombinedStmtStatsIterator) Next(ctx context.Context) (bool, error) {
 
 // Cur returns the roachpb.CollectedStatementStatistics at the current internal
 // counter.
-func (c *CombinedStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
-	return c.nextToRead
+func (c *CombinedStmtStatsIterator) Cur() (*roachpb.CollectedStatementStatistics, error) {
+	if !c.mem.valid && !c.disk.valid {
+		panic("iterator exhausted")
+	}
+
+	switch c.state {
+	case stateEqual:
+		memVal := c.mem.it.Cur()
+		diskVal, err := rowToStmtStats(c.disk.it.Cur())
+		if err != nil {
+			return nil, err
+		}
+		// Combine the stats.
+		memVal.Stats.Add(&diskVal.Stats)
+		return memVal, nil
+	case stateDiskSmaller:
+		return rowToStmtStats(c.disk.it.Cur())
+	case stateMemSmaller:
+		return c.mem.it.Cur(), nil
+	default:
+		panic(fmt.Sprintf("unexpected state: %v", c.state))
+	}
 }
 
 func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
@@ -209,135 +194,88 @@ func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
 // in-memory and persisted txn stats provided by the in-memory iterator and
 // the on-disk iterator.
 type CombinedTxnStatsIterator struct {
-	nextToReadVal  *roachpb.CollectedTransactionStatistics
-	expectedColCnt int
+	state iterState
 
 	mem struct {
-		canBeAdvanced bool
-		paused        bool
-		it            *memTxnStatsIterator
+		valid bool
+		it    *memTxnStatsIterator
 	}
 
 	disk struct {
-		canBeAdvanced bool
-		paused        bool
-		it            sqlutil.InternalRows
+		valid bool
+		it    sqlutil.InternalRows
 	}
 }
 
 // NewCombinedTxnStatsIterator returns a new instance of
 // CombinedTxnStatsIterator.
 func NewCombinedTxnStatsIterator(
-	memIter *memTxnStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+	memIter *memTxnStatsIterator, diskIter sqlutil.InternalRows,
 ) *CombinedTxnStatsIterator {
 	c := &CombinedTxnStatsIterator{
-		expectedColCnt: expectedColCnt,
+		// We start in stateEqual so that the first Next() call will advance both
+		// iterators.
+		state: stateEqual,
 	}
-
 	c.mem.it = memIter
-	c.mem.canBeAdvanced = true
-
 	c.disk.it = diskIter
-	c.disk.canBeAdvanced = true
-
 	return c
+}
+
+func (c *CombinedTxnStatsIterator) advanceMem() {
+	c.mem.valid = c.mem.it.Next()
+}
+
+func (c *CombinedTxnStatsIterator) advanceDisk(ctx context.Context) error {
+	var err error
+	c.disk.valid, err = c.disk.it.Next(ctx)
+	return err
 }
 
 // Next increments the internal counter of the CombinedTxnStatsIterator. It
 // returns true if the following Cur() call will be valid, false otherwise.
 func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
-	var err error
-
-	if c.mem.canBeAdvanced && !c.mem.paused {
-		c.mem.canBeAdvanced = c.mem.it.Next()
-	}
-
-	if c.disk.canBeAdvanced && !c.disk.paused {
-		c.disk.canBeAdvanced, err = c.disk.it.Next(ctx)
-		if err != nil {
+	switch c.state {
+	case stateEqual:
+		c.advanceMem()
+		if err := c.advanceDisk(ctx); err != nil {
 			return false, err
 		}
+	case stateMemSmaller:
+		c.advanceMem()
+	case stateDiskSmaller:
+		if err := c.advanceDisk(ctx); err != nil {
+			return false, err
+		}
+	default:
+		panic(fmt.Sprintf("unexpected state: %v", c.state))
 	}
 
-	// Both iterators are exhausted, no new value can be produced.
-	if !c.mem.canBeAdvanced && !c.disk.canBeAdvanced {
-		// Sanity check.
-		if c.mem.paused || c.disk.paused {
-			return false, errors.AssertionFailedf("bug: leaked iterator")
-		}
+	if !c.mem.valid && !c.disk.valid {
 		return false, nil
 	}
 
-	// If memIter is exhausted, but disk iterator can still move forward.
-	// We promote the disk.Cur() and resume the disk iterator if it was paused.
-	if !c.mem.canBeAdvanced {
-		row := c.disk.it.Cur()
-		if row == nil {
-			return false, errors.New("unexpected nil row")
-		}
-
-		if len(row) != c.expectedColCnt {
-			return false, errors.AssertionFailedf("unexpectedly received %d columns", len(row))
-		}
-
-		c.nextToReadVal, err = rowToTxnStats(c.disk.it.Cur())
-		if err != nil {
-			return false, err
-		}
-
-		if c.disk.canBeAdvanced {
-			c.disk.paused = false
-		}
+	if !c.mem.valid {
+		c.state = stateDiskSmaller
+		return true, nil
+	}
+	if !c.disk.valid {
+		c.state = stateMemSmaller
 		return true, nil
 	}
 
-	// If diskIter is exhausted, but mem iterator can still move forward.
-	// We promote the mem.Cur() and resume the mem iterator if it was paused.
-	if !c.disk.canBeAdvanced {
-		c.nextToReadVal = c.mem.it.Cur()
-
-		if c.mem.canBeAdvanced {
-			c.mem.paused = false
-		}
-		return true, nil
-	}
-
-	// Both iterators can be moved forward. Now we check the value of Cur()
-	// for both iterators. We will have a few scenarios:
-	// 1. mem.Cur() < disk.Cur():
-	//    we promote mem.Cur() to c.nextToRead. We then pause
-	//    the disk iterator and resume the mem iterator for next iteration.
-	// 2. mem.Cur() == disk.Cur():
-	//    we promote both mem.Cur() and disk.Cur() by merging both
-	//    stats. We resume both iterators for next iteration.
-	// 3. mem.Cur() > disk.Cur():
-	//    we promote disk.Cur() to c.nextToRead. We then pause
-	//    mem iterator and resume disk iterator for next iteration.
-	memCurVal := c.mem.it.Cur()
-	diskCurVal, err := rowToTxnStats(c.disk.it.Cur())
+	memVal := c.mem.it.Cur()
+	diskVal, err := rowToTxnStats(c.disk.it.Cur())
 	if err != nil {
 		return false, err
 	}
-
-	switch compareTxnStats(memCurVal, diskCurVal) {
-	case -1:
-		// First Case.
-		c.nextToReadVal = memCurVal
-		c.mem.paused = false
-		c.disk.paused = true
-	case 0:
-		// Second Case.
-		c.nextToReadVal = memCurVal
-		c.nextToReadVal.Stats.Add(&diskCurVal.Stats)
-		c.mem.paused = false
-		c.disk.paused = false
-	case 1:
-		// Third Case.
-		c.nextToReadVal = diskCurVal
-		c.mem.paused = true
-		c.disk.paused = false
-	default:
-		return false, errors.AssertionFailedf("bug: impossible state")
+	cmp := compareTxnStats(memVal, diskVal)
+	if cmp < 0 {
+		c.state = stateMemSmaller
+	} else if cmp == 0 {
+		c.state = stateEqual
+	} else {
+		c.state = stateDiskSmaller
 	}
 
 	return true, nil
@@ -345,8 +283,28 @@ func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
 
 // Cur returns the roachpb.CollectedTransactionStatistics at the current internal
 // counter.
-func (c *CombinedTxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
-	return c.nextToReadVal
+func (c *CombinedTxnStatsIterator) Cur() (*roachpb.CollectedTransactionStatistics, error) {
+	if !c.mem.valid && !c.disk.valid {
+		panic("iterator exhausted")
+	}
+
+	switch c.state {
+	case stateEqual:
+		memVal := c.mem.it.Cur()
+		diskVal, err := rowToTxnStats(c.disk.it.Cur())
+		if err != nil {
+			return nil, err
+		}
+		// Combine the stats.
+		memVal.Stats.Add(&diskVal.Stats)
+		return memVal, nil
+	case stateDiskSmaller:
+		return rowToTxnStats(c.disk.it.Cur())
+	case stateMemSmaller:
+		return c.mem.it.Cur(), nil
+	default:
+		panic(fmt.Sprintf("unexpected state: %v", c.state))
+	}
 }
 
 func compareTxnStats(lhs, rhs *roachpb.CollectedTransactionStatistics) int {
