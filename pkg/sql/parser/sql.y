@@ -660,9 +660,6 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
 func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
   return u.val.(*tree.BackupOptions)
 }
-func (u *sqlSymUnion) replicationOptions() *tree.ReplicationOptions {
-  return u.val.(*tree.ReplicationOptions)
-}
 func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
   return u.val.(*tree.CopyOptions)
 }
@@ -1021,7 +1018,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> copy_from_stmt
 
 %type <tree.Statement> create_stmt
-%type <tree.Statement> create_changefeed_stmt create_replication_stream_stmt
+%type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
@@ -1442,7 +1439,6 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
 %type <tree.AuditMode> audit_mode
-%type <*tree.ReplicationOptions> opt_with_replication_options replication_options replication_options_list
 
 %type <str> relocate_kw
 %type <tree.RelocateSubject> relocate_subject relocate_subject_nonlease
@@ -3662,7 +3658,6 @@ create_stmt:
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_changefeed_stmt
-| create_replication_stream_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
@@ -3903,65 +3898,6 @@ opt_changefeed_sink:
   {
     /* SKIP DOC */
     $$.val = nil
-  }
-
-// %Help: CREATE REPLICATION STREAM - continuously replicate data
-// %Category: CCL
-// %Text:
-// CREATE REPLICATION STREAM FOR <targets> [INTO <sink>] [WITH <options>]
-//
-// Sink: Replication stream destination.
-// WITH <options>:
-//   Options specific to REPLICATION STREAM: See CHANGEFEED options
-//
-// %SeeAlso: CREATE CHANGEFEED
-create_replication_stream_stmt:
-  CREATE REPLICATION STREAM FOR targets opt_changefeed_sink opt_with_replication_options
-  {
-    $$.val = &tree.ReplicationStream{
-      Targets: $5.targetList(),
-      SinkURI: $6.expr(),
-      Options: *$7.replicationOptions(),
-    }
-  }
-
-// Optional replication stream options.
-opt_with_replication_options:
-  WITH replication_options_list
-  {
-    $$.val = $2.replicationOptions()
-  }
-| WITH OPTIONS '(' replication_options_list ')'
-  {
-    $$.val = $4.replicationOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ReplicationOptions{}
-  }
-
-replication_options_list:
-  // Require at least one option
-  replication_options
-  {
-    $$.val = $1.replicationOptions()
-  }
-| replication_options_list ',' replication_options
-  {
-    if err := $1.replicationOptions().CombineWith($3.replicationOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-// List of valid replication stream options.
-replication_options:
-  CURSOR '=' a_expr
-  {
-    $$.val = &tree.ReplicationOptions{Cursor: $3.expr()}
-  }
-| DETACHED
-  {
-    $$.val = &tree.ReplicationOptions{Detached: true}
   }
 
 // %Help: DELETE - delete rows from a table

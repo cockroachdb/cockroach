@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -199,79 +198,6 @@ func startReplication(
 		cancel: cancel,
 	}
 	return feedSource, streamingtest.MakeReplicationFeed(t, feedSource)
-}
-
-func TestReplicationStreamTenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
-	defer cleanup()
-
-	h.Tenant.SQL.Exec(t, `
-CREATE DATABASE d;
-CREATE TABLE d.t1(i int primary key, a string, b string);
-CREATE TABLE d.t2(i int primary key);
-INSERT INTO d.t1 (i) VALUES (42);
-INSERT INTO d.t2 VALUES (2);
-`)
-
-	ctx := context.Background()
-	streamTenantQuery := fmt.Sprintf(
-		`CREATE REPLICATION STREAM FOR TENANT %d`, h.Tenant.ID.ToUint64())
-
-	t.Run("cannot-stream-tenant-from-tenant", func(t *testing.T) {
-		_, err := h.Tenant.SQL.DB.ExecContext(ctx, `SET enable_experimental_stream_replication = true`)
-		require.NoError(t, err)
-		// Cannot replicate stream from inside the tenant
-		_, err = h.Tenant.SQL.DB.ExecContext(ctx, streamTenantQuery)
-		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
-	})
-
-	descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
-
-	t.Run("stream-tenant", func(t *testing.T) {
-		_, feed := startReplication(t, h, makeCoreChangefeedDecoder, streamTenantQuery)
-		defer feed.Close(ctx)
-
-		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42)
-		firstObserved := feed.ObserveKey(ctx, expected.Key)
-
-		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
-
-		// Periodically, resolved timestamps should be published.
-		// Observe resolved timestamp that's higher than the previous value timestamp.
-		feed.ObserveResolved(ctx, firstObserved.Value.Timestamp)
-
-		// Update our row.
-		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
-		expected = streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, nil, "world")
-
-		// Observe its changes.
-		secondObserved := feed.ObserveKey(ctx, expected.Key)
-		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
-		require.True(t, firstObserved.Value.Timestamp.Less(secondObserved.Value.Timestamp))
-	})
-
-	t.Run("stream-tenant-with-cursor", func(t *testing.T) {
-		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
-		beforeUpdateTS := h.SysServer.Clock().Now()
-		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET a = 'привет' WHERE i = 42`)
-		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'мир' WHERE i = 42`)
-
-		_, feed := startReplication(t, h, makeCoreChangefeedDecoder,
-			fmt.Sprintf("%s WITH cursor='%s'", streamTenantQuery, beforeUpdateTS.AsOfSystemTime()))
-		defer feed.Close(ctx)
-
-		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
-		// version ("привет", "мир")
-		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, "привет", "world")
-		firstObserved := feed.ObserveKey(ctx, expected.Key)
-		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
-
-		expected = streamingtest.EncodeKV(t, h.Tenant.Codec, descr, 42, "привет", "мир")
-		secondObserved := feed.ObserveKey(ctx, expected.Key)
-		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
-	})
 }
 
 func TestReplicationStreamInitialization(t *testing.T) {
