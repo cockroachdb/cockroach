@@ -1544,6 +1544,12 @@ func (ns prepStmtNamespace) HasActivePortals() bool {
 	return len(ns.portals) > 0
 }
 
+// HasPortal returns true if there exists a given named portal in the session.
+func (ns prepStmtNamespace) HasPortal(s string) bool {
+	_, ok := ns.portals[s]
+	return ok
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
 func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
