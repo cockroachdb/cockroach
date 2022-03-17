@@ -1793,11 +1793,7 @@ func (c *clusterImpl) StartE(
 	c.setStatusForClusterOpt("starting", startOpts.RoachtestOpts.Worker, opts...)
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
-	if startOpts.RoachtestOpts.DontEncrypt || !c.encAtRest {
-		startOpts.RoachprodOpts.EncryptedStores = false
-	} else if c.encAtRest {
-		startOpts.RoachprodOpts.EncryptedStores = true
-	}
+	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
 
 	// Set some env vars. The first two also the default for `roachprod start`,
 	// but we have to add them so that the third one doesn't wipe them out.
