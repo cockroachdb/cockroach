@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -770,4 +771,18 @@ func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKe
 	}
 
 	return bucket, accessKey, secretKey
+}
+
+func waitForJobStatus(
+	runner *sqlutils.SQLRunner, t *testing.T, id jobspb.JobID, targetStatus jobs.Status,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		var jobStatus string
+		query := `SELECT status FROM [SHOW CHANGEFEED JOB $1]`
+		runner.QueryRow(t, query, id).Scan(&jobStatus)
+		if targetStatus != jobs.Status(jobStatus) {
+			return errors.Errorf("Expected status:%s but found status:%s", targetStatus, jobStatus)
+		}
+		return nil
+	})
 }

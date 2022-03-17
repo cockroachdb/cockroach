@@ -66,7 +66,7 @@ INSERT INTO t VALUES (1), (2), (3);
 	span := tableSpan(uint32(descr.GetID()))
 
 	exportTime := kvdb.Clock().Now()
-	cfg := physicalConfig{
+	cfg := scanConfig{
 		Spans:     []roachpb.Span{span},
 		Timestamp: exportTime,
 		Knobs: TestingKnobs{

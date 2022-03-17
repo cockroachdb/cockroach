@@ -386,7 +386,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Clock:                   cfg.DB.Clock(),
 		Gossip:                  cfg.Gossip,
 		Spans:                   spans,
-		BackfillCheckpoint:      ca.spec.Checkpoint.Spans,
+		CheckpointSpans:         ca.spec.Checkpoint.Spans,
+		CheckpointTimestamp:     ca.spec.Checkpoint.Timestamp,
 		Targets:                 AllTargets(ca.spec.Feed),
 		Metrics:                 &ca.metrics.KVFeedMetrics,
 		OnBackfillCallback:      ca.sliMetrics.getBackfillCallback(),
@@ -401,33 +402,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
 	}
-}
-
-// getKVFeedInitialParameters determines the starting timestamp for the kv and
-// whether or not an initial scan is needed. The need for an initial scan is
-// determined by whether the watched in the spec have a resolved timestamp. The
-// higher layers mark each watch with the checkpointed resolved timestamp if no
-// initial scan is needed.
-//
-// TODO(ajwerner): Utilize this partial checkpointing, especially in the face of
-// of logical backfills of a single table while progress is made on others or
-// get rid of it. See https://github.com/cockroachdb/cockroach/issues/43896.
-func getKVFeedInitialParameters(
-	spec execinfrapb.ChangeAggregatorSpec,
-) (initialHighWater hlc.Timestamp, needsInitialScan bool) {
-	for _, watch := range spec.Watches {
-		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
-	// This will be true in the case where we have no cursor and we've never
-	// checkpointed a resolved timestamp or we have a cursor but we want an
-	// initial scan. The higher levels will coordinate that we only have empty
-	// watches when we need an initial scan.
-	if needsInitialScan = initialHighWater.IsEmpty(); needsInitialScan {
-		initialHighWater = spec.Feed.StatementTime
-	}
-	return initialHighWater, needsInitialScan
 }
 
 // setupSpans is called on start to extract the spans for this changefeed as a
@@ -589,7 +563,8 @@ func (ca *changeAggregator) noteResolvedSpan(resolved *jobspb.ResolvedSpan) erro
 	// At a lower frequency we checkpoint specific spans in the job progress
 	// either in backfills or if the highwater mark is excessively lagging behind
 	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
-		(resolved.Timestamp.Equal(ca.frontier.BackfillTS()) || ca.frontier.hasLaggingSpans(&ca.flowCtx.Cfg.Settings.SV)) &&
+		(resolved.Timestamp.Equal(ca.frontier.BackfillTS()) ||
+			ca.frontier.hasLaggingSpans(ca.spec.Feed.StatementTime, &ca.flowCtx.Cfg.Settings.SV)) &&
 		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
 
 	if checkpointFrontier || checkpointSpans {
@@ -1630,7 +1605,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// it, therefore to avoid losing that progress on changefeed resumption we
 	// also store as many of those leading spans as we can in the job progress
 	updateCheckpoint :=
-		(inBackfill || cf.frontier.hasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
+		(inBackfill || cf.frontier.hasLaggingSpans(cf.spec.Feed.StatementTime, &cf.js.settings.SV)) &&
+			cf.js.canCheckpointSpans()
 
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
@@ -1923,16 +1899,15 @@ type schemaChangeFrontier struct {
 func makeSchemaChangeFrontier(
 	initialHighWater hlc.Timestamp, spans ...roachpb.Span,
 ) (*schemaChangeFrontier, error) {
-	sf, err := span.MakeFrontier(spans...)
+	sf, err := span.MakeFrontierAt(initialHighWater, spans...)
 	if err != nil {
 		return nil, err
 	}
-	for _, span := range spans {
-		if _, err := sf.Forward(span, initialHighWater); err != nil {
-			return nil, err
-		}
-	}
-	return &schemaChangeFrontier{spanFrontier: &spanFrontier{sf}, initialHighWater: initialHighWater, latestTs: initialHighWater}, nil
+	return &schemaChangeFrontier{
+		spanFrontier:     &spanFrontier{Frontier: sf},
+		initialHighWater: initialHighWater,
+		latestTs:         initialHighWater,
+	}, nil
 }
 
 // ForwardResolvedSpan advances the timestamp for a resolved span, taking care
@@ -2046,10 +2021,16 @@ func (f *schemaChangeFrontier) schemaChangeBoundaryReached() (r bool) {
 
 // hasLaggingSpans returns true when the time between the earliest and latest
 // resolved spans has exceeded the configured HighwaterLagCheckpointThreshold
-func (f *schemaChangeFrontier) hasLaggingSpans(sv *settings.Values) bool {
-	lagThreshold := changefeedbase.FrontierHighwaterLagCheckpointThreshold.Get(sv)
-	if lagThreshold == 0 {
+func (f *schemaChangeFrontier) hasLaggingSpans(
+	defaultIfEmpty hlc.Timestamp, sv *settings.Values,
+) bool {
+	lagThresholdNanos := int64(changefeedbase.FrontierHighwaterLagCheckpointThreshold.Get(sv))
+	if lagThresholdNanos == 0 {
 		return false
 	}
-	return f.latestTs.GoTime().Sub(f.Frontier().GoTime()) > lagThreshold
+	frontier := f.Frontier()
+	if frontier.IsEmpty() {
+		frontier = defaultIfEmpty
+	}
+	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTs)
 }
