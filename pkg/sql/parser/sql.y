@@ -989,6 +989,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.Statement> alter_database_set_stmt
 %type <tree.Statement> alter_database_add_super_region
 %type <tree.Statement> alter_database_drop_super_region
+%type <tree.Statement> alter_database_set_zone_config_extension_stmt
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1757,6 +1758,7 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
 // ALTER DATABASE <name> PLACEMENT { RESTRICTED | DEFAULT }
+// ALTER DATABASE <name> ALTER LOCALITY { GLOBAL | REGIONAL [IN <region>] } CONFIGURE ZONE <zone config>
 // ALTER DATABASE <name> SET var { TO | = } { value | DEFAULT }
 // ALTER DATABASE <name> RESET { var | ALL }
 // %SeeAlso: WEBDOCS/alter-database.html
@@ -1773,6 +1775,7 @@ alter_database_stmt:
 | alter_database_set_stmt
 | alter_database_add_super_region
 | alter_database_drop_super_region
+| alter_database_set_zone_config_extension_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1884,6 +1887,44 @@ alter_database_drop_super_region:
     }
   }
 
+alter_database_set_zone_config_extension_stmt:
+  ALTER DATABASE database_name ALTER LOCALITY GLOBAL set_zone_config
+  {
+    /* SKIP DOC */
+    s := $7.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:  tree.Name($3),
+      LocalityLevel: tree.LocalityLevelGlobal,
+      SetDefault:    s.SetDefault,
+      YAMLConfig:    s.YAMLConfig,
+      Options:       s.Options,
+    }
+  }
+| ALTER DATABASE database_name ALTER LOCALITY REGIONAL set_zone_config
+  {
+    /* SKIP DOC */
+    s := $7.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:  tree.Name($3),
+      LocalityLevel: tree.LocalityLevelTable,
+      SetDefault:    s.SetDefault,
+      YAMLConfig:    s.YAMLConfig,
+      Options:       s.Options,
+    }
+  }
+| ALTER DATABASE database_name ALTER LOCALITY REGIONAL IN region_name set_zone_config
+  {
+    /* SKIP DOC */
+    s := $9.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:  tree.Name($3),
+      LocalityLevel: tree.LocalityLevelTable,
+      RegionName:    tree.Name($8),
+      SetDefault:    s.SetDefault,
+      YAMLConfig:    s.YAMLConfig,
+      Options:       s.Options,
+    }
+  }
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL
