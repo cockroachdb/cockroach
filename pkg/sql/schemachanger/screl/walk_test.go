@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,6 +161,19 @@ func TestWalk(t *testing.T) {
 					return nil
 				}))
 				require.Equal(t, tc.expExpressions, got)
+			})
+			t.Run("errors", func(t *testing.T) {
+				require.EqualError(t, WalkDescIDs(tc.elem, func(id *catid.DescID) error {
+					return errors.New("boom")
+				}), "boom")
+			})
+			t.Run("stop iteration", func(t *testing.T) {
+				var called int
+				require.NoError(t, WalkDescIDs(tc.elem, func(id *catid.DescID) error {
+					called++
+					return iterutil.StopIteration()
+				}))
+				require.Equal(t, 1, called)
 			})
 		})
 	}
