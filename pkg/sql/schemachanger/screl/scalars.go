@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,7 +49,10 @@ func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 			// Ignore the parent schema, it won't have back-references.
 			ids.Add(te.ObjectID)
 		default:
-			AllDescIDs(e).ForEach(ids.Add)
+			_ = WalkDescIDs(e, func(id *catid.DescID) error {
+				ids.Add(*id)
+				return nil
+			})
 		}
 	}
 	return ids
@@ -64,4 +68,15 @@ func AllDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
 		return nil
 	})
 	return ids
+}
+
+// ContainsDescID searches the element to see if it contains a descriptor id.
+func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) {
+	_ = WalkDescIDs(haystack, func(id *catid.DescID) error {
+		if contains = *id == needle; contains {
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return contains
 }

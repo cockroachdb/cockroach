@@ -432,7 +432,7 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 			if ids.Contains(descID) || descID == id {
 				continue
 			}
-			if !screl.AllDescIDs(es.element).Contains(id) {
+			if !screl.ContainsDescID(es.element, id) {
 				continue
 			}
 			ids.Add(descID)
