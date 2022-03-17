@@ -114,8 +114,6 @@ func registerImportNodeShutdown(r registry.Registry) {
 func registerImportTPCC(r registry.Registry) {
 	runImportTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
-		// Randomize starting with encryption-at-rest enabled.
-		c.EncryptAtRandom(true)
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
@@ -161,10 +159,11 @@ func registerImportTPCC(r registry.Registry) {
 		testName := fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes)
 		timeout := 5 * time.Hour
 		r.Add(registry.TestSpec{
-			Name:    testName,
-			Owner:   registry.OwnerBulkIO,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Timeout: timeout,
+			Name:            testName,
+			Owner:           registry.OwnerBulkIO,
+			Cluster:         r.MakeClusterSpec(numNodes),
+			Timeout:         timeout,
+			EncryptAtRandom: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},
@@ -173,10 +172,11 @@ func registerImportTPCC(r registry.Registry) {
 	const geoWarehouses = 4000
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
-		Timeout: 5 * time.Hour,
+		Name:            fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
+		Timeout:         5 * time.Hour,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 				5*time.Hour, geoWarehouses)
@@ -204,15 +204,14 @@ func registerImportTPCH(r registry.Registry) {
 	} {
 		item := item
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Owner:   registry.OwnerBulkIO,
-			Cluster: r.MakeClusterSpec(item.nodes),
-			Timeout: item.timeout,
+			Name:            fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
+			Owner:           registry.OwnerBulkIO,
+			Cluster:         r.MakeClusterSpec(item.nodes),
+			Timeout:         item.timeout,
+			EncryptAtRandom: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
 
-				// Randomize starting with encryption-at-rest enabled.
-				c.EncryptAtRandom(true)
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				conn := c.Conn(ctx, t.L(), 1)
