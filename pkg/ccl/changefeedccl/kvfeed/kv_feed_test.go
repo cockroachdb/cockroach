@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -108,8 +109,8 @@ func TestKVFeed(t *testing.T) {
 		bufferFactory := func() kvevent.Buffer {
 			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 		}
-		scans := make(chan physicalConfig)
-		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
+		scans := make(chan scanConfig)
+		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
 			select {
 			case scans <- cfg:
 				return nil
@@ -119,7 +120,7 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
-		f := newKVFeed(buf, tc.spans, tc.checkpoint,
+		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater, tc.endTime,
@@ -312,9 +313,9 @@ func TestKVFeed(t *testing.T) {
 	}
 }
 
-type scannerFunc func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
+type scannerFunc func(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error
 
-func (s scannerFunc) Scan(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
+func (s scannerFunc) Scan(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
 	return s(ctx, sink, cfg)
 }
 
@@ -388,11 +389,20 @@ type rawEventFeed []roachpb.RangeFeedEvent
 
 func (f rawEventFeed) run(
 	ctx context.Context,
-	spans []roachpb.Span,
-	startFrom hlc.Timestamp,
+	spans []kvcoord.SpanTimePair,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error {
+	var startFrom hlc.Timestamp
+	for _, s := range spans {
+		if startFrom.IsEmpty() || s.TS.Less(startFrom) {
+			startFrom = s.TS
+		}
+	}
+	if !startFrom.IsEmpty() {
+		startFrom = startFrom.Prev()
+	}
+
 	// We can't use binary search because the errors don't have timestamps.
 	// Instead we just search for the first event which comes after the start time.
 	var i int
