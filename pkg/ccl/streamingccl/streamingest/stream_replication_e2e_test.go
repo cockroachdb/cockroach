@@ -148,8 +148,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	jobutils.WaitForJob(t, destSysSQL, jobspb.JobID(ingestionJobID))
 	// TODO(casper): Make producer job exit normally in the cutover scenario.
 	sourceSysSQL.CheckQueryResultsRetry(t,
-		fmt.Sprintf("SELECT status, error FROM [SHOW JOBS] WHERE job_id = %d", streamProducerJobID),
-		[][]string{{"failed", fmt.Sprintf("replication stream %d timed out", streamProducerJobID)}})
+		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamProducerJobID), [][]string{{"succeeded"}})
 
 	// After cutover, changes to source won't be streamed into destination cluster.
 	sourceTenantSQL.Exec(t, `

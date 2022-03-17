@@ -62,6 +62,13 @@ func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
 	return getReplicationStreamSpec(evalCtx, txn, streamID)
 }
 
+// CompleteReplicationStream implements ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) CompleteReplicationStream(
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
+) error {
+	return completeReplicationStream(evalCtx, txn, streamID)
+}
+
 func newReplicationStreamManagerWithPrivilegesCheck(
 	evalCtx *tree.EvalContext,
 ) (streaming.ReplicationStreamManager, error) {

@@ -125,6 +125,9 @@ message StreamReplicationDetails {
 message StreamReplicationProgress {
   // Expiration timestamp of consumer heartbeat
   google.protobuf.Timestamp expiration = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // If the ingestion side has been cut over.
+  bool ingestion_cut_over = 2;
 }
 
 message SchedulePTSChainingRecord {
