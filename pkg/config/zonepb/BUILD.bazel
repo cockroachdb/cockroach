@@ -16,8 +16,6 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/opt/cat",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

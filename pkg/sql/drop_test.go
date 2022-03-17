@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -1393,4 +1395,63 @@ func TestDropPhysicalTableGC(t *testing.T) {
 			require.Zerof(t, actualZoneConfigs, "Zone config for '%s' was not deleted as expected.", table.name)
 		}
 	}
+}
+
+func dropLargeDatabaseGeneric(
+	t *testing.T, workloadParams sqltestutils.GenerateViewBasedGraphSchemaParams, useDeclarative bool,
+) {
+	// Creates a complex schema with a view based graph that nests within
+	// each other, which can lead to long DROP times specially if there
+	// is anything takes quadratic time
+	// (see sqltestutils.GenerateViewBasedGraphSchema).
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `
+CREATE DATABASE largedb;
+SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled=no;
+`)
+	stmts, err := sqltestutils.GenerateViewBasedGraphSchema(workloadParams)
+	require.NoError(t, err)
+	for _, stmt := range stmts {
+		sqlDB.Exec(t, stmt.SQL)
+	}
+	if !useDeclarative {
+		sqlDB.Exec(t, `SET use_declarative_schema_changer=off;`)
+	}
+	startTime := timeutil.Now()
+	sqlDB.Exec(t, `DROP DATABASE largedb;`)
+	t.Logf("Total time for drop (declarative: %t) %f",
+		useDeclarative,
+		timeutil.Since(startTime).Seconds())
+}
+
+func TestDropLargeDatabaseWithLegacySchemaChanger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "drop can be longer than timeout under race testing")
+	dropLargeDatabaseGeneric(t,
+		sqltestutils.GenerateViewBasedGraphSchemaParams{
+			SchemaName:         "largedb",
+			NumTablesPerDepth:  5,
+			NumColumnsPerTable: 6,
+			GraphDepth:         4,
+		},
+		false)
+}
+
+func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "drop can be longer than timeout under race testing")
+	// TODO(fqazi): Increase graph complexity as we improve performance.
+	dropLargeDatabaseGeneric(t,
+		sqltestutils.GenerateViewBasedGraphSchemaParams{
+			SchemaName:         "largedb",
+			NumTablesPerDepth:  5,
+			NumColumnsPerTable: 2,
+			GraphDepth:         2,
+		},
+		true)
 }

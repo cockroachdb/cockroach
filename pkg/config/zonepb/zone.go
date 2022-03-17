@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -77,8 +75,8 @@ var NamedZonesByID = func() map[uint32]NamedZone {
 
 // IsNamedZoneID returns true if the given ID is one of the pseudo-table IDs
 // that maps to named zones.
-func IsNamedZoneID(id descpb.ID) bool {
-	_, ok := NamedZonesByID[(uint32(id))]
+func IsNamedZoneID(id uint32) bool {
+	_, ok := NamedZonesByID[id]
 	return ok
 }
 
@@ -528,7 +526,7 @@ func validateVoterConstraintsCompatibility(
 	return nil
 }
 
-// InheritFromParent hydrates a zones missing fields from its parent.
+// InheritFromParent hydrates a zone's missing fields from its parent.
 func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 	// Allow for subzonePlaceholders to inherit fields from parents if needed.
 	if z.NumReplicas == nil || (z.NumReplicas != nil && *z.NumReplicas == 0) {
@@ -1056,46 +1054,6 @@ func (z ZoneConfig) SubzoneSplits() []roachpb.RKey {
 	return out
 }
 
-// ReplicaConstraintsCount is part of the cat.Zone interface.
-func (z *ZoneConfig) ReplicaConstraintsCount() int {
-	return len(z.Constraints)
-}
-
-// ReplicaConstraints is part of the cat.Zone interface.
-func (z *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
-	return &z.Constraints[i]
-}
-
-// VoterConstraintsCount is part of the cat.Zone interface.
-func (z *ZoneConfig) VoterConstraintsCount() int {
-	return len(z.VoterConstraints)
-}
-
-// VoterConstraint is part of the cat.Zone interface.
-func (z *ZoneConfig) VoterConstraint(i int) cat.ReplicaConstraints {
-	return &z.VoterConstraints[i]
-}
-
-// LeasePreferenceCount is part of the cat.Zone interface.
-func (z *ZoneConfig) LeasePreferenceCount() int {
-	return len(z.LeasePreferences)
-}
-
-// LeasePreference is part of the cat.Zone interface.
-func (z *ZoneConfig) LeasePreference(i int) cat.ConstraintSet {
-	return &z.LeasePreferences[i]
-}
-
-// ConstraintCount is part of the cat.LeasePreference interface.
-func (l *LeasePreference) ConstraintCount() int {
-	return len(l.Constraints)
-}
-
-// Constraint is part of the cat.LeasePreference interface.
-func (l *LeasePreference) Constraint(i int) cat.Constraint {
-	return &l.Constraints[i]
-}
-
 func (c ConstraintsConjunction) String() string {
 	var sb strings.Builder
 	for i, cons := range c.Constraints {
@@ -1108,36 +1066,6 @@ func (c ConstraintsConjunction) String() string {
 		fmt.Fprintf(&sb, ":%d", c.NumReplicas)
 	}
 	return sb.String()
-}
-
-// ReplicaCount is part of the cat.ReplicaConstraints interface.
-func (c *ConstraintsConjunction) ReplicaCount() int32 {
-	return c.NumReplicas
-}
-
-// ConstraintCount is part of the cat.ReplicaConstraints interface.
-func (c *ConstraintsConjunction) ConstraintCount() int {
-	return len(c.Constraints)
-}
-
-// Constraint is part of the cat.ReplicaConstraints interface.
-func (c *ConstraintsConjunction) Constraint(i int) cat.Constraint {
-	return &c.Constraints[i]
-}
-
-// IsRequired is part of the cat.Constraint interface.
-func (c *Constraint) IsRequired() bool {
-	return c.Type == Constraint_REQUIRED
-}
-
-// GetKey is part of the cat.Constraint interface.
-func (c *Constraint) GetKey() string {
-	return c.Key
-}
-
-// GetValue is part of the cat.Constraint interface.
-func (c *Constraint) GetValue() string {
-	return c.Value
 }
 
 // EnsureFullyHydrated returns an assertion error if the zone config is not

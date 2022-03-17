@@ -224,7 +224,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	descsCol *descs.Collection,
 	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
 ) (_ []spanconfig.Record, err error) {
-	if zonepb.IsNamedZoneID(id) {
+	if zonepb.IsNamedZoneID(uint32(id)) {
 		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
 	}
 
@@ -505,7 +505,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 func (s *SQLTranslator) findDescendantLeafIDs(
 	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) (descpb.IDs, error) {
-	if zonepb.IsNamedZoneID(id) {
+	if zonepb.IsNamedZoneID(uint32(id)) {
 		return s.findDescendantLeafIDsForNamedZone(ctx, id, txn, descsCol)
 	}
 	// We're dealing with a SQL Object here.

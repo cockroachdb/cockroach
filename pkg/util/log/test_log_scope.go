@@ -395,9 +395,9 @@ func (l *TestLogScope) Close(t tShim) {
 				// If the test failed or there was a panic, we keep the log
 				// files for further investigation.
 				if inPanic {
-					fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+					fmt.Fprint(OrigStderr, "\nERROR: a panic has occurred!\n"+
 						"Details cannot be printed yet because we are still unwinding.\n"+
-						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n\n")
 				}
 				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
 			} else {
