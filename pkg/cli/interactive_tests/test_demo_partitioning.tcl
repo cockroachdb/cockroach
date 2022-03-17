@@ -130,7 +130,7 @@ eexpect $prompt
 end_test
 
 start_test "Expect an error if geo-partitioning is requested with multitenant mode"
-send "$argv demo --geo-partitioned-replicas\r"
+send "$argv demo --geo-partitioned-replicas --multitenant=true\r"
 # expect a failure
 eexpect "operation is unsupported in multi-tenancy mode"
 eexpect $prompt
