@@ -586,18 +586,21 @@ message HashJoinerSpec {
 }
 
 // InvertedJoinerSpec is the specification for an inverted join. The processor
-// has two inputs and one output.
+// has one input and one output and performs lookups in an inverted index.
 //
-// The processor uses the inverted index on a column of the right input to
-// join with a column of the left input. In addition to the InvertedExpr which
-// is specified on these two columns, it also evaluates an OnExpr on the
-// joined rows that satisfy the InvertedExpr. The "internal columns" of an
-// InvertedJoiner for INNER and LEFT_OUTER joins are a concatenation of the
-// columns of left and right input. The only columns of the right input that
-// are populated are the columns present in the inverted index, except for the
-// inverted column (since it does not represent a complete value for the datum
-// that was indexed). For LEFT_SEMI and LEFT_ANTI, the "internal columns" are
-// the columns of the left input.
+// The processor uses the inverted index to join with one or more columns of the
+// input, according to an inverted expression. In addition to the InvertedExpr,
+// the processor also evaluates an OnExpr on the joined rows that satisfy the
+// InvertedExpr.
+
+// The "internal columns" of an InvertedJoiner for INNER and LEFT_OUTER joins
+// are a concatenation of the input columns and the fetched columns. For
+// LEFT_SEMI and LEFT_ANTI, the "internal columns" are the columns of the input.
+//
+// The fetched columns must always include the inverted key column (so it can be
+// referred to by InvertedExpr), as well as any prefix columns. Note that the
+// processor does not produce output values for the inverted key column (a
+// single output row can correspond to multiple inverted key values).
 //
 // In many cases, the inverted join will contain false positives wrt the
 // original join condition. This is handled by pairing it with a lookup join.
@@ -606,60 +609,59 @@ message HashJoinerSpec {
 // query with LEFT_OUTER/LEFT_ANTI, the inverted join is run as a LEFT_OUTER
 // with a special mode that outputs an additional bool column that represents
 // whether this row is a continuation of a group, where a group is defined as
-// rows corresponding to the same original left row. This is paired with a
+// rows corresponding to the same original input row. This is paired with a
 // lookup join that also knows about the semantics of this bool column. For a
 // user query with LEFT_SEMI, the inverted join is run as an INNER join with
 // the same special mode. See the JoinReaderSpec for an example.
 //
 // Example:
+// TABLE (k, other, z, PRIMARY KEY (k), INVERTED INDEX (z))
 // Input stream columns: | a | b |
-// Table columns: | c | d | e |
-// The InvertedExpr involves columns b, e and the primary key for the right
-// input is c.
-// The inverted index has columns: | e' | c |
-// where e' is derived from e. For instance, if e is an array, e' will
+// The InvertedExpr involves columns b, z.
+// Fetched columns: | z' | k |
+// where z' is derived from z. For instance, if z is an array, z' will
 // correspond to elements of the array.
-// The OnExpr can use columns a, b, c, since they are the other columns that
-// are present in the input stream and the inverted index.
+// The OnExpr can use columns a, b, k. The InvertedExpr can use columns
+// a, b, z'.
 //
-// Internal columns for INNER and LEFT_OUTER: | a | b | c | d | e |
-// where d, e are not populated.
+// Internal columns for INNER and LEFT_OUTER: | a | b | z' | k |
+// The values of z' are not populated in the output.
 // Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b |
 //
 // Multi-column inverted index example:
+// TABLE (k, other, region, z, PRIMARY KEY (d), INVERTED INDEX (region, z))
 // Input stream columns: | a | b | c |
-// Table columns: | d | e | f | g |
-// The InvertedExpr involves columns b, e. The non-inverted prefix key columns
-// equate c to f. The primary key for the right input is d.
-// The inverted index has columns: | f | e' | d |
-// where e' is derived from e and f is a non-inverted prefix column.
-// The OnExpr can use columns a, b, c, d, f.
+// Fetch columns: | z' | region | k |
+// where z' is derived from z and region is a non-inverted prefix column.
+// The InvertedExpr involves columns b, z. The non-inverted prefix key columns
+// equate c to region.
+// The OnExpr can use columns a, b, c, k, region.
 //
-// Internal columns for INNER and LEFT_OUTER: | a | b | c | d | e | f | g |
+// Internal columns for INNER and LEFT_OUTER: | a | b | c | z' | region | k |
 // where e, g are not populated.
 // Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b | c |
 //
 // For INNER/LEFT_OUTER with OutputGroupContinuationForLeftRow = true, the
 // internal columns include an additional bool column as the last column.
 message InvertedJoinerSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.IndexFetchSpec fetch_spec = 10 [(gogoproto.nullable) = false];
 
-  // The ID of the inverted index. The first column in the index is the
-  // inverted column, and the remaining columns are the primary key.
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  // InvertedColumnOriginalType is the type of the table column that is being
+  // indexed (e.g. JSON or Geometry).
+  optional sql.sem.types.T inverted_column_original_type = 11;
 
-  reserved 3;
+  reserved 1, 2, 3;
 
   // The join expression is a conjunction of inverted_expr and on_expr.
 
   // Expression involving the indexed column and columns from the input.
   // Assuming that the input stream has N columns and the table that has been
   // indexed has M columns, in this expression variables @1 to @N refer to
-  // columns of the input stream and variables @(N+1) to @(N+M) refer to
-  // columns in the table. Although the numbering includes all columns, only
-  // columns corresponding to the indexed column and the input columns may be
-  // present in this expression. Note that the column numbering matches the
-  // numbering used below by the on expression.
+  // columns of the input stream and variables @(N+1) to @(N+M) refer to fetched
+  // columns. Although the numbering includes all columns, only columns
+  // corresponding to the indexed column and the input columns may be present in
+  // this expression. Note that the column numbering matches the numbering used
+  // by OnExpr.
   //
   // The expression is passed to xform.NewDatumToInvertedExpr to construct an
   // implementation of invertedexpr.DatumToInvertedExpr, which will be fed each
@@ -670,11 +672,11 @@ message InvertedJoinerSpec {
   // inverted column) and the columns in the input stream. Assuming that the
   // input stream has N columns and the table that has been indexed has M
   // columns, in this expression variables @1 to @N refer to columns of the
-  // input stream and variables @(N+1) to @(N+M) refer to columns in the
-  // table. The numbering does not omit the column in the table corresponding
-  // to the inverted column, or other table columns absent from the index, but
-  // they cannot be present in this expression. Note that the column numbering
-  // matches the numbering used above by the inverted expression.
+  // input stream and variables @(N+1) to @(N+M) refer to fetched columns.
+  // The numbering does not omit the column in the table corresponding to the
+  // inverted column, or other table columns absent from the index, but they
+  // cannot be present in this expression. Note that the column numbering
+  // matches the numbering used by InvertedExpr.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   // Only INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI are supported. For indexes

@@ -187,9 +187,9 @@ type Index interface {
 	// returned is always <= ImplicitColumnCount.
 	ImplicitPartitioningColumnCount() int
 
-	// GeoConfig returns a geospatial index configuration. If non-nil, it
+	// GeoConfig returns a geospatial index configuration. If not empty, it
 	// describes the configuration for this geospatial inverted index.
-	GeoConfig() *geoindex.Config
+	GeoConfig() geoindex.Config
 
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion

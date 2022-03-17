@@ -76,6 +76,9 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		for _, sstLine := range tableSSTs {
 			sstLine = strings.TrimSpace(sstLine)
 			firstFileIdx := strings.Index(sstLine, ":")
+			if firstFileIdx < 0 {
+				t.Fatalf("unexpected format for sst line: %s", sstLine)
+			}
 			_, err = strconv.Atoi(sstLine[:firstFileIdx])
 			if err != nil {
 				t.Fatalf("error when converting %s to int: %s", sstLine[:firstFileIdx], err.Error())

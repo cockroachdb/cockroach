@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
@@ -126,6 +127,18 @@ func TestRunnerRun(t *testing.T) {
 		},
 		Cluster: r.MakeClusterSpec(0),
 	})
+	r.Add(registry.TestSpec{
+		Name:  "panic",
+		Owner: OwnerUnitTest,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			sl := []int{0}
+			// We need to throw the RoachVet linter off our scent since it's pretty
+			// good at figuring out static out of bound indexing.
+			idx := rand.Intn(2) + 1 // definitely out of bounds
+			t.L().Printf("boom %d", sl[idx])
+		},
+		Cluster: r.MakeClusterSpec(0),
+	})
 
 	testCases := []struct {
 		filters []string
@@ -139,6 +152,7 @@ func TestRunnerRun(t *testing.T) {
 		{filters: []string{"pass", "fail"}, expErr: "some tests failed"},
 		{filters: []string{"notests"}, expErr: "no test"},
 		{filters: []string{"errors"}, expErr: "some tests failed", expOut: "second error"},
+		{filters: []string{"panic"}, expErr: "some tests failed", expOut: "index out of range"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
