@@ -516,7 +516,7 @@ func EncodeInvertedIndexKeys(
 		val = tree.DNull
 	}
 	indexGeoConfig := index.GetGeoConfig()
-	if !geoindex.IsEmptyConfig(&indexGeoConfig) {
+	if !indexGeoConfig.IsEmpty() {
 		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, indexGeoConfig)
 	}
 	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.GetVersion())

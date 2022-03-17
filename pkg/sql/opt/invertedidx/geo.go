@@ -62,7 +62,7 @@ func GetGeoIndexRelationship(expr opt.ScalarExpr) (_ geoindex.RelationshipType, 
 // geospatial relationship. It is implemented by getSpanExprForGeographyIndex
 // and getSpanExprForGeometryIndex and used in extractGeoFilterCondition.
 type getSpanExprForGeoIndexFn func(
-	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, *geoindex.Config,
+	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, geoindex.Config,
 ) inverted.Expression
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
@@ -72,7 +72,7 @@ func getSpanExprForGeographyIndex(
 	d tree.Datum,
 	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
-	indexConfig *geoindex.Config,
+	indexConfig geoindex.Config,
 ) inverted.Expression {
 	geogIdx := geoindex.NewS2GeographyIndex(*indexConfig.S2Geography)
 	geog := d.(*tree.DGeography).Geography
@@ -159,7 +159,7 @@ func getSpanExprForGeometryIndex(
 	d tree.Datum,
 	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
-	indexConfig *geoindex.Config,
+	indexConfig geoindex.Config,
 ) inverted.Expression {
 	geomIdx := geoindex.NewS2GeometryIndex(*indexConfig.S2Geometry)
 	geom := d.(*tree.DGeometry).Geometry
@@ -708,7 +708,7 @@ type geoDatumsToInvertedExpr struct {
 	evalCtx      *tree.EvalContext
 	colTypes     []*types.T
 	invertedExpr tree.TypedExpr
-	indexConfig  *geoindex.Config
+	indexConfig  geoindex.Config
 	typ          *types.T
 	getSpanExpr  getSpanExprForGeoIndexFn
 
@@ -746,9 +746,9 @@ func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeForm
 
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.
 func NewGeoDatumsToInvertedExpr(
-	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, config *geoindex.Config,
+	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
-	if geoindex.IsEmptyConfig(config) {
+	if config.IsEmpty() {
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
 	}
 
@@ -757,10 +757,10 @@ func NewGeoDatumsToInvertedExpr(
 		colTypes:    colTypes,
 		indexConfig: config,
 	}
-	if geoindex.IsGeographyConfig(config) {
+	if config.IsGeography() {
 		g.typ = types.Geography
 		g.getSpanExpr = getSpanExprForGeographyIndex
-	} else if geoindex.IsGeometryConfig(config) {
+	} else if config.IsGeometry() {
 		g.typ = types.Geometry
 		g.getSpanExpr = getSpanExprForGeometryIndex
 	} else {

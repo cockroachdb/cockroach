@@ -863,8 +863,8 @@ type Index struct {
 	invertedOrd int
 
 	// geoConfig is the geospatial index configuration, if this is a geospatial
-	// inverted index. Otherwise geoConfig is nil.
-	geoConfig *geoindex.Config
+	// inverted index.
+	geoConfig geoindex.Config
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
@@ -969,7 +969,7 @@ func (ti *Index) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (ti *Index) GeoConfig() *geoindex.Config {
+func (ti *Index) GeoConfig() geoindex.Config {
 	return ti.geoConfig
 }
 

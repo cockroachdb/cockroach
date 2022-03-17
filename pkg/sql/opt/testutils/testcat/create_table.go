@@ -737,7 +737,7 @@ func (tt *Table) addIndexWithVersion(
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
-				idx.geoConfig = &geoindex.Config{
+				idx.geoConfig = geoindex.Config{
 					S2Geometry: &geoindex.S2GeometryConfig{
 						MinX: -5,
 						MaxX: 5,
@@ -754,7 +754,7 @@ func (tt *Table) addIndexWithVersion(
 
 			case types.GeographyFamily:
 				// Don't use the default config because it creates a huge number of spans.
-				idx.geoConfig = &geoindex.Config{
+				idx.geoConfig = geoindex.Config{
 					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
 						MinLevel: 0,
 						MaxLevel: 2,
