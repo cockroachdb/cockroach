@@ -765,7 +765,7 @@ func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
 func (*DeclareCursor) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*DeclareCursor) StatementTag() string { return "DECLARE" }
+func (*DeclareCursor) StatementTag() string { return "DECLARE CURSOR" }
 
 // StatementReturnType implements the Statement interface.
 func (n *Delete) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }

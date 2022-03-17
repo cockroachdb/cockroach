@@ -53,6 +53,10 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
 			}
 
+			if p.extendedEvalCtx.PreparedStatementState.HasPortal(cursorName) {
+				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists as portal", cursorName)
+			}
+
 			// Try to plan the cursor query to make sure that it's valid.
 			stmt := makeStatement(parser.Statement{AST: s.Select}, ClusterWideID{})
 			pt := planTop{}
