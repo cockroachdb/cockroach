@@ -857,8 +857,8 @@ func (r *testRunner) runTest(
 			// We only have to record panics if the panic'd value is not the sentinel
 			// produced by t.Fatal*().
 			if r := recover(); r != nil && r != errTestFatal {
-				// TODO(andreimatei): prevent the cluster from being reused.
-				t.Fatalf("test panicked: %v", r)
+				// NB: we're careful to avoid t.Fatalf here, which re-panics.
+				t.Errorf("test panicked: %v", r)
 			}
 		}()
 
