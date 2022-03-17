@@ -297,7 +297,7 @@ func newInvertedJoiner(
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
-			ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.index,
+			ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.index.GetGeoConfig(),
 		)
 		if err != nil {
 			return nil, err
