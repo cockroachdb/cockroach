@@ -386,7 +386,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Clock:                   cfg.DB.Clock(),
 		Gossip:                  cfg.Gossip,
 		Spans:                   spans,
-		BackfillCheckpoint:      ca.spec.Checkpoint.Spans,
+		CheckpointSpans:         ca.spec.Checkpoint.Spans,
+		CheckpointTimestamp:     ca.spec.Checkpoint.Timestamp,
 		Targets:                 AllTargets(ca.spec.Feed),
 		Metrics:                 &ca.metrics.KVFeedMetrics,
 		OnBackfillCallback:      ca.sliMetrics.getBackfillCallback(),
@@ -401,33 +402,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
 	}
-}
-
-// getKVFeedInitialParameters determines the starting timestamp for the kv and
-// whether or not an initial scan is needed. The need for an initial scan is
-// determined by whether the watched in the spec have a resolved timestamp. The
-// higher layers mark each watch with the checkpointed resolved timestamp if no
-// initial scan is needed.
-//
-// TODO(ajwerner): Utilize this partial checkpointing, especially in the face of
-// of logical backfills of a single table while progress is made on others or
-// get rid of it. See https://github.com/cockroachdb/cockroach/issues/43896.
-func getKVFeedInitialParameters(
-	spec execinfrapb.ChangeAggregatorSpec,
-) (initialHighWater hlc.Timestamp, needsInitialScan bool) {
-	for _, watch := range spec.Watches {
-		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
-	// This will be true in the case where we have no cursor and we've never
-	// checkpointed a resolved timestamp or we have a cursor but we want an
-	// initial scan. The higher levels will coordinate that we only have empty
-	// watches when we need an initial scan.
-	if needsInitialScan = initialHighWater.IsEmpty(); needsInitialScan {
-		initialHighWater = spec.Feed.StatementTime
-	}
-	return initialHighWater, needsInitialScan
 }
 
 // setupSpans is called on start to extract the spans for this changefeed as a

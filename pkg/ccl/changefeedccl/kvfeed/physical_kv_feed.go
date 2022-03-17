@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -22,31 +23,31 @@ import (
 // physicalFeedFactory constructs a physical feed which writes into sink and
 // runs until the group's context expires.
 type physicalFeedFactory interface {
-	Run(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
+	Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error
 }
 
-type physicalConfig struct {
-	Spans     []roachpb.Span
-	Timestamp hlc.Timestamp
-	WithDiff  bool
-	Knobs     TestingKnobs
+type rangeFeedConfig struct {
+	Frontier hlc.Timestamp
+	Spans    []kvcoord.SpanTimePair
+	WithDiff bool
+	Knobs    TestingKnobs
 }
 
 type rangefeedFactory func(
 	ctx context.Context,
-	spans []roachpb.Span,
-	startFrom hlc.Timestamp,
+	spans []kvcoord.SpanTimePair,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error
 
 type rangefeed struct {
 	memBuf kvevent.Writer
-	cfg    physicalConfig
+	cfg    rangeFeedConfig
 	eventC chan *roachpb.RangeFeedEvent
+	knobs  TestingKnobs
 }
 
-func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
+func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error {
 	// To avoid blocking raft, RangeFeed puts all entries in a server side
 	// buffer. But to keep things simple, it's a small fixed-sized buffer. This
 	// means we need to ingest everything we get back as quickly as possible, so
@@ -68,11 +69,12 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg phys
 		memBuf: sink,
 		cfg:    cfg,
 		eventC: make(chan *roachpb.RangeFeedEvent, 128),
+		knobs:  cfg.Knobs,
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
 	g.GoCtx(func(ctx context.Context) error {
-		return p(ctx, cfg.Spans, cfg.Timestamp, cfg.WithDiff, feed.eventC)
+		return p(ctx, cfg.Spans, cfg.WithDiff, feed.eventC)
 	})
 	return g.Wait()
 }
@@ -101,10 +103,13 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 					return err
 				}
 			case *roachpb.RangeFeedCheckpoint:
-				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Timestamp) {
+				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as
 					// soon as there are no outstanding intents under them.
 					// Changefeeds don't care about these at all, so throw them out.
+					continue
+				}
+				if p.knobs.ShouldSkipCheckpoint != nil && p.knobs.ShouldSkipCheckpoint(t) {
 					continue
 				}
 				if err := p.memBuf.Add(
