@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	types "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -58,6 +59,9 @@ func walk(wantType reflect.Type, toWalk interface{}, f func(interface{}) error) 
 			err = r
 		default:
 			err = errors.AssertionFailedf("failed to do walk: %v", r)
+		}
+		if iterutil.Done(err) {
+			err = nil
 		}
 	}()
 
