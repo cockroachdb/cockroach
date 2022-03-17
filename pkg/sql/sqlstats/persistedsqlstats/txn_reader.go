@@ -48,14 +48,10 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 	if err != nil {
 		return err
 	}
+	combinedIter := NewCombinedTxnStatsIterator(memIter, &txnStatsWrapper{rows: persistedIter})
 	defer func() {
-		closeError := persistedIter.Close()
-		if closeError != nil {
-			err = errors.CombineErrors(err, closeError)
-		}
+		err = errors.CombineErrors(err, combinedIter.Close())
 	}()
-
-	combinedIter := NewCombinedTxnStatsIterator(memIter, persistedIter)
 
 	for {
 		var ok bool
@@ -68,10 +64,7 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 			break
 		}
 
-		stats, err := combinedIter.Cur()
-		if err != nil {
-			return err
-		}
+		stats := combinedIter.Cur()
 		if err = visitor(ctx, stats); err != nil {
 			return err
 		}

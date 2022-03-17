@@ -48,14 +48,10 @@ func (s *PersistedSQLStats) IterateStatementStats(
 	if err != nil {
 		return err
 	}
+	combinedIter := NewCombinedStmtStatsIterator(memIter, &stmtStatsWrapper{rows: persistedIter})
 	defer func() {
-		closeError := persistedIter.Close()
-		if closeError != nil {
-			err = errors.CombineErrors(err, closeError)
-		}
+		err = errors.CombineErrors(err, combinedIter.Close())
 	}()
-
-	combinedIter := NewCombinedStmtStatsIterator(memIter, persistedIter)
 
 	for {
 		var ok bool
@@ -68,10 +64,7 @@ func (s *PersistedSQLStats) IterateStatementStats(
 			break
 		}
 
-		stats, err := combinedIter.Cur()
-		if err != nil {
-			return err
-		}
+		stats := combinedIter.Cur()
 		if err = visitor(ctx, stats); err != nil {
 			return err
 		}
