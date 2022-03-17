@@ -1585,3 +1585,23 @@ SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON CONSTRAINT pkey_comment_a_b_key ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+
+# Regression for #78046: `ALTER PRIMARY KEY` should not create a secondary
+# index on the (old) primary key columns when there is already a secondary
+# index thereof.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_key (a));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+query TTT
+select index_name,column_name,direction from [show indexes from t];
+----
+t_pkey     b   ASC
+t_pkey     a   N/A
+t_a_key    a   ASC
+t_a_key    b   ASC
