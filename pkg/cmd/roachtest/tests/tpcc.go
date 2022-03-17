@@ -861,7 +861,6 @@ func (s tpccBenchSpec) partitions() int {
 // startOpts returns any extra start options that the spec requires.
 func (s tpccBenchSpec) startOpts() (option.StartOpts, install.ClusterSettings) {
 	startOpts := option.DefaultStartOpts()
-	startOpts.RoachtestOpts.DontEncrypt = true
 	settings := install.MakeClusterSettings()
 	// Facilitate diagnosing out-of-memory conditions in tpccbench runs.
 	// See https://github.com/cockroachdb/cockroach/issues/75071.
@@ -1061,7 +1060,6 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	c.Put(ctx, t.Cockroach(), "./cockroach", loadNodes)
 	// Don't encrypt in tpccbench tests.
 	startOpts, settings := b.startOpts()
-	startOpts.RoachtestOpts.DontEncrypt = true
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos

@@ -370,7 +370,6 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		startOpts.RoachtestOpts.DontEncrypt = true
 		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}
 }
@@ -419,7 +418,6 @@ func upgradeNodes(
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachtestOpts.DontEncrypt = true
 		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
 	}
 }
