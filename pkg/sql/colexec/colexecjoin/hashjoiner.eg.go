@@ -49,7 +49,7 @@ const _ = "template_distinctCollectProbeNoOuter"
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := 0
 
-	if hj.spec.JoinType.IsRightSemiOrRightAnti() {
+	if !hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
 		collectRightSemiAnti(hj, batchSize)
 		return 0
 	}
@@ -85,7 +85,7 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := 0
 
-	if hj.spec.JoinType.IsRightSemiOrRightAnti() {
+	if !hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
 		collectRightSemiAnti(hj, batchSize)
 		return 0
 	}
