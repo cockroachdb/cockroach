@@ -116,6 +116,9 @@ var ExplainDDLDeps = telemetry.GetCounterOnce("sql.plan.explain-ddl-deps")
 // EXPLAIN (OPT, VERBOSE) is run.
 var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt-verbose")
 
+// ExplainOptSteps is to be incremented whenever EXPLAIN (OPTSTEPS) is run.
+var ExplainOptSteps = telemetry.GetCounterOnce("sql.plan.explain-optsteps")
+
 // ExplainGist is to be incremented whenever
 // EXPLAIN (GIST) is run.
 var ExplainGist = telemetry.GetCounterOnce("sql.plan.explain-gist")

@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "optsteps",
+    srcs = [
+        "explore_trace.go",
+        "forcing_opt.go",
+        "memo_groups.go",
+        "opt_steps.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optsteps",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pmezard_go_difflib//difflib",
+    ],
+)

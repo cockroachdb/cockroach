@@ -39,6 +39,9 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	case tree.ExplainDistSQL:
 		telemetry.Inc(sqltelemetry.ExplainDistSQLUseCounter)
 
+	case tree.ExplainOptSteps:
+		telemetry.Inc(sqltelemetry.ExplainOptSteps)
+
 	case tree.ExplainOpt:
 		if explain.Flags[tree.ExplainFlagVerbose] {
 			telemetry.Inc(sqltelemetry.ExplainOptVerboseUseCounter)

@@ -342,6 +342,7 @@ go_library(
         "//pkg/sql/opt/indexrec",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/optsteps",
         "//pkg/sql/opt/xform",
         "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/paramparse",

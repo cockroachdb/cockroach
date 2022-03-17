@@ -75,17 +75,21 @@ const (
 	// ExplainGist generates a plan "gist".
 	ExplainGist
 
+	// ExplainOptSteps shows the optsteps output for the plan.
+	ExplainOptSteps
+
 	numExplainModes = iota
 )
 
 var explainModeStrings = [...]string{
-	ExplainPlan:    "PLAN",
-	ExplainDistSQL: "DISTSQL",
-	ExplainOpt:     "OPT",
-	ExplainVec:     "VEC",
-	ExplainDebug:   "DEBUG",
-	ExplainDDL:     "DDL",
-	ExplainGist:    "GIST",
+	ExplainPlan:     "PLAN",
+	ExplainDistSQL:  "DISTSQL",
+	ExplainOpt:      "OPT",
+	ExplainVec:      "VEC",
+	ExplainDebug:    "DEBUG",
+	ExplainDDL:      "DDL",
+	ExplainGist:     "GIST",
+	ExplainOptSteps: "OPTSTEPS",
 }
 
 var explainModeStringMap = func() map[string]ExplainMode {
