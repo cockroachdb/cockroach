@@ -177,7 +177,6 @@ var _ CCLOnlyStatement = &Import{}
 var _ CCLOnlyStatement = &Export{}
 var _ CCLOnlyStatement = &ScheduledBackup{}
 var _ CCLOnlyStatement = &StreamIngestion{}
-var _ CCLOnlyStatement = &ReplicationStream{}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterChangefeed) StatementReturnType() StatementReturnType { return Rows }
@@ -1092,19 +1091,6 @@ func (n *RelocateRange) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
-func (*ReplicationStream) StatementReturnType() StatementReturnType { return Rows }
-
-// StatementType implements the Statement interface.
-func (*ReplicationStream) StatementType() StatementType { return TypeDML }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*ReplicationStream) StatementTag() string { return "CREATE REPLICATION STREAM" }
-
-func (*ReplicationStream) cclOnlyStatement() {}
-
-func (*ReplicationStream) hiddenFromShowQueries() {}
-
-// StatementReturnType implements the Statement interface.
 func (*Restore) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1891,7 +1877,6 @@ func (n *RefreshMaterializedView) String() string        { return AsString(n) }
 func (n *RenameColumn) String() string                   { return AsString(n) }
 func (n *RenameDatabase) String() string                 { return AsString(n) }
 func (n *ReparentDatabase) String() string               { return AsString(n) }
-func (n *ReplicationStream) String() string              { return AsString(n) }
 func (n *RenameIndex) String() string                    { return AsString(n) }
 func (n *RenameTable) String() string                    { return AsString(n) }
 func (n *Restore) String() string                        { return AsString(n) }

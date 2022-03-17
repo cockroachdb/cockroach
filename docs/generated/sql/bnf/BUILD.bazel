@@ -76,7 +76,6 @@ FILES = [
     "create_extension_stmt",
     "create_index_stmt",
     "create_inverted_index_stmt",
-    "create_replication_stream_stmt",
     "create_role_stmt",
     "create_schedule_for_backup_stmt",
     "create_schema_stmt",
