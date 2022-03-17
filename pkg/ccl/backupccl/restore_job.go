@@ -872,7 +872,11 @@ func createImportingDescriptors(
 							if err != nil {
 								return err
 							}
-							superRegions, err := t.SuperRegions()
+							superRegions, err := typeDesc.SuperRegions()
+							if err != nil {
+								return err
+							}
+							zoneCfgExtensions, err := typeDesc.ZoneConfigExtensions()
 							if err != nil {
 								return err
 							}
@@ -883,6 +887,7 @@ func createImportingDescriptors(
 								desc.RegionConfig.RegionEnumID,
 								desc.RegionConfig.Placement,
 								superRegions,
+								zoneCfgExtensions,
 							)
 							if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 								ctx,
