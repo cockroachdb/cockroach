@@ -85,6 +85,10 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			if err != nil {
 				return err
 			}
+			// The job completes successfully if the ingestion has been cut over.
+			if p := j.Progress(); p.GetStreamReplication().IngestionCutOver {
+				return nil
+			}
 			if isTimedOut(j) {
 				return errors.Errorf("replication stream %d timed out", p.job.ID())
 			}

@@ -79,7 +79,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	SET CLUSTER SETTING kv.rangefeed.enabled = true;
 	SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 	SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-  SET CLUSTER SETTING stream_replication.job_liveness_timeout = '3s';
+  SET CLUSTER SETTING stream_replication.job_liveness_timeout = '60s';
   SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';
   SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
   `)
@@ -90,7 +90,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	destSysSQL, destTenantSQL := sqlutils.MakeSQLRunner(destSysDB), sqlutils.MakeSQLRunner(destTenantDB)
 
 	destSysSQL.Exec(t, `
-	SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
+	SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '1s';
 	SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '10ms';
 	SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
 	SET enable_experimental_stream_replication = true;
@@ -148,8 +148,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	jobutils.WaitForJobToSucceed(t, destSysSQL, jobspb.JobID(ingestionJobID))
 	// TODO(casper): Make producer job exit normally in the cutover scenario.
 	sourceSysSQL.CheckQueryResultsRetry(t,
-		fmt.Sprintf("SELECT status, error FROM [SHOW JOBS] WHERE job_id = %d", streamProducerJobID),
-		[][]string{{"failed", fmt.Sprintf("replication stream %d timed out", streamProducerJobID)}})
+		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamProducerJobID), [][]string{{"succeeded"}})
 
 	// After cutover, changes to source won't be streamed into destination cluster.
 	sourceTenantSQL.Exec(t, `

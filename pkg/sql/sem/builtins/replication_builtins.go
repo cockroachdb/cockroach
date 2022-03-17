@@ -204,4 +204,32 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.complete_replication_stream": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"stream_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+
+				streamID := int64(tree.MustBeDInt(args[0]))
+				if err := mgr.CompleteReplicationStream(evalCtx, evalCtx.Txn, streaming.StreamID(streamID)); err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(streamID)), err
+			},
+			Info: "This function can be used on the producer side to complete and clean up a replication stream " +
+				"after the consumer receives a cutover event and finishes the ingestion",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }

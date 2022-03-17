@@ -125,6 +125,11 @@ func (m *mockStreamClient) Close() error {
 	return nil
 }
 
+// Complete implements the streamclient.Client interface.
+func (m *mockStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+	return nil
+}
+
 // errorStreamClient always returns an error when consuming a partition.
 type errorStreamClient struct{ mockStreamClient }
 
@@ -138,6 +143,11 @@ func (m *errorStreamClient) Subscribe(
 	checkpoint hlc.Timestamp,
 ) (streamclient.Subscription, error) {
 	return nil, errors.New("this client always returns an error")
+}
+
+// Complete implements the streamclient.Client interface.
+func (m *errorStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+	return nil
 }
 
 func TestStreamIngestionProcessor(t *testing.T) {
