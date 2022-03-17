@@ -126,7 +126,6 @@ func registerAutoUpgrade(r registry.Registry) {
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
 			startOpts := option.DefaultStartOpts()
-			startOpts.RoachtestOpts.DontEncrypt = true
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
@@ -150,7 +149,6 @@ func registerAutoUpgrade(r registry.Registry) {
 		}
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachtestOpts.DontEncrypt = true
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(nodes))
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
@@ -195,7 +193,6 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		// Restart the previously stopped node.
 		startOpts = option.DefaultStartOpts()
-		startOpts.RoachtestOpts.DontEncrypt = true
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(nodes-1))
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
