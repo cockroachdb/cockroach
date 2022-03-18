@@ -211,11 +211,15 @@ function renderTransactionType(implicitTxn: boolean) {
   return "Explicit";
 }
 
-function renderBools(b: boolean) {
-  if (b) {
+function renderCount(yesCount: Long, totalCount: Long) {
+  if (longToInt(yesCount) == 0) {
+    return "No";
+  }
+  if (longToInt(yesCount) == longToInt(totalCount)) {
     return "Yes";
   }
-  return "No";
+  const noCount = longToInt(totalCount) - longToInt(yesCount);
+  return `${longToInt(yesCount)} Yes / ${noCount} No`;
 }
 
 class NumericStatTable extends React.Component<NumericStatTableProps> {
@@ -445,19 +449,18 @@ export class StatementDetails extends React.Component<
     } = this.props;
     const { currentTab } = this.state;
     const { statement_statistics_per_plan_hash } = this.props.statementDetails;
+    const { stats } = this.props.statementDetails.statement;
     const {
-      stats,
       app_names,
       formatted_query,
-    } = this.props.statementDetails.statement;
-    const {
       query,
-      database,
-      distSQL,
-      failed,
-      vec,
+      databases,
+      dist_sql_count,
+      failed_count,
+      vec_count,
+      total_count,
       implicit_txn,
-    } = this.props.statementDetails.statement.key_data;
+    } = this.props.statementDetails.statement.metadata;
 
     if (Number(stats.count) == 0) {
       const sourceApp = queryByName(this.props.location, appAttr);
@@ -525,8 +528,8 @@ export class StatementDetails extends React.Component<
       </Tooltip>
     );
 
-    const db = database ? (
-      <Text>{database}</Text>
+    const db = databases ? (
+      <Text>{databases}</Text>
     ) : (
       <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
     );
@@ -689,15 +692,15 @@ export class StatementDetails extends React.Component<
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
-                  <Text>{renderBools(failed)}</Text>
+                  <Text>{renderCount(failed_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>
-                  <Text>{renderBools(distSQL)}</Text>
+                  <Text>{renderCount(dist_sql_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Vectorized execution?</Text>
-                  <Text>{renderBools(vec)}</Text>
+                  <Text>{renderCount(vec_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Transaction type</Text>

@@ -43,21 +43,20 @@ describe("SQLDetailsStats sagas", () => {
   const SQLDetailsStatsResponse = new cockroach.server.serverpb.StatementDetailsResponse(
     {
       statement: {
-        key_data: {
+        metadata: {
           query: "SELECT * FROM crdb_internal.node_build_info",
-          app: "",
-          distSQL: false,
-          failed: false,
+          app_names: ["$ cockroach sql", "newname"],
+          dist_sql_count: new Long(2),
+          failed_count: new Long(2),
           implicit_txn: true,
-          vec: true,
-          full_scan: false,
-          database: "defaultdb",
-          plan_hash: new Long(0),
+          vec_count: new Long(2),
+          full_scan_count: new Long(2),
+          databases: ["defaultdb"],
           query_summary: "SELECT * FROM crdb_internal.node_build_info",
-          transaction_fingerprint_id: new Long(0),
+          formatted_query: "SELECT * FROM crdb_internal.node_build_info\n",
+          stmt_type: "DDL",
+          total_count: new Long(3),
         },
-        app_names: ["$ cockroach sql", "newname"],
-        formatted_query: "SELECT * FROM crdb_internal.node_build_info\n",
         stats: {
           count: new Long(5),
           first_attempt_count: new Long(5),

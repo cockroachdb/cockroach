@@ -54,7 +54,7 @@ const CancelStatementDiagnosticsReportRequest =
 // diagnostics.
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
   const statementDetails = selectStatementDetails(state, props);
-  const statementFingerprint = statementDetails?.statement.key_data.query;
+  const statementFingerprint = statementDetails?.statement.metadata.query;
   return {
     statementDetails,
     statementsError: state.adminUI.sqlStats.lastError,

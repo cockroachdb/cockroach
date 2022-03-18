@@ -108,7 +108,7 @@ describe("StatementDetails page", () => {
         .simulate("click");
 
       onDiagnosticsActivateClickSpy.calledOnceWith(
-        statementDetailsProps.statementDetails.statement.key_data.query,
+        statementDetailsProps.statementDetails.statement.metadata.query,
       );
     });
   });
