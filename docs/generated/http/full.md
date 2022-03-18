@@ -424,8 +424,6 @@ StoreStatus records the most recent values of metrics for a store.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| incoming | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | in bytes | [reserved](#support-status) |
-| outgoing | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | in bytes | [reserved](#support-status) |
 | latency | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | in nanoseconds | [reserved](#support-status) |
 
 
@@ -578,8 +576,6 @@ StoreStatus records the most recent values of metrics for a store.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| incoming | [int64](#cockroach.server.status.statuspb.NodeStatus-int64) |  | in bytes | [reserved](#support-status) |
-| outgoing | [int64](#cockroach.server.status.statuspb.NodeStatus-int64) |  | in bytes | [reserved](#support-status) |
 | latency | [int64](#cockroach.server.status.statuspb.NodeStatus-int64) |  | in nanoseconds | [reserved](#support-status) |
 
 
@@ -835,8 +831,6 @@ NodeDescriptor holds details on node physical/network topology.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| incoming | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | in bytes | [reserved](#support-status) |
-| outgoing | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | in bytes | [reserved](#support-status) |
 | latency | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | in nanoseconds | [reserved](#support-status) |
 
 
@@ -1095,8 +1089,6 @@ NodeDescriptor holds details on node physical/network topology.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| incoming | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | in bytes | [reserved](#support-status) |
-| outgoing | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | in bytes | [reserved](#support-status) |
 | latency | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | in nanoseconds | [reserved](#support-status) |
 
 
