@@ -598,10 +598,11 @@ func (r *testRunner) runWorker(
 			c.status("running test")
 			c.setTest(t)
 
-			// If randomized encryption-at-rest was requested, roll the dice now.
-			var encAtRest bool
-			if t.Spec().(*registry.TestSpec).EncryptAtRandom && rand.Intn(2) != 0 {
-				encAtRest = true
+			// Populate encryption at rest from the --encrypt flag.
+			encAtRest := encrypt.asBool()
+			if encrypt.String() == "random" && !t.Spec().(*registry.TestSpec).EncryptAtRandom {
+				// In random mode, enable enc-at-rest only if tests opted into it.
+				encAtRest = false
 			}
 			c.encAtRest = encAtRest
 

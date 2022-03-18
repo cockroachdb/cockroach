@@ -190,6 +190,13 @@ func TestRunnerRun(t *testing.T) {
 func TestRunnerEncryptionAtRest(t *testing.T) {
 	// Verify that if a test opts into EncryptAtRandom, it will (eventually) get
 	// a cluster that has encryption at rest enabled.
+	{
+		prev := encrypt.String()
+		require.NoError(t, encrypt.Set("random")) // --encrypt=random
+		defer func() {
+			require.NoError(t, encrypt.Set(prev))
+		}()
+	}
 	r := mkReg(t)
 	var sawEncrypted int32 // atomic
 	r.Add(registry.TestSpec{

@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var loadTeams = func() (team.Map, error) {
+	return team.DefaultLoadTeams()
+}
+
 func ownerToAlias(o registry.Owner) team.Alias {
 	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
 }
@@ -73,7 +77,7 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 		os.Exit(1)
 	}
 	if err := r.prepareSpec(&spec); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
 	r.m[spec.Name] = &spec
@@ -116,7 +120,7 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if spec.Owner == `` {
 		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
 	}
-	teams, err := team.DefaultLoadTeams()
+	teams, err := loadTeams()
 	if err != nil {
 		return err
 	}

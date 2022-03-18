@@ -27,6 +27,7 @@ build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest \
 source $root/build/teamcity/util/roachtest_util.sh
 
 build/teamcity-roachtest-invoke.sh \
+  --encrypt=random \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
   --parallelism="${PARALLELISM}" \
