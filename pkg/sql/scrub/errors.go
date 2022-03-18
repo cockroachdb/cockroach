@@ -42,6 +42,9 @@ const (
 	// ForeignKeyConstraintViolation occurs when a row in a
 	// table is violating a foreign key constraint.
 	ForeignKeyConstraintViolation = "foreign_key_violation"
+	// UniqueConstraintViolation occurs when a row in a table is violating
+	// a unique constraint.
+	UniqueConstraintViolation = "unique_constraint_violation"
 )
 
 // Error contains the details on the scrub error that was caught.
