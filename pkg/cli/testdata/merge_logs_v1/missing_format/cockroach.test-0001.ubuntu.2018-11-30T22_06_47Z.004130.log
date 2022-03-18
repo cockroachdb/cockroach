@@ -2,4 +2,4 @@
 {"header":1,"timestamp":"1631568932.530923000","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"running on machine: "}
 {"header":1,"timestamp":"1631568932.530929000","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"binary: CockroachDB CCL v21.2.0-alpha.00000000-4019-g6d1becda18-dirty (x86_64-apple-darwin20.6.0, built , go1.16.6)"}
 {"header":1,"timestamp":"1631568932.530934000","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"arguments: []"}
-{"header":1,"timestamp":"1631568932.530945000","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"log format (utf8=✓): json"}
+{"header":1,"timestamp":"1631568932.530945000","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"log format (utf8=✓): json-unsupported"}

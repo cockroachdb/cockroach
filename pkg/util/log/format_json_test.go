@@ -14,15 +14,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/kr/pretty"
 )
 
 func TestJSONFormats(t *testing.T) {
@@ -90,4 +94,35 @@ func TestJSONFormats(t *testing.T) {
 		return buf.String()
 	})
 
+}
+
+func TestJsonDecode(t *testing.T) {
+	datadriven.RunTest(t, "testdata/parse_json",
+		func(t *testing.T, td *datadriven.TestData) string {
+			switch td.Cmd {
+			case "log":
+				var out strings.Builder
+
+				d, err := NewEntryDecoderWithFormat(strings.NewReader(td.Input), WithMarkedSensitiveData, td.CmdArgs[0].Vals[0])
+				if err != nil {
+					td.Fatalf(t, "error while constructing decoder: %v", err)
+				}
+
+				for {
+					var e logpb.Entry
+					if err := d.Decode(&e); err != nil {
+						if err == io.EOF {
+							break
+						}
+						td.Fatalf(t, "error while decoding: %v", err)
+					}
+					fmt.Fprintf(&out, "%# v\n", pretty.Formatter(e))
+				}
+				return out.String()
+			default:
+				t.Fatalf("unknown directive: %q", td.Cmd)
+			}
+			// unreachable
+			return ""
+		})
 }
