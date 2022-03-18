@@ -78,13 +78,20 @@ func registerAlterPK(r registry.Registry) {
 			t.Status("beginning primary key change")
 			db := c.Conn(ctx, t.L(), roachNodes[0])
 			defer db.Close()
-			cmd := `
-			USE bank;
-			ALTER TABLE bank ALTER COLUMN balance SET NOT NULL;
-			ALTER TABLE bank ALTER PRIMARY KEY USING COLUMNS (id, balance)
-			`
-			if _, err := db.ExecContext(ctx, cmd); err != nil {
-				t.Fatal(err)
+			cmds := []string{
+				`USE bank;`,
+				`ALTER TABLE bank ALTER COLUMN balance SET NOT NULL;`,
+				`ALTER TABLE bank ALTER PRIMARY KEY USING COLUMNS (id, balance)`,
+			}
+			conn, err := db.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = conn.Close() }()
+			for _, cmd := range cmds {
+				if _, err := conn.ExecContext(ctx, cmd); err != nil {
+					return err
+				}
 			}
 			t.Status("primary key change finished")
 			pkChangeDone <- struct{}{}
