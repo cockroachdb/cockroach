@@ -426,6 +426,7 @@ type Store struct {
 	scanner            *replicaScanner             // Replica scanner
 	consistencyQueue   *consistencyQueue           // Replica consistency check queue
 	consistencyLimiter *quotapool.RateLimiter      // Rate limits consistency checks
+	consistencySem     *quotapool.IntPool          // Limit concurrent consistency checks
 	metrics            *StoreMetrics
 	intentResolver     *intentresolver.IntentResolver
 	recoveryMgr        txnrecovery.Manager
@@ -1631,6 +1632,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		rate := consistencyCheckRate.Get(&s.ClusterSettings().SV)
 		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
 	})
+	s.consistencySem = quotapool.NewIntPool("concurrent async consistency checks",
+		consistencyCheckAsyncConcurrency)
+	s.stopper.AddCloser(s.consistencySem.Closer("stopper"))
 
 	// Storing suggested compactions in the store itself was deprecated with
 	// the removal of the Compactor in 21.1. See discussion in
