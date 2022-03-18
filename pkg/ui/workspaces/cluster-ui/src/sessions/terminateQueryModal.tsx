@@ -56,10 +56,10 @@ const TerminateQueryModal = (
       onCancel={onCancelHandler}
       okText="Yes"
       cancelText="No"
-      title="Terminate the Statement?"
+      title="Cancel the Statement"
     >
       <Text>
-        Terminating a statement ends the statement, returning an error to the
+        Cancelling a statement ends the statement, returning an error to the
         session.
       </Text>
     </Modal>
