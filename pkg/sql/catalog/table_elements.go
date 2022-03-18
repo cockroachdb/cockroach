@@ -722,6 +722,14 @@ func FindCorrespondingTemporaryIndexByID(desc TableDescriptor, id descpb.IndexID
 	return nil
 }
 
+// IsCorrespondingTemporaryIndex returns true iff idx is a temporary index
+// created during a backfill and is the corresponding temporary index for
+// otherIdx. It assumes that idx and otherIdx are both indexes from the same
+// table.
+func IsCorrespondingTemporaryIndex(idx Index, otherIdx Index) bool {
+	return idx.IsTemporaryIndexForBackfill() && idx.Ordinal() == otherIdx.Ordinal()+1
+}
+
 // UserDefinedTypeColsHaveSameVersion returns whether one table descriptor's
 // columns with user defined type metadata have the same versions of metadata
 // as in the other descriptor. Note that this function is only valid on two
