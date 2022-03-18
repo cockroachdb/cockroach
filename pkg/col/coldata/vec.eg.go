@@ -544,7 +544,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
-							toCol.copy(fromCol, i+args.DestIdx, selIdx)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 						}
 					}
 					return
@@ -553,7 +553,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
-					toCol.copy(fromCol, i+args.DestIdx, selIdx)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 				}
 				return
 			}
@@ -850,7 +850,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
-							toCol.copy(fromCol, i+args.DestIdx, selIdx)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 						}
 					}
 					return
@@ -859,7 +859,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
-					toCol.copy(fromCol, i+args.DestIdx, selIdx)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 				}
 				return
 			}
