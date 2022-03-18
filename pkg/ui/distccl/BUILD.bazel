@@ -20,7 +20,10 @@ fi
 
 go_library(
     name = "distccl",
-    srcs = ["distccl.go"],
+    srcs = [
+        "bindata.go",
+        "distccl.go",
+    ],
     embedsrcs = [":genassets"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
     visibility = ["//visibility:public"],

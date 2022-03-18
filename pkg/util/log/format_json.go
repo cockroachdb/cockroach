@@ -12,12 +12,16 @@ package log
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -409,4 +413,155 @@ func escapeString(buf *buffer, s string) {
 	b := buf.Bytes()
 	b = jsonbytes.EncodeString(b, s)
 	buf.Buffer = *bytes.NewBuffer(b)
+}
+
+type entryDecoderJSON struct {
+	decoder         *json.Decoder
+	sensitiveEditor redactEditor
+}
+
+func getFirstMatchString(obj map[string]interface{}, fields [2]string) (string, bool) {
+	for _, f := range fields {
+		if v, ok := obj[f]; ok {
+			vString, ok := v.(string)
+			if ok {
+				return vString, true
+			}
+		}
+	}
+	return "", false
+}
+
+func getFirstMatchInt64(obj map[string]interface{}, fields [2]string) (int64, bool) {
+	for _, f := range fields {
+		if v, ok := obj[f]; ok {
+			vFloat, ok := v.(float64)
+			if ok {
+				return int64(vFloat), true
+			}
+		}
+	}
+	return 0, false
+}
+
+// Decode decodes the next log entry into the provided protobuf message.
+func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
+	var e map[string]interface{}
+
+	err := d.decoder.Decode(&e)
+	if err != nil {
+		return err
+	}
+
+	if jsonTs, ok := getFirstMatchString(e, jsonTags['t'].tags); ok {
+		ts, err := fromFluent(jsonTs)
+		if err != nil {
+			return err
+		}
+		entry.Time = ts
+	}
+
+	if goroutine, ok := getFirstMatchInt64(e, jsonTags['g'].tags); ok {
+		entry.Goroutine = goroutine
+	}
+
+	if file, ok := getFirstMatchString(e, jsonTags['f'].tags); ok {
+		entry.File = file
+	}
+
+	if line, ok := getFirstMatchInt64(e, jsonTags['l'].tags); ok {
+		entry.Line = line
+	}
+
+	if redactable, ok := getFirstMatchInt64(e, jsonTags['r'].tags); ok {
+		entry.Redactable = redactable == 1
+	}
+
+	// If not a header entry, process the fields that belong to such entries.
+	if header, ok := getFirstMatchInt64(e, [2]string{"header", ""}); !ok || header == 0 {
+		if severityNumeric, ok := getFirstMatchInt64(e, jsonTags['s'].tags); ok {
+			entry.Severity = Severity(severityNumeric)
+		}
+		if channelNumeric, ok := getFirstMatchInt64(e, jsonTags['c'].tags); ok {
+			entry.Channel = Channel(channelNumeric)
+		}
+		if counter, ok := getFirstMatchInt64(e, jsonTags['n'].tags); ok {
+			entry.Counter = uint64(counter)
+		}
+	}
+
+	var entryMsg bytes.Buffer
+	// Process the message.
+	if ev, ok := e["event"]; ok {
+		if event, ok := ev.(map[string]interface{}); ok {
+			if len(event) > 0 {
+				// TODO(davidh): HANDLE ERROR!!!!
+				by, _ := json.Marshal(event)
+				entryMsg.Write(by)
+				entry.StructuredStart = 0
+				entry.StructuredEnd = uint32(entryMsg.Len())
+			}
+		}
+	} else {
+		if msg, ok := e["message"]; ok {
+			if message, ok := msg.(string); ok {
+				entryMsg.Write([]byte(message))
+			}
+		}
+
+	}
+
+	// Process conditional fields.
+	if tgs, ok := e["tags"]; ok {
+		if tags, ok := tgs.(map[string]interface{}); ok {
+			var t *logtags.Buffer
+			for k, v := range tags {
+				if vs, ok := v.(string); ok {
+					t = t.Add(k, vs)
+				}
+			}
+			// TODO(davidh): does redaction need to be handled here???
+			// TODO(davidh): in the test cases, tag values are not getting redacted...
+			s := &strings.Builder{}
+			t.FormatToString(s)
+			tagStrings := strings.Split(s.String(), ",")
+			sort.Strings(tagStrings)
+			entry.Tags = strings.Join(tagStrings, ",")
+		}
+	}
+
+	if stacks, ok := e["stacks"]; ok {
+		if stacksString, ok := stacks.(string); ok {
+			entry.StackTraceStart = uint32(entryMsg.Len()) + 1
+			entryMsg.Write([]byte("\nstack trace:\n"))
+			entryMsg.Write([]byte(stacksString))
+		}
+	}
+
+	r := redactablePackage{
+		msg:        entryMsg.Bytes(),
+		redactable: entry.Redactable,
+	}
+	r = d.sensitiveEditor(r)
+	entry.Message = string(r.msg)
+	entry.Redactable = r.redactable
+
+	return nil
+
+}
+
+func fromFluent(timestamp string) (int64, error) {
+	parts := strings.Split(timestamp, ".")
+	if len(parts) != 2 {
+		return 0, errors.New("bad timestamp format")
+	}
+	left, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	right, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return left*1000000000 + right, nil
 }
