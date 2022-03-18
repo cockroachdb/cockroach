@@ -2867,7 +2867,7 @@ func (t *logicTest) processSubtest(
 			}
 
 			execRes := <-pending.resultChan
-			err := t.finishExecQuery(pending.logicQuery, execRes.rows, execRes.err)
+			err := t.finishExecQuery(pending.logicQuery, []*gosql.Rows{execRes.rows}, execRes.err)
 			if err != nil {
 				t.Error(err)
 			}
@@ -3644,9 +3644,42 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		for _, p := range parsed {
 			var prep *gosql.Stmt
 			var rows *gosql.Rows
-			prep, execErr = t.db.Prepare(p.SQL)
+
+			// Replace all scalar values in the query with placeholders. Then, send
+			// the scalar values that we replaced to Query().
+			ast, scalars := tree.ReplaceScalarsWithPlaceholders(p.AST)
+			args := make([]interface{}, len(scalars))
+			for i := range scalars {
+				if scalars[i] == tree.DNull {
+					args[i] = gosql.NullString{}
+				} else {
+					args[i] = tree.AsStringWithFlags(scalars[i], tree.FmtBareStrings)
+				}
+			}
+
+			prep, execErr = t.db.Prepare(ast.String())
+
+			if execErr != nil {
+				// Sometimes, it's impossible to prepare/execute a query with scalars
+				// replaced as placeholders because there is insufficient information
+				// in the text of the query to infer which types the placeholders
+				// should be. In this case, we'll just fall back on an ordinary
+				// PREPARE/EXECUTE without placeholders.
+
+				// Unfortunately, there's not a consistent error code returned for this
+				// situation. Sometimes, it's "indeterminate datatype", which is most
+				// correct, but sometimes the indeterminate datatype error is wrapped
+				// by a different function and given a slightly different error code.
+				// As a result, we choose to check the string of the error rather than
+				// the code.
+				if strings.Contains(execErr.Error(), "could not determine data type of placeholder") {
+					prep, execErr = t.db.Prepare(p.SQL)
+					args = []interface{}{}
+				}
+			}
+
 			if execErr == nil {
-				rows, execErr = prep.Query()
+				rows, execErr = prep.Query(args...)
 				rowses = append(rowses, rows)
 			}
 			if execErr != nil {
@@ -3660,10 +3693,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		res, execErr = db.Query(query.sql)
 		rowses = []*gosql.Rows{res}
 	}
-	return t.finishExecQuery(query, rows, execErr)
+	return t.finishExecQuery(query, rowses, execErr)
 }
 
-func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, execErr error) error {
+func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, execErr error) error {
 	if execErr == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 
