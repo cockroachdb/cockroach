@@ -650,6 +650,13 @@ func (sp *Span) reset(
 	sp.finishStack = ""
 }
 
+// visitOpenChildren calls the visitor for every open child. The receiver's lock
+// is held for the duration of the iteration, so the visitor should be quick.
+// The visitor is not allowed to hold on to children after it returns.
+func (sp *Span) visitOpenChildren(visitor func(sp *Span)) {
+	sp.i.crdb.visitOpenChildren(visitor)
+}
+
 // spanRef represents a reference to a span. In addition to a simple *Span, a
 // spanRef prevents the referenced span from being reallocated in between the
 // time when this spanRef was created and the time when release() is called. It

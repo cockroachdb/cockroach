@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useState} from "react";
 import Long from "long";
 import {
   Badge,
@@ -18,13 +18,10 @@ import {
   SortSetting,
   util,
 } from "@cockroachlabs/cluster-ui";
-import { Button, Icon } from "@cockroachlabs/ui-components";
+import {Button, Icon} from "@cockroachlabs/ui-components";
 import Dropdown from "src/views/shared/components/dropdown";
-import {
-  PageConfig,
-  PageConfigItem,
-} from "src/views/shared/components/pageconfig";
-import { cockroach, google } from "src/js/protos";
+import {PageConfig, PageConfigItem,} from "src/views/shared/components/pageconfig";
+import {cockroach, google} from "src/js/protos";
 import {
   getLiveTrace,
   getTraceForSnapshot,
@@ -33,15 +30,16 @@ import {
   setTraceRecordingType,
   takeTracingSnapshot,
 } from "src/util/api";
-import { CaretRight } from "@cockroachlabs/icons";
+import {CaretRight} from "@cockroachlabs/icons";
+import {Switch} from "antd";
 import ISnapshotInfo = cockroach.server.serverpb.ISnapshotInfo;
+import ITracingSpan = cockroach.server.serverpb.ITracingSpan;
 import GetTracingSnapshotRequest = cockroach.server.serverpb.GetTracingSnapshotRequest;
 import GetTraceRequest = cockroach.server.serverpb.GetTraceRequest;
 import IGetTraceResponse = cockroach.server.serverpb.IGetTraceResponse;
 import ISpanTag = cockroach.server.serverpb.ISpanTag;
 import SetTraceRecordingTypeRequest = cockroach.server.serverpb.SetTraceRecordingTypeRequest;
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
-import { Switch } from "antd";
 
 const TS_FORMAT = "MMMM Do YYYY, h:mm:ss a"; // January 28th 2022, 7:12:40 pm;
 
@@ -73,9 +71,8 @@ const SnapshotSelector = ({
 };
 
 interface SnapshotRow {
-  span: cockroach.server.serverpb.ITracingSpan;
+  span: ITracingSpan;
   stack: string;
-  recording?: boolean;
 }
 
 const GoroutineToggler = ({ id, stack }: { id: Long; stack: string }) => {
@@ -182,9 +179,9 @@ const TagCell = (props: {
 };
 
 const snapshotColumns = (
-  setRecording: (span: cockroach.server.serverpb.ITracingSpan) => void,
+  setRecording: (span: ITracingSpan) => void,
   setSearch: (s: string) => void,
-  setTraceRecordingVerbose: (trace_id: Long) => void,
+  setTraceRecordingVerbose: (span: ITracingSpan) => void,
 ): ColumnDescriptor<SnapshotRow>[] => {
   return [
     {
@@ -203,12 +200,12 @@ const snapshotColumns = (
       name: "recording",
       cell: sr => (
         <Switch
-          checked={sr.recording}
-          // TODO(davidh): Implement toggling back and forth
-          onClick={() => setTraceRecordingVerbose(sr.span.trace_id)}
+          disabled={!sr.span.current}
+          checked={sr.span.current_recording_mode != RecordingMode.OFF}
+          onClick={() => setTraceRecordingVerbose(sr.span)}
         />
       ),
-      sort: sr => `${sr.recording}`,
+      sort: sr => `${sr.span.current_recording_mode}`,
     },
     {
       title: "Start Time",
@@ -240,7 +237,7 @@ const CurrentSnapshot = ({
   search: string;
   setRecording: (trace: cockroach.server.serverpb.ITracingSpan) => void;
   setSearch: (s: string) => void;
-  setTraceRecordingVerbose: (trace_id: Long) => void;
+  setTraceRecordingVerbose: (span: ITracingSpan) => void;
 }) => {
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: true,
@@ -302,12 +299,14 @@ export const Tracez = () => {
       setSnapshot({
         id: req.snapshot.snapshot_id,
         captured_at: req.snapshot.captured_at,
-        rows: req.snapshot.spans.map(span => {
-          return {
-            span,
-            stack: req.snapshot.stacks[`${span.goroutine_id}`],
-          };
-        }),
+        rows: req.snapshot.spans.map(
+          (span: cockroach.server.serverpb.ITracingSpan): SnapshotRow => {
+            return {
+              span,
+              stack: req.snapshot.stacks[`${span.goroutine_id}`],
+            };
+          },
+        ),
       });
     });
   };
@@ -346,20 +345,24 @@ export const Tracez = () => {
     }
   }, [showTrace, snapshot, requestedSpan, showLiveTrace]);
 
-  const setTraceRecordingVerbose = (t: Long) => {
+  const setTraceRecordingVerbose = (span: ITracingSpan) => {
+    const recMode =
+      span.current_recording_mode != RecordingMode.OFF
+        ? RecordingMode.OFF
+        : RecordingMode.VERBOSE;
     setTraceRecordingType(
       new SetTraceRecordingTypeRequest({
-        trace_id: t,
-        recording_mode: RecordingMode.VERBOSE,
-        // TODO(davidh): do we need `span_id` on this request?
+        trace_id: span.trace_id,
+        recording_mode: recMode,
       }),
     ).then(() => {
+      // We modify the snapshot in place.
       setSnapshot({
         id: snapshot.id,
         captured_at: snapshot.captured_at,
         rows: snapshot.rows.map(r => {
-          if (r.span.trace_id === t) {
-            r.recording = true;
+          if (r.span.trace_id === span.trace_id) {
+            r.span.current_recording_mode = recMode;
           }
           return r;
         }),
@@ -453,7 +456,7 @@ interface SnapshotViewProps {
   setSearch: (s: string) => void;
   search: string;
   setRecording: (s: cockroach.server.serverpb.ITracingSpan) => void;
-  setTraceRecordingVerbose: (trace_id: Long) => void;
+  setTraceRecordingVerbose: (span: ITracingSpan) => void;
 }
 
 const SnapshotView = ({

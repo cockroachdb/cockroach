@@ -426,12 +426,12 @@ func (r *SpanRegistry) getSpanByID(id tracingpb.SpanID) RegistrySpan {
 	return crdbSpan
 }
 
-// VisitSpans calls the visitor callback for every local root span in the
+// VisitRoots calls the visitor callback for every local root span in the
 // registry. Iterations stops when the visitor returns an error. If that error
-// is iterutils.StopIteration(), then VisitSpans() returns nil.
+// is iterutils.StopIteration(), then VisitRoots() returns nil.
 //
 // The callback should not hold on to the span after it returns.
-func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan) error) error {
+func (r *SpanRegistry) VisitRoots(visitor func(span RegistrySpan) error) error {
 	// Take a snapshot of the registry and release the lock.
 	r.mu.Lock()
 	spans := make([]spanRef, 0, len(r.mu.m))
@@ -454,6 +454,40 @@ func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan) error) error {
 			}
 			return err
 		}
+	}
+	return nil
+}
+
+// visitTrace recursively calls the visitor on sp and all its descedents.
+func visitTrace(sp *Span, visitor func(sp RegistrySpan)) {
+	visitor(sp.i.crdb)
+	sp.visitOpenChildren(func(sp *Span) {
+		visitTrace(sp, visitor)
+	})
+}
+
+// VisitSpans calls the visitor callback for every span in the
+// registry.
+//
+// The callback should not hold on to the span after it returns.
+func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan)) error {
+	// Take a snapshot of the registry and release the lock.
+	r.mu.Lock()
+	spans := make([]spanRef, 0, len(r.mu.m))
+	for _, sp := range r.mu.m {
+		// We'll keep the spans alive while we're visiting them below.
+		spans = append(spans, makeSpanRef(sp.sp))
+	}
+	r.mu.Unlock()
+
+	defer func() {
+		for i := range spans {
+			spans[i].release()
+		}
+	}()
+
+	for _, sp := range spans {
+		visitTrace(sp.Span, visitor)
 	}
 	return nil
 }
@@ -1399,6 +1433,12 @@ type RegistrySpan interface {
 
 var _ RegistrySpan = &crdbSpan{}
 
+// GetActiveSpansRegistry returns a pointer to the registry containing all
+// in-flight on the node.
+func (t *Tracer) GetActiveSpansRegistry() *SpanRegistry {
+	return t.activeSpansRegistry
+}
+
 // GetActiveSpanByID retrieves any active root span given its ID.
 func (t *Tracer) GetActiveSpanByID(spanID tracingpb.SpanID) RegistrySpan {
 	return t.activeSpansRegistry.getSpanByID(spanID)
@@ -1410,7 +1450,7 @@ func (t *Tracer) GetActiveSpanByID(spanID tracingpb.SpanID) RegistrySpan {
 //
 // The callback should not hold on to the span after it returns.
 func (t *Tracer) VisitSpans(visitor func(span RegistrySpan) error) error {
-	return t.activeSpansRegistry.VisitSpans(visitor)
+	return t.activeSpansRegistry.VisitRoots(visitor)
 }
 
 // TestingRecordAsyncSpans is a test-only helper that configures

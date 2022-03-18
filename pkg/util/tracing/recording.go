@@ -70,6 +70,20 @@ func (t RecordingType) ToProto() tracingpb.RecordingMode {
 	}
 }
 
+// RecordingTypeFromProto converts from the proto values to the corresponding enum.
+func RecordingTypeFromProto(val tracingpb.RecordingMode) RecordingType {
+	switch val {
+	case tracingpb.RecordingMode_OFF:
+		return RecordingOff
+	case tracingpb.RecordingMode_STRUCTURED:
+		return RecordingStructured
+	case tracingpb.RecordingMode_VERBOSE:
+		return RecordingVerbose
+	default:
+		panic(fmt.Sprintf("invalid RecordingType: %d", val))
+	}
+}
+
 // RecordingTypeFromCarrierValue decodes a recording type carried by a carrier.
 func RecordingTypeFromCarrierValue(val string) RecordingType {
 	switch val {
@@ -421,7 +435,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 		// or not at the time each event was recorded, so we make a guess based on
 		// whether the span was verbose at the moment when the Recording was
 		// produced.
-		if !sp.Verbose {
+		if !(sp.Verbose || sp.RecordingMode == tracingpb.RecordingMode_VERBOSE) {
 			sp.Structured(func(sr *types.Any, t time.Time) {
 				jl := jaegerjson.Log{Timestamp: uint64(t.UnixNano() / 1000)}
 				jsonStr, err := MessageToJSONString(sr, true /* emitDefaults */)

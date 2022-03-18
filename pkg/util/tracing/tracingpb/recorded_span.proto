@@ -16,6 +16,7 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "util/tracing/tracingpb/tracing.proto";
 
 // LogRecord is a log message recorded in a traced span.
 message LogRecord {
@@ -79,7 +80,13 @@ message RecordedSpan {
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
   // verbose indicates whether the span was recording in verbose mode at the
   // time the recording was produced.
+  //
+  // This field is deprecated; it can be removed in 23.1. Use recording_mode
+  // instead.
   bool verbose = 16;
+  // recording_mode indicates the recording mode of the span at the the
+  // recording was produced.
+  RecordingMode recording_mode = 17;
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];

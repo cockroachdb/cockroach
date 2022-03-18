@@ -3439,12 +3439,13 @@ func (s *adminServer) GetTracingSnapshot(
 	}
 
 	id := tracing.SnapshotID(req.SnapshotId)
-	snapshot, err := s.server.cfg.Tracer.GetSnapshot(id)
+	tr := s.server.cfg.Tracer
+	snapshot, err := tr.GetSnapshot(id)
 	if err != nil {
 		return nil, err
 	}
 
-	spansList := tracingui.ProcessSnapshot(snapshot)
+	spansList := tracingui.ProcessSnapshot(snapshot, tr.GetActiveSpansRegistry())
 
 	spans := make([]*serverpb.TracingSpan, len(spansList.Spans))
 	stacks := make(map[string]string)
@@ -3467,13 +3468,15 @@ func (s *adminServer) GetTracingSnapshot(
 		}
 
 		spans[i] = &serverpb.TracingSpan{
-			Operation:     s.Operation,
-			TraceID:       s.TraceID,
-			SpanID:        s.SpanID,
-			ParentSpanID:  s.ParentSpanID,
-			Start:         &s.Start,
-			GoroutineID:   s.GoroutineID,
-			ProcessedTags: tags,
+			Operation:            s.Operation,
+			TraceID:              s.TraceID,
+			SpanID:               s.SpanID,
+			ParentSpanID:         s.ParentSpanID,
+			Start:                s.Start,
+			GoroutineID:          s.GoroutineID,
+			ProcessedTags:        tags,
+			Current:              s.Current,
+			CurrentRecordingMode: s.CurrentRecordingMode.ToProto(),
 		}
 	}
 
@@ -3527,7 +3530,7 @@ func (s *adminServer) GetTrace(
 	// recording mode. If we were asked to display the current trace (as opposed
 	// to the trace saved in a snapshot), we also collect the recording.
 	traceStillExists := false
-	if err := s.server.cfg.Tracer.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
+	if err := s.server.cfg.Tracer.SpanRegistry().VisitRoots(func(sp tracing.RegistrySpan) error {
 		if sp.TraceID() != traceID {
 			return nil
 		}
@@ -3564,7 +3567,8 @@ func (s *adminServer) SetTraceRecordingType(
 		if sp.TraceID() != req.TraceID {
 			return nil
 		}
-		sp.SetRecordingType(tracing.RecordingVerbose) // NB: The recording type propagates to the children, recursively.
+		// NB: The recording type propagates to the children, recursively.
+		sp.SetRecordingType(tracing.RecordingTypeFromProto(req.RecordingMode))
 		return nil
 	})
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil
