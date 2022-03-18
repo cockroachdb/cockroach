@@ -33,10 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
@@ -232,22 +234,40 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		}
 	}
 
-	// Compute SHA asynchronously and store it in a map by UUID.
-	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
-		func() {
-			defer snap.Close()
-			var snapshot *roachpb.RaftSnapshotData
-			if cc.SaveSnapshot {
-				snapshot = &roachpb.RaftSnapshotData{}
-			}
+	// Compute SHA asynchronously and store it in a map by UUID. Concurrent checks
+	// share the rate limit in r.store.consistencyLimiter, so we also limit the
+	// number of concurrent checks via r.store.consistencySem.
+	const taskName = "storage.Replica: computing checksum"
+	sem := r.store.consistencySem
+	if cc.Mode == roachpb.ChecksumMode_CHECK_STATS {
+		// Stats-only checks are cheap, and the DistSender parallelizes these across
+		// ranges (in particular when calling crdb_internal.check_consistency()), so
+		// they don't count towards the semaphore limit.
+		sem = nil
+	}
+	if err := stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName:   taskName,
+		Sem:        sem,
+		WaitForSem: false,
+	}, func(ctx context.Context) {
+		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
+			func(ctx context.Context) error {
+				defer snap.Close()
+				var snapshot *roachpb.RaftSnapshotData
+				if cc.SaveSnapshot {
+					snapshot = &roachpb.RaftSnapshotData{}
+				}
 
-			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
-			if err != nil {
-				log.Errorf(ctx, "%v", err)
-				result = nil
-			}
-			r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
-		}()
+				result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
+				if err != nil {
+					result = nil
+				}
+				r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
+				return err
+			},
+		); err != nil {
+			log.Errorf(ctx, "checksum computation failed: %v", err)
+		}
 
 		var shouldFatal bool
 		for _, rDesc := range cc.Terminate {
