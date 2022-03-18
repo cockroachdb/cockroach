@@ -109,6 +109,7 @@ var writeMetadataSST = settings.RegisterBoolSetting(
 	"write experimental new format BACKUP metadata file",
 	true,
 )
+var errEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
 // is used rather than a standard implementation such as http.DetectContentType
@@ -1097,9 +1098,11 @@ func sanitizeLocalityKV(kv string) string {
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
 ) ([]jobspb.EncryptionInfo, error) {
+	const encryptionReadErrorMsg = `could not find or read encryption information`
+
 	files, err := getEncryptionInfoFiles(ctx, src)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), errEncryptionInfoRead)
 	}
 	var encInfo []jobspb.EncryptionInfo
 	// The user is more likely to pass in a KMS URI that was used to
@@ -1108,13 +1111,13 @@ func readEncryptionOptions(
 	for i := len(files) - 1; i >= 0; i-- {
 		r, err := src.ReadFile(ctx, files[i])
 		if err != nil {
-			return nil, errors.Wrap(err, "could not find or read encryption information")
+			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
 		defer r.Close(ctx)
 
 		encInfoBytes, err := ioctx.ReadAll(ctx, r)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not find or read encryption information")
+			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
 		var currentEncInfo jobspb.EncryptionInfo
 		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
