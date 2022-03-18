@@ -1457,9 +1457,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeRespons
 	activity := make(map[roachpb.NodeID]serverpb.NodeResponse_NetworkActivity, len(n.Activity))
 	for k, v := range n.Activity {
 		activity[k] = serverpb.NodeResponse_NetworkActivity{
-			Incoming: v.Incoming,
-			Outgoing: v.Outgoing,
-			Latency:  v.Latency,
+			Latency: v.Latency,
 		}
 	}
 
