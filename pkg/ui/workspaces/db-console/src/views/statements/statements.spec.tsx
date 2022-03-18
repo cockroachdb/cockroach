@@ -214,7 +214,7 @@ describe("selectApps", () => {
 
     const result = selectApps(state);
 
-    assert.deepEqual(result, ["(unset)", "foobar", "cockroach sql"]);
+    assert.deepEqual(result, ["(unset)", "cockroach sql", "foobar"]);
   });
 });
 
