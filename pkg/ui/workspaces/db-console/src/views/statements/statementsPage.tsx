@@ -188,7 +188,7 @@ export const selectApps = createSelector(
         }
       },
     );
-    return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+    return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps).sort());
   },
 );
 

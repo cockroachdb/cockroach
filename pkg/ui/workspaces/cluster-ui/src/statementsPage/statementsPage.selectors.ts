@@ -81,7 +81,7 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
       }
     },
   );
-  return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+  return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps).sort());
 });
 
 // selectDatabases returns the array of all databases with statement statistics present
