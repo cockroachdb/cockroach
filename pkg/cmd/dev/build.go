@@ -178,6 +178,20 @@ func (d *dev) crossBuild(
 			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/%s\"\n", target.fullName, dirname))
 			continue
 		}
+		if target.kind == "go_binary" || target.kind == "go_test" {
+			if !bazelBinSet {
+				script.WriteString(fmt.Sprintf("BAZELBIN=$(bazel info bazel-bin %s)\n", shellescape.QuoteCommand(configArgs)))
+				bazelBinSet = true
+			}
+			output := bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(crossConfig, "windows"))
+			baseOutput := filepath.Base(output)
+			script.WriteString(fmt.Sprintf("cp -R $BAZELBIN/%s /artifacts\n", output))
+			script.WriteString(fmt.Sprintf("chmod a+w /artifacts/%s\n", baseOutput))
+			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/%s\"\n", target.fullName, baseOutput))
+			continue
+		}
+		// Catch-all case: run the target being built under `realpath`
+		// to figure out where to copy the binary from.
 		// NB: For test targets, the `stdout` output from `bazel run` is
 		// going to have some extra garbage. We grep ^/ to select out
 		// only the filename we're looking for.
