@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -585,55 +583,29 @@ func (db *DB) AdminSplit(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// SplitAndScatterResult carries wraps information about the SplitAndScatter
-// call, including how long each step took or stats for range scattered.
-type SplitAndScatterResult struct {
-	// Timing indicates how long each step in this multi-step call took.
-	Timing struct {
-		Split   time.Duration
-		Scatter time.Duration
-	}
-	// Stats describe the scattered range, as returned by the AdminScatter call.
-	ScatteredStats *enginepb.MVCCStats
-	ScatteredSpan  roachpb.Span
-}
-
-// SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
-func (db *DB) SplitAndScatter(
-	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key,
-) (SplitAndScatterResult, error) {
-	beforeSplit := timeutil.Now()
-	b := &Batch{}
-	b.adminSplit(key, expirationTime, predicateKeys)
-	if err := getOneErr(db.Run(ctx, b), b); err != nil {
-		return SplitAndScatterResult{}, err
-	}
-	beforeScatter := timeutil.Now()
-
+// AdminScatter scatters the range containing the specified key.
+//
+// maxSize greater than non-zero specified a maximum size of the range above
+// which it should reject the scatter request, allowing callers to send request
+// to scatter that is conditional on it not resulting in excessive data movement
+// if the range is large.
+func (db *DB) AdminScatter(
+	ctx context.Context, key roachpb.Key, maxSize int64,
+) (*roachpb.AdminScatterResponse, error) {
 	scatterReq := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
 		RandomizeLeases: true,
+		MaxSize:         maxSize,
 	}
 	raw, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq)
 	if pErr != nil {
-		return SplitAndScatterResult{}, pErr.GoError()
+		return nil, pErr.GoError()
 	}
-	reply := SplitAndScatterResult{}
-	reply.Timing.Split = beforeScatter.Sub(beforeSplit)
-	reply.Timing.Scatter = timeutil.Since(beforeScatter)
 	resp, ok := raw.(*roachpb.AdminScatterResponse)
 	if !ok {
-		return reply, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
+		return nil, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
 	}
-	reply.ScatteredStats = resp.MVCCStats
-	if len(resp.RangeInfos) > 0 {
-		reply.ScatteredSpan = roachpb.Span{
-			Key:    resp.RangeInfos[0].Desc.StartKey.AsRawKey(),
-			EndKey: resp.RangeInfos[0].Desc.EndKey.AsRawKey(),
-		}
-	}
-
-	return reply, nil
+	return resp, nil
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.

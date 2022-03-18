@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const maxScatterSize = 4 << 20
+
 // BufferingAdder is a wrapper for an SSTBatcher that allows out-of-order calls
 // to Add, buffering them up and then sorting them before then passing them in
 // order into an SSTBatcher
@@ -422,8 +424,8 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 		predicateKey := b.curBuf.Key(predicateAt)
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
-		resp, err := b.sink.db.SplitAndScatter(ctx, splitKey, expire, predicateKey)
-		if err != nil {
+		beforeSplit := timeutil.Now()
+		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, predicateKey); err != nil {
 			// TODO(dt): a typed error would be nice here.
 			if strings.Contains(err.Error(), "predicate") {
 				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s",
@@ -432,16 +434,21 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			}
 			return err
 		}
-
+		b.sink.flushCounts.splitWait += timeutil.Since(beforeSplit)
+		beforeScatter := timeutil.Now()
+		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0)
+		if err != nil {
+			log.Warningf(ctx, "failed to scatter: %v", err)
+			continue
+		}
 		b.sink.flushCounts.splitAndScatters++
-		b.sink.flushCounts.splitWait += resp.Timing.Split
-		b.sink.flushCounts.scatterWait += resp.Timing.Scatter
-		if resp.ScatteredStats != nil {
-			moved := sz(resp.ScatteredStats.Total())
+		b.sink.flushCounts.scatterWait += timeutil.Since(beforeScatter)
+		if resp.MVCCStats != nil {
+			moved := sz(resp.MVCCStats.Total())
 			b.sink.flushCounts.scatterMoved += moved
-			if resp.ScatteredStats.Total() > 0 {
+			if moved > 0 {
 				log.VEventf(ctx, 1, "pre-split scattered %s in non-empty range %s",
-					moved, resp.ScatteredSpan)
+					moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 			}
 		}
 		created++
