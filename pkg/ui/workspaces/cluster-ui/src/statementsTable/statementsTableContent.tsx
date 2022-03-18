@@ -111,7 +111,7 @@ export const StatementTableCell = {
                   return {
                     name: (
                       <div className={cx("diagnostic-report-dropdown-option")}>
-                        {`Cancel current diagnostic request`}
+                        {`Cancel diagnostic request`}
                       </div>
                     ),
                     value: dr,

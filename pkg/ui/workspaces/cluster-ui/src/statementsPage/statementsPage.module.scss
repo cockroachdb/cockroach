@@ -51,6 +51,12 @@
   width: fit-content;
 }
 
+.reset-btn-area {
+  height: $line-height--larger;
+  display: flex;
+  align-items: center;
+}
+
 .app-filter-dropdown {
   /* 
     we are truncating the text in the filter, 
