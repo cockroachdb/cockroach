@@ -188,7 +188,7 @@ export const selectApps = createSelector(
         }
       },
     );
-    return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+    return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps).sort());
   },
 );
 
@@ -206,7 +206,7 @@ export const selectDatabases = createSelector(
           s.key.key_data.database ? s.key.key_data.database : "(unset)",
         ),
       ),
-    ).filter((dbName: string) => dbName !== null && dbName.length > 0);
+    ).filter((dbName: string) => dbName !== null && dbName.length > 0).sort();
   },
 );
 
