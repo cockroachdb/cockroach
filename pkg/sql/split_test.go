@@ -98,7 +98,7 @@ func TestSplitAt(t *testing.T) {
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES ($1)",
 			args:  []interface{}{"blah"},
-			error: "error in argument for $1: strconv.ParseInt",
+			error: "error in argument for $1: could not parse \"blah\" as type int: strconv.ParseInt",
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES ($1::string)",

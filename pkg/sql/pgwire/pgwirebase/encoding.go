@@ -312,13 +312,15 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 // DecodeDatum decodes bytes with specified type and format code into
 // a datum. If res is nil, then user defined types are not attempted
 // to be resolved.
-func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (tree.Datum, error) {
-	id := t.Oid()
+func DecodeDatum(
+	evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
+) (tree.Datum, error) {
+	id := typ.Oid()
 	switch code {
 	case FormatText:
 		switch id {
 		case oid.T_record:
-			d, _, err := tree.ParseDTupleFromString(evalCtx, string(b), t)
+			d, _, err := tree.ParseDTupleFromString(evalCtx, string(b), typ)
 			if err != nil {
 				return nil, err
 			}
@@ -326,19 +328,19 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 		case oid.T_bool:
 			t, err := strconv.ParseBool(string(b))
 			if err != nil {
-				return nil, err
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return tree.MakeDBool(tree.DBool(t)), nil
 		case oid.T_bit, oid.T_varbit:
 			t, err := tree.ParseDBitArray(string(b))
 			if err != nil {
-				return nil, err
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return t, nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
 			i, err := strconv.ParseInt(string(b), 10, 64)
 			if err != nil {
-				return nil, err
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_oid,
@@ -352,29 +354,29 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 			oid.T_regnamespace,
 			oid.T_regprocedure,
 			oid.T_regdictionary:
-			return eval.ParseDOid(evalCtx, string(b), t)
+			return eval.ParseDOid(evalCtx, string(b), typ)
 		case oid.T_float4, oid.T_float8:
 			f, err := strconv.ParseFloat(string(b), 64)
 			if err != nil {
-				return nil, err
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oidext.T_box2d:
 			d, err := tree.ParseDBox2D(string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as box2d", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oidext.T_geography:
 			d, err := tree.ParseDGeography(string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geography", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oidext.T_geometry:
 			d, err := tree.ParseDGeometry(string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geometry", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_void:
@@ -382,69 +384,67 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 		case oid.T_numeric:
 			d, err := tree.ParseDDecimal(string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_bytea:
 			res, err := lex.DecodeRawBytesToByteArrayAuto(b)
 			if err != nil {
-				return nil, err
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
 			d, _, err := tree.ParseDTimestamp(evalCtx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamp", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_timestamptz:
 			d, _, err := tree.ParseDTimestampTZ(evalCtx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamptz", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_date:
 			d, _, err := tree.ParseDDate(evalCtx, string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as date", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_time:
 			d, _, err := tree.ParseDTime(nil, string(b), time.Microsecond)
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as time", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_timetz:
 			d, _, err := tree.ParseDTimeTZ(evalCtx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as interval", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_uuid:
 			d, err := tree.ParseDUuidFromString(string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as uuid", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T_inet:
 			d, err := tree.ParseDIPAddrFromINetString(string(b))
 			if err != nil {
-				return nil, pgerror.Newf(pgcode.Syntax,
-					"could not parse string %q as inet", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8:
 			var arr pgtype.Int8Array
 			if err := arr.DecodeText(nil, b); err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax,
-					"could not parse string %q as int array", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			if arr.Status != pgtype.Present {
 				return tree.DNull, nil
@@ -468,8 +468,7 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 		case oid.T__text, oid.T__name:
 			var arr pgtype.TextArray
 			if err := arr.DecodeText(nil, b); err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax,
-					"could not parse string %q as text array", b)
+				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			if arr.Status != pgtype.Present {
 				return tree.DNull, nil
@@ -502,7 +501,7 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 			}
 			return tree.ParseDJSON(string(b))
 		}
-		if t.Family() == types.ArrayFamily {
+		if typ.Family() == types.ArrayFamily {
 			// Arrays come in in their string form, so we parse them as such and later
 			// convert them to their actual datum form.
 			if err := validateStringBytes(b); err != nil {
@@ -656,7 +655,7 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 
 				decString := string(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
-					return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", decString)
+					return nil, pgerror.Newf(pgcode.Syntax, "could not parse %q as type decimal", decString)
 				}
 				alloc.dd.Exponent = -int32(dscale)
 			}
@@ -784,8 +783,8 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
 			return &tree.DBitArray{BitArray: ba}, err
 		default:
-			if t.Family() == types.ArrayFamily {
-				return decodeBinaryArray(evalCtx, t.ArrayContents(), b, code)
+			if typ.Family() == types.ArrayFamily {
+				return decodeBinaryArray(evalCtx, typ.ArrayContents(), b, code)
 			}
 		}
 	default:
@@ -794,12 +793,12 @@ func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (
 	}
 
 	// Types with identical text/binary handling.
-	switch t.Family() {
+	switch typ.Family() {
 	case types.EnumFamily:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		return tree.MakeDEnumFromLogicalRepresentation(t, string(b))
+		return tree.MakeDEnumFromLogicalRepresentation(typ, string(b))
 	}
 	switch id {
 	case oid.T_text, oid.T_varchar, oid.T_unknown:
