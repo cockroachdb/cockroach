@@ -680,8 +680,6 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 				srcCol = src.TemplateType()
 			}
 			outCol := out.TemplateType()
-			var val _GOTYPE
-			var srcStartIdx int
 
 			// Loop over every group.
 			for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -704,15 +702,28 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 				// Loop over every row in the group.
 				for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 					// Repeat each row numRepeats times.
-					srcStartIdx = o.builderState.left.curSrcStartIdx
 					// {{if _HAS_SELECTION}}
-					srcStartIdx = sel[srcStartIdx]
+					srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
+					// {{else}}
+					srcStartIdx := o.builderState.left.curSrcStartIdx
 					// {{end}}
 
+					// {{/* repeatsLeft will always be positive. */}}
 					repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 					toAppend := repeatsLeft
 					if outStartIdx+toAppend > o.outputCapacity {
 						toAppend = o.outputCapacity - outStartIdx
+						if toAppend == 0 {
+							// {{/*
+							//     We reached the capacity of the output, so
+							//     exit or move onto the next column.
+							// */}}
+							if lastSrcCol {
+								return
+							}
+							o.builderState.left.setBuilderColumnState(initialBuilderState)
+							continue LeftColLoop
+						}
 					}
 
 					// {{if or _JOIN_TYPE.IsRightOuter _JOIN_TYPE.IsRightAnti}}
@@ -723,27 +734,52 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 					// */}}
 					if leftGroup.nullGroup {
 						outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-						outStartIdx += toAppend
 					} else
 					// {{end}}
 					{
 						if srcNulls.NullAt(srcStartIdx) {
 							outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-							outStartIdx += toAppend
 						} else {
-							val = srcCol.Get(srcStartIdx)
+							// {{if not .IsBytesLike}}
+							// {{if .Sliceable}}
+							outCol := outCol[outStartIdx:]
+							_ = outCol[toAppend-1]
+							// {{end}}
+							val := srcCol.Get(srcStartIdx)
+							// {{end}}
 							for i := 0; i < toAppend; i++ {
-								outCol.Set(outStartIdx, val)
-								outStartIdx++
+								// {{if .IsBytesLike}}
+								outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
+								// {{else}}
+								// {{if .Sliceable}}
+								// {{/*
+								//     For the sliceable types, we sliced outCol
+								//     to start at outStartIdx, so we use index
+								//     i directly.
+								// */}}
+								//gcassert:bce
+								outCol.Set(i, val)
+								// {{else}}
+								// {{/*
+								//     For the non-sliceable types, outCol
+								//     vector is the original one (i.e. without
+								//     an adjustment), so we need to add
+								//     outStartIdx to set the element at the
+								//     correct index.
+								// */}}
+								outCol.Set(outStartIdx+i, val)
+								// {{end}}
+								// {{end}}
 							}
 						}
 					}
+					outStartIdx += toAppend
 
 					if toAppend < repeatsLeft {
 						// We didn't materialize all the rows in the group so save state and
 						// move to the next column.
 						o.builderState.left.numRepeatsIdx += toAppend
-						if colIdx == len(input.sourceTypes)-1 {
+						if lastSrcCol {
 							return
 						}
 						o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -799,6 +835,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroupsFromBatch(
 			// Loop over every column.
 		LeftColLoop:
 			for colIdx := range input.sourceTypes {
+				lastSrcCol := colIdx == len(input.sourceTypes)-1
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx)
 				var src coldata.Vec
@@ -896,7 +933,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 					// done with the current column.
 					if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 						// If it's the last column, save state and return.
-						if colIdx == len(input.sourceTypes)-1 {
+						if lastSrcCol {
 							o.builderState.right.curSrcStartIdx += toAppend
 							return
 						}
@@ -951,6 +988,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
 			// Loop over every column.
 		RightColLoop:
 			for colIdx := range input.sourceTypes {
+				lastSrcCol := colIdx == len(input.sourceTypes)-1
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx + colOffset)
 				var src coldata.Vec

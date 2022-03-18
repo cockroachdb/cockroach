@@ -211,9 +211,9 @@ func (b *Bytes) Window(start, end int) *Bytes {
 	}
 }
 
-// copy copies a single value from src at position srcIdx into position destIdx
+// Copy copies a single value from src at position srcIdx into position destIdx
 // of the receiver. It is faster than b.Set(destIdx, src.Get(srcIdx)).
-func (b *Bytes) copy(src *Bytes, destIdx, srcIdx int) {
+func (b *Bytes) Copy(src *Bytes, destIdx, srcIdx int) {
 	if buildutil.CrdbTestBuild {
 		if b.isWindow {
 			panic("copy is called on a window into Bytes")
