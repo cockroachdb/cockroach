@@ -226,6 +226,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/schemaexpr:schemaexpr_test",
     "//pkg/sql/catalog/seqexpr:seqexpr_test",
     "//pkg/sql/catalog/systemschema:systemschema_test",
+    "//pkg/sql/catalog/systemschema_test:systemschema_test_test",
     "//pkg/sql/catalog/tabledesc:tabledesc_test",
     "//pkg/sql/catalog/typedesc:typedesc_test",
     "//pkg/sql/catalog:catalog_test",
