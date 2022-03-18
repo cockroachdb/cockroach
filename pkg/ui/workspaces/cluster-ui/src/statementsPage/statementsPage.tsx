@@ -71,7 +71,6 @@ import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
 import {
   TimeScaleDropdown,
-  defaultTimeScaleSelected,
   TimeScale,
   toDateRange,
 } from "../timeScaleDropdown";
@@ -135,6 +134,7 @@ export interface StatementsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
+  startRequest?: Date;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
@@ -183,6 +183,7 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
+      startRequest: new Date(),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -250,6 +251,9 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
+    this.setState({
+      startRequest: new Date(),
+    });
   };
 
   resetPagination = (): void => {
@@ -270,9 +274,15 @@ export class StatementsPage extends React.Component<
   resetSQLStats = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.resetSQLStats(req);
+    this.setState({
+      startRequest: new Date(),
+    });
   };
 
   componentDidMount(): void {
+    this.setState({
+      startRequest: new Date(),
+    });
     this.refreshStatements();
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
@@ -611,7 +621,12 @@ export class StatementsPage extends React.Component<
       ? []
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
+
+    const timeNow = new Date();
+    const timeWaitingResponse =
+      (timeNow.getTime() - this.state.startRequest.getTime()) / 1000;
     const longLoadingMessage = isNil(this.props.statements) &&
+      timeWaitingResponse > 2 &&
       isNil(getValidErrorsList(this.props.statementsError)) && (
         <InlineAlert
           intent="info"
@@ -651,7 +666,9 @@ export class StatementsPage extends React.Component<
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
+          <PageConfigItem
+            className={`${commonStyles("separator")} ${cx("reset-btn-area")} `}
+          >
             <ClearStats
               resetSQLStats={this.resetSQLStats}
               tooltipType="statement"
