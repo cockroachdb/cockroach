@@ -28,6 +28,10 @@
       <key>include</key>
       <string>#logictest</string>
     </dict>
+    <dict>
+      <key>include</key>
+      <string>#opttest</string>
+    </dict>
   </array>
   <key>repository</key>
   <dict>
@@ -190,6 +194,59 @@
           <key>name</key>
           <string>meta.logictestmisc.datadriven</string>
          </dict>
+      </array>
+    </dict>
+    <key>opttest</key>
+    <dict>
+      <key>patterns</key>
+      <array>
+        <dict>
+          <key>begin</key>
+          <string>(?x) # Enable free spacing mode
+          ^(assign-placeholders-build |
+            assign-placeholders-norm |
+            assign-placeholders-opt |
+            build-cascades |
+            build |
+            check-size |
+            exec-ddl |
+            exploretrace |
+            exprnorm |
+            expropt |
+            expr |
+            index-candidates |
+            index-recommendations |
+            inject-stats |
+            import |
+            memo |
+            norm |
+            opt |
+            optsteps |
+            optstepsweb |
+            placeholder-fast-path |
+            reorderjoins |
+            rulestats |
+            stats-quality).*\n</string>
+          <key>captures</key>
+          <dict>
+            <key>1</key>
+            <dict>
+              <key>name</key>
+              <string>entity.name.function.datadriven</string>
+            </dict>
+          </dict>
+          <key>while</key>
+          <string>^(?!----).*$</string>
+          <key>name</key>
+          <string>meta.opttest.datadriven</string>
+          <key>patterns</key>
+          <array>
+            <dict>
+              <key>include</key>
+              <string>source.sql</string>
+            </dict>
+          </array>
+        </dict>
       </array>
     </dict>
   </dict>
