@@ -451,9 +451,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1 > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs("1").Results(true),
-			baseTest.SetArgs(1.1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
-			baseTest.SetArgs("1.0").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
-			baseTest.SetArgs(true).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
+			baseTest.SetArgs(1.1).Error(`pq: error in argument for $1: could not parse "1.1" as type int: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
+			baseTest.SetArgs("1.0").Error(`pq: error in argument for $1: could not parse "1.0" as type int: strconv.ParseInt: parsing "1.0": invalid syntax`),
+			baseTest.SetArgs(true).Error(`pq: error in argument for $1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
 		{"SELECT ($1) > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
@@ -467,7 +467,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(true).Results(true),
 			baseTest.SetArgs(false).Results(false),
 			baseTest.SetArgs(1).Results(true),
-			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
+			baseTest.SetArgs("").Error(`pq: error in argument for $1: could not parse "" as type bool: strconv.ParseBool: parsing "": invalid syntax`),
 			// Make sure we can run another after a failure.
 			baseTest.SetArgs(true).Results(true),
 		}},
@@ -476,9 +476,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("true").Results(true),
 			baseTest.SetArgs("false").Results(false),
 			baseTest.SetArgs("1").Results(true),
-			baseTest.SetArgs(2).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "2": invalid syntax`),
-			baseTest.SetArgs(3.1).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
-			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
+			baseTest.SetArgs(2).Error(`pq: error in argument for $1: could not parse "2" as type bool: strconv.ParseBool: parsing "2": invalid syntax`),
+			baseTest.SetArgs(3.1).Error(`pq: error in argument for $1: could not parse "3.1" as type bool: strconv.ParseBool: parsing "3.1": invalid syntax`),
+			baseTest.SetArgs("").Error(`pq: error in argument for $1: could not parse "" as type bool: strconv.ParseBool: parsing "": invalid syntax`),
 		}},
 		{"SELECT CASE 40+2 WHEN 42 THEN 51 ELSE $1::INT END", []preparedQueryTest{
 			baseTest.Error(
@@ -492,14 +492,14 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("2", 1).Results(true),
 			baseTest.SetArgs(1, "2").Results(false),
 			baseTest.SetArgs("2", "1.0").Results(true),
-			baseTest.SetArgs("2.0", "1").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
-			baseTest.SetArgs(2.1, 1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			baseTest.SetArgs("2.0", "1").Error(`pq: error in argument for $1: could not parse "2.0" as type int: strconv.ParseInt: parsing "2.0": invalid syntax`),
+			baseTest.SetArgs(2.1, 1).Error(`pq: error in argument for $1: could not parse "2.1" as type int: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		}},
 		{"SELECT greatest($1, 0, $2), $2", []preparedQueryTest{
 			baseTest.SetArgs(1, -1).Results(1, -1),
 			baseTest.SetArgs(-1, 10).Results(10, 10),
 			baseTest.SetArgs("-2", "-1").Results(0, -1),
-			baseTest.SetArgs(1, 2.1).Error(`pq: error in argument for $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			baseTest.SetArgs(1, 2.1).Error(`pq: error in argument for $2: could not parse "2.1" as type int: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		}},
 		{"SELECT $1::int, $1::float", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1, 1.0),
@@ -508,7 +508,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT 3 + $1, $1 + $2", []preparedQueryTest{
 			baseTest.SetArgs("1", "2").Results(4, 3),
 			baseTest.SetArgs(3, "4").Results(6, 7),
-			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: strconv.ParseInt: parsing "a": invalid syntax`),
+			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax`),
 		}},
 		// Check for name resolution.
 		{"SELECT count(*)", []preparedQueryTest{
@@ -522,7 +522,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT CASE 1 WHEN $1 THEN $2 ELSE 2 END", []preparedQueryTest{
 			baseTest.SetArgs(1, 3).Results(3),
 			baseTest.SetArgs(2, 3).Results(2),
-			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
+			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
 		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
@@ -1091,7 +1091,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"INSERT INTO d.public.t VALUES ($1, $2, $3)",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, "one", 2).RowsAffected(1),
-				baseTest.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "two": invalid syntax`),
+				baseTest.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: could not parse "two" as type int: strconv.ParseInt: parsing "two": invalid syntax`),
 			},
 		},
 		{
