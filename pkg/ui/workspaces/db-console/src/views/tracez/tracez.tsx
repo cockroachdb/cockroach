@@ -75,7 +75,7 @@ const SnapshotSelector = ({
 interface SnapshotRow {
   span: cockroach.server.serverpb.ITracingSpan;
   stack: string;
-  verbose?: boolean;
+  recording?: boolean;
 }
 
 const GoroutineToggler = ({ id, stack }: { id: Long; stack: string }) => {
@@ -199,16 +199,16 @@ const snapshotColumns = (
       cell: sr => <TagCell sr={sr} setSearch={setSearch} />,
     },
     {
-      title: "Verbose",
-      name: "verbose",
+      title: "Recording",
+      name: "recording",
       cell: sr => (
         <Switch
-          checked={sr.verbose}
+          checked={sr.recording}
           // TODO(davidh): Implement toggling back and forth
           onClick={() => setTraceRecordingVerbose(sr.span.trace_id)}
         />
       ),
-      sort: sr => `${sr.verbose}`,
+      sort: sr => `${sr.recording}`,
     },
     {
       title: "Start Time",
@@ -359,7 +359,7 @@ export const Tracez = () => {
         captured_at: snapshot.captured_at,
         rows: snapshot.rows.map(r => {
           if (r.span.trace_id === t) {
-            r.verbose = true;
+            r.recording = true;
           }
           return r;
         }),
