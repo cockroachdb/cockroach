@@ -32,6 +32,10 @@
       <key>include</key>
       <string>#opttest</string>
     </dict>
+    <dict>
+      <key>include</key>
+      <string>#basetest</string>
+    </dict>
   </array>
   <key>repository</key>
   <dict>
@@ -246,6 +250,28 @@
               <string>source.sql</string>
             </dict>
           </array>
+        </dict>
+      </array>
+    </dict>
+    <key>basetest</key>
+    <dict>
+      <key>patterns</key>
+      <array>
+        <dict>
+          <key>begin</key>
+          <string>^([\w|-]+).*\n</string>
+          <key>captures</key>
+          <dict>
+            <key>1</key>
+            <dict>
+              <key>name</key>
+              <string>entity.name.function.datadriven</string>
+            </dict>
+          </dict>
+          <key>while</key>
+          <string>^(?!----).*$</string>
+          <key>name</key>
+          <string>meta.basetest.datadriven</string>
         </dict>
       </array>
     </dict>
