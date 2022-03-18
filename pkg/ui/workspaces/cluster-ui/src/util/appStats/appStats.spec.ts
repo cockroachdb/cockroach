@@ -21,9 +21,9 @@ import {
   combineStatementStats,
 } from "./appStats";
 import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
+import ITimestamp = protos.google.protobuf.Timestamp;
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
-import { random } from "d3";
-import { exec } from "child_process";
+import moment from "moment";
 
 // record is implemented here so we can write the below test as a direct
 // analog of the one in pkg/roachpb/app_stats_test.go.  It's here rather
@@ -45,10 +45,12 @@ function emptyStats() {
 function makeSensitiveInfo(
   lastErr: string,
   planDescription: IExplainTreePlanNode,
+  planSampledTimestamp: ITimestamp,
 ): ISensitiveInfo {
   return {
     last_err: lastErr,
     most_recent_plan_description: planDescription,
+    most_recent_plan_timestamp: planSampledTimestamp,
   };
 }
 
@@ -264,7 +266,7 @@ function randomStats(
     bytes_read: randomStat(),
     rows_read: randomStat(),
     rows_written: randomStat(),
-    sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
+    sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null, null),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
     exec_stats: randomExecStats(count),
@@ -298,6 +300,11 @@ function randomPlanDescription(): IExplainTreePlanNode {
     ],
   };
 }
+
+const emptyPlanDescription: IExplainTreePlanNode = {
+  children: [],
+  name: "",
+};
 
 describe("combineStatementStats", () => {
   it("combines statement statistics", () => {
@@ -430,10 +437,27 @@ describe("combineStatementStats", () => {
       const plan1 = randomPlanDescription();
       const plan2 = randomPlanDescription();
 
-      const empty = makeSensitiveInfo(null, null);
-      const a = makeSensitiveInfo(error1, null);
-      const b = makeSensitiveInfo(null, plan1);
-      const c = makeSensitiveInfo(error2, plan2);
+      // plan1 is sampled after plan2.
+      const plan1SampleTs = new ITimestamp({
+        nanos: 500,
+      });
+
+      const plan2SampleTs = new ITimestamp({
+        nanos: 10,
+      });
+
+      const empty = makeSensitiveInfo(
+        null,
+        emptyPlanDescription,
+        new ITimestamp(),
+      );
+      const a = makeSensitiveInfo(
+        error1,
+        emptyPlanDescription,
+        new ITimestamp(),
+      );
+      const b = makeSensitiveInfo(null, plan1, plan1SampleTs);
+      const c = makeSensitiveInfo(error2, plan2, plan2SampleTs);
 
       function assertSensitiveInfoInCombineStatementStats(
         input: ISensitiveInfo[],
@@ -459,16 +483,29 @@ describe("combineStatementStats", () => {
       assertSensitiveInfoInCombineStatementStats([a, b, c], {
         last_err: a.last_err,
         most_recent_plan_description: b.most_recent_plan_description,
+        most_recent_plan_timestamp: plan1SampleTs,
       });
       assertSensitiveInfoInCombineStatementStats([a, c, b], {
         last_err: a.last_err,
-        most_recent_plan_description: c.most_recent_plan_description,
+        most_recent_plan_description: b.most_recent_plan_description,
+        most_recent_plan_timestamp: plan1SampleTs,
       });
       assertSensitiveInfoInCombineStatementStats([b, c, a], {
         last_err: c.last_err,
         most_recent_plan_description: b.most_recent_plan_description,
+        most_recent_plan_timestamp: plan1SampleTs,
       });
-      assertSensitiveInfoInCombineStatementStats([c, a, b], c);
+      assertSensitiveInfoInCombineStatementStats([c, a, b], {
+        last_err: c.last_err,
+        most_recent_plan_description: b.most_recent_plan_description,
+        most_recent_plan_timestamp: plan1SampleTs,
+      });
+      assertSensitiveInfoInCombineStatementStats([a, c], {
+        last_err: a.last_err,
+        most_recent_plan_description: c.most_recent_plan_description,
+        most_recent_plan_timestamp: plan2SampleTs,
+      });
+      assertSensitiveInfoInCombineStatementStats([c, a], c);
     });
   });
 });

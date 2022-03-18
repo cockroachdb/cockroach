@@ -61,11 +61,23 @@ export function aggregateNumericStats(
 export function coalesceSensitiveInfo(
   a: protos.cockroach.sql.ISensitiveInfo,
   b: protos.cockroach.sql.ISensitiveInfo,
-) {
+): protos.cockroach.sql.ISensitiveInfo {
+  let planDesc = a.most_recent_plan_description;
+  let mostRecentPlanTimestamp = a.most_recent_plan_timestamp;
+
+  const planSampledNanoA = a.most_recent_plan_timestamp?.nanos || 0;
+  const planSampledNanoB = b.most_recent_plan_timestamp?.nanos || 0;
+
+  // Always return the most recently sampled plan.
+  if (planSampledNanoA < planSampledNanoB) {
+    planDesc = b.most_recent_plan_description;
+    mostRecentPlanTimestamp = b.most_recent_plan_timestamp;
+  }
+
   return {
     last_err: a.last_err || b.last_err,
-    most_recent_plan_description:
-      a.most_recent_plan_description || b.most_recent_plan_description,
+    most_recent_plan_description: planDesc,
+    most_recent_plan_timestamp: mostRecentPlanTimestamp,
   };
 }
 
