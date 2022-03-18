@@ -13,6 +13,7 @@ package bulk
 import (
 	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -400,18 +401,28 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
 			hour := hlc.Timestamp{WallTime: beforeFlush.Add(time.Hour).UnixNano()}
-			reply, err := b.db.SplitAndScatter(ctx, splitAt, hour)
-			if err != nil {
+			beforeSplit := timeutil.Now()
+			if err := b.db.AdminSplit(ctx, splitAt, hour); err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
-				b.flushCounts.splitAndScatters++
-				b.flushCounts.splitWait += reply.Timing.Split
-				b.flushCounts.scatterWait += reply.Timing.Scatter
-				if reply.ScatteredStats != nil {
-					moved := sz(reply.ScatteredStats.Total())
-					b.flushCounts.scatterMoved += moved
-					if moved > 0 {
-						log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, reply.ScatteredSpan)
+				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+				beforeScatter := timeutil.Now()
+				resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
+				b.flushCounts.scatterWait += timeutil.Since(beforeScatter)
+				if err != nil {
+					if strings.Contains(err.Error(), "existing range size") {
+						log.VEventf(ctx, 1, "%s scattered non-empty range rejected: %v", b.name, err)
+					} else {
+						log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
+					}
+				} else {
+					b.flushCounts.splitAndScatters++
+					if resp.MVCCStats != nil {
+						moved := sz(resp.MVCCStats.Total())
+						b.flushCounts.scatterMoved += moved
+						if moved > 0 {
+							log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
+						}
 					}
 				}
 			}
