@@ -120,7 +120,7 @@ type SSTBatcher struct {
 		dueToSize  int
 		files      int // a single flush might create multiple files.
 
-		splitAndScatters int
+		splits, scatters int
 		scatterMoved     sz
 
 		flushWait   time.Duration
@@ -406,6 +406,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
 				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+				b.flushCounts.splits++
 				beforeScatter := timeutil.Now()
 				resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
 				b.flushCounts.scatterWait += timeutil.Since(beforeScatter)
@@ -416,7 +417,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 						log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 					}
 				} else {
-					b.flushCounts.splitAndScatters++
+					b.flushCounts.scatters++
 					if resp.MVCCStats != nil {
 						moved := sz(resp.MVCCStats.Total())
 						b.flushCounts.scatterMoved += moved
