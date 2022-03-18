@@ -12,9 +12,7 @@ package sql_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub/scrubtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -68,23 +67,25 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.MissingIndexEntryError,
-		Database:     "t",
-		Table:        "tEst",
-		PrimaryKey:   "(10)",
-		Repaired:     false,
-		DetailsRegex: `"v": "20"`,
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.MissingIndexEntryError,
+			Database:     "t",
+			Table:        "tEst",
+			PrimaryKey:   "(10)",
+			Repaired:     false,
+			DetailsRegex: `"v": "20"`,
+		},
 	}
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
 	time.Sleep(1 * time.Millisecond)
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '-1ms' WITH OPTIONS INDEX ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '-1ms' WITH OPTIONS INDEX ALL`, exp)
 
 	// Verify that AS OF SYSTEM TIME actually operates in the past.
 	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
 	r.Exec(t, `DELETE FROM t."tEst"`)
-	runScrub(
+	scrubtestutils.RunScrub(
 		t, db, fmt.Sprintf(
 			`EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL`, ts,
 		),
@@ -117,7 +118,7 @@ INSERT INTO t.test VALUES (2, 15);
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
-		exp := expectedScrubResult{
+		exp := scrubtestutils.ExpectedScrubResult{
 			ErrorType:    scrub.MissingIndexEntryError,
 			Database:     "t",
 			Table:        "test",
@@ -125,7 +126,7 @@ INSERT INTO t.test VALUES (2, 15);
 			Repaired:     false,
 			DetailsRegex: `"v": "15"`,
 		}
-		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
 	})
 	t.Run("dangling index entry that matches predicate", func(t *testing.T) {
 		r.Exec(t, `
@@ -143,7 +144,7 @@ INSERT INTO t.test VALUES (2, 15);
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
-		exp := expectedScrubResult{
+		exp := scrubtestutils.ExpectedScrubResult{
 			ErrorType:    scrub.DanglingIndexReferenceError,
 			Database:     "t",
 			Table:        "test",
@@ -151,7 +152,7 @@ INSERT INTO t.test VALUES (2, 15);
 			Repaired:     false,
 			DetailsRegex: `"v": "25"`,
 		}
-		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
 	})
 	t.Run("dangling index entry that does not match predicate", func(t *testing.T) {
 		r.Exec(t, `
@@ -169,7 +170,7 @@ INSERT INTO t.test VALUES (2, 15);
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
-		exp := expectedScrubResult{
+		exp := scrubtestutils.ExpectedScrubResult{
 			ErrorType:    scrub.DanglingIndexReferenceError,
 			Database:     "t",
 			Table:        "test",
@@ -177,7 +178,7 @@ INSERT INTO t.test VALUES (2, 15);
 			Repaired:     false,
 			DetailsRegex: `"v": "7"`,
 		}
-		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
 	})
 	t.Run("index entry that does not match predicate", func(t *testing.T) {
 		r.Exec(t, `
@@ -195,7 +196,7 @@ INSERT INTO t.test VALUES (2, 15);
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
-		exp := expectedScrubResult{
+		exp := scrubtestutils.ExpectedScrubResult{
 			ErrorType:    scrub.DanglingIndexReferenceError,
 			Database:     "t",
 			Table:        "test",
@@ -203,7 +204,7 @@ INSERT INTO t.test VALUES (2, 15);
 			Repaired:     false,
 			DetailsRegex: `"v": "5"`,
 		}
-		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
 	})
 
 }
@@ -575,22 +576,24 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.ForeignKeyConstraintViolation,
-		Database:     "t",
-		Table:        "child",
-		PrimaryKey:   "(10)",
-		DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.ForeignKeyConstraintViolation,
+			Database:     "t",
+			Table:        "child",
+			PrimaryKey:   "(10)",
+			DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+		},
 	}
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
 	time.Sleep(1 * time.Millisecond)
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 
 	// Verify that AS OF SYSTEM TIME actually operates in the past.
 	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
 	r.Exec(t, "INSERT INTO t.parent VALUES (0)")
-	runScrub(
+	scrubtestutils.RunScrub(
 		t, db, fmt.Sprintf(
 			`EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '%s' WITH OPTIONS CONSTRAINT ALL`, ts,
 		),
@@ -633,75 +636,79 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.ForeignKeyConstraintViolation,
-		Database:     "t",
-		Table:        "child",
-		PrimaryKey:   "(11)",
-		DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.ForeignKeyConstraintViolation,
+			Database:     "t",
+			Table:        "child",
+			PrimaryKey:   "(11)",
+			DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+		},
 	}
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	time.Sleep(1 * time.Millisecond)
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
 
-type expectedScrubResult struct {
-	ErrorType    string
-	Database     string
-	Table        string
-	PrimaryKey   string
-	Repaired     bool
-	DetailsRegex string
-}
+// TestScrubUniqueWithoutIndex tests SCRUB on a table that violates a
+// UNIQUE WITHOUT INDEX constraint.
+func TestScrubUniqueWithoutIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
 
-func checkScrubResult(t *testing.T, res sqlutils.ScrubResult, exp expectedScrubResult) {
-	t.Helper()
+	// Create the table and row entries.
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	id2 INT UNIQUE WITHOUT INDEX
+);
 
-	if res.ErrorType != exp.ErrorType {
-		t.Errorf("expected %q error, instead got: %s", exp.ErrorType, res.ErrorType)
-	}
-
-	if res.Database != exp.Database {
-		t.Errorf("expected database %q, got %q", exp.Database, res.Database)
-	}
-
-	if res.Table != exp.Table {
-		t.Errorf("expected table %q, got %q", exp.Table, res.Table)
-	}
-
-	if res.PrimaryKey != exp.PrimaryKey {
-		t.Errorf("expected primary key %q, got %q", exp.PrimaryKey, res.PrimaryKey)
-	}
-	if res.Repaired != exp.Repaired {
-		t.Fatalf("expected repaired %v, got %v", exp.Repaired, res.Repaired)
-	}
-
-	if matched, err := regexp.MatchString(exp.DetailsRegex, res.Details); err != nil {
-		t.Fatal(err)
-	} else if !matched {
-		t.Errorf("expected error details to contain `%s`, got `%s`", exp.DetailsRegex, res.Details)
-	}
-}
-
-// runScrub runs a SCRUB statement and checks that it returns exactly one scrub
-// result and that it matches the expected result.
-func runScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp expectedScrubResult) {
-	t.Helper()
-
-	// Run SCRUB and find the FOREIGN KEY violation created.
-	rows, err := db.Query(scrubStmt)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	defer rows.Close()
-
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
+INSERT INTO db.t VALUES (1, 2), (2,3);
+`); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	// Overwrite one of the values with a duplicate unique value.
+	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		t.Fatalf("unexpected error %s", err)
 	}
-	checkScrubResult(t, results[0], exp)
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+	// Put a duplicate unique value via KV.
+	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(1)",
+			DetailsRegex: `{"constraint_name": "unique_id2", "row_data": {"id": "1", "id2": "3"}`,
+		},
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(2)",
+			DetailsRegex: `{"constraint_name": "unique_id2", "row_data": {"id": "2", "id2": "3"}`,
+		},
+	}
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
