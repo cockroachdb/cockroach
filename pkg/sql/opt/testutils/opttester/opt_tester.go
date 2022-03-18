@@ -488,6 +488,16 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     - import: the file path is relative to opttester/testfixtures;
 //     - inject-stats: the file path is relative to the test file.
 //
+//  - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
+//  indicates the number of joins at which the optimizer should stop attempting
+//  to reorder.
+//
+//  - prefer-lookup-joins-for-fks sets SessionData.PreferLookupJoinsForFKs to
+//  true, causing foreign key operations to prefer lookup joins.
+//
+//  - null-ordered-last sets SessionData.NullOrderedLast to true, which orders
+//  NULL values last in ascending order.
+//
 //  - cascade-levels: used to limit the depth of recursive cascades for
 //    build-cascades.
 //
@@ -504,6 +514,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //  - group-limit: used with check-size to set a max limit on the number of
 //    groups that can be added to the memo before a testing error is returned.
+//
+//  - use-multi-col-stats sets the value for
+//  SessionData.OptimizerUseMultiColStats which indicates whether or not
+//  multi-column statistics are used for cardinality estimation in the
+//  optimizer. This option requires a single boolean argument.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -899,6 +914,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.JoinLimit = int(limit)
 
 	case "prefer-lookup-joins-for-fks":
+		if len(arg.Vals) > 0 {
+			return fmt.Errorf("unknown vals for prefer-lookup-joins-for-fks")
+		}
 		f.PreferLookupJoinsForFKs = true
 
 	case "null-ordered-last":
