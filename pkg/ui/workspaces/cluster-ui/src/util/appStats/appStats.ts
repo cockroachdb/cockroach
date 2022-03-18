@@ -61,11 +61,18 @@ export function aggregateNumericStats(
 export function coalesceSensitiveInfo(
   a: protos.cockroach.sql.ISensitiveInfo,
   b: protos.cockroach.sql.ISensitiveInfo,
-) {
+): protos.cockroach.sql.ISensitiveInfo {
+  let planDesc = a.most_recent_plan_description;
+
+  // When a plan is empty, backend API always sends back a valid JSON object
+  // with empty names instead of null field.
+  if (planDesc && !planDesc.name) {
+    planDesc = b.most_recent_plan_description;
+  }
+
   return {
     last_err: a.last_err || b.last_err,
-    most_recent_plan_description:
-      a.most_recent_plan_description || b.most_recent_plan_description,
+    most_recent_plan_description: planDesc,
   };
 }
 

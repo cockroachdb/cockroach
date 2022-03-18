@@ -299,6 +299,11 @@ function randomPlanDescription(): IExplainTreePlanNode {
   };
 }
 
+const emptyPlanDescription: IExplainTreePlanNode = {
+  children: [],
+  name: "",
+};
+
 describe("combineStatementStats", () => {
   it("combines statement statistics", () => {
     const a = randomStats();
@@ -430,8 +435,8 @@ describe("combineStatementStats", () => {
       const plan1 = randomPlanDescription();
       const plan2 = randomPlanDescription();
 
-      const empty = makeSensitiveInfo(null, null);
-      const a = makeSensitiveInfo(error1, null);
+      const empty = makeSensitiveInfo(null, emptyPlanDescription);
+      const a = makeSensitiveInfo(error1, emptyPlanDescription);
       const b = makeSensitiveInfo(null, plan1);
       const c = makeSensitiveInfo(error2, plan2);
 
