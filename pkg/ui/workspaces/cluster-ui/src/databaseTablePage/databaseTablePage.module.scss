@@ -22,6 +22,10 @@
   }
 }
 
+.tab-pane {
+  margin-left: 1px;
+}
+
 .summary-card {
   h4 {
     @include text--body-strong;
@@ -69,6 +73,7 @@
   &__summary-card {
     width: fit-content;
     padding: 0;
+    margin-left: 9px;
   }
 
   &__header {
@@ -91,6 +96,11 @@
 
   &__reset-btn {
     color: $colors--primary-blue-3;
+
+    &:hover {
+      color: $colors--primary-blue-3;
+      text-decoration: underline;
+    }
   }
 
   &-table {

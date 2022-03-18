@@ -90,18 +90,9 @@ const StatementTableCell = (props: { session: ISession }) => {
   const stmtSummary = session.active_queries[0].sql_summary;
   const stmtCellText = computeOrUseStmtSummary(sql, stmtSummary);
   return (
-    <Link
-      to={StatementLinkTarget({
-        statementFingerprintID: stmt.id,
-        statementNoConstants: stmt.sql_no_constants,
-        implicitTxn: session.active_txn?.implicit,
-        appNames: [session.application_name],
-      })}
-    >
-      <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
-        <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
-      </Tooltip>
-    </Link>
+    <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
+      <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
+    </Tooltip>
   );
 };
 

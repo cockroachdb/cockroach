@@ -115,9 +115,13 @@ class StatementDiagnosticsHistoryView extends React.Component<
           return <StatementColumn fingerprint={fingerprint} />;
         }
 
+        const base = `/statement/${implicitTxn}`;
+        const statementFingerprintID = statement.id.toString();
+        const path = `${base}/${encodeURIComponent(statementFingerprintID)}`;
+
         return (
           <Link
-            to={`/statement/${implicitTxn}/${encodeURIComponent(query)}`}
+            to={path}
             className="crl-statements-diagnostics-view__statements-link"
           >
             <StatementColumn fingerprint={fingerprint} />

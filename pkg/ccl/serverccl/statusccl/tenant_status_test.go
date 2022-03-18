@@ -1098,34 +1098,75 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 
 func testTenantRangesRPC(_ context.Context, t *testing.T, helper *tenantTestHelper) {
 	tenantA := helper.testCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
-	keyPrefixForA := keys.MakeTenantPrefix(helper.testCluster().tenant(0).tenant.RPCContext().TenantID)
-	keyPrefixEndForA := keyPrefixForA.PrefixEnd()
-
 	tenantB := helper.controlCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
-	keyPrefixForB := keys.MakeTenantPrefix(helper.controlCluster().tenant(0).tenant.RPCContext().TenantID)
-	keyPrefixEndForB := keyPrefixForB.PrefixEnd()
 
-	resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
-	require.NoError(t, err)
-	require.NotEmpty(t, resp.RangesByLocality)
-	for localityKey, rangeList := range resp.RangesByLocality {
-		require.NotEmpty(t, localityKey)
-		for _, r := range rangeList.Ranges {
-			assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
-			assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+	// Wait for range splits to occur so we get more than just a single range during our tests.
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+		if err != nil {
+			return err
 		}
-	}
+		for _, ranges := range resp.RangesByLocality {
+			if len(ranges.Ranges) > 1 {
+				return nil
+			}
+		}
+		return errors.New("waiting for tenant range split")
+	})
 
-	resp, err = tenantB.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
-	require.NoError(t, err)
-	require.NotEmpty(t, resp.RangesByLocality)
-	for localityKey, rangeList := range resp.RangesByLocality {
-		require.NotEmpty(t, localityKey)
-		for _, r := range rangeList.Ranges {
-			assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
-			assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+	t.Run("test tenant ranges respects tenant isolation", func(t *testing.T) {
+		keyPrefixForA := keys.MakeTenantPrefix(helper.testCluster().tenant(0).tenant.RPCContext().TenantID)
+		keyPrefixEndForA := keyPrefixForA.PrefixEnd()
+		keyPrefixForB := keys.MakeTenantPrefix(helper.controlCluster().tenant(0).tenant.RPCContext().TenantID)
+		keyPrefixEndForB := keyPrefixForB.PrefixEnd()
+
+		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.RangesByLocality)
+		for localityKey, rangeList := range resp.RangesByLocality {
+			require.NotEmpty(t, localityKey)
+			for _, r := range rangeList.Ranges {
+				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
+				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+			}
 		}
-	}
+
+		resp, err = tenantB.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.RangesByLocality)
+		for localityKey, rangeList := range resp.RangesByLocality {
+			require.NotEmpty(t, localityKey)
+			for _, r := range rangeList.Ranges {
+				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
+				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+			}
+		}
+	})
+
+	t.Run("test tenant ranges pagination", func(t *testing.T) {
+		ctx := context.Background()
+		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
+			Limit: 1,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, int(resp1.Next))
+		for _, ranges := range resp1.RangesByLocality {
+			require.Len(t, ranges.Ranges, 1)
+		}
+
+		resp2, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
+			Limit:  1,
+			Offset: resp1.Next,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, int(resp2.Next))
+		for locality, ranges := range resp2.RangesByLocality {
+			require.Len(t, ranges.Ranges, 1)
+			// Verify pagination functions based on ascending RangeID order.
+			require.True(t,
+				resp1.RangesByLocality[locality].Ranges[0].RangeID < ranges.Ranges[0].RangeID)
+		}
+	})
 }
 
 // assertStartKeyInRange compares the pretty printed startKey with the provided

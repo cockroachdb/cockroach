@@ -1134,42 +1134,73 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("test ranges response", func(t *testing.T) {
+		// Perform a scan to ensure that all the raft groups are initialized.
+		if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+			t.Fatal(err)
+		}
 
-	var response serverpb.RangesResponse
-	if err := getStatusJSONProto(ts, "ranges/local", &response); err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Ranges) == 0 {
-		t.Errorf("didn't get any ranges")
-	}
-	for _, ri := range response.Ranges {
-		// Do some simple validation based on the fact that this is a
-		// single-node cluster.
-		if ri.RaftState.State != "StateLeader" && ri.RaftState.State != raftStateDormant {
-			t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState.State)
+		var response serverpb.RangesResponse
+		if err := getStatusJSONProto(ts, "ranges/local", &response); err != nil {
+			t.Fatal(err)
 		}
-		expReplica := roachpb.ReplicaDescriptor{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 1,
+		if len(response.Ranges) == 0 {
+			t.Errorf("didn't get any ranges")
 		}
-		if len(ri.State.Desc.InternalReplicas) != 1 || ri.State.Desc.InternalReplicas[0] != expReplica {
-			t.Errorf("unexpected replica list %+v", ri.State.Desc.InternalReplicas)
+		for _, ri := range response.Ranges {
+			// Do some simple validation based on the fact that this is a
+			// single-node cluster.
+			if ri.RaftState.State != "StateLeader" && ri.RaftState.State != raftStateDormant {
+				t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState.State)
+			}
+			expReplica := roachpb.ReplicaDescriptor{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			}
+			if len(ri.State.Desc.InternalReplicas) != 1 || ri.State.Desc.InternalReplicas[0] != expReplica {
+				t.Errorf("unexpected replica list %+v", ri.State.Desc.InternalReplicas)
+			}
+			if ri.State.Lease == nil || ri.State.Lease.Empty() {
+				t.Error("expected a nontrivial Lease")
+			}
+			if ri.State.LastIndex == 0 {
+				t.Error("expected positive LastIndex")
+			}
+			if len(ri.LeaseHistory) == 0 {
+				t.Error("expected at least one lease history entry")
+			}
 		}
-		if ri.State.Lease == nil || ri.State.Lease.Empty() {
-			t.Error("expected a nontrivial Lease")
+	})
+
+	t.Run("test ranges pagination", func(t *testing.T) {
+		ctx := context.Background()
+		rpcStopper := stop.NewStopper()
+		defer rpcStopper.Stop(ctx)
+
+		conn, err := ts.rpcContext.GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if ri.State.LastIndex == 0 {
-			t.Error("expected positive LastIndex")
-		}
-		if len(ri.LeaseHistory) == 0 {
-			t.Error("expected at least one lease history entry")
-		}
-	}
+		client := serverpb.NewStatusClient(conn)
+		resp1, err := client.Ranges(ctx, &serverpb.RangesRequest{
+			Limit: 1,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp1.Ranges, 1)
+		require.Equal(t, int(resp1.Next), 1)
+
+		resp2, err := client.Ranges(ctx, &serverpb.RangesRequest{
+			Limit:  1,
+			Offset: resp1.Next,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp2.Ranges, 1)
+		require.Equal(t, int(resp2.Next), 2)
+
+		// Verify pagination functions based on ascending RangeID order.
+		require.True(t, resp1.Ranges[0].State.Desc.RangeID < resp2.Ranges[0].State.Desc.RangeID)
+	})
 }
 
 func TestTenantRangesResponse(t *testing.T) {
