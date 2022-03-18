@@ -55,6 +55,12 @@ func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, nil)
 }
 
+// StoreCordonRangeKey returns a store-local key that records the
+// range ID of a range that should be cordoned off on this store.
+func StoreCordonRangeKey() roachpb.Key {
+	return MakeStoreKey(localStoreCordonRangeSuffix, nil)
+}
+
 // StoreGossipKey returns a store-local key for the gossip bootstrap metadata.
 func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)

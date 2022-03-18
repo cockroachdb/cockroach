@@ -168,6 +168,7 @@ type raftScheduler struct {
 	processor      raftProcessor
 	latency        *metric.Histogram
 	numWorkers     int
+	cordoned       map[roachpb.RangeID]bool
 
 	mu struct {
 		syncutil.Mutex
@@ -181,16 +182,22 @@ type raftScheduler struct {
 }
 
 func newRaftScheduler(
-	ambient log.AmbientContext, metrics *StoreMetrics, processor raftProcessor, numWorkers int,
+	ambient log.AmbientContext,
+	metrics *StoreMetrics,
+	processor raftProcessor,
+	numWorkers int,
+	cordoned map[roachpb.RangeID]bool,
 ) *raftScheduler {
 	s := &raftScheduler{
 		ambientContext: ambient,
 		processor:      processor,
 		latency:        metrics.RaftSchedulerLatency,
 		numWorkers:     numWorkers,
+		cordoned:       cordoned,
 	}
 	s.mu.cond = sync.NewCond(&s.mu.Mutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
+
 	return s
 }
 
@@ -270,6 +277,17 @@ func (s *raftScheduler) worker(ctx context.Context) {
 				break
 			}
 			s.mu.cond.Wait()
+		}
+
+		// TODO(josh): I have no idea if this is a reasonable way to actually
+		// implement the cordoning!!!
+		// TODO(josh): Let's say a single replica of three is cordoned. Will the
+		// per-replica proposal quota hold back writes to the range? That is not
+		// desirable! Some relevant discussion:
+		// https://github.com/cockroachdb/cockroach/issues/77251
+		if s.cordoned[id] {
+			log.Warningf(ctx, "range %v is cordoned", id)
+			continue
 		}
 
 		// Grab and clear the existing state for the range ID. Note that we leave

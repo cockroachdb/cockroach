@@ -115,6 +115,18 @@ func (r *Replica) sendWithRangeID(
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
 	}
 
+	// Fail fast in case the replica is cordoned. Note that cordoning only takes
+	// effect post server restart. Since cordoning keeps the raft scheduler from
+	// scheduling the replica, and since post restart the node can't resume its
+	// existing leases, this code will only run if so many replicas are cordoned
+	// that no node can get a valid lease.
+	// TODO(josh): Should we be using the circuit breaker that Tobias introduced
+	// instead? It allow follower reads when possible. See below:
+	// https://github.com/cockroachdb/cockroach/pull/76858
+	if r.store.cordoned[_forStacks] {
+		return nil, roachpb.NewError(errors.Newf("range %v is cordoned", _forStacks))
+	}
+
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
 

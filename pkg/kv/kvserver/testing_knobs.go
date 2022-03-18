@@ -64,7 +64,8 @@ type StoreTestingKnobs struct {
 	// a forced error and the command will not be applied. If it returns an error
 	// on some replicas but not others, the behavior is poorly defined. The
 	// returned int is interpreted as a proposalReevaluationReason.
-	TestingApplyFilter kvserverbase.ReplicaApplyFilter
+	TestingApplyFilter                kvserverbase.ReplicaApplyFilter
+	DontPanicOnApplyPanicOrFatalError bool
 	// TestingApplyForcedErrFilter is like TestingApplyFilter, but it is only
 	// invoked when there is a pre-existing forced error. The returned int and
 	// *Error replace the existing proposalReevaluationReason (if initially zero

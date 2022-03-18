@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	"gopkg.in/yaml.v2"
 )
 
 type raftRequestInfo struct {
@@ -503,6 +505,18 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	}
 
 	ctx := r.raftCtx
+	// If panic (or fatal error since maybeFatalOnRaftReadyErr converts
+	// these into panics), we mark the replica for cordoning and crash.
+	// On startup, the raft scheduler won't schedule the replica.
+	// Crashing will also shed the lease if the node happens to have it (the node
+	// will have a new liveness epoch so it won't be able to resume any existing
+	// leases). If enough replicas for some range are cordoned, the range will
+	// clearly be unavailable, but the nodes holding those replicas will be
+	// healthy otherwise, rather than crashing continuously, which is an improvement
+	// over the status quo in terms of the blast radius of the outage. If a single
+	// replica is cordoned OTOH, the range should remain available.
+	defer s.markReplicaForCordoningIfPanic(ctx, rangeID)
+
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	maybeFatalOnRaftReadyErr(ctx, expl, err)
@@ -516,6 +530,41 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
 		log.Warningf(ctx, "handle raft ready: %.1fs [applied=%d, batches=%d, state_assertions=%d]",
 			elapsed.Seconds(), stats.entriesProcessed, stats.batchesProcessed, stats.stateAssertions)
+	}
+}
+
+type cordonRecord struct {
+	RangeID roachpb.RangeID
+}
+
+func (s *Store) markReplicaForCordoningIfPanic(ctx context.Context, rangeID roachpb.RangeID) {
+	if re := recover(); re != nil {
+		func() {
+			log.Errorf(ctx, "cordoning range %v since panic and/or fatal error during application: %v",
+				rangeID, re)
+
+			// TODO(josh): For the POC, we only allow cordoning a single range at a time.
+			c := cordonRecord{RangeID: rangeID}
+			// TODO(josh): Use proto instead of yaml.
+			mc, err := yaml.Marshal(c)
+			if err != nil {
+				log.Errorf(ctx, "couldn't marshall cordon record: %v", err)
+				return
+			}
+			// TODO(josh): I don't think we need an fsync here? The process will restart,
+			// but OS is going to stay up. I bring this up because there has been some
+			// discussion about the possibility of a read being served after a panic /
+			// error but before the process restarts. This code increases that time
+			// window, but perhaps we can skip the fsync to reduce it again.
+			if err := s.engine.PutUnversioned(keys.StoreCordonRangeKey(), mc); err != nil {
+				log.Errorf(ctx, "couldn't write to cordon range key: %v", err)
+				return
+			}
+		}()
+		if s.cfg.TestingKnobs.DontPanicOnApplyPanicOrFatalError {
+			return
+		}
+		panic(re)
 	}
 }
 

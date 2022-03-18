@@ -870,6 +870,11 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		}
 	}
 
+	// TODO(josh): Remove.
+	if b.r.RangeID == 54 {
+		panic("josh second boom")
+	}
+
 	// Apply the write batch to RockDB. Entry application is done without
 	// syncing to disk. The atomicity guarantees of the batch and the fact that
 	// the applied state is stored in this batch, ensure that if the batch ends

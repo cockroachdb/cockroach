@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/redact"
 	raft "go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -903,6 +904,7 @@ type Store struct {
 	// Store.mu.replicas.
 	replicaQueues syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
 
+	cordoned  map[roachpb.RangeID]bool
 	scheduler *raftScheduler
 
 	// livenessMap is a map from nodeID to a bool indicating
@@ -1159,8 +1161,15 @@ func NewStore(
 	}
 	s.replRankings = newReplicaRankings()
 
+	var err error
+	s.cordoned, err = replicasToCordon(ctx, eng)
+	if err != nil {
+		// TODO(josh): Is it okay to fatal here in case the read to storage fails?
+		log.Fatalf(ctx, "couldn't determine which replicas if any to cordon: %v", err)
+	}
+
 	s.draining.Store(false)
-	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency, s.cordoned)
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
@@ -1336,6 +1345,27 @@ func NewStore(
 	}
 
 	return s
+}
+
+func replicasToCordon(ctx context.Context, eng storage.Engine) (map[roachpb.RangeID]bool, error) {
+	iter := eng.NewEngineIterator(storage.IterOptions{
+		LowerBound: keys.StoreCordonRangeKey(),
+		UpperBound: keys.StoreCordonRangeKey().Next(),
+	})
+	defer iter.Close()
+	_, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: keys.StoreCordonRangeKey()})
+	if err != nil {
+		return nil, errors.Wrapf(err, "couldn't seek to cordon range key: %v", err)
+	}
+	val := iter.Value()
+	// TODO(josh): For the POC, we only allow cordoning a single range at a time.
+	var c cordonRecord
+	// TODO(josh): Use proto instead of yaml.
+	err = yaml.Unmarshal(val, &c)
+	if err != nil {
+		return nil, errors.Wrapf(err, "couldn't unmarshall cordon range record: %v", err)
+	}
+	return map[roachpb.RangeID]bool{c.RangeID: true}, nil
 }
 
 // String formats a store for debug output.
