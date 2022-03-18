@@ -209,14 +209,14 @@ class StatementDiagnosticsHistoryView extends React.Component<
     if (totalCount <= this.tablePageSize) {
       return (
         <div className="diagnostics-history-view__table-header">
-          <Text>{`${totalCount} traces`}</Text>
+          <Text>{`${totalCount} diagnostics bundles`}</Text>
         </div>
       );
     }
 
     return (
       <div className="diagnostics-history-view__table-header">
-        <Text>{`${this.tablePageSize} of ${totalCount} traces`}</Text>
+        <Text>{`${this.tablePageSize} of ${totalCount} diagnostics bundles`}</Text>
       </div>
     );
   };
