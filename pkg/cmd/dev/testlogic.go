@@ -47,8 +47,8 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
 	testLogicCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
-	testLogicCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
-	testLogicCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
+	testLogicCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run")
+	testLogicCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
@@ -65,7 +65,8 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		config        = mustGetFlagString(cmd, configFlag)
 		files         = mustGetFlagString(cmd, filesFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
-		rewrite       = mustGetFlagString(cmd, rewriteFlag)
+		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
+		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		subtests      = mustGetFlagString(cmd, subtestsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
@@ -76,7 +77,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 	)
-	if rewrite == "" {
+	if rewrite {
 		ignoreCache = true
 	}
 
@@ -139,7 +140,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			args = append(args, "--test_arg", "-config", "--test_arg", config)
 		}
 
-		if rewrite != "" {
+		if rewrite {
 			if stress {
 				return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
 			}
@@ -149,7 +150,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			}
 
 			args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
-			args = append(args, "--test_arg", rewrite)
+			args = append(args, "--test_arg", "-rewrite")
 
 			dir := getDirectoryFromTarget(testTarget)
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
@@ -187,7 +188,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			subtests)
 		args = append(args, testTarget)
 		args = append(args, "--test_filter", selector)
-		args = append(args, d.getTestOutputArgs(stress, verbose, showLogs)...)
+		args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 		args = append(args, additionalBazelArgs...)
 		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
