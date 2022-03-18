@@ -331,7 +331,7 @@ export class SessionsPage extends React.Component<
 
     const isColumnSelected = (c: ColumnDescriptor<SessionInfo>) => {
       return (
-        (!userSelectedColumnsToShow && c.showByDefault) ||
+        (userSelectedColumnsToShow === null && c.showByDefault !== false) ||
         (userSelectedColumnsToShow &&
           userSelectedColumnsToShow.includes(c.name)) ||
         c.alwaysShow

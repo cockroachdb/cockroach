@@ -445,9 +445,9 @@ export const terminateSessionAlertSelector = createSelector(
     if (status === "FAILED") {
       return {
         level: AlertLevel.CRITICAL,
-        title: "There was an error terminating the session.",
+        title: "There was an error cancelling the session.",
         text:
-          "Please try activating again. If the problem continues please reach out to customer support.",
+          "Please try cancelling again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
@@ -457,7 +457,7 @@ export const terminateSessionAlertSelector = createSelector(
     }
     return {
       level: AlertLevel.SUCCESS,
-      title: "Session terminated.",
+      title: "Session cancelled.",
       showAsAlert: true,
       autoClose: true,
       closable: false,
@@ -490,9 +490,9 @@ export const terminateQueryAlertSelector = createSelector(
     if (status === "FAILED") {
       return {
         level: AlertLevel.CRITICAL,
-        title: "There was an error terminating the query.",
+        title: "There was an error cancelling the statement.",
         text:
-          "Please try terminating again. If the problem continues please reach out to customer support.",
+          "Please try cancelling again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
@@ -502,7 +502,7 @@ export const terminateQueryAlertSelector = createSelector(
     }
     return {
       level: AlertLevel.SUCCESS,
-      title: "Query terminated.",
+      title: "Statement cancelled.",
       showAsAlert: true,
       autoClose: true,
       closable: false,

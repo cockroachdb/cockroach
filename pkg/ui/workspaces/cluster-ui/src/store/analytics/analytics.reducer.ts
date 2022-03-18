@@ -61,7 +61,7 @@ type SessionClicked = {
 type SessionActionsClicked = {
   name: "Session Actions Clicked";
   page: Page;
-  action: "Terminate Statement" | "Terminate Session";
+  action: "Cancel Statement" | "Cancel Session";
 };
 
 type FilterEvent = {
