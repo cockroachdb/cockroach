@@ -1170,3 +1170,138 @@ ReadyForQuery
 ----
 {"Type":"ErrorResponse","Code":"34000"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that it's not possible to DECLARE a cursor of the same name as an open
+# portal.
+send
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Close {"ObjectType": "S", "Name": "s"}
+Close {"ObjectType": "P", "Name": "p"}
+Parse {"Name": "s", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Parse {"Query": "DECLARE p CURSOR FOR SELECT 1"}
+Bind
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CloseComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Parse {"Query": "ROLLBACK"}
+Bind
+Execute
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Test that creating a portal that declares a cursor with the same name as the
+# portal fails with a "duplicate cursor" error.
+
+send
+Parse {"Query": "DECLARE fnord CURSOR FOR SELECT 1", "Name": "bloop"}
+Bind {"DestinationPortal": "fnord", "PreparedStatement": "bloop"}
+Execute {"Portal": "fnord"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Test the converse case: ensure that a portal cannot be created with the same
+# name as an open cursor.
+
+send
+Parse {"Query": "ROLLBACK"}
+Bind
+Execute
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "DECLARE sqlcursor CURSOR FOR SELECT 1"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "blah", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "sqlcursor", "PreparedStatement": "blah"}
+Execute {"Portal": "sqlcursor"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
