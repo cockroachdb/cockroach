@@ -600,8 +600,11 @@ func (r *testRunner) runWorker(
 
 			// If randomized encryption-at-rest was requested, roll the dice now.
 			var encAtRest bool
-			if t.Spec().(*registry.TestSpec).EncryptAtRandom && rand.Intn(2) != 0 {
-				encAtRest = true
+			if t.Spec().(*registry.TestSpec).EncryptAtRandom {
+				// Populate encryption at rest from the --encrypt flag. If it is false,
+				// this is always false. If it's 'random', there's a 50% chance of 'true'
+				// here. If it's 'true', 100%.
+				encAtRest = encrypt.asBool()
 			}
 			c.encAtRest = encAtRest
 
