@@ -940,7 +940,7 @@ func mvccGetMetadata(
 		if !hasPoint || !unsafeKey.Key.Equal(metaKey.Key) {
 			meta.Deleted = true
 			meta.Timestamp = rkTimestamp.ToLegacyTimestamp()
-			return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
+			return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
 		}
 	}
 
@@ -950,7 +950,7 @@ func mvccGetMetadata(
 		if rkTS := iter.RangeKeys()[0].RangeKey.Timestamp; unsafeKey.Timestamp.LessEq(rkTS) {
 			meta.Deleted = true
 			meta.Timestamp = rkTS.ToLegacyTimestamp()
-			return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
+			return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
 		}
 	}
 
@@ -968,7 +968,7 @@ func mvccGetMetadata(
 	meta.Deleted = unsafeVal.IsTombstone()
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 
-	return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
+	return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
