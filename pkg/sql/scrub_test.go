@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -84,13 +86,15 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.MissingIndexEntryError,
-		Database:     "t",
-		Table:        "tEst",
-		PrimaryKey:   "(10)",
-		Repaired:     false,
-		DetailsRegex: `"v": "20"`,
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.MissingIndexEntryError,
+			Database:     "t",
+			Table:        "tEst",
+			PrimaryKey:   "(10)",
+			Repaired:     false,
+			DetailsRegex: `"v": "20"`,
+		},
 	}
 	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
@@ -489,12 +493,14 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.ForeignKeyConstraintViolation,
-		Database:     "t",
-		Table:        "child",
-		PrimaryKey:   "(10)",
-		DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.ForeignKeyConstraintViolation,
+			Database:     "t",
+			Table:        "child",
+			PrimaryKey:   "(10)",
+			DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+		},
 	}
 	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
@@ -547,16 +553,296 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.ForeignKeyConstraintViolation,
-		Database:     "t",
-		Table:        "child",
-		PrimaryKey:   "(11)",
-		DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.ForeignKeyConstraintViolation,
+			Database:     "t",
+			Table:        "child",
+			PrimaryKey:   "(11)",
+			DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+		},
 	}
 	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	time.Sleep(1 * time.Millisecond)
 	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+}
+
+// TestScrubUniqueWithoutIndex tests SCRUB on a table that violates a
+// UNIQUE WITHOUT INDEX constraint.
+func TestScrubUniqueWithoutIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Create the table and row entries.
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	id2 INT UNIQUE WITHOUT INDEX
+);
+
+INSERT INTO db.t VALUES (1, 2), (2,3);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Overwrite one of the values with a duplicate unique value.
+	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		t.Fatalf("unexpected error %s", err)
+	}
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+	// Put a duplicate unique value via KV.
+	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(1)",
+			DetailsRegex: `{"constraint_name": "unique_id2", "row_data": {"id": "1", "id2": "3"}`,
+		},
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(2)",
+			DetailsRegex: `{"constraint_name": "unique_id2", "row_data": {"id": "2", "id2": "3"}`,
+		},
+	}
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+}
+
+// TestScrubUniqueIndex tests SCRUB on a table that violates a UNIQUE
+// constraint.
+func TestScrubUniqueIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	utilccl.TestingEnableEnterprise()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Create the table and row entries.
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_implicit_column_partitioning = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	id2 INT UNIQUE,
+	partition_by INT
+) PARTITION ALL BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+);
+
+
+INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Overwrite the value on partition 1 with a duplicate unique index value.
+	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3), tree.NewDInt(1)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		t.Fatalf("unexpected error %s", err)
+	}
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+
+	// Add the primary key via the KV API.
+	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(1, 1)",
+			DetailsRegex: `{"constraint_name": "t_id2_key", "row_data": {"id": "1", "id2": "3", "partition_by": "1"}`,
+		},
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(2, 2)",
+			DetailsRegex: `{"constraint_name": "t_id2_key", "row_data": {"id": "2", "id2": "3", "partition_by": "2"}`,
+		},
+	}
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+}
+
+// TestScrubUniqueIndexMultiCol tests SCRUB on a table that violates a UNIQUE
+// constraint.
+func TestScrubUniqueIndexMultiCol(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	utilccl.TestingEnableEnterprise()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Create the table and row entries.
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_implicit_column_partitioning = true;
+CREATE TABLE db.t (
+	pk INT PRIMARY KEY,
+	id INT,
+	id2 INT,
+	partition_by INT,
+	UNIQUE (id, id2)
+) PARTITION ALL BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+);
+
+
+INSERT INTO db.t VALUES (1, 1, 2, 1);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Insert a row on partition 2 with a duplicate unique index value.
+	values := []tree.Datum{tree.NewDInt(2), tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(2)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[3].GetID(), 3)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		t.Fatalf("unexpected error %s", err)
+	}
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+
+	// Add the primary key via the KV API.
+	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(1, 1)",
+			DetailsRegex: `{"constraint_name": "t_id_id2_key", "row_data": {"id": "1", "id2": "2", "partition_by": "1", "pk": "1"}`,
+		},
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(2, 2)",
+			DetailsRegex: `{"constraint_name": "t_id_id2_key", "row_data": {"id": "1", "id2": "2", "partition_by": "2", "pk": "2"}`,
+		},
+	}
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+}
+
+// TestScrubPrimaryKey tests SCRUB on a table that violates a PRIMARY KEY
+// constraint.
+func TestScrubPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	utilccl.TestingEnableEnterprise()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Create the table and row entries.
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_implicit_column_partitioning = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	partition_by INT
+) PARTITION ALL BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+);
+
+
+INSERT INTO db.t VALUES (1, 1);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Insert a duplicate primary key into a different partition.
+	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(2)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		t.Fatalf("unexpected error %s", err)
+	}
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+
+	// Insert primary key via KV.
+	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB
+	exp := []expectedScrubResult{
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(1, 1)",
+			DetailsRegex: `{"constraint_name": "t_pkey", "row_data": {"id": "1", "partition_by": "1"}`,
+		},
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(2, 1)",
+			DetailsRegex: `{"constraint_name": "t_pkey", "row_data": {"id": "1", "partition_by": "2"}`,
+		},
+	}
+
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
 
 type expectedScrubResult struct {
@@ -568,38 +854,42 @@ type expectedScrubResult struct {
 	DetailsRegex string
 }
 
-func checkScrubResult(t *testing.T, res sqlutils.ScrubResult, exp expectedScrubResult) {
+func checkScrubResult(t *testing.T, ress []sqlutils.ScrubResult, exps []expectedScrubResult) {
 	t.Helper()
 
-	if res.ErrorType != exp.ErrorType {
-		t.Errorf("expected %q error, instead got: %s", exp.ErrorType, res.ErrorType)
-	}
+	for i := 0; i < len(exps); i++ {
+		res := ress[i]
+		exp := exps[i]
+		if res.ErrorType != exp.ErrorType {
+			t.Errorf("expected %q error, instead got: %s", exp.ErrorType, res.ErrorType)
+		}
 
-	if res.Database != exp.Database {
-		t.Errorf("expected database %q, got %q", exp.Database, res.Database)
-	}
+		if res.Database != exp.Database {
+			t.Errorf("expected database %q, got %q", exp.Database, res.Database)
+		}
 
-	if res.Table != exp.Table {
-		t.Errorf("expected table %q, got %q", exp.Table, res.Table)
-	}
+		if res.Table != exp.Table {
+			t.Errorf("expected table %q, got %q", exp.Table, res.Table)
+		}
 
-	if res.PrimaryKey != exp.PrimaryKey {
-		t.Errorf("expected primary key %q, got %q", exp.PrimaryKey, res.PrimaryKey)
-	}
-	if res.Repaired != exp.Repaired {
-		t.Fatalf("expected repaired %v, got %v", exp.Repaired, res.Repaired)
-	}
+		if res.PrimaryKey != exp.PrimaryKey {
+			t.Errorf("expected primary key %q, got %q", exp.PrimaryKey, res.PrimaryKey)
+		}
+		if res.Repaired != exp.Repaired {
+			t.Fatalf("expected repaired %v, got %v", exp.Repaired, res.Repaired)
+		}
 
-	if matched, err := regexp.MatchString(exp.DetailsRegex, res.Details); err != nil {
-		t.Fatal(err)
-	} else if !matched {
-		t.Errorf("expected error details to contain `%s`, got `%s`", exp.DetailsRegex, res.Details)
+		if matched, err := regexp.MatchString(exp.DetailsRegex, res.Details); err != nil {
+			t.Fatal(err)
+		} else if !matched {
+			t.Errorf("expected error details to contain `%s`, got `%s`", exp.DetailsRegex, res.Details)
+		}
 	}
 }
 
 // runScrub runs a SCRUB statement and checks that it returns exactly one scrub
 // result and that it matches the expected result.
-func runScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp expectedScrubResult) {
+func runScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp []expectedScrubResult) {
 	t.Helper()
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
@@ -614,8 +904,8 @@ func runScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp expectedScrubRes
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	if len(results) != len(exp) {
+		t.Fatalf("expected %d results, got %d. got %#v", len(exp), len(results), results)
 	}
-	checkScrubResult(t, results[0], exp)
+	checkScrubResult(t, results, exp)
 }
