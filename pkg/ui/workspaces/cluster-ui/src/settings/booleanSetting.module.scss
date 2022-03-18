@@ -2,6 +2,7 @@
 
 .crl-hover-text {
   font-size: 12px;
+  color: white;
 
   &__dashed-underline {
     color: inherit;
@@ -12,8 +13,16 @@
   }
 
   &__link-text {
-  color: inherit;
-  font-size: inherit;
+    color: inherit;
+    font-size: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+
+    &:hover {
+      color: inherit;
+      opacity: 0.7;
+      text-decoration: underline;
+    }
   }
 }
 
@@ -22,15 +31,15 @@
   &__enabled {
     fill: $colors--success;
     margin-right: 8px;
-    height: 8px;
-    width: 8px;
+    height: 10px;
+    width: 10px;
   }
 
   &__disabled {
     fill: $colors--disabled;
     margin-right: 8px;
-    height: 8px;
-    width: 8px;
+    height: 10px;
+    width: 10px;
   }
 }
 
