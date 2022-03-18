@@ -1572,6 +1572,10 @@ message ExportResponse {
 message AdminScatterRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
+
+  // max_size, if > 0, specifies a range's size above with it should reject
+  // this scatter request, allowing a "scatter-if-not-full" conditional request.
+  int64 max_size = 3;
 }
 
 // ScatterResponse is the response to a Scatter() operation.
