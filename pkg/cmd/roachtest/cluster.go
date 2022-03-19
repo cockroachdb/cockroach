@@ -634,15 +634,7 @@ type clusterImpl struct {
 	// the cluster is running in insecure mode.
 	localCertsDir string
 	expiration    time.Time
-	// encryptDefault is true if the cluster should default to having encryption
-	// at rest enabled. The default only applies if encryption is not explicitly
-	// enabled or disabled by options passed to Start.
-	encryptDefault bool
-	// encryptAtRandom is true if the cluster should enable encryption-at-rest
-	// on about half of all runs. Only valid if encryptDefault is false. Only
-	// applies if encryption is not explicitly enabled or disabled by options
-	// passed to Start. For use in roachtests.
-	encryptAtRandom bool
+	encAtRest     bool // use encryption at rest
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
@@ -651,18 +643,6 @@ type clusterImpl struct {
 // Name returns the cluster name, i.e. something like `teamcity-....`
 func (c *clusterImpl) Name() string {
 	return c.name
-}
-
-// EncryptAtRandom sets whether the cluster will start new nodes with
-// encryption enabled.
-func (c *clusterImpl) EncryptAtRandom(b bool) {
-	c.encryptAtRandom = b
-}
-
-// EncryptDefault sets the default for encryption-at-rest. This can be overridden
-// by options passed to `c.Start`.
-func (c *clusterImpl) EncryptDefault(b bool) {
-	c.encryptDefault = b
 }
 
 // Spec returns the spec underlying the cluster.
@@ -891,11 +871,10 @@ func (f *clusterFactory) newCluster(
 			// the loop. See:
 			//
 			// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
-			name:           f.genName(cfg),
-			spec:           cfg.spec,
-			expiration:     cfg.spec.Expiration(),
-			encryptDefault: encrypt.asBool(),
-			r:              f.r,
+			name:       f.genName(cfg),
+			spec:       cfg.spec,
+			expiration: cfg.spec.Expiration(),
+			r:          f.r,
 			destroyState: destroyState{
 				owned: true,
 				alloc: cfg.alloc,
@@ -972,11 +951,10 @@ func attachToExistingCluster(
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
 	c := &clusterImpl{
-		name:           name,
-		spec:           spec,
-		l:              l,
-		expiration:     exp,
-		encryptDefault: encrypt.asBool(),
+		name:       name,
+		spec:       spec,
+		l:          l,
+		expiration: exp,
 		destroyState: destroyState{
 			// If we're attaching to an existing cluster, we're not going to destroy it.
 			owned: false,
@@ -1815,18 +1793,7 @@ func (c *clusterImpl) StartE(
 	c.setStatusForClusterOpt("starting", startOpts.RoachtestOpts.Worker, opts...)
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
-	if startOpts.RoachtestOpts.DontEncrypt {
-		startOpts.RoachprodOpts.EncryptedStores = false
-	} else if c.encryptDefault {
-		startOpts.RoachprodOpts.EncryptedStores = true
-	} else if c.encryptAtRandom {
-		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		if rng.Intn(2) == 1 {
-			// Force encryption in future calls of Start with the same cluster.
-			c.encryptDefault = true
-			startOpts.RoachprodOpts.EncryptedStores = true
-		}
-	}
+	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
 
 	// Set some env vars. The first two also the default for `roachprod start`,
 	// but we have to add them so that the third one doesn't wipe them out.

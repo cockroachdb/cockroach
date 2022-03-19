@@ -597,6 +597,15 @@ func (r *testRunner) runWorker(
 			// test".
 			c.status("running test")
 			c.setTest(t)
+
+			// Populate encryption at rest from the --encrypt flag.
+			encAtRest := encrypt.asBool()
+			if encrypt.String() == "random" && !t.Spec().(*registry.TestSpec).EncryptAtRandom {
+				// In random mode, enable enc-at-rest only if tests opted into it.
+				encAtRest = false
+			}
+			c.encAtRest = encAtRest
+
 			wStatus.SetCluster(c)
 			wStatus.SetTest(t, testToRun)
 			wStatus.SetStatus("running test")
