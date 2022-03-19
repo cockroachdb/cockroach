@@ -69,7 +69,7 @@ type crossJoiner struct {
 	// isLeftAllNulls and isRightAllNulls indicate whether the output vectors
 	// corresponding to the left and right inputs, respectively, should consist
 	// only of NULL values. This is the case when we have right or left,
-	// respectively, unmatched tuples.
+	// respectively, unmatched tuples. Used only in OUTER joins.
 	isLeftAllNulls, isRightAllNulls bool
 	// done indicates that the cross joiner has fully built its output and
 	// closed the spilling queue. Once set to true, only zero-length batches are
@@ -353,7 +353,7 @@ type crossJoinerBase struct {
 
 		// numEmittedCurLeftBatch tracks the number of joined rows returned
 		// based on the current left batch. It is reset on every call to
-		// prepareForNextLeftBatch.
+		// prepareForNextLeftBatch. It is only used in INNER and OUTER joins.
 		numEmittedCurLeftBatch int
 
 		// numEmittedTotal tracks the number of rows that have been emitted
@@ -425,6 +425,8 @@ func (b *crossJoinerBase) prepareForNextLeftBatch(batch coldata.Batch, startIdx,
 // inputs are not empty.
 func (b *crossJoinerBase) canEmit() int {
 	switch b.joinType {
+	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
+		return b.builderState.setup.rightNumRepeats*b.numRightTuples - b.builderState.numEmittedCurLeftBatch
 	case descpb.LeftSemiJoin, descpb.IntersectAllJoin, descpb.ExceptAllJoin:
 		return b.builderState.setup.leftSrcEndIdx - b.builderState.left.curSrcStartIdx
 	case descpb.LeftAntiJoin:
@@ -447,7 +449,9 @@ func (b *crossJoinerBase) canEmit() int {
 		}
 		return b.numRightTuples - b.builderState.numEmittedTotal
 	default:
-		return b.builderState.setup.rightNumRepeats*b.numRightTuples - b.builderState.numEmittedCurLeftBatch
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected join type %s", b.joinType.String()))
+		// The code is unreachable, but the compiler cannot infer that.
+		return 0
 	}
 }
 
