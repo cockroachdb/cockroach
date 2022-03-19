@@ -111,11 +111,6 @@ type Cluster interface {
 	WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error
 	Wipe(ctx context.Context, opts ...option.Option)
 
-	// Toggling encryption-at-rest settings for starting CockroachDB.
-
-	EncryptAtRandom(on bool)
-	EncryptDefault(on bool)
-
 	// Internal niche tools.
 
 	Reset(ctx context.Context, l *logger.Logger) error

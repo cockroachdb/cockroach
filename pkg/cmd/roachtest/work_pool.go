@@ -157,6 +157,7 @@ func (p *workPool) selectTestForCluster(
 	}
 
 	p.decTestLocked(ctx, candidate.spec.Name)
+
 	runNum := p.count - candidate.count + 1
 	return testToRunRes{
 		spec:            candidate.spec,

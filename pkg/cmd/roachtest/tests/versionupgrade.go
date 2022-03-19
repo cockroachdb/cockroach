@@ -85,8 +85,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This test uses fixtures and we do not have encrypted fixtures right now.
-	c.EncryptDefault(false)
 
 	// Set the bool within to true to create a new fixture for this test. This
 	// is necessary after every release. For example, the day `master` becomes
@@ -372,7 +370,6 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		startOpts.RoachtestOpts.DontEncrypt = true
 		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}
 }
@@ -421,7 +418,6 @@ func upgradeNodes(
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachtestOpts.DontEncrypt = true
 		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
 	}
 }
@@ -585,7 +581,6 @@ func makeVersionFixtureAndFatal(
 		makeFixtureVersion = ""
 	}
 
-	c.EncryptDefault(false)
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
 		// be at the predecessor version (though in practice it's fully up to

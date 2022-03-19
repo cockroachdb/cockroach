@@ -40,7 +40,6 @@ func registerVersion(r registry.Registry) {
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachtestOpts.DontEncrypt = true
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		stageDuration := 10 * time.Minute

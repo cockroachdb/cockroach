@@ -265,7 +265,6 @@ func startVersion(nodes option.NodeListOption, version string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		settings := install.MakeClusterSettings(install.BinaryOption(cockroachBinaryPath(version)))
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachtestOpts.DontEncrypt = true
 		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}
 }
