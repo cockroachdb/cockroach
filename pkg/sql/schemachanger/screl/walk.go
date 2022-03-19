@@ -102,11 +102,9 @@ func walk(wantType reflect.Type, toWalk interface{}, f func(interface{}) error) 
 			}
 		case reflect.Struct:
 			for i := 0; i < value.NumField(); i++ {
-				f := value.Field(i)
-				if !f.CanAddr() || !fieldIsExported(value.Type(), i) {
-					continue
+				if f := value.Field(i); f.CanAddr() && value.Type().Field(i).IsExported() {
+					walk(f.Addr().Elem())
 				}
-				walk(value.Field(i).Addr().Elem())
 			}
 		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
@@ -125,22 +123,3 @@ func walk(wantType reflect.Type, toWalk interface{}, f func(interface{}) error) 
 	walk(v.Elem())
 	return nil
 }
-
-// fieldIsExported caches whether a field is exported as an optimization to avoid
-// allocations due to (*reflect.Type).Field() calls.
-func fieldIsExported(typ reflect.Type, field int) bool {
-	k := fieldExportedCacheKey{typ: typ, field: field}
-	if exported, ok := fieldExportedCache[k]; ok {
-		return exported
-	}
-	exported := typ.Field(field).IsExported()
-	fieldExportedCache[k] = exported
-	return exported
-}
-
-type fieldExportedCacheKey struct {
-	typ   reflect.Type
-	field int
-}
-
-var fieldExportedCache = map[fieldExportedCacheKey]bool{}
