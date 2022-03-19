@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -267,4 +269,95 @@ func TestReconciliationJobIsIdle(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestReconciliationJobErrorFailsJob tests that injecting an error into the
+// reconciliation job fails the entire job (if bypassing the internal retry); if
+// re-checked by the manager (and assuming we're no longer injecting an error),
+// the job runs successfully.
+func TestReconciliationJobErrorFailsJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	errMu := struct {
+		syncutil.Mutex
+		err   error
+		count int
+	}{}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation:                      true, // disable the automatic job creation
+					JobDisableInternalRetry:                        true,
+					SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
+					JobOnCheckpointInterceptor: func() error {
+						errMu.Lock()
+						defer errMu.Unlock()
+
+						errMu.count++
+						return errMu.err
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	waitForJobStatus := func(jobID jobspb.JobID, status jobs.Status) {
+		testutils.SucceedsSoon(t, func() error {
+			var jobStatus string
+			tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
+
+			if jobs.Status(jobStatus) != status {
+				return errors.Newf("expected jobID %d to have status %, got %s", jobID, jobs.StatusFailed, jobStatus)
+			}
+			return nil
+		})
+	}
+
+	var jobID jobspb.JobID
+	ts := tc.Server(0)
+	manager := spanconfigmanager.New(
+		ts.DB(),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.Stopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
+		&spanconfig.TestingKnobs{
+			ManagerCreatedJobInterceptor: func(jobI interface{}) {
+				jobID = jobI.(*jobs.Job).ID()
+			},
+		},
+	)
+
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	require.NoError(t, err)
+	require.True(t, started)
+
+	testutils.SucceedsSoon(t, func() error {
+		if jobID == jobspb.JobID(0) {
+			return errors.New("waiting for reconciliation job to be started")
+		}
+		return nil
+	})
+
+	errMu.Lock()
+	errMu.err = errors.New("injected")
+	errMu.Unlock()
+
+	waitForJobStatus(jobID, jobs.StatusFailed)
+
+	errMu.Lock()
+	errMu.err = nil
+	errMu.Unlock()
+
+	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	require.NoError(t, err)
+	require.True(t, started)
+
+	waitForJobStatus(jobID, jobs.StatusRunning)
 }
