@@ -194,10 +194,10 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 	return d.sqlDBs[key]
 }
 
-// TestDataDriven is a datadriven test to test standard backup/restore
+// doDataDriven is the datadriven test driver to test standard backup/restore
 // interactions involving setting up clusters and running different SQL
-// commands. The test files are in testdata/backup-restore. The following
-// syntax is provided:
+// commands. The test files are in testdata/backup-restore-*. The following syntax
+// is provided:
 //
 // - "new-server name=<name> [args]"
 //   Create a new server with the input name.
@@ -277,18 +277,13 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   + expect-pausepoint: expects the schema change job to end up in a paused state because
 //   of a pausepoint error.
-func TestDataDriven(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "takes ~3mins to run")
-
+func doDataDriven(t *testing.T, relative string) {
 	// This test uses this mock HTTP server to pass the backup files between tenants.
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
 
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, relative), func(t *testing.T, path string) {
 		var lastCreatedServer string
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx)
@@ -567,6 +562,47 @@ func TestDataDriven(t *testing.T) {
 	})
 }
 
+// TestDataDriven* are the test drivers for the datadriven tests written in
+// testdata/. These have been manually sharded into ~5 datadriven tests per
+// driver to avoid hitting the stress timeouts.
+func TestDataDriven1(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "tests take too long to run")
+
+	doDataDriven(t, "backup-restore-1")
+}
+
+func TestDataDriven2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "tests take too long to run")
+
+	doDataDriven(t, "backup-restore-2")
+}
+
+func TestDataDriven3(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "tests take too long to run")
+
+	doDataDriven(t, "backup-restore-3")
+}
+
+func TestDataDrivenSlow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "tests take too long to run")
+	skip.UnderStress(t, "tests take too long to run")
+	skip.UnderStressRace(t, "tests take too long to run")
+
+	doDataDriven(t, "backup-restore-slow")
+}
+
 // findMostRecentJobWithType returns the most recently created job of `job_type`
 // jobType.
 func findMostRecentJobWithType(
@@ -605,8 +641,4 @@ func tagJob(
 		t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
 	}
 	ds.jobTags[jobTag] = findMostRecentJobWithType(t, ds, server, user, jobType)
-}
-
-func runAOST() {
-
 }
