@@ -61,7 +61,7 @@ var (
 
 	DirectoryAddr = FlagInfo{
 		Name:        "directory",
-		Description: "Directory address of the service doing resolution from backend id to IP.",
+		Description: "Directory address of the service doing resolution of tenants to their IP addresses.",
 	}
 
 	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be

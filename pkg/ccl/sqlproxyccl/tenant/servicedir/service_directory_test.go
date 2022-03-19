@@ -519,7 +519,7 @@ func newTestDirectory(
 	t *testing.T, opts ...servicedir.DirOption,
 ) (
 	tc serverutils.TestClusterInterface,
-	directory tenant.Resolver,
+	directory tenant.Directory,
 	tds *tenantdirsvr.TestDirectoryServer,
 ) {
 	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{

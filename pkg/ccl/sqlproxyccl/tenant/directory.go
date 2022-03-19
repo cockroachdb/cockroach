@@ -14,11 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// Resolver is an interface for the tenant directory.
-//
-// TODO(jaylim-crl): Rename this to Directory, and the current tenant.Directory
-// to tenant.directory.
-type Resolver interface {
+// Directory is an interface for the tenant directory.
+type Directory interface {
 	// EnsureTenantAddr returns an IP address of one of the given tenant's SQL
 	// processes based on the tenantID and clusterName fields. This should block
 	// until the process associated with the IP is ready.

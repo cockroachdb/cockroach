@@ -48,10 +48,8 @@ type connector struct {
 	// Directory corresponds to the tenant directory, which will be used to
 	// resolve tenants to their corresponding IP addresses.
 	//
-	// TODO(jaylim-crl): Replace this with a Directory interface.
-	//
 	// NOTE: This field is required.
-	Directory tenant.Resolver
+	Directory tenant.Directory
 
 	// StartupMsg represents the startup message associated with the client.
 	// This will be used when establishing a pgwire connection with the SQL pod.
@@ -342,7 +340,7 @@ func isRetriableConnectorError(err error) bool {
 // reportFailureToDirectory is a hookable function that calls the given tenant
 // directory's ReportFailure method.
 var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Resolver,
+	ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Directory,
 ) error {
 	return directory.ReportFailure(ctx, tenantID, addr)
 }

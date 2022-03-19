@@ -79,7 +79,7 @@ type ProxyOptions struct {
 	// connection.
 	RoutingRule string
 	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does
-	// the resolution from backend id to IP address. If specified - it will be
+	// the resolution from tenants to IP addresses. If specified - it will be
 	// used instead of the routing rule above.
 	DirectoryAddr string
 	// RatelimitBaseDelay is the initial backoff after a failed login attempt.
@@ -127,8 +127,8 @@ type proxyHandler struct {
 	// idleMonitor will detect idle connections to DRAINING pods.
 	idleMonitor *idle.Monitor
 
-	// directory is used to resolve backend id to IP addresses.
-	directory tenant.Resolver
+	// directory is used to resolve tenants to their corresponding IP addresses.
+	directory tenant.Directory
 
 	// CertManger keeps up to date the certificates used.
 	certManager *certmgr.CertManager

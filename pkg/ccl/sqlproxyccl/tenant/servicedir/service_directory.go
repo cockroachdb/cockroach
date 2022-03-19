@@ -99,6 +99,8 @@ type serviceDirectory struct {
 	}
 }
 
+var _ tenant.Directory = &serviceDirectory{}
+
 // NewServiceDirectory constructs a new serviceDirectory instance that tracks
 // SQL tenant processes managed by a given Directory server. The given context
 // is used for tracing pod watcher activity.
@@ -107,7 +109,7 @@ type serviceDirectory struct {
 // needed.
 func NewServiceDirectory(
 	ctx context.Context, stopper *stop.Stopper, client DirectoryClient, opts ...DirOption,
-) (tenant.Resolver, error) {
+) (tenant.Directory, error) {
 	dir := &serviceDirectory{client: client, stopper: stopper}
 
 	dir.mut.tenants = make(map[roachpb.TenantID]*tenantEntry)
@@ -140,6 +142,8 @@ func NewServiceDirectory(
 // such as the name of the cluster, before being allowed to connect. Similarly,
 // if the tenant does not exist (e.g. because it was deleted), EnsureTenantAddr
 // returns a GRPC NotFound error.
+//
+// EnsureTenantAddr implements the tenant.Directory interface.
 func (d *serviceDirectory) EnsureTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
@@ -173,6 +177,8 @@ func (d *serviceDirectory) EnsureTenantAddr(
 // into the directory's cache (LookupTenantAddrs will never attempt to fetch it).
 // If no processes are available for the tenant, LookupTenantAddrs will return the
 // empty set (unlike EnsureTenantAddr).
+//
+// LookupTenantAddrs implements the tenant.Directory interface.
 func (d *serviceDirectory) LookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
@@ -203,6 +209,8 @@ func (d *serviceDirectory) LookupTenantAddrs(
 // particular pod as "unhealthy" so that it's less likely to be chosen.
 // However, today there can be at most one pod for a given tenant, so it
 // must always be chosen. Keep the parameter as a placeholder for the future.
+//
+// ReportFailure implements the tenant.Directory interface.
 func (d *serviceDirectory) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {

@@ -435,7 +435,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		c := &connector{
 			TenantID: roachpb.MakeTenantID(42),
 		}
-		c.Directory = &testResolver{
+		c.Directory = &testDirectory{
 			reportFailureFn: func(fnCtx context.Context, tenantID roachpb.TenantID, addr string) error {
 				reportFailureFnCount++
 				require.Equal(t, ctx, fnCtx)
@@ -485,7 +485,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c = &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Directory: &testResolver{
+			Directory: &testDirectory{
 				ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
 					ensureTenantAddrFnCount++
 					require.Equal(t, ctx, fnCtx)
@@ -508,7 +508,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c = &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Directory: &testResolver{
+			Directory: &testDirectory{
 				ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
 					ensureTenantAddrFnCount++
 					require.Equal(t, ctx, fnCtx)
@@ -531,7 +531,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c = &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Directory: &testResolver{
+			Directory: &testDirectory{
 				ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
 					ensureTenantAddrFnCount++
 					require.Equal(t, ctx, fnCtx)
@@ -554,7 +554,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c = &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Directory: &testResolver{
+			Directory: &testDirectory{
 				ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
 					ensureTenantAddrFnCount++
 					require.Equal(t, ctx, fnCtx)
@@ -674,31 +674,31 @@ func TestRetriableConnectorError(t *testing.T) {
 	require.True(t, errors.Is(err, errRetryConnectorSentinel))
 }
 
-var _ tenant.Resolver = &testResolver{}
+var _ tenant.Directory = &testDirectory{}
 
-// testResolver is a test implementation of the tenant resolver.
-type testResolver struct {
+// testDirectory is a test implementation of the tenant resolver.
+type testDirectory struct {
 	ensureTenantAddrFn  func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
 	lookupTenantAddrsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
 	reportFailureFn     func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
 }
 
 // EnsureTenantAddr implements the Resolver interface.
-func (r *testResolver) EnsureTenantAddr(
+func (r *testDirectory) EnsureTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
 	return r.ensureTenantAddrFn(ctx, tenantID, clusterName)
 }
 
 // LookupTenantAddrs implements the Resolver interface.
-func (r *testResolver) LookupTenantAddrs(
+func (r *testDirectory) LookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
 	return r.lookupTenantAddrsFn(ctx, tenantID)
 }
 
 // ReportFailure implements the Resolver interface.
-func (r *testResolver) ReportFailure(
+func (r *testDirectory) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
 	return r.reportFailureFn(ctx, tenantID, addr)

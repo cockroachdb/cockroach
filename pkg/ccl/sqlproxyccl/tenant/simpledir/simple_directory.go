@@ -27,18 +27,18 @@ type simpleDirectory struct {
 	podAddr string
 }
 
-var _ tenant.Resolver = &simpleDirectory{}
+var _ tenant.Directory = &simpleDirectory{}
 
 // NewSimpleDirectory constructs a new simple directory instance that abides to
-// the Resolver interface.
-func NewSimpleDirectory(podAddr string) tenant.Resolver {
+// the tenant.Directory interface.
+func NewSimpleDirectory(podAddr string) tenant.Directory {
 	return &simpleDirectory{podAddr: podAddr}
 }
 
 // EnsureTenantAddr returns the SQL pod address associated with this directory.
 // If the address cannot be resolved, a GRPC NotFound error will be returned.
 //
-// EnsureTenantAddr implements the Resolver interface.
+// EnsureTenantAddr implements the tenant.Directory interface.
 func (d *simpleDirectory) EnsureTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
@@ -52,7 +52,7 @@ func (d *simpleDirectory) EnsureTenantAddr(
 // of tenantID. If that address cannot be resolved, a GRPC NotFound error will
 // be returned.
 //
-// LookupTenantAddrs implements the Resolver interface.
+// LookupTenantAddrs implements the tenant.Directory interface.
 func (d *simpleDirectory) LookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
@@ -64,7 +64,7 @@ func (d *simpleDirectory) LookupTenantAddrs(
 
 // ReportFailure is a no-op for the simple directory.
 //
-// ReportFailure implements the Resolver interface.
+// ReportFailure implements the tenant.Directory interface.
 func (d *simpleDirectory) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
