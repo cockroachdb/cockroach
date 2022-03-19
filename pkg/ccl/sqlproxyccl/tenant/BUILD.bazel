@@ -23,10 +23,10 @@ go_proto_library(
 go_library(
     name = "tenant",
     srcs = [
-        "directory.go",
         "entry.go",
         "pod.go",
         "resolver.go",
+        "service_directory.go",
         "simple_directory.go",
     ],
     embed = [":tenant_go_proto"],
@@ -49,9 +49,9 @@ go_test(
     name = "tenant_test",
     size = "large",
     srcs = [
-        "directory_test.go",
         "main_test.go",
         "pod_test.go",
+        "service_directory_test.go",
         "simple_directory_test.go",
     ],
     embed = [":tenant"],

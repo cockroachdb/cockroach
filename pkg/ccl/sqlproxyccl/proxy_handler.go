@@ -194,7 +194,7 @@ func newProxyHandler(
 		}
 
 		client := tenant.NewDirectoryClient(conn)
-		handler.directory, err = tenant.NewDirectory(ctx, stopper, client, dirOpts...)
+		handler.directory, err = tenant.NewServiceDirectory(ctx, stopper, client, dirOpts...)
 		if err != nil {
 			return nil, err
 		}

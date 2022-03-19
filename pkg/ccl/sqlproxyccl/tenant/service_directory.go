@@ -23,15 +23,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// dirOptions control the behavior of tenant.Directory.
+// dirOptions control the behavior of tenant.serviceDirectory.
 type dirOptions struct {
 	deterministic bool
 	refreshDelay  time.Duration
 	podWatcher    chan *Pod
 }
 
-// DirOption defines an option that can be passed to tenant.Directory in order
-// to control its behavior.
+// DirOption defines an option that can be passed to tenant.serviceDirectory
+// in order to control its behavior.
 type DirOption func(opts *dirOptions)
 
 // RefreshDelay specifies the minimum amount of time that must elapse between
@@ -58,10 +58,10 @@ func PodWatcher(podWatcher chan *Pod) func(opts *dirOptions) {
 	}
 }
 
-// Directory tracks the network locations of SQL tenant processes. It is used by
-// the sqlproxy to route incoming traffic to the correct backend process.
-// Process information is populated and kept relatively up-to-date using a
-// streaming watcher. However, since watchers deliver slightly stale
+// serviceDirectory tracks the network locations of SQL tenant processes.
+// It is used by the sqlproxy to route incoming traffic to the correct backend
+// process. Process information is populated and kept relatively up-to-date
+// using a streaming watcher. However, since watchers deliver slightly stale
 // information, the directory will also make direct server calls to fetch the
 // latest information about a process that is not yet in the cache, or when a
 // process is suspected to have failed. When a new tenant is created, or is
@@ -74,7 +74,7 @@ func PodWatcher(podWatcher chan *Pod) func(opts *dirOptions) {
 // to synchronize access to shared in-memory data structures, each tenant also
 // has its own locks that are used to synchronize per-tenant operations such as
 // making directory server calls to fetch updated tenant information.
-type Directory struct {
+type serviceDirectory struct {
 	// client is the directory client instance used to make directory server
 	// calls.
 	client DirectoryClient
@@ -98,16 +98,16 @@ type Directory struct {
 	}
 }
 
-// NewDirectory constructs a new Directory instance that tracks SQL tenant
-// processes managed by a given Directory server. The given context is used for
-// tracing pod watcher activity.
+// NewServiceDirectory constructs a new serviceDirectory instance that tracks
+// SQL tenant processes managed by a given Directory server. The given context
+// is used for tracing pod watcher activity.
 //
 // NOTE: stopper.Stop must be called on the directory when it is no longer
 // needed.
-func NewDirectory(
+func NewServiceDirectory(
 	ctx context.Context, stopper *stop.Stopper, client DirectoryClient, opts ...DirOption,
-) (*Directory, error) {
-	dir := &Directory{client: client, stopper: stopper}
+) (Resolver, error) {
+	dir := &serviceDirectory{client: client, stopper: stopper}
 
 	dir.mut.tenants = make(map[roachpb.TenantID]*tenantEntry)
 	for _, opt := range opts {
@@ -139,7 +139,7 @@ func NewDirectory(
 // such as the name of the cluster, before being allowed to connect. Similarly,
 // if the tenant does not exist (e.g. because it was deleted), EnsureTenantAddr
 // returns a GRPC NotFound error.
-func (d *Directory) EnsureTenantAddr(
+func (d *serviceDirectory) EnsureTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
 	// Ensure that a directory entry has been created for this tenant.
@@ -172,7 +172,7 @@ func (d *Directory) EnsureTenantAddr(
 // into the directory's cache (LookupTenantAddrs will never attempt to fetch it).
 // If no processes are available for the tenant, LookupTenantAddrs will return the
 // empty set (unlike EnsureTenantAddr).
-func (d *Directory) LookupTenantAddrs(
+func (d *serviceDirectory) LookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
 	// Ensure that a directory entry has been created for this tenant.
@@ -202,7 +202,7 @@ func (d *Directory) LookupTenantAddrs(
 // particular pod as "unhealthy" so that it's less likely to be chosen.
 // However, today there can be at most one pod for a given tenant, so it
 // must always be chosen. Keep the parameter as a placeholder for the future.
-func (d *Directory) ReportFailure(
+func (d *serviceDirectory) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
 	entry, err := d.getEntry(ctx, tenantID, false /* allowCreate */)
@@ -223,7 +223,7 @@ func (d *Directory) ReportFailure(
 // ensures that it is fully initialized with tenant metadata. Obtaining this
 // metadata requires making a separate directory server call;
 // getEntry will block until that's complete.
-func (d *Directory) getEntry(
+func (d *serviceDirectory) getEntry(
 	ctx context.Context, tenantID roachpb.TenantID, allowCreate bool,
 ) (*tenantEntry, error) {
 	entry := func() *tenantEntry {
@@ -270,7 +270,7 @@ func (d *Directory) getEntry(
 
 // deleteEntry removes the given directory entry for the given tenant, if it
 // exists. It returns true if an entry was actually deleted.
-func (d *Directory) deleteEntry(entry *tenantEntry) bool {
+func (d *serviceDirectory) deleteEntry(entry *tenantEntry) bool {
 	// Remove the entry from the tenants map, since initialization failed.
 	d.mut.Lock()
 	defer d.mut.Unlock()
@@ -289,7 +289,7 @@ func (d *Directory) deleteEntry(entry *tenantEntry) bool {
 // watchPods establishes a watcher that looks for changes to tenant pods.
 // Whenever tenant pods start or terminate, the watcher will get a notification
 // and update the directory to reflect that change.
-func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error {
+func (d *serviceDirectory) watchPods(ctx context.Context, stopper *stop.Stopper) error {
 	req := WatchPodsRequest{}
 
 	// The loop that processes the event stream is running in a separate go
@@ -381,7 +381,7 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 // updateTenantEntry keeps tenant directory entries up-to-date by handling pod
 // watcher events. When a pod is created, destroyed, or modified, it updates the
 // tenant's entry to reflect that change.
-func (d *Directory) updateTenantEntry(ctx context.Context, pod *Pod) {
+func (d *serviceDirectory) updateTenantEntry(ctx context.Context, pod *Pod) {
 	if pod.Addr == "" {
 		// Nothing needs to be done if there is no IP address specified.
 		return

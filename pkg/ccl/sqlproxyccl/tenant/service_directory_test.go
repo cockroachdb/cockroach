@@ -518,7 +518,7 @@ func newTestDirectory(
 	t *testing.T, opts ...tenant.DirOption,
 ) (
 	tc serverutils.TestClusterInterface,
-	directory *tenant.Directory,
+	directory tenant.Resolver,
 	tds *tenantdirsvr.TestDirectoryServer,
 ) {
 	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
@@ -554,7 +554,7 @@ func newTestDirectory(
 	// nolint:grpcconnclose
 	clusterStopper.AddCloser(stop.CloserFn(func() { require.NoError(t, conn.Close() /* nolint:grpcconnclose */) }))
 	client := tenant.NewDirectoryClient(conn)
-	directory, err = tenant.NewDirectory(context.Background(), clusterStopper, client, opts...)
+	directory, err = tenant.NewServiceDirectory(context.Background(), clusterStopper, client, opts...)
 	require.NoError(t, err)
 
 	return
