@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/simpledir"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -105,7 +106,7 @@ func TestBackendDownRetry(t *testing.T) {
 
 	callCount := 0
 	defer testutils.TestingHook(
-		&tenant.ResolveTCPAddr,
+		&simpledir.ResolveTCPAddr,
 		func(network, addr string) (*net.TCPAddr, error) {
 			callCount++
 			if callCount >= 3 {
@@ -659,7 +660,7 @@ func TestDirectoryConnect(t *testing.T) {
 	proxy, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("tenant not found", func(t *testing.T) {
-		defer testutils.TestingHook(&tenant.ResolveTCPAddr,
+		defer testutils.TestingHook(&simpledir.ResolveTCPAddr,
 			func(network, addr string) (*net.TCPAddr, error) {
 				// Expect fallback.
 				require.Equal(t, srv.ServingSQLAddr(), addr)

@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/servicedir"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -32,7 +32,7 @@ import (
 )
 
 // Make sure that TestDirectoryServer implements the DirectoryServer interface.
-var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
+var _ servicedir.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // Process stores information about a running tenant process.
 type Process struct {
@@ -105,7 +105,7 @@ func New(stopper *stop.Stopper, args ...string) (*TestDirectoryServer, error) {
 	dir.proc.processByAddrByTenantID = map[uint64]map[net.Addr]*Process{}
 	dir.listen.eventListeners = list.New()
 	stopper.AddCloser(stop.CloserFn(func() { dir.grpcServer.GracefulStop() }))
-	tenant.RegisterDirectoryServer(dir.grpcServer, dir)
+	servicedir.RegisterDirectoryServer(dir.grpcServer, dir)
 	return dir, nil
 }
 
@@ -172,12 +172,12 @@ func (s *TestDirectoryServer) SetFakeLoad(id roachpb.TenantID, addr net.Addr, fa
 
 	s.listen.RLock()
 	defer s.listen.RUnlock()
-	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-		Pod: &tenant.Pod{
+	s.notifyEventListenersLocked(&servicedir.WatchPodsResponse{
+		Pod: &servicedir.Pod{
 			Addr:     addr.String(),
 			TenantID: id.ToUint64(),
 			Load:     fakeLoad,
-			State:    tenant.UNKNOWN,
+			State:    servicedir.UNKNOWN,
 		},
 	})
 }
@@ -185,9 +185,9 @@ func (s *TestDirectoryServer) SetFakeLoad(id roachpb.TenantID, addr net.Addr, fa
 // GetTenant returns tenant metadata for a given ID. Hard coded to return every
 // tenant's cluster name as "tenant-cluster"
 func (s *TestDirectoryServer) GetTenant(
-	_ context.Context, _ *tenant.GetTenantRequest,
-) (*tenant.GetTenantResponse, error) {
-	return &tenant.GetTenantResponse{
+	_ context.Context, _ *servicedir.GetTenantRequest,
+) (*servicedir.GetTenantResponse, error) {
+	return &servicedir.GetTenantResponse{
 		ClusterName: "tenant-cluster",
 	}, nil
 }
@@ -195,8 +195,8 @@ func (s *TestDirectoryServer) GetTenant(
 // ListPods returns a list of tenant process pods as well as status of
 // the processes.
 func (s *TestDirectoryServer) ListPods(
-	ctx context.Context, req *tenant.ListPodsRequest,
-) (*tenant.ListPodsResponse, error) {
+	ctx context.Context, req *servicedir.ListPodsRequest,
+) (*servicedir.ListPodsResponse, error) {
 	ctx = logtags.AddTag(ctx, "tenant", req.TenantID)
 	s.proc.RLock()
 	defer s.proc.RUnlock()
@@ -206,7 +206,7 @@ func (s *TestDirectoryServer) ListPods(
 // WatchPods returns a new stream, that can be used to monitor server
 // activity.
 func (s *TestDirectoryServer) WatchPods(
-	_ *tenant.WatchPodsRequest, server tenant.Directory_WatchPodsServer,
+	_ *servicedir.WatchPodsRequest, server servicedir.Directory_WatchPodsServer,
 ) error {
 	select {
 	case <-s.stopper.ShouldQuiesce():
@@ -215,7 +215,7 @@ func (s *TestDirectoryServer) WatchPods(
 	}
 	// Make the channel with a small buffer to allow for a burst of notifications
 	// and a slow receiver.
-	c := make(chan *tenant.WatchPodsResponse, 10)
+	c := make(chan *servicedir.WatchPodsResponse, 10)
 	s.listen.Lock()
 	elem := s.listen.eventListeners.PushBack(c)
 	s.listen.Unlock()
@@ -258,28 +258,28 @@ func (s *TestDirectoryServer) Drain() {
 		for addr := range processByAddr {
 			s.listen.RLock()
 			defer s.listen.RUnlock()
-			s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-				Pod: &tenant.Pod{
+			s.notifyEventListenersLocked(&servicedir.WatchPodsResponse{
+				Pod: &servicedir.Pod{
 					TenantID: tenantID,
 					Addr:     addr.String(),
-					State:    tenant.DRAINING,
+					State:    servicedir.DRAINING,
 				},
 			})
 		}
 	}
 }
 
-func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchPodsResponse) {
+func (s *TestDirectoryServer) notifyEventListenersLocked(req *servicedir.WatchPodsResponse) {
 	for e := s.listen.eventListeners.Front(); e != nil; {
 		select {
-		case e.Value.(chan *tenant.WatchPodsResponse) <- req:
+		case e.Value.(chan *servicedir.WatchPodsResponse) <- req:
 			e = e.Next()
 		default:
 			// The receiver is unable to consume fast enough. Close the channel and
 			// remove it from the list.
 			eToClose := e
 			e = e.Next()
-			close(eToClose.Value.(chan *tenant.WatchPodsResponse))
+			close(eToClose.Value.(chan *servicedir.WatchPodsResponse))
 			s.listen.eventListeners.Remove(eToClose)
 		}
 	}
@@ -289,8 +289,8 @@ func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchPodsRe
 // process or it will start a new one. It will return an error if starting a new
 // tenant process is impossible.
 func (s *TestDirectoryServer) EnsurePod(
-	ctx context.Context, req *tenant.EnsurePodRequest,
-) (*tenant.EnsurePodResponse, error) {
+	ctx context.Context, req *servicedir.EnsurePodRequest,
+) (*servicedir.EnsurePodResponse, error) {
 	select {
 	case <-s.stopper.ShouldQuiesce():
 		return nil, context.Canceled
@@ -302,7 +302,7 @@ func (s *TestDirectoryServer) EnsurePod(
 	s.proc.Lock()
 	defer s.proc.Unlock()
 
-	lst, err := s.listLocked(ctx, &tenant.ListPodsRequest{TenantID: req.TenantID})
+	lst, err := s.listLocked(ctx, &servicedir.ListPodsRequest{TenantID: req.TenantID})
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func (s *TestDirectoryServer) EnsurePod(
 		}))
 	}
 
-	return &tenant.EnsurePodResponse{}, nil
+	return &servicedir.EnsurePodResponse{}, nil
 }
 
 // Serve requests on the given listener.
@@ -326,18 +326,18 @@ func (s *TestDirectoryServer) Serve(listener net.Listener) error {
 }
 
 func (s *TestDirectoryServer) listLocked(
-	_ context.Context, req *tenant.ListPodsRequest,
-) (*tenant.ListPodsResponse, error) {
+	_ context.Context, req *servicedir.ListPodsRequest,
+) (*servicedir.ListPodsResponse, error) {
 	processByAddr, ok := s.proc.processByAddrByTenantID[req.TenantID]
 	if !ok {
-		return &tenant.ListPodsResponse{}, nil
+		return &servicedir.ListPodsResponse{}, nil
 	}
-	resp := tenant.ListPodsResponse{}
+	resp := servicedir.ListPodsResponse{}
 	for addr, proc := range processByAddr {
-		resp.Pods = append(resp.Pods, &tenant.Pod{
+		resp.Pods = append(resp.Pods, &servicedir.Pod{
 			TenantID: req.TenantID,
 			Addr:     addr.String(),
-			State:    tenant.RUNNING,
+			State:    servicedir.RUNNING,
 			Load:     proc.FakeLoad,
 		})
 	}
@@ -354,11 +354,11 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 
 	s.listen.RLock()
 	defer s.listen.RUnlock()
-	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-		Pod: &tenant.Pod{
+	s.notifyEventListenersLocked(&servicedir.WatchPodsResponse{
+		Pod: &servicedir.Pod{
 			TenantID: tenantID,
 			Addr:     process.SQL.String(),
-			State:    tenant.RUNNING,
+			State:    servicedir.RUNNING,
 			Load:     process.FakeLoad,
 		},
 	})
@@ -377,11 +377,11 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 
 		s.listen.RLock()
 		defer s.listen.RUnlock()
-		s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-			Pod: &tenant.Pod{
+		s.notifyEventListenersLocked(&servicedir.WatchPodsResponse{
+			Pod: &servicedir.Pod{
 				TenantID: tenantID,
 				Addr:     sql.String(),
-				State:    tenant.DELETING,
+				State:    servicedir.DELETING,
 			},
 		})
 	}

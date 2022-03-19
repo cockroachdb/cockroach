@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant_test
+package simpledir_test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/simpledir"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,11 +27,11 @@ func TestSimpleDirectory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tenantID := roachpb.MakeTenantID(10)
-	d := tenant.NewSimpleDirectory("localhost:42")
+	d := simpledir.NewSimpleDirectory("localhost:42")
 
 	t.Run("resolve_error", func(t *testing.T) {
 		defer testutils.TestingHook(
-			&tenant.ResolveTCPAddr,
+			&simpledir.ResolveTCPAddr,
 			func(network, addr string) (*net.TCPAddr, error) {
 				return nil, errors.New("invalid address")
 			},
@@ -63,7 +63,7 @@ func TestSimpleDirectory(t *testing.T) {
 	t.Run("successful", func(t *testing.T) {
 		resolveTCPAddrCount := 0
 		defer testutils.TestingHook(
-			&tenant.ResolveTCPAddr,
+			&simpledir.ResolveTCPAddr,
 			func(network, addr string) (*net.TCPAddr, error) {
 				resolveTCPAddrCount++
 				return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil

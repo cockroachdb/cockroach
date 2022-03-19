@@ -6,12 +6,13 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant
+package simpledir
 
 import (
 	"context"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,11 +27,11 @@ type simpleDirectory struct {
 	podAddr string
 }
 
-var _ Resolver = &simpleDirectory{}
+var _ tenant.Resolver = &simpleDirectory{}
 
 // NewSimpleDirectory constructs a new simple directory instance that abides to
 // the Resolver interface.
-func NewSimpleDirectory(podAddr string) Resolver {
+func NewSimpleDirectory(podAddr string) tenant.Resolver {
 	return &simpleDirectory{podAddr: podAddr}
 }
 

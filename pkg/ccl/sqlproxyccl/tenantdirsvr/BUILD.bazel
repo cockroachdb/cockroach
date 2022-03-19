@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/ccl/sqlproxyccl/tenant/servicedir",
         "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/stop",

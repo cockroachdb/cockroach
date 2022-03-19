@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/servicedir"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/simpledir"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
@@ -184,22 +186,22 @@ func newProxyHandler(
 		// and the pod watcher. When a pod enters the DRAINING state, the pod
 		// watcher will set the idle monitor to detect connections without
 		// activity and terminate them.
-		var dirOpts []tenant.DirOption
+		var dirOpts []servicedir.DirOption
 		if options.DrainTimeout != 0 {
 			handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
 
-			podWatcher := make(chan *tenant.Pod)
+			podWatcher := make(chan *servicedir.Pod)
 			go handler.startPodWatcher(ctx, podWatcher)
-			dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
+			dirOpts = append(dirOpts, servicedir.PodWatcher(podWatcher))
 		}
 
-		client := tenant.NewDirectoryClient(conn)
-		handler.directory, err = tenant.NewServiceDirectory(ctx, stopper, client, dirOpts...)
+		client := servicedir.NewDirectoryClient(conn)
+		handler.directory, err = servicedir.NewServiceDirectory(ctx, stopper, client, dirOpts...)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		handler.directory = tenant.NewSimpleDirectory(handler.RoutingRule)
+		handler.directory = simpledir.NewSimpleDirectory(handler.RoutingRule)
 	}
 
 	return &handler, nil
@@ -388,13 +390,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 // are subject to an idle timeout that closes them after a short period of
 // inactivity. If a pod transitions back to the RUNNING state or to the DELETING
 // state, then the idle timeout needs to be cleared.
-func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher chan *tenant.Pod) {
+func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher chan *servicedir.Pod) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case pod := <-podWatcher:
-			if pod.State == tenant.DRAINING {
+			if pod.State == servicedir.DRAINING {
 				handler.idleMonitor.SetIdleChecks(pod.Addr)
 			} else {
 				// Clear idle checks either for RUNNING or DELETING.

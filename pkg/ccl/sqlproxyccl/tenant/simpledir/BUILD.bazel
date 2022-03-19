@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "simpledir",
+    srcs = ["simple_directory.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/simpledir",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/roachpb",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "simpledir_test",
+    srcs = ["simple_directory_test.go"],
+    deps = [
+        ":simpledir",
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)

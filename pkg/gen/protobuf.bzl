@@ -6,7 +6,7 @@ PROTOBUF_SRCS = [
   "//pkg/build:build_go_proto",
   "//pkg/ccl/backupccl:backupccl_go_proto",
   "//pkg/ccl/baseccl:baseccl_go_proto",
-  "//pkg/ccl/sqlproxyccl/tenant:tenant_go_proto",
+  "//pkg/ccl/sqlproxyccl/tenant/servicedir:servicedir_go_proto",
   "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
   "//pkg/ccl/streamingccl/streampb:streampb_go_proto",
   "//pkg/ccl/utilccl/licenseccl:licenseccl_go_proto",

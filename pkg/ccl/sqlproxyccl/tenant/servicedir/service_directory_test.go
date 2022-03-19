@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant_test
+package servicedir_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/servicedir"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -71,11 +72,11 @@ func TestWatchPods(t *testing.T) {
 	skip.UnderDeadlockWithIssue(t, 71365)
 
 	// Make pod watcher channel.
-	podWatcher := make(chan *tenant.Pod, 1)
+	podWatcher := make(chan *servicedir.Pod, 1)
 
 	// Create the directory.
 	ctx := context.Background()
-	tc, dir, tds := newTestDirectory(t, tenant.PodWatcher(podWatcher))
+	tc, dir, tds := newTestDirectory(t, servicedir.PodWatcher(podWatcher))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(20)
@@ -90,14 +91,14 @@ func TestWatchPods(t *testing.T) {
 	pod := <-podWatcher
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
-	require.Equal(t, tenant.RUNNING, pod.State)
+	require.Equal(t, servicedir.RUNNING, pod.State)
 
 	// Trigger drain of pod.
 	tds.Drain()
 	pod = <-podWatcher
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
-	require.Equal(t, tenant.DRAINING, pod.State)
+	require.Equal(t, servicedir.DRAINING, pod.State)
 
 	// Ensure that all addresses have been cleared from the directory, since
 	// it should only return RUNNING addresses.
@@ -119,7 +120,7 @@ func TestWatchPods(t *testing.T) {
 	pod = <-podWatcher
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
-	require.Equal(t, tenant.DELETING, pod.State)
+	require.Equal(t, servicedir.DELETING, pod.State)
 
 	// We know that the directory should have been emptied earlier since we
 	// don't add DRAINING pods to the directory, so putting the pod into the
@@ -129,7 +130,7 @@ func TestWatchPods(t *testing.T) {
 	require.Empty(t, addrs)
 
 	// Resume tenant again by a direct call to the directory server
-	_, err = tds.EnsurePod(ctx, &tenant.EnsurePodRequest{tenantID.ToUint64()})
+	_, err = tds.EnsurePod(ctx, &servicedir.EnsurePodRequest{tenantID.ToUint64()})
 	require.NoError(t, err)
 
 	// Wait for background watcher to populate the initial pod.
@@ -146,7 +147,7 @@ func TestWatchPods(t *testing.T) {
 	pod = <-podWatcher
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
-	require.Equal(t, tenant.RUNNING, pod.State)
+	require.Equal(t, servicedir.RUNNING, pod.State)
 
 	// Verify that EnsureTenantAddr returns the pod's IP address.
 	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
@@ -174,9 +175,9 @@ func TestWatchPods(t *testing.T) {
 	pod = <-podWatcher
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
-	require.Equal(t, tenant.DELETING, pod.State)
+	require.Equal(t, servicedir.DELETING, pod.State)
 
-	// Verify that a new call to EnsureTenantAddr will resume again the tenant.
+	// Verify that a new call to EnsureTenantAddr will resume again the servicedir.
 	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
@@ -185,7 +186,7 @@ func TestWatchPods(t *testing.T) {
 	pod = <-podWatcher
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
-	require.Equal(t, tenant.RUNNING, pod.State)
+	require.Equal(t, servicedir.RUNNING, pod.State)
 }
 
 func TestCancelLookups(t *testing.T) {
@@ -275,7 +276,7 @@ func TestDeleteTenant(t *testing.T) {
 	// Create the directory.
 	ctx := context.Background()
 	// Disable throttling for this test
-	tc, dir, tds := newTestDirectory(t, tenant.RefreshDelay(-1))
+	tc, dir, tds := newTestDirectory(t, servicedir.RefreshDelay(-1))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(50)
@@ -330,7 +331,7 @@ func TestRefreshThrottling(t *testing.T) {
 	// Create the directory, but with extreme rate limiting so that directory
 	// will never refresh.
 	ctx := context.Background()
-	tc, dir, _ := newTestDirectory(t, tenant.RefreshDelay(60*time.Minute))
+	tc, dir, _ := newTestDirectory(t, servicedir.RefreshDelay(60*time.Minute))
 	defer tc.Stopper().Stop(ctx)
 
 	// Create test tenant.
@@ -362,11 +363,11 @@ func TestLoadBalancing(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// Make pod watcher channel.
-	podWatcher := make(chan *tenant.Pod, 1)
+	podWatcher := make(chan *servicedir.Pod, 1)
 
 	// Create the directory.
 	ctx := context.Background()
-	tc, dir, tds := newTestDirectory(t, tenant.PodWatcher(podWatcher))
+	tc, dir, tds := newTestDirectory(t, servicedir.PodWatcher(podWatcher))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(30)
@@ -515,7 +516,7 @@ func startTenant(
 // Setup directory that uses a client connected to a test directory server
 // that manages tenants connected to a backing KV server.
 func newTestDirectory(
-	t *testing.T, opts ...tenant.DirOption,
+	t *testing.T, opts ...servicedir.DirOption,
 ) (
 	tc serverutils.TestClusterInterface,
 	directory tenant.Resolver,
@@ -553,8 +554,8 @@ func newTestDirectory(
 	require.NoError(t, err)
 	// nolint:grpcconnclose
 	clusterStopper.AddCloser(stop.CloserFn(func() { require.NoError(t, conn.Close() /* nolint:grpcconnclose */) }))
-	client := tenant.NewDirectoryClient(conn)
-	directory, err = tenant.NewServiceDirectory(context.Background(), clusterStopper, client, opts...)
+	client := servicedir.NewDirectoryClient(conn)
+	directory, err = servicedir.NewServiceDirectory(context.Background(), clusterStopper, client, opts...)
 	require.NoError(t, err)
 
 	return

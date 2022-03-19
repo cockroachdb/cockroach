@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant
+package servicedir
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -106,7 +107,7 @@ type serviceDirectory struct {
 // needed.
 func NewServiceDirectory(
 	ctx context.Context, stopper *stop.Stopper, client DirectoryClient, opts ...DirOption,
-) (Resolver, error) {
+) (tenant.Resolver, error) {
 	dir := &serviceDirectory{client: client, stopper: stopper}
 
 	dir.mut.tenants = make(map[roachpb.TenantID]*tenantEntry)
