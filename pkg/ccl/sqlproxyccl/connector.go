@@ -11,11 +11,10 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
-	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,39 +33,6 @@ const sessionRevivalTokenStartupParam = "crdb:session_revival_token_base64"
 // remoteAddrStartupParam contains the remote address of the original client.
 const remoteAddrStartupParam = "crdb:remote_addr"
 
-// TenantResolver is an interface for the tenant directory. Currently only
-// tenant.Directory implements it.
-//
-// TODO(jaylim-crl): Rename this to Directory, and the current tenant.Directory
-// to tenant.directory. This needs to be moved into the tenant package as well.
-// This is added here to aid testing.
-type TenantResolver interface {
-	// EnsureTenantAddr returns an IP address of one of the given tenant's SQL
-	// processes based on the tenantID and clusterName fields. This should block
-	// until the process associated with the IP is ready.
-	//
-	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
-	// deleted), this will return a GRPC NotFound error.
-	EnsureTenantAddr(
-		ctx context.Context,
-		tenantID roachpb.TenantID,
-		clusterName string,
-	) (string, error)
-
-	// LookupTenantAddrs returns the IP addresses for all available SQL
-	// processes for the given tenant. It returns a GRPC NotFound error if the
-	// tenant does not exist.
-	//
-	// Unlike EnsureTenantAddr which blocks until there is an associated
-	// process, LookupTenantAddrs will just return an empty set if no processes
-	// are available for the tenant.
-	LookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
-
-	// ReportFailure is used to indicate to the resolver that a connection
-	// attempt to connect to a particular SQL tenant pod have failed.
-	ReportFailure(ctx context.Context, tenantID roachpb.TenantID, addr string) error
-}
-
 // connector is a per-session tenant-associated component that can be used to
 // obtain a connection to the tenant cluster. This will also handle the
 // authentication phase. All connections returned by the connector should
@@ -80,24 +46,12 @@ type connector struct {
 	TenantID    roachpb.TenantID
 
 	// Directory corresponds to the tenant directory, which will be used to
-	// resolve tenants to their corresponding IP addresses. If this isn't set,
-	// we will fallback to use RoutingRule.
+	// resolve tenants to their corresponding IP addresses.
 	//
-	// TODO(jaylim-crl): Replace this with a Directory interface, and remove
-	// the RoutingRule field. RoutingRule should not be in here.
+	// TODO(jaylim-crl): Replace this with a Directory interface.
 	//
-	// NOTE: This field is optional.
-	Directory TenantResolver
-
-	// RoutingRule refers to the static rule that will be used when resolving
-	// tenants. This will be used directly whenever the Directory field isn't
-	// specified, or as a fallback if one was specified.
-	//
-	// The literal "{{clusterName}}" will be replaced with ClusterName within
-	// the RoutingRule string.
-	//
-	// NOTE: This field is optional, if Directory isn't set.
-	RoutingRule string
+	// NOTE: This field is required.
+	Directory tenant.Resolver
 
 	// StartupMsg represents the startup message associated with the client.
 	// This will be used when establishing a pgwire connection with the SQL pod.
@@ -300,9 +254,6 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 	return nil, errors.Mark(err, ctx.Err())
 }
 
-// resolveTCPAddr indirection to allow test hooks.
-var resolveTCPAddr = net.ResolveTCPAddr
-
 // lookupAddr returns an address (that must include both host and port)
 // pointing to one of the SQL pods for the tenant associated with this
 // connector.
@@ -315,40 +266,21 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 		return c.testingKnobs.lookupAddr(ctx)
 	}
 
-	// First try to lookup tenant in the directory (if available).
-	if c.Directory != nil {
-		addr, err := c.Directory.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
-		switch {
-		case err == nil:
-			return addr, nil
-		case status.Code(err) == codes.FailedPrecondition:
-			if st, ok := status.FromError(err); ok {
-				return "", newErrorf(codeUnavailable, "%v", st.Message())
-			}
-			return "", newErrorf(codeUnavailable, "unavailable")
-		case status.Code(err) != codes.NotFound:
-			return "", markAsRetriableConnectorError(err)
-		default:
-			// Fallback to old resolution rule.
+	addr, err := c.Directory.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
+	switch {
+	case err == nil:
+		return addr, nil
+	case status.Code(err) == codes.FailedPrecondition:
+		if st, ok := status.FromError(err); ok {
+			return "", newErrorf(codeUnavailable, "%v", st.Message())
 		}
-	}
-
-	// Derive DNS address and then try to resolve it. If it does not exist, then
-	// map to a GRPC NotFound error.
-	//
-	// TODO(jaylim-crl): This code is temporary. Remove this once we have fully
-	// replaced this with a Directory interface. This fallback does not need
-	// to exist.
-	addr := strings.ReplaceAll(
-		c.RoutingRule, "{{clusterName}}",
-		fmt.Sprintf("%s-%d", c.ClusterName, c.TenantID.ToUint64()),
-	)
-	if _, err := resolveTCPAddr("tcp", addr); err != nil {
-		log.Errorf(ctx, "could not retrieve SQL server address: %v", err.Error())
+		return "", newErrorf(codeUnavailable, "unavailable")
+	case status.Code(err) == codes.NotFound:
 		return "", newErrorf(codeParamsRoutingFailed,
 			"cluster %s-%d not found", c.ClusterName, c.TenantID.ToUint64())
+	default:
+		return "", markAsRetriableConnectorError(err)
 	}
-	return addr, nil
 }
 
 // dialSQLServer dials the given address for the SQL pod, and forwards the
@@ -410,7 +342,7 @@ func isRetriableConnectorError(err error) bool {
 // reportFailureToDirectory is a hookable function that calls the given tenant
 // directory's ReportFailure method.
 var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, addr string, directory TenantResolver,
+	ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Resolver,
 ) error {
 	return directory.ReportFailure(ctx, tenantID, addr)
 }

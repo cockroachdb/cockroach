@@ -74,8 +74,7 @@ type ProxyOptions struct {
 	// Insecure if set, will not use TLS for the backend connection. For testing.
 	Insecure bool
 	// RoutingRule for constructing the backend address for each incoming
-	// connection. Optionally use '{{clusterName}}'
-	// which will be substituted with the cluster name.
+	// connection.
 	RoutingRule string
 	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does
 	// the resolution from backend id to IP address. If specified - it will be
@@ -126,9 +125,8 @@ type proxyHandler struct {
 	// idleMonitor will detect idle connections to DRAINING pods.
 	idleMonitor *idle.Monitor
 
-	// directory is optional and if set, will be used to resolve
-	// backend id to IP addresses.
-	directory *tenant.Directory
+	// directory is used to resolve backend id to IP addresses.
+	directory tenant.Resolver
 
 	// CertManger keeps up to date the certificates used.
 	certManager *certmgr.CertManager
@@ -200,6 +198,8 @@ func newProxyHandler(
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		handler.directory = tenant.NewSimpleDirectory(handler.RoutingRule)
 	}
 
 	return &handler, nil
@@ -277,11 +277,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	connector := &connector{
 		ClusterName: clusterName,
 		TenantID:    tenID,
-		RoutingRule: handler.RoutingRule,
 		StartupMsg:  backendStartupMsg,
-	}
-	if handler.directory != nil {
-		connector.Directory = handler.directory
+		Directory:   handler.directory,
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.

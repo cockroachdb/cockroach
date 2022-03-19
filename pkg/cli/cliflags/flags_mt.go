@@ -55,10 +55,8 @@ var (
 	}
 
 	RoutingRule = FlagInfo{
-		Name: "routing-rule",
-		Description: `
-Routing rule for incoming connections. Use '{{clusterName}}' for substitution.
-This rule must include the port of the SQL pod.`,
+		Name:        "routing-rule",
+		Description: "Routing rule for incoming connections. This rule must include the port.",
 	}
 
 	DirectoryAddr = FlagInfo{

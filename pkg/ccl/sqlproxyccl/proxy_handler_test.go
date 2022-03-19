@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -72,13 +73,18 @@ func TestLongDBName(t *testing.T) {
 	defer testutils.TestingHook(&BackendDial, func(
 		_ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
 	) (net.Conn, error) {
-		require.Equal(t, outgoingAddr, "dim-dog-28-0.cockroachdb:26257")
+		require.Equal(t, outgoingAddr, "127.0.0.1:26257")
 		return nil, newErrorf(codeParamsRoutingFailed, "boom")
 	})()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "{{clusterName}}-0.cockroachdb:26257"})
+	s, addr := newSecureProxyServer(
+		ctx,
+		t,
+		stopper,
+		&ProxyOptions{RoutingRule: "127.0.0.1:26257"},
+	)
 
 	longDB := strings.Repeat("x", 70) // 63 is limit
 	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, longDB)
@@ -98,18 +104,25 @@ func TestBackendDownRetry(t *testing.T) {
 	defer te.Close()
 
 	callCount := 0
-	defer testutils.TestingHook(&resolveTCPAddr,
+	defer testutils.TestingHook(
+		&tenant.ResolveTCPAddr,
 		func(network, addr string) (*net.TCPAddr, error) {
 			callCount++
 			if callCount >= 3 {
 				return nil, errors.New("tenant not found")
 			}
 			return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
-		})()
+		},
+	)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$:1234"})
+	_, addr := newSecureProxyServer(
+		ctx,
+		t,
+		stopper,
+		&ProxyOptions{RoutingRule: "undialable%$!@$:1234"},
+	)
 
 	// Valid connection, but no backend server running.
 	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=dim-dog-28&sslmode=require", addr)
@@ -261,7 +274,7 @@ func TestProxyTLSConf(t *testing.T) {
 		defer stopper.Stop(ctx)
 		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    true,
-			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+			RoutingRule: "127.0.0.1:26257",
 		})
 
 		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
@@ -285,7 +298,7 @@ func TestProxyTLSConf(t *testing.T) {
 		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    false,
 			SkipVerify:  true,
-			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+			RoutingRule: "127.0.0.1:26257",
 		})
 
 		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
@@ -313,7 +326,7 @@ func TestProxyTLSConf(t *testing.T) {
 		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    false,
 			SkipVerify:  false,
-			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+			RoutingRule: "127.0.0.1:26257",
 		})
 
 		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
@@ -645,8 +658,8 @@ func TestDirectoryConnect(t *testing.T) {
 	}
 	proxy, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
-	t.Run("fallback when tenant not found", func(t *testing.T) {
-		defer testutils.TestingHook(&resolveTCPAddr,
+	t.Run("tenant not found", func(t *testing.T) {
+		defer testutils.TestingHook(&tenant.ResolveTCPAddr,
 			func(network, addr string) (*net.TCPAddr, error) {
 				// Expect fallback.
 				require.Equal(t, srv.ServingSQLAddr(), addr)
@@ -656,7 +669,7 @@ func TestDirectoryConnect(t *testing.T) {
 		url := fmt.Sprintf(
 			"postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-%d",
 			addr, notFoundTenantID)
-		te.TestConnect(ctx, t, url, func(*pgx.Conn) {})
+		te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "tenant-cluster-99 not found")
 	})
 
 	t.Run("fail to connect to backend", func(t *testing.T) {
@@ -675,7 +688,7 @@ func TestDirectoryConnect(t *testing.T) {
 		// Ensure that Directory.ReportFailure is being called correctly.
 		countReports := 0
 		defer testutils.TestingHook(&reportFailureToDirectory, func(
-			ctx context.Context, tenantID roachpb.TenantID, addr string, directory TenantResolver,
+			ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Resolver,
 		) error {
 			require.Equal(t, roachpb.MakeTenantID(28), tenantID)
 			addrs, err := directory.LookupTenantAddrs(ctx, tenantID)
@@ -1398,21 +1411,12 @@ type tester struct {
 		authenticated bool
 		errToClient   *codeError
 	}
-
-	restoreResolveTCPAddr  func()
 	restoreAuthenticate    func()
 	restoreSendErrToClient func()
 }
 
 func newTester() *tester {
 	te := &tester{}
-
-	// Override default lookup function so that it does not use net.ResolveTCPAddr.
-	te.restoreResolveTCPAddr =
-		testutils.TestingHook(&resolveTCPAddr,
-			func(network, addr string) (*net.TCPAddr, error) {
-				return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
-			})
 
 	// Record successful connection and authentication.
 	originalAuthenticate := authenticate
@@ -1437,7 +1441,6 @@ func newTester() *tester {
 }
 
 func (te *tester) Close() {
-	te.restoreResolveTCPAddr()
 	te.restoreAuthenticate()
 	te.restoreSendErrToClient()
 }
