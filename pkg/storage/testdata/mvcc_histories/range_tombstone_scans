@@ -1,0 +1,249 @@
+# Tests MVCC scans and gets across range tombstones.
+#
+# Sets up following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
+#
+#  T
+#  6                 [e6]     
+#  5                      f5
+#  4          o------------------o
+#  3  x          d3       f3
+#  2  o---------------o
+#  1  a1  x   c1          f1
+#     a   b   c   d   e   f   g   h
+#
+run ok
+put k=a ts=1 v=a1
+del k=b ts=1
+put k=c ts=1 v=c1
+put k=f ts=1 v=f1
+del_range_ts k=a end=e ts=2
+del k=a ts=3
+put k=d ts=3 v=d3
+put k=f ts=3 v=f3
+del_range_ts k=c end=h ts=4
+put k=f ts=5 v=f5
+with t=A
+  txn_begin ts=6
+  put k=e v=e6
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+rangekey: {a-c}/[2.000000000,0]
+rangekey: {c-e}/[4.000000000,0 2.000000000,0]
+rangekey: {e-h}/[4.000000000,0]
+data: "a"/3.000000000,0 -> /<empty>
+data: "a"/1.000000000,0 -> /BYTES/a1
+data: "b"/1.000000000,0 -> /<empty>
+data: "c"/1.000000000,0 -> /BYTES/c1
+data: "d"/3.000000000,0 -> /BYTES/d3
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /BYTES/e6
+data: "f"/5.000000000,0 -> /BYTES/f5
+data: "f"/3.000000000,0 -> /BYTES/f3
+data: "f"/1.000000000,0 -> /BYTES/f1
+
+# Run non-tombstone scans at all timestamps.
+run ok
+scan k=a end=z ts=1
+----
+scan: "a" -> /BYTES/a1 @1.000000000,0
+scan: "c" -> /BYTES/c1 @1.000000000,0
+scan: "f" -> /BYTES/f1 @1.000000000,0
+
+run ok
+scan k=a end=z ts=2
+----
+scan: "f" -> /BYTES/f1 @1.000000000,0
+
+run ok
+scan k=a end=z ts=3
+----
+scan: "d" -> /BYTES/d3 @3.000000000,0
+scan: "f" -> /BYTES/f3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=4
+----
+scan: "a"-"z" -> <no data>
+
+run ok
+scan k=a end=z ts=5
+----
+scan: "f" -> /BYTES/f5 @5.000000000,0
+
+run ok
+scan k=a end=z ts=6 inconsistent
+----
+scan: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: "f" -> /BYTES/f5 @5.000000000,0
+
+# Run tombstone scans at all timestamps.
+run ok
+scan k=a end=z ts=1 tombstones
+----
+scan: "a" -> /BYTES/a1 @1.000000000,0
+scan: "b" -> /<empty> @1.000000000,0
+scan: "c" -> /BYTES/c1 @1.000000000,0
+scan: "f" -> /BYTES/f1 @1.000000000,0
+
+run ok
+scan k=a end=z ts=2 tombstones
+----
+scan: "a" -> /<empty> @2.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @2.000000000,0
+scan: "d" -> /<empty> @2.000000000,0
+scan: "f" -> /BYTES/f1 @1.000000000,0
+
+run ok
+scan k=a end=z ts=3 tombstones
+----
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @2.000000000,0
+scan: "d" -> /BYTES/d3 @3.000000000,0
+scan: "f" -> /BYTES/f3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=4 tombstones
+----
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "f" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=z ts=5 tombstones
+----
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "f" -> /BYTES/f5 @5.000000000,0
+
+run ok
+scan k=a end=z ts=6 tombstones inconsistent
+----
+scan: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "f" -> /BYTES/f5 @5.000000000,0
+
+# Try some corresponding gets.
+run ok
+get k=a ts=1
+get k=a ts=2
+get k=a ts=3
+get k=a ts=1 tombstones
+get k=a ts=2 tombstones
+get k=a ts=3 tombstones
+----
+get: "a" -> /BYTES/a1 @1.000000000,0
+get: "a" -> <no data>
+get: "a" -> <no data>
+get: "a" -> /BYTES/a1 @1.000000000,0
+get: "a" -> /<empty> @2.000000000,0
+get: "a" -> /<empty> @3.000000000,0
+
+run ok
+get k=b ts=1
+get k=b ts=2
+get k=b ts=3
+get k=b ts=1 tombstones
+get k=b ts=2 tombstones
+get k=b ts=3 tombstones
+----
+get: "b" -> <no data>
+get: "b" -> <no data>
+get: "b" -> <no data>
+get: "b" -> /<empty> @1.000000000,0
+get: "b" -> /<empty> @2.000000000,0
+get: "b" -> /<empty> @2.000000000,0
+
+run ok
+get k=c ts=1
+get k=c ts=2
+get k=c ts=3
+get k=c ts=4
+get k=c ts=5
+get k=c ts=1 tombstones
+get k=c ts=2 tombstones
+get k=c ts=3 tombstones
+get k=c ts=4 tombstones
+get k=c ts=5 tombstones
+----
+get: "c" -> /BYTES/c1 @1.000000000,0
+get: "c" -> <no data>
+get: "c" -> <no data>
+get: "c" -> <no data>
+get: "c" -> <no data>
+get: "c" -> /BYTES/c1 @1.000000000,0
+get: "c" -> /<empty> @2.000000000,0
+get: "c" -> /<empty> @2.000000000,0
+get: "c" -> /<empty> @4.000000000,0
+get: "c" -> /<empty> @4.000000000,0
+
+run ok
+get k=d ts=1
+get k=d ts=2
+get k=d ts=3
+get k=d ts=4
+get k=d ts=5
+get k=d ts=1 tombstones
+get k=d ts=2 tombstones
+get k=d ts=3 tombstones
+get k=d ts=4 tombstones
+get k=d ts=5 tombstones
+----
+get: "d" -> <no data>
+get: "d" -> <no data>
+get: "d" -> /BYTES/d3 @3.000000000,0
+get: "d" -> <no data>
+get: "d" -> <no data>
+get: "d" -> <no data>
+get: "d" -> /<empty> @2.000000000,0
+get: "d" -> /BYTES/d3 @3.000000000,0
+get: "d" -> /<empty> @4.000000000,0
+get: "d" -> /<empty> @4.000000000,0
+
+run ok
+get k=e ts=3 inconsistent
+get k=e ts=4 inconsistent
+get k=e ts=5 inconsistent
+get k=e ts=6 inconsistent
+get k=e ts=3 tombstones inconsistent
+get k=e ts=4 tombstones inconsistent
+get k=e ts=5 tombstones inconsistent
+get k=e ts=6 tombstones inconsistent
+----
+get: "e" -> <no data>
+get: "e" -> <no data>
+get: "e" -> <no data>
+get: "e" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+get: "e" -> <no data>
+get: "e" -> <no data>
+get: "e" -> /<empty> @4.000000000,0
+get: "e" -> /<empty> @4.000000000,0
+get: "e" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+get: "e" -> /<empty> @4.000000000,0
+
+run ok
+get k=g ts=3
+get k=g ts=4
+get k=g ts=5
+get k=g ts=3 tombstones
+get k=g ts=4 tombstones
+get k=g ts=5 tombstones
+----
+get: "g" -> <no data>
+get: "g" -> <no data>
+get: "g" -> <no data>
+get: "g" -> <no data>
+get: "g" -> /<empty> @4.000000000,0
+get: "g" -> /<empty> @4.000000000,0
