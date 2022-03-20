@@ -12,6 +12,7 @@ package rangefeedcache
 
 import (
 	"context"
+	"math"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -223,7 +224,19 @@ func (s *Watcher) Run(ctx context.Context) error {
 	}
 	defer func() { atomic.StoreInt32(&s.started, 0) }()
 
-	buffer := rangefeedbuffer.New(s.bufferSize)
+	// Initially construct an "unbounded" buffer. We want our initial scan to
+	// succeed, regardless of size. If we exceed a hard-coded limit during the
+	// initial scan, that's not recoverable/retryable -- a subsequent retry would
+	// run into the same limit. Instead, we'll forego limiting for now but
+	// set it below, when handling incremental updates.
+	//
+	// TODO(irfansharif): If this unbounded initial scan buffer proves worrying,
+	// we could re-work these interfaces to have callers use the rangefeedcache to
+	// keep a subset of the total table in-memory, fed by the rangefeed, and
+	// transparently query the backing table if the record requested is not found.
+	// We could also have the initial scan operate in chunks, handing off results
+	// to the caller incrementally, all within the "initial scan" phase.
+	buffer := rangefeedbuffer.New(math.MaxInt)
 	frontierBumpedCh, initialScanDoneCh, errCh := make(chan struct{}), make(chan struct{}), make(chan error)
 	mu := struct { // serializes access between the rangefeed and the main thread here
 		syncutil.Mutex
@@ -315,6 +328,9 @@ func (s *Watcher) Run(ctx context.Context) error {
 
 		case <-initialScanDoneCh:
 			s.handleUpdate(ctx, buffer, initialScanTS, CompleteUpdate)
+			// We're done with our initial scan, set a hard limit for incremental
+			// updates going forward.
+			buffer.SetLimit(s.bufferSize)
 
 		case err := <-errCh:
 			return err
