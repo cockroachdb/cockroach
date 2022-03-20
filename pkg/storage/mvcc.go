@@ -689,12 +689,34 @@ func (opts *MVCCGetOptions) validate() error {
 	return nil
 }
 
-func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCIterator {
+// newMVCCIterator is a convenience function that sets up a suitable iterator
+// for internal MVCC operations. In particular, this never exposes range keys
+// (i.e. MVCC range tombstones), but instead synthesizes MVCC point tombstones
+// around existing point keys that overlap an MVCC range tombstone, as well as
+// at the start of MVCC range tombstones. It does this even if tombstones are
+// not returned, since they must be visible to conflict/uncertainty checks.
+func newMVCCIterator(
+	reader Reader, timestamp hlc.Timestamp, returnTombstones bool, opts IterOptions,
+) MVCCIterator {
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic(errors.AssertionFailedf("can't request range keys"))
+	}
+	opts.KeyTypes = IterKeyTypePointsAndRanges
+	// Disable separated intents if reading inline.
 	iterKind := MVCCKeyAndIntentsIterKind
-	if inlineMeta {
+	if timestamp.IsEmpty() {
 		iterKind = MVCCKeyIterKind
 	}
-	return reader.NewMVCCIterator(iterKind, opts)
+	// If we're not returning tombstones, enable range key masking.
+	if !returnTombstones && opts.RangeKeyMaskingBelow.IsEmpty() {
+		opts.RangeKeyMaskingBelow = timestamp
+	}
+	// Prefix iterators are generally used for point operations (e.g. gets or puts
+	// as opposed to scans). For these, we also synthesize point tombstones for
+	// MVCC range tombstones at a SeekGE key, to emit them even if no existing
+	// point key exists -- this is necessary for conflict/uncertainty checks.
+	emitOnSeekGE := opts.Prefix
+	return newPointSynthesizingIter(reader.NewMVCCIterator(iterKind, opts), emitOnSeekGE)
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -703,7 +725,10 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 //
 // In tombstones mode, if the most recent value is a deletion tombstone, the
 // result will be a non-nil roachpb.Value whose RawBytes field is nil.
-// Otherwise, a deletion tombstone results in a nil roachpb.Value.
+// Otherwise, a deletion tombstone results in a nil roachpb.Value. MVCC range
+// tombstones will be emitted as synthetic point tombstones (these synthetic
+// point tombstones may not be visible to a scan if there is no existing point
+// key at this key).
 //
 // In inconsistent mode, if an intent is encountered, it will be placed in the
 // dedicated return parameter. By contrast, in consistent mode, an intent will
@@ -724,7 +749,7 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(reader, timestamp, opts.Tombstones, IterOptions{Prefix: true})
 	defer iter.Close()
 	value, intent, err := mvccGet(ctx, iter, key, timestamp, opts)
 	return value.ToPointer(), intent, err
@@ -1063,10 +1088,7 @@ func MVCCDelete(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
-		KeyTypes: IterKeyTypePointsAndRanges,
-		Prefix:   true,
-	})
+	iter := newMVCCIterator(rw, timestamp, false /* returnTombstones */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
@@ -1687,10 +1709,7 @@ func MVCCIncrement(
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
-		KeyTypes: IterKeyTypePointsAndRanges,
-		Prefix:   true,
-	})
+	iter := newMVCCIterator(rw, timestamp, false /* returnTombstones */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var int64Val int64
@@ -1762,10 +1781,7 @@ func MVCCConditionalPut(
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
-		KeyTypes: IterKeyTypePointsAndRanges,
-		Prefix:   true,
-	})
+	iter := newMVCCIterator(rw, timestamp, false /* returnTombstones */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
@@ -1843,10 +1859,7 @@ func MVCCInitPut(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
-		KeyTypes: IterKeyTypePointsAndRanges,
-		Prefix:   true,
-	})
+	iter := newMVCCIterator(rw, timestamp, false /* returnTombstones */, IterOptions{Prefix: true})
 	defer iter.Close()
 	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, failOnTombstones, txn)
 }
@@ -2221,7 +2234,7 @@ func MVCCDeleteRange(
 
 	buf := newPutBuffer()
 	defer buf.release()
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp, false /* returnTombstones */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var keys []roachpb.Key
@@ -2741,7 +2754,10 @@ type MVCCScanResult struct {
 // In tombstones mode, if the most recent value for a key is a deletion
 // tombstone, the scan result will contain a roachpb.KeyValue for that key whose
 // RawBytes field is nil. Otherwise, the key-value pair will be omitted from the
-// result entirely.
+// result entirely. For MVCC range tombstones, synthetic point tombstones are
+// returned at the start of the range tombstone and when then overlap a point
+// key (note that this may emit spurious point tombstones at the MVCCScan start
+// key if it truncates an MVCC range tombstone).
 //
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
@@ -2764,7 +2780,10 @@ func MVCCScan(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp, opts.Tombstones, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2777,7 +2796,10 @@ func MVCCScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp, opts.Tombstones, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2811,7 +2833,9 @@ func MVCCScanAsTxn(
 // the reverse flag is set, the iterator will be moved in reverse order. If the
 // scan options specify an inconsistent scan, all "ignored" intents will be
 // returned. In consistent mode, intents are only ever returned as part of a
-// WriteIntentError.
+// WriteIntentError. In Tombstones mode, MVCC range tombstones are emitted as
+// synthetic point tombstones around overlapping point keys and the start of
+// MVCC range tombstones.
 func MVCCIterate(
 	ctx context.Context,
 	reader Reader,
@@ -2820,8 +2844,10 @@ func MVCCIterate(
 	opts MVCCScanOptions,
 	f func(roachpb.KeyValue) error,
 ) ([]roachpb.Intent, error) {
-	iter := newMVCCIterator(
-		reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp, opts.Tombstones, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 
 	var intents []roachpb.Intent
