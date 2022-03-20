@@ -528,11 +528,15 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	})
 }
 
+var decodeKeyOptions struct {
+	useBase64 bool
+}
+
 var debugDecodeKeyCmd = &cobra.Command{
 	Use:   "decode-key",
 	Short: "decode <key>",
 	Long: `
-Decode a hexadecimal-encoded key and pretty-print it. For example:
+Decode a hexadecimal or base64 encoded key and pretty-print it. For example:
 
 	$ decode-key BB89F902ADB43000151C2D1ED07DE6C009
 	/Table/51/1/44938288/1521140384.514565824,0
@@ -540,7 +544,13 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, arg := range args {
-			b, err := gohex.DecodeString(arg)
+			var b []byte
+			var err error
+			if decodeKeyOptions.useBase64 {
+				b, err = base64.StdEncoding.DecodeString(arg)
+			} else {
+				b, err = gohex.DecodeString(arg)
+			}
 			if err != nil {
 				return err
 			}
@@ -1696,6 +1706,9 @@ func init() {
 		"log format of the input files")
 	f.Var(&debugMergeLogsOpts.useColor, "color",
 		"force use of TTY escape codes to colorize the output")
+
+	f = debugDecodeKeyCmd.Flags()
+	f.BoolVar(&decodeKeyOptions.useBase64, "base64", false, "use base64 encoding for keys")
 
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
