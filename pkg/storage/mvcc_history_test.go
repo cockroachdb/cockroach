@@ -1002,6 +1002,9 @@ func cmdIterNew(e *evalCtx) error {
 		MVCCIterator: r.NewMVCCIterator(kind, opts),
 		closeReader:  closeReader,
 	}
+	if e.hasArg("pointSynthesis") {
+		e.iter = newPointSynthesizingIter(e.iter, false)
+	}
 	return nil
 }
 

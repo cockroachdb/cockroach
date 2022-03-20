@@ -703,7 +703,8 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 //
 // In tombstones mode, if the most recent value is a deletion tombstone, the
 // result will be a non-nil roachpb.Value whose RawBytes field is nil.
-// Otherwise, a deletion tombstone results in a nil roachpb.Value.
+// Otherwise, a deletion tombstone results in a nil roachpb.Value. Range
+// tombstones will be emitted as if they were point tombstones.
 //
 // In inconsistent mode, if an intent is encountered, it will be placed in the
 // dedicated return parameter. By contrast, in consistent mode, an intent will
@@ -724,7 +725,15 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	var rangeKeyMaskingBelow hlc.Timestamp
+	if !opts.Tombstones {
+		rangeKeyMaskingBelow = timestamp
+	}
+	iter := newPointSynthesizingIter(newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		Prefix:               true,
+		RangeKeyMaskingBelow: rangeKeyMaskingBelow,
+	}), true /* emitOnSeek */)
 	defer iter.Close()
 	value, intent, err := mvccGet(ctx, iter, key, timestamp, opts)
 	return value.ToPointer(), intent, err
@@ -2730,7 +2739,9 @@ type MVCCScanResult struct {
 // In tombstones mode, if the most recent value for a key is a deletion
 // tombstone, the scan result will contain a roachpb.KeyValue for that key whose
 // RawBytes field is nil. Otherwise, the key-value pair will be omitted from the
-// result entirely.
+// result entirely. If a point key was deleted by an MVCC range tombstone,
+// a synthesized point tombstone is returned -- range tombstones by themselves
+// are not surfaced (in particular if they don't cover any point keys).
 //
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
@@ -2753,7 +2764,16 @@ func MVCCScan(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	var rangeKeyMaskingBelow hlc.Timestamp
+	if !opts.Tombstones {
+		rangeKeyMaskingBelow = timestamp
+	}
+	iter := newPointSynthesizingIter(newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{
+		KeyTypes:             IterKeyTypePointsWithRanges,
+		LowerBound:           key,
+		UpperBound:           endKey,
+		RangeKeyMaskingBelow: rangeKeyMaskingBelow,
+	}), false /* emitOnSeek */)
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2766,6 +2786,7 @@ func MVCCScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
+	// TODO(erikgrinaker): Update this.
 	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
