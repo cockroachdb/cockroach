@@ -281,8 +281,9 @@ func extractResultKey(repr []byte) roachpb.Key {
 	return key
 }
 
-// Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
-// one MVCCGet / MVCCScan call.
+// pebbleMVCCScanner performs an MVCCGet / MVCCScan. It does not support MVCC
+// range tombstones, and relies on a pointSynthesizingIter to synthesize point
+// tombstones for range tombstones.
 type pebbleMVCCScanner struct {
 	parent MVCCIterator
 	// memAccount is used to account for the size of the scan results.
@@ -1066,6 +1067,11 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 			p.err = err
 		}
 		return false
+	}
+	// We don't support range keys, and expect the caller to give us a
+	// pointSynthesizingIter for these.
+	if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+		panic(errors.AssertionFailedf("unexpected range key at %s", p.parent.UnsafeKey()))
 	}
 	return true
 }

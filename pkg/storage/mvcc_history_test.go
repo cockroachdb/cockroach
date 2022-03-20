@@ -71,7 +71,7 @@ import (
 // put_rangekey   k=<key> end=<key> ts=<int>[,<int>]
 // scan           [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
-// iter           [k=<key>] [end=<key>] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]]
+// iter           [k=<key>] [end=<key>] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis [emitOnSeekGE]] [maskBelow=<int>[,<int>]]
 // iter_seek_ge   k=<key> [ts=<int>[,<int>]]
 // iter_seek_lt   k=<key> [ts=<int>[,<int>]]
 // iter_seek_intent_ge k=<key> txn=<name>
@@ -1023,6 +1023,9 @@ func cmdIterNew(e *evalCtx) error {
 	e.iter = &iterWithCloseReader{
 		MVCCIterator: r.NewMVCCIterator(kind, opts),
 		closeReader:  closeReader,
+	}
+	if e.hasArg("pointSynthesis") {
+		e.iter = newPointSynthesizingIter(e.iter, e.hasArg("emitOnSeekGE"))
 	}
 	return nil
 }
