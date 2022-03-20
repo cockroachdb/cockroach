@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testutils",
+    srcs = ["test_directory.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/testutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)

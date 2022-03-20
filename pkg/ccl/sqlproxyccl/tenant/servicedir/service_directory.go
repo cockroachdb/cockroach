@@ -205,10 +205,18 @@ func (d *serviceDirectory) LookupTenantAddrs(
 // tenant pod have failed. Since this could be due to a failed process,
 // ReportFailure will attempt to refresh the cache with the latest information
 // about available tenant processes.
+//
 // TODO(andyk): In the future, the ip parameter will be used to mark a
 // particular pod as "unhealthy" so that it's less likely to be chosen.
 // However, today there can be at most one pod for a given tenant, so it
 // must always be chosen. Keep the parameter as a placeholder for the future.
+//
+// TODO(jaylim-crl): To implement the TODO above, one strawman idea is to add
+// a healthy/unhealthy field (or failureCount) to *tenant.Pod. ReportFailure
+// sets that field to unhealthy, and we'll have another ReportSuccess API that
+// will reset that field to healthy once we have sufficient connection counts.
+// When routing a connection to a SQL pod, the balancer will use that field when
+// calculating likelihoods.
 //
 // ReportFailure implements the tenant.Directory interface.
 func (d *serviceDirectory) ReportFailure(

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
@@ -130,6 +131,9 @@ type proxyHandler struct {
 	// directory is used to resolve tenants to their corresponding IP addresses.
 	directory tenant.Directory
 
+	// balancer is used to load balance incoming connections.
+	balancer *balancer.Balancer
+
 	// CertManger keeps up to date the certificates used.
 	certManager *certmgr.CertManager
 }
@@ -203,6 +207,7 @@ func newProxyHandler(
 	} else {
 		handler.directory = simpledir.NewSimpleDirectory(handler.RoutingRule)
 	}
+	handler.balancer = balancer.NewBalancer(handler.directory)
 
 	return &handler, nil
 }
@@ -280,7 +285,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		ClusterName: clusterName,
 		TenantID:    tenID,
 		StartupMsg:  backendStartupMsg,
-		Directory:   handler.directory,
+		Balancer:    handler.balancer,
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.

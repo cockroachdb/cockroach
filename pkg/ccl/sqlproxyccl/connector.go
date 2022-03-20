@@ -14,7 +14,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,11 +45,11 @@ type connector struct {
 	ClusterName string
 	TenantID    roachpb.TenantID
 
-	// Directory corresponds to the tenant directory, which will be used to
-	// resolve tenants to their corresponding IP addresses.
+	// Balancer represents the load balancer component that will be used to
+	// route connections to SQL pods.
 	//
 	// NOTE: This field is required.
-	Directory tenant.Directory
+	Balancer *balancer.Balancer
 
 	// StartupMsg represents the startup message associated with the client.
 	// This will be used when establishing a pgwire connection with the SQL pod.
@@ -215,21 +215,19 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 					dialSQLServerErrs = 0
 				}
 
-				// Report the failure to the directory so that it can refresh
+				// Report the failure to the balancer so that it can refresh
 				// any stale information that may have caused the problem.
-				if c.Directory != nil {
-					if err = reportFailureToDirectory(
-						ctx, c.TenantID, serverAddr, c.Directory,
-					); err != nil {
-						reportFailureErrs++
-						if reportFailureErr.ShouldLog() {
-							log.Ops.Errorf(ctx,
-								"report failure (%d errors skipped): %v",
-								reportFailureErrs,
-								err,
-							)
-							reportFailureErrs = 0
-						}
+				if err = reportFailureToBalancer(
+					ctx, c.TenantID, serverAddr, c.Balancer,
+				); err != nil {
+					reportFailureErrs++
+					if reportFailureErr.ShouldLog() {
+						log.Ops.Errorf(ctx,
+							"report failure (%d errors skipped): %v",
+							reportFailureErrs,
+							err,
+						)
+						reportFailureErrs = 0
 					}
 				}
 				continue
@@ -264,7 +262,7 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 		return c.testingKnobs.lookupAddr(ctx)
 	}
 
-	addr, err := c.Directory.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
+	addr, err := c.Balancer.ChoosePodAddr(ctx, c.TenantID, c.ClusterName)
 	switch {
 	case err == nil:
 		return addr, nil
@@ -337,10 +335,10 @@ func isRetriableConnectorError(err error) bool {
 	return errors.Is(err, errRetryConnectorSentinel)
 }
 
-// reportFailureToDirectory is a hookable function that calls the given tenant
-// directory's ReportFailure method.
-var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Directory,
+// reportFailureToBalancer is a hookable function that calls the given
+// balancer's ReportFailure method.
+var reportFailureToBalancer = func(
+	ctx context.Context, tenantID roachpb.TenantID, addr string, balancer *balancer.Balancer,
 ) error {
-	return directory.ReportFailure(ctx, tenantID, addr)
+	return balancer.ReportFailure(ctx, tenantID, addr)
 }

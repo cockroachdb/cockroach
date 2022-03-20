@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant/simpledir"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
@@ -688,17 +688,17 @@ func TestDirectoryConnect(t *testing.T) {
 
 		// Ensure that Directory.ReportFailure is being called correctly.
 		countReports := 0
-		defer testutils.TestingHook(&reportFailureToDirectory, func(
-			ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Directory,
+		defer testutils.TestingHook(&reportFailureToBalancer, func(
+			ctx context.Context, tenantID roachpb.TenantID, addr string, balancer *balancer.Balancer,
 		) error {
 			require.Equal(t, roachpb.MakeTenantID(28), tenantID)
-			addrs, err := directory.LookupTenantAddrs(ctx, tenantID)
+			addrs, err := balancer.ListPodAddrs(ctx, tenantID)
 			require.NoError(t, err)
 			require.Len(t, addrs, 1)
 			require.Equal(t, addrs[0], addr)
 
 			countReports++
-			err = directory.ReportFailure(ctx, tenantID, addr)
+			err = balancer.ReportFailure(ctx, tenantID, addr)
 			require.NoError(t, err)
 			return err
 		})()

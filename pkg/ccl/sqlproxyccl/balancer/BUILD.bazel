@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "balancer",
+    srcs = ["balancer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/roachpb",
+    ],
+)
+
+go_test(
+    name = "balancer_test",
+    srcs = ["balancer_test.go"],
+    deps = [
+        ":balancer",
+        "//pkg/ccl/sqlproxyccl/tenant/testutils",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)
