@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -98,6 +99,9 @@ type TestingKnobs struct {
 	// LimiterLimitOverride, if set, allows tests to dynamically override the span
 	// config limit.
 	LimiterLimitOverride func() int64
+
+	// StoreForEachOverlappingSpanConfigOverride
+	StoreForEachOverlappingSpanConfigOverride func() []roachpb.SpanConfigEntry
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

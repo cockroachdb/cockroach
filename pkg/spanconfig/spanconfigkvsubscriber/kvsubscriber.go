@@ -90,7 +90,7 @@ type KVSubscriber struct {
 		// populated while the exposed spanconfig.StoreReader appears static.
 		// Once sufficiently caught up, the fresh spanconfig.Store is swapped in
 		// and the old discarded. See type-level comment for more details.
-		internal spanconfig.Store
+		internal *spanconfigstore.Store
 		handlers []handler
 	}
 }
@@ -121,10 +121,10 @@ func New(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	spanConfigStore := spanconfigstore.New(fallback)
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
+	spanConfigStore := spanconfigstore.New(fallback, knobs)
 	s := &KVSubscriber{
 		fallback: fallback,
 		knobs:    knobs,
@@ -247,7 +247,7 @@ func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update
 func (s *KVSubscriber) handleCompleteUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
-	freshStore := spanconfigstore.New(s.fallback)
+	freshStore := spanconfigstore.New(s.fallback, s.knobs)
 	for _, ev := range events {
 		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}

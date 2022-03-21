@@ -54,13 +54,22 @@ type Store struct {
 	// fallback is the span config we'll fall back on in the absence of
 	// something more specific.
 	fallback roachpb.SpanConfig
+
+	knobs *spanconfig.TestingKnobs
 }
 
 var _ spanconfig.Store = &Store{}
 
 // New instantiates a span config store with the given fallback.
-func New(fallback roachpb.SpanConfig) *Store {
-	s := &Store{fallback: fallback}
+func New(fallback roachpb.SpanConfig, knobs *spanconfig.TestingKnobs) *Store {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
+
+	s := &Store{
+		fallback: fallback,
+		knobs:    knobs,
+	}
 	s.mu.spanConfigStore = newSpanConfigStore()
 	s.mu.systemSpanConfigStore = newSystemSpanConfigStore()
 	return s
@@ -115,10 +124,23 @@ func (s *Store) Apply(
 	return deleted, added
 }
 
-// ForEachOverlappingSpanConfig is part of the spanconfig.Store interface.
+// ForEachOverlappingSpanConfig invokes the supplied callback on each
+// span config that overlaps with the supplied span. In addition to the
+// SpanConfig, the span it applies over is passed into the callback as well.
 func (s *Store) ForEachOverlappingSpanConfig(
 	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
 ) error {
+	if fn := s.knobs.StoreForEachOverlappingSpanConfigOverride; fn != nil {
+		for _, entry := range fn() {
+			entrySp := entry.Target.GetSpan()
+			if entrySp.Overlaps(span) {
+				if err := f(*entrySp, entry.Config); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.mu.spanConfigStore.forEachOverlapping(span, func(entry spanConfigEntry) error {
@@ -135,7 +157,7 @@ func (s *Store) Copy(ctx context.Context) *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	clone := New(s.fallback)
+	clone := New(s.fallback, s.knobs)
 	clone.mu.spanConfigStore = s.mu.spanConfigStore.copy(ctx)
 	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.copy()
 	return clone

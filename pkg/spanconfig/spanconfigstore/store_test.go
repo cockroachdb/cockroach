@@ -75,7 +75,7 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
-		store := New(spanconfigtestutils.ParseConfig(t, "FALLBACK"))
+		store := New(spanconfigtestutils.ParseConfig(t, "FALLBACK"), nil /* knobs */)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var spanStr, keyStr string
 			switch d.Cmd {
@@ -190,7 +190,7 @@ func TestStoreClone(t *testing.T) {
 		),
 	}
 
-	original := New(roachpb.TestingDefaultSpanConfig())
+	original := New(roachpb.TestingDefaultSpanConfig(), nil /* knobs */)
 	original.Apply(ctx, false, updates...)
 	clone := original.Copy(ctx)
 
