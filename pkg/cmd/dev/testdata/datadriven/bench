@@ -9,6 +9,11 @@ dev bench pkg/sql/parser --filter=BenchmarkParse
 bazel test pkg/sql/parser:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_output errors
 
 exec
+dev bench pkg/sql/parser --filter=BenchmarkParse --stream-output
+----
+bazel test pkg/sql/parser:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_output streamed
+
+exec
 dev bench pkg/bench -f=BenchmarkTracing/1node/scan/trace=off --count=2 --bench-time=10x --bench-mem
 ----
 bazel test pkg/bench:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.count=2 --test_arg -test.benchtime=10x --test_arg -test.benchmem --test_output errors

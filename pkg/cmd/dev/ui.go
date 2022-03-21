@@ -21,11 +21,12 @@ import (
 )
 
 const (
-	// ossFlag is the name of the boolean long (GNU-style) flag that builds only the open-source parts of the UI
+	// ossFlag is the name of the boolean long (GNU-style) flag that builds only
+	// the open-source parts of the UI.
 	ossFlag = "oss"
 )
 
-// makeUICmd initializes the top-level 'ui' subcommand
+// makeUICmd initializes the top-level 'ui' subcommand.
 func makeUICmd(d *dev) *cobra.Command {
 	uiCmd := &cobra.Command{
 		Use:   "ui",
@@ -41,9 +42,9 @@ func makeUICmd(d *dev) *cobra.Command {
 
 // UIDirectories contains the absolute path to the root of each UI sub-project.
 type UIDirectories struct {
-	// clusterUI is the absolute path to ./pkg/ui/workspaces/cluster-ui
+	// clusterUI is the absolute path to ./pkg/ui/workspaces/cluster-ui.
 	clusterUI string
-	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console
+	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console.
 	dbConsole string
 }
 
@@ -60,15 +61,19 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}, nil
 }
 
-// makeUIWatchCmd initializes the 'ui watch' subcommand, which sets up a live-reloading HTTP server for db-console and a
-// file-watching rebuilder for cluster-ui.
+// makeUIWatchCmd initializes the 'ui watch' subcommand, which sets up a
+// live-reloading HTTP server for db-console and a file-watching rebuilder for
+// cluster-ui.
 func makeUIWatchCmd(d *dev) *cobra.Command {
 	const (
-		// portFlag is the name of the long (GNU-style) flag that controls which port webpack's dev server listens on
+		// portFlag is the name of the long (GNU-style) flag that controls which
+		// port webpack's dev server listens on.
 		portFlag = "port"
-		// dbTargetFlag is the name of the long (GNU-style) flag that determines which DB instance to proxy to
+		// dbTargetFlag is the name of the long (GNU-style) flag that determines
+		// which DB instance to proxy to.
 		dbTargetFlag = "db"
-		// secureFlag is the name of the boolean long (GNU-style) flag that makes webpack's dev server use HTTPS
+		// secureFlag is the name of the boolean long (GNU-style) flag that makes
+		// webpack's dev server use HTTPS.
 		secureFlag = "secure"
 	)
 
@@ -80,7 +85,7 @@ func makeUIWatchCmd(d *dev) *cobra.Command {
 Replaces 'make ui-watch'.`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: func(cmd *cobra.Command, commandLine []string) error {
-			// Create a context that cancels when OS signals come in
+			// Create a context that cancels when OS signals come in.
 			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
 			defer stop()
 
@@ -89,7 +94,7 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			// Build prerequisites for db-console and cluster-ui
+			// Build prerequisites for db-console and cluster-ui.
 			args := []string{
 				"build",
 				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
@@ -105,7 +110,7 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			// Extract remaining flags
+			// Extract remaining flags.
 			portNumber, err := cmd.Flags().GetInt16(portFlag)
 			if err != nil {
 				log.Fatalf("unexpected error: %v", err)
@@ -124,7 +129,8 @@ Replaces 'make ui-watch'.`,
 			}
 			secure := mustGetFlagBool(cmd, secureFlag)
 
-			// `yarn` is required to be on a user's path, since it won't run via Bazel
+			// `yarn` is required to be on a user's path, since it won't run via
+			// Bazel.
 			err = d.ensureBinaryInPath("yarn")
 			if err != nil {
 				return err
@@ -158,7 +164,8 @@ Replaces 'make ui-watch'.`,
 				"webpack-dev-server",
 				"--config", "webpack.app.js",
 				"--mode", "development",
-				// Polyfill WEBPACK_SERVE for webpack v4; it's set in webpack v5 via `webpack serve`
+				// Polyfill WEBPACK_SERVE for webpack v4; it's set in webpack v5 via
+				// `webpack serve`.
 				"--env.WEBPACK_SERVE",
 				"--env.dist=" + webpackDist,
 				"--env.target=" + dbTarget,
@@ -168,14 +175,14 @@ Replaces 'make ui-watch'.`,
 				args = append(args, "--https")
 			}
 
-			// Start the db-console web server + watcher
+			// Start the db-console web server + watcher.
 			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
 			if err != nil {
 				log.Fatalf("Unable to serve db-console: %v", err)
 				return err
 			}
 
-			// Wait for OS signals to cancel if we're not in test-mode
+			// Wait for OS signals to cancel if we're not in test-mode.
 			if !d.exec.IsDryrun() {
 				<-ctx.Done()
 			}
@@ -211,13 +218,18 @@ Replaces 'make ui-lint'.`,
 				return err
 			}
 
-			// Build prerequisites for db-console and cluster-ui
+			// Build prerequisites for db-console and cluster-ui.
 			args := []string{
 				"test",
 				"//pkg/ui:lint",
 			}
 			args = append(args,
-				d.getTestOutputArgs(false /* stream */, isVerbose, false /* showLogs */)...,
+				d.getTestOutputArgs(
+					false, /* stream */
+					isVerbose,
+					false, /* showLogs */
+					false, /* streamOutput */
+				)...,
 			)
 
 			logCommand("bazel", args...)
