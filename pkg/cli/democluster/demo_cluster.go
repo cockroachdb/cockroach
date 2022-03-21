@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
 )
 
@@ -1260,6 +1262,14 @@ func (c *transientCluster) runWorkload(
 
 	// Use a rate limit (default 25 queries per second).
 	limiter := rate.NewLimiter(rate.Limit(c.demoCtx.WorkloadMaxQPS), 1)
+	go func() {
+		if err := http.ListenAndServe(
+			fmt.Sprintf(":%d", 2112),
+			promhttp.HandlerFor(reg.Gatherer(), promhttp.HandlerOpts{}),
+		); err != nil {
+			c.warnLog(ctx, "error serving prometheus: %v", err)
+		}
+	}()
 
 	// Start a goroutine to run each of the workload functions.
 	for _, workerFn := range ops.WorkerFns {

@@ -175,7 +175,7 @@ func (l ttlLogger) Tables() []workload.Table {
 	id TEXT NOT NULL DEFAULT gen_random_uuid()::string,
 	message TEXT NOT NULL,
 	%s
-) WITH (ttl_expire_after = '%s', ttl_label_metrics = true, ttl_row_stats_poll_interval = '15s', ttl_job_cron = '* * * * *')`,
+) WITH (ttl_expire_after = '%s', ttl_label_metrics = true, ttl_row_stats_poll_interval = '15s', ttl_job_cron = '* * * * *', ttl_range_concurrency = 4)`,
 				pk,
 				l.ttl.String(),
 			),
