@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,39 +34,6 @@ const sessionRevivalTokenStartupParam = "crdb:session_revival_token_base64"
 
 // remoteAddrStartupParam contains the remote address of the original client.
 const remoteAddrStartupParam = "crdb:remote_addr"
-
-// TenantResolver is an interface for the tenant directory. Currently only
-// tenant.Directory implements it.
-//
-// TODO(jaylim-crl): Rename this to Directory, and the current tenant.Directory
-// to tenant.directory. This needs to be moved into the tenant package as well.
-// This is added here to aid testing.
-type TenantResolver interface {
-	// EnsureTenantAddr returns an IP address of one of the given tenant's SQL
-	// processes based on the tenantID and clusterName fields. This should block
-	// until the process associated with the IP is ready.
-	//
-	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
-	// deleted), this will return a GRPC NotFound error.
-	EnsureTenantAddr(
-		ctx context.Context,
-		tenantID roachpb.TenantID,
-		clusterName string,
-	) (string, error)
-
-	// LookupTenantAddrs returns the IP addresses for all available SQL
-	// processes for the given tenant. It returns a GRPC NotFound error if the
-	// tenant does not exist.
-	//
-	// Unlike EnsureTenantAddr which blocks until there is an associated
-	// process, LookupTenantAddrs will just return an empty set if no processes
-	// are available for the tenant.
-	LookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
-
-	// ReportFailure is used to indicate to the resolver that a connection
-	// attempt to connect to a particular SQL tenant pod have failed.
-	ReportFailure(ctx context.Context, tenantID roachpb.TenantID, addr string) error
-}
 
 // connector is a per-session tenant-associated component that can be used to
 // obtain a connection to the tenant cluster. This will also handle the
@@ -87,7 +55,7 @@ type connector struct {
 	// the RoutingRule field. RoutingRule should not be in here.
 	//
 	// NOTE: This field is optional.
-	Directory TenantResolver
+	Directory tenant.Resolver
 
 	// RoutingRule refers to the static rule that will be used when resolving
 	// tenants. This will be used directly whenever the Directory field isn't
@@ -410,7 +378,7 @@ func isRetriableConnectorError(err error) bool {
 // reportFailureToDirectory is a hookable function that calls the given tenant
 // directory's ReportFailure method.
 var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, addr string, directory TenantResolver,
+	ctx context.Context, tenantID roachpb.TenantID, addr string, directory tenant.Resolver,
 ) error {
 	return directory.ReportFailure(ctx, tenantID, addr)
 }
