@@ -49,6 +49,13 @@ SELECT v, k FROM kv
 1  2
 2  3
 
+query IIII rowsort
+SELECT v, k, k, v FROM kv
+----
+1  1  1  1
+1  2  2  1
+2  3  3  2
+
 query III rowsort
 SELECT k, v, k + v FROM kv
 ----
