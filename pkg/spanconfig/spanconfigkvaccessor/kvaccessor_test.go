@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -24,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDataDriven runs datadriven tests against the kvaccessor interface.
@@ -102,4 +106,45 @@ func TestDataDriven(t *testing.T) {
 			return ""
 		})
 	})
+}
+
+func BenchmarkKVAccessorUpdate(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	for _, batchSize := range []int{100, 1000, 10000} {
+		records := make([]spanconfig.Record, 0, batchSize)
+		for i := 0; i < batchSize; i++ {
+			log.Infof(ctx, "generating batch: %s", fmt.Sprintf("[%06d,%06d):X", i, i+1))
+			record := spanconfigtestutils.ParseSpanConfigRecord(b, fmt.Sprintf("[%06d,%06d):X", i, i+1))
+			records = append(records, record)
+		}
+
+		b.Run(fmt.Sprintf("batch-size=%d", batchSize), func(b *testing.B) {
+			tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{})
+			defer tc.Stopper().Stop(ctx)
+
+			const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
+			tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			tdb.Exec(b, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
+
+			accessor := spanconfigkvaccessor.New(
+				tc.Server(0).DB(),
+				tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+				tc.Server(0).ClusterSettings(),
+				dummySpanConfigurationsFQN,
+			)
+
+			start := timeutil.Now()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				require.NoError(b, accessor.UpdateSpanConfigRecords(ctx, nil, records))
+			}
+			duration := timeutil.Since(start)
+
+			b.ReportMetric(0, "ns/op")
+			b.ReportMetric(float64(len(records))*float64(b.N)/float64(duration.Milliseconds()), "records/ms")
+			b.ReportMetric(float64(duration.Milliseconds())/float64(b.N), "ms/batch")
+		})
+	}
 }
