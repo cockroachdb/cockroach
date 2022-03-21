@@ -10,7 +10,6 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
@@ -84,15 +83,13 @@ const withData: DatabaseTablePageProps = {
       )
     `,
     replicaCount: 7,
-    indexNames: _.map(Array(3), randomName),
-    grants: _.uniq(
-      _.map(Array(12), () => {
-        return {
-          user: randomRole(),
-          privilege: randomTablePrivilege(),
-        };
-      }),
-    ),
+    indexNames: Array(3).map(randomName),
+    grants: [
+      {
+        user: randomRole(),
+        privilege: randomTablePrivilege(),
+      },
+    ],
     statsLastUpdated: moment("0001-01-01T00:00:00Z"),
   },
   showNodeRegionsSection: true,
