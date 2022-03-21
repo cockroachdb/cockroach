@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // rowFetcherCache maintains a cache of single table RowFetchers. Given a key
@@ -33,9 +35,10 @@ import (
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
 type rowFetcherCache struct {
-	codec    keys.SQLCodec
-	leaseMgr *lease.Manager
-	fetchers *cache.UnorderedCache
+	codec           keys.SQLCodec
+	leaseMgr        *lease.Manager
+	fetchers        *cache.UnorderedCache
+	watchedFamilies map[watchedFamily]struct{}
 
 	collection *descs.Collection
 	db         *kv.DB
@@ -47,6 +50,12 @@ type cachedFetcher struct {
 	tableDesc  catalog.TableDescriptor
 	fetcher    row.Fetcher
 	familyDesc descpb.ColumnFamilyDescriptor
+	skip       bool
+}
+
+type watchedFamily struct {
+	tableID    descpb.ID
+	familyName string
 }
 
 var rfCacheConfig = cache.Config{
@@ -69,13 +78,20 @@ func newRowFetcherCache(
 	leaseMgr *lease.Manager,
 	cf *descs.CollectionFactory,
 	db *kv.DB,
+	details jobspb.ChangefeedDetails,
 ) *rowFetcherCache {
+	specs := details.TargetSpecifications
+	watchedFamilies := make(map[watchedFamily]struct{}, len(specs))
+	for _, s := range specs {
+		watchedFamilies[watchedFamily{tableID: s.TableID, familyName: s.FamilyName}] = struct{}{}
+	}
 	return &rowFetcherCache{
-		codec:      codec,
-		leaseMgr:   leaseMgr,
-		collection: cf.NewCollection(ctx, nil /* TemporarySchemaProvider */),
-		db:         db,
-		fetchers:   cache.NewUnorderedCache(rfCacheConfig),
+		codec:           codec,
+		leaseMgr:        leaseMgr,
+		collection:      cf.NewCollection(ctx, nil /* TemporarySchemaProvider */),
+		db:              db,
+		fetchers:        cache.NewUnorderedCache(rfCacheConfig),
+		watchedFamilies: watchedFamilies,
 	}
 }
 
@@ -151,68 +167,25 @@ func (c *rowFetcherCache) TableDescForKey(
 	return tableDesc, family, nil
 }
 
-func (c *rowFetcherCache) RowFetcherForTableDesc(
-	tableDesc catalog.TableDescriptor,
-) (*row.Fetcher, error) {
-	idVer := idVersion{id: tableDesc.GetID(), version: tableDesc.GetVersion()}
-	// Ensure that all user defined types are up to date with the cached
-	// version and the desired version to use the cache. It is safe to use
-	// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
-	// guaranteed that the tables have the same version. Additionally, these
-	// fetchers are always initialized with a single tabledesc.Immutable.
-	if v, ok := c.fetchers.Get(idVer); ok {
-		f := v.(*cachedFetcher)
-		if catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, f.tableDesc) {
-			return &f.fetcher, nil
-		}
-	}
-
-	f := &cachedFetcher{
-		tableDesc: tableDesc,
-	}
-	rf := &f.fetcher
-
-	// TODO(dan): Allow for decoding a subset of the columns.
-	var spec descpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(
-		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), tableDesc.PublicColumnIDs(),
-	); err != nil {
-		return nil, err
-	}
-
-	if err := rf.Init(
-		context.TODO(),
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		&c.a,
-		nil, /* memMonitor */
-		&spec,
-	); err != nil {
-		return nil, err
-	}
-
-	// Necessary because virtual columns are not populated.
-	// TODO(radu): should we stop requesting those columns from the fetcher?
-	rf.IgnoreUnexpectedNulls = true
-
-	c.fetchers.Add(idVer, f)
-	return rf, nil
-}
+// ErrUnwatchedFamily is a sentinel error that indicates this part of the row
+// is not being watched and does not need to be decoded.
+var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	tableDesc catalog.TableDescriptor, family descpb.FamilyID,
 ) (*row.Fetcher, error) {
 	idVer := idVersion{id: tableDesc.GetID(), version: tableDesc.GetVersion(), family: family}
-	// Ensure that all user defined types are up to date with the cached
-	// version and the desired version to use the cache. It is safe to use
-	// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
-	// guaranteed that the tables have the same version. Additionally, these
-	// fetchers are always initialized with a single tabledesc.Immutable.
-	// TODO (zinger): Only check types used in the relevant family.
 	if v, ok := c.fetchers.Get(idVer); ok {
 		f := v.(*cachedFetcher)
+		if f.skip {
+			return &f.fetcher, ErrUnwatchedFamily
+		}
+		// Ensure that all user defined types are up to date with the cached
+		// version and the desired version to use the cache. It is safe to use
+		// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
+		// guaranteed that the tables have the same version. Additionally, these
+		// fetchers are always initialized with a single tabledesc.Immutable.
+		// TODO (zinger): Only check types used in the relevant family.
 		if catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, f.tableDesc) {
 			return &f.fetcher, nil
 		}
@@ -228,6 +201,15 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		familyDesc: *familyDesc,
 	}
 	rf := &f.fetcher
+
+	_, wholeTableWatched := c.watchedFamilies[watchedFamily{tableID: tableDesc.GetID()}]
+	if !wholeTableWatched {
+		_, familyWatched := c.watchedFamilies[watchedFamily{tableID: tableDesc.GetID(), familyName: familyDesc.Name}]
+		if !familyWatched {
+			f.skip = true
+			return rf, ErrUnwatchedFamily
+		}
+	}
 
 	var spec descpb.IndexFetchSpec
 
