@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -383,9 +384,17 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteByte('}')
 	}
 
+	// Stacks.
+	if len(entry.stacks) > 0 {
+		buf.WriteString(`,"stacks":"`)
+		escapeString(buf, string(entry.stacks))
+		buf.WriteByte('"')
+	}
+
 	if entry.structured {
 		buf.WriteString(`,"event":{`)
-		buf.WriteString(entry.payload.message) // Already JSON.
+		commonPrefixLen := buf.Len()
+		buf.maybeJSONMultiLine(commonPrefixLen, entry.payload.redactable, entry.payload.message)
 		buf.WriteByte('}')
 	} else {
 		// Message.
@@ -394,12 +403,6 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteByte('"')
 	}
 
-	// Stacks.
-	if len(entry.stacks) > 0 {
-		buf.WriteString(`,"stacks":"`)
-		escapeString(buf, string(entry.stacks))
-		buf.WriteByte('"')
-	}
 	buf.WriteByte('}')
 	buf.WriteByte('\n')
 	return buf
@@ -409,4 +412,241 @@ func escapeString(buf *buffer, s string) {
 	b := buf.Bytes()
 	b = jsonbytes.EncodeString(b, s)
 	buf.Buffer = *bytes.NewBuffer(b)
+}
+
+type JSONLongLineLen int
+
+// jsonLongLineLen is the max length of a log entry with JSON formatting,
+// before it gets broken up into multiple lines. This maximum is applied
+// to the size of the entry without considering the prefix (timestamp, location
+// etc) or suffix (stack traces etc.).
+var jsonLongLineLen JSONLongLineLen
+
+// minValueSpaceBuffer is the minimum amount of space required for a JSON value
+// to be inserted into a log. If there is not enough space in the current log
+// for the JSON value, we end the current log and insert it into the next one.
+const minValueSpaceBuffer = 8
+
+func init() {
+	jsonLongLineLen.set(16 * 10)
+}
+
+func (l *JSONLongLineLen) set(v int) {
+	// We refuse to break a long entry in the middle of a UTF-8
+	// sequence, so the effective max length needs to be reduced by the
+	// maximum size of an UTF-8 sequence.
+	suffixLen := utf8.UTFMax
+	// We also refuse to break a long entry in the middle of a redaction
+	// marker. Additionally, if we observe a start redaction marker,
+	// we are going to insert a closing redaction marker after it
+	// before we break up the line.
+	if len(startRedactionMarker)+len(endRedactionMarker) > suffixLen {
+		suffixLen = len(startRedactionMarker) + len(endRedactionMarker)
+	}
+	// We would like to include an ending '|' marker to indicate if the current payload
+	// has been split into multiple entries.
+	suffixLen += 1
+	// We also cannot break a long entry without a closing quotation mark
+	// and two closing JSON brackets (one for the message, one for the entire
+	// JSON log).
+	suffixLen += 3
+	newMax := v - suffixLen
+	if newMax < 1 {
+		panic("max line length cannot be zero or negative")
+	}
+	*l = JSONLongLineLen(newMax)
+}
+
+func (l JSONLongLineLen) shouldBreakValue(lastLen int) bool {
+	return lastLen >= int(l)
+}
+
+func (buf *buffer) maybeJSONMultiLine(
+	prefixLen int, redactable bool, msg string,
+) {
+	var i int
+	for i = len(msg) - 1; i > 0 && msg[i] == '\n'; i-- {
+		msg = msg[:i]
+	}
+
+	lastLen := 0
+	beforeColon := true
+	betweenRedactionMarkers := false
+	betweenQuotesInValue := false
+	inValueNoQuotes := false
+	var keyBuffer []byte
+	var valueBuffer []byte
+
+	// Note: This implementation is under the assumption the payload is
+	// well-formed JSON, and that the payload message does not contain inner
+	// JSON objects.
+	for i, w := 0, 0; i < len(msg); i += w {
+		runeValue, width := utf8.DecodeRuneInString(msg[i:])
+		w = width
+		if beforeColon {
+			keyBuffer = append(keyBuffer, string(runeValue)...)
+			if runeValue == ':' {
+				// Check if the key space exceeds or matches the remaining amount of
+				// space in log (plus additional buffer for some space for the value).
+				// If so, split the log early.
+				// TODO(thomas): extract logic to function
+				if lastLen+len(keyBuffer) >= int(jsonLongLineLen)-minValueSpaceBuffer {
+					// If the last byte in the buffer is a comma, replace with closing bracket.
+					if buf.Bytes()[len(buf.Bytes())-1] == ',' {
+						buf.Bytes()[len(buf.Bytes())-1] = '}'
+					}
+					// Close the entire log.
+					buf.WriteByte('}')
+					// Move to next log.
+					buf.WriteByte('\n')
+					// Write the prefix.
+					buf.Write(buf.Bytes()[0:prefixLen])
+					// Reset the length of the log.
+					lastLen = 0
+				}
+				// Update that we have past the JSON field's colon (i.e. entering JSON
+				// value).
+				beforeColon = !beforeColon
+				// Move to the next character.
+				continue
+			}
+		}
+
+		// If we are after the colon (i.e. in the JSON value).
+		if !beforeColon {
+			// If the value buffer is empty, this is the first character in the new
+			// value.
+			if len(valueBuffer) == 0 {
+				if runeValue == '"' {
+					valueBuffer = append(valueBuffer, string(runeValue)...)
+					betweenQuotesInValue = true
+					continue
+				} else {
+					inValueNoQuotes = true
+				}
+			}
+
+			// Check if the log should be split.
+			// TODO(thomas): extract logic to function
+			if lastLen+len(keyBuffer)+len(valueBuffer) >= int(jsonLongLineLen) {
+				buf.Write(keyBuffer)
+				buf.Write(valueBuffer)
+				// Write the marker to signify the end split of the payload.
+				buf.WriteByte('|')
+				if betweenRedactionMarkers {
+					// We are breaking a long line in-between redaction
+					// markers. Ensures that the opening and closing markers do
+					// not straddle log entries.
+					buf.WriteString(endRedactionMarker)
+				}
+				if betweenQuotesInValue {
+					// Add a closing quote.
+					buf.WriteByte('"')
+				}
+				// Add a closing bracket.
+				buf.WriteByte('}')
+				// Close the entire JSON payload.
+				buf.WriteByte('}')
+				// Move to next log.
+				buf.WriteByte('\n')
+				// Reset the length of the log.
+				lastLen = 0
+				// Clear the value buffer.
+				valueBuffer = valueBuffer[:0]
+				// Write the prefix (i.e. "... event:{").
+				buf.Write(buf.Bytes()[0:prefixLen])
+
+				if betweenQuotesInValue {
+					// Write an opening quote to the value buffer.
+					valueBuffer = append(valueBuffer, '"')
+				}
+
+				if betweenRedactionMarkers {
+					// See above: if we are splitting in-between redaction
+					// markers, continue the sensitive item on the new line.
+					valueBuffer = append(valueBuffer, startRedactionMarker...)
+				}
+				// Write the marker to mark the beginning split of the payload.
+				valueBuffer = append(valueBuffer, '|')
+			}
+
+			if redactable {
+				// If we see an opening redaction marker, remember this fact
+				// so that we close/open it properly.
+				if strings.HasPrefix(msg[i:], startRedactionMarker) {
+					betweenRedactionMarkers = true
+					valueBuffer = append(valueBuffer, startRedactionMarker...)
+					w = len(startRedactionMarker)
+					continue
+				} else if strings.HasPrefix(msg[i:], endRedactionMarker) {
+					betweenRedactionMarkers = false
+					valueBuffer = append(valueBuffer, endRedactionMarker...)
+					w = len(endRedactionMarker)
+					continue
+				}
+			}
+
+			// After checking for a log split and redaction markers, append the
+			// current rune to the value buffer.
+			valueBuffer = append(valueBuffer, string(runeValue)...)
+
+			if betweenQuotesInValue {
+				// If we are in a string value and the current rune is a backslash.
+				if runeValue == '\\' {
+					// Append the escaped character.
+					nextRuneValue, nextWidth := utf8.DecodeRuneInString(msg[i+w:])
+					valueBuffer = append(valueBuffer, string(nextRuneValue)...)
+					w += nextWidth
+				} else if runeValue == '"' {
+					// If we are in a string value and the current rune is a double
+					// quote, we have reached the end of the string.
+
+					// If there exists another rune after the closing quote, another JSON
+					// field exists, append a comma after the current value.
+					if i+w < len(msg)-1 {
+						nextRuneValue, nextWidth := utf8.DecodeRuneInString(msg[i+w:])
+						// Expect the next character to be a comma if we encounter the
+						// closing quotation mark, and we are not at the end of msg.
+						if nextRuneValue == ',' {
+							valueBuffer = append(valueBuffer, string(nextRuneValue)...)
+							w += nextWidth
+						} else {
+							panic("expected comma after closing quotation mark in value got " + string(nextRuneValue))
+						}
+					}
+
+					// We have parsed the entire value. Write the key-value pair.
+					buf.Write(keyBuffer)
+					buf.Write(valueBuffer)
+					lastLen += len(keyBuffer) + len(valueBuffer)
+					// Clear the buffers.
+					keyBuffer = keyBuffer[:0]
+					valueBuffer = valueBuffer[:0]
+					// Update that we are out of the value.
+					beforeColon = !beforeColon
+					betweenQuotesInValue = false
+				}
+			}
+
+			if inValueNoQuotes {
+				// We write the current key-value pairing to the buffer when:
+				//	- we are in a non-string value and encounter a comma, we have
+				// 	finished parsing the value
+				// 	- there is no comma, but we have finished parsing the message
+				//	(there does not exist another rune after the current rune)
+				if runeValue == ',' || i+w >= len(msg) {
+					// We have parsed the entire value. Write the key-value pair.
+					buf.Write(keyBuffer)
+					buf.Write(valueBuffer)
+					lastLen += len(keyBuffer) + len(valueBuffer)
+					// Clear the buffers.
+					keyBuffer = keyBuffer[:0]
+					valueBuffer = valueBuffer[:0]
+					// Update that we are out of the value.
+					beforeColon = !beforeColon
+					inValueNoQuotes = false
+				}
+			}
+		}
+	}
 }
