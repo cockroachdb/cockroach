@@ -333,7 +333,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		targets = append(targets,
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 	}
-	store := spanconfigstore.New(roachpb.SpanConfig{})
+	store := spanconfigstore.New(roachpb.SpanConfig{}, f.knobs)
 	{
 		// Fully populate the store with KVAccessor contents.
 		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)

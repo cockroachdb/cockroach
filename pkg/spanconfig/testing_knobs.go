@@ -11,6 +11,7 @@
 package spanconfig
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -94,6 +95,9 @@ type TestingKnobs struct {
 	// ProtectedTSReaderOverrideFn returns a ProtectedTSReader which is used to
 	// override the ProtectedTSReader used when setting up a new store.
 	ProtectedTSReaderOverrideFn func(clock *hlc.Clock) ProtectedTSReader
+
+	// StoreForEachOverlappingSpanConfigOverride
+	StoreForEachOverlappingSpanConfigOverride func() []roachpb.SpanConfigEntry
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

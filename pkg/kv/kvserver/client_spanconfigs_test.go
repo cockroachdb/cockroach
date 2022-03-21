@@ -37,7 +37,7 @@ import (
 func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	spanConfigStore := spanconfigstore.New(roachpb.TestingDefaultSpanConfig())
+	spanConfigStore := spanconfigstore.New(roachpb.TestingDefaultSpanConfig(), nil /* knobs */)
 	mockSubscriber := newMockSpanConfigSubscriber(spanConfigStore)
 
 	ctx := context.Background()
