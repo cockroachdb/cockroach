@@ -353,59 +353,62 @@ func (k *KVAccessor) constructValidationStmtAndArgs(
 	// what we do in GetSpanConfigRecords. For a single upserted span, we
 	// want effectively validate using:
 	//
+	//   -- verify only a single span overlaps with [$start, $end)
 	//   SELECT count(*) = 1 FROM system.span_configurations
 	//    WHERE start_key < $end AND end_key > $start
 	//
-	// Applying the GetSpanConfigRecords treatment, we can arrive at:
+	// With the naive form above that translates to an unbounded index scan on
+	// followed by a filter. Since start_key < end_key, and that spans are
+	// non-overlapping, we can instead do the following:
 	//
-	//   SELECT count(*) = 1 FROM (
-	//    SELECT * FROM span_configurations
-	//     WHERE start_key >= 100 AND start_key < 105
+	//   SELECT bool_and(valid) FROM (
+	//    SELECT bool_and(prev_end_key IS NULL OR start_key >= prev_end_key) AS valid FROM (
+	//     SELECT start_key, lag(end_key, 1) OVER (ORDER BY start_key) AS prev_end_key FROM span_configurations
+	//     WHERE start_key >= $start AND start_key < $end
+	//    )
 	//    UNION ALL
 	//    SELECT * FROM (
-	//      SELECT * FROM span_configurations
-	//      WHERE start_key < 100 ORDER BY start_key DESC LIMIT 1
-	//    ) WHERE end_key > 100
+	//     SELECT $start >= end_key FROM span_configurations
+	//     WHERE start_key < $start ORDER BY start_key DESC LIMIT 1
+	//    )
 	//   )
 	//
-	// To batch multiple query spans into the same statement, we make use of
-	// ALL and UNION ALL.
+	// The idea is to first find all spans that start within the span being
+	// upserted[1], compare each start key to the preceding end key[2] (if any)
+	// and ensure that they're non-overlapping[3]. We also verify the span with
+	// the start key immediately preceding the span being upserted[4]; ensuring
+	// that our upserted span does not overlap with it[5].
 	//
-	//   SELECT true = ALL(
-	//     ( ... validation statement for 1st query span ...),
-	//     UNION ALL
-	//     ( ... validation statement for 2nd query span ...),
-	//     ...
-	//   )
+	// When multiple spans are being upserted, we validate instead the span
+	// straddling all the individual spans being upserted, i.e.
+	// [$smallest-start-key, $largest-end-key).
 	//
-	var validationInnerStmtBuilder strings.Builder
-	validationQueryArgs := make([]interface{}, len(toUpsert)*2)
-	for i, entry := range toUpsert {
-		if i > 0 {
-			validationInnerStmtBuilder.WriteString(`UNION ALL`)
-		}
+	// [1]: WHERE start_key >= $start AND start_key < $end
+	// [2]: lag(end_key, 1) OVER (ORDER BY start_key) AS prev_end_key
+	// [3]: start_key >= prev_end_key
+	// [4]: WHERE start_key < $start ORDER BY start_key DESC LIMIT 1
+	// [5]: $start >= end_key
+	//
+	targetsToUpsert := spanconfig.TargetsFromRecords(toUpsert)
+	sort.Sort(spanconfig.Targets(targetsToUpsert))
 
-		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		validationQueryArgs[startKeyIdx] = entry.GetTarget().Encode().Key
-		validationQueryArgs[endKeyIdx] = entry.GetTarget().Encode().EndKey
+	validationQueryArgs := make([]interface{}, 2)
+	validationQueryArgs[0] = targetsToUpsert[0].Encode().Key
+	validationQueryArgs[1] = targetsToUpsert[len(targetsToUpsert)-1].Encode().EndKey
 
-		fmt.Fprintf(&validationInnerStmtBuilder, `
-SELECT count(*) = 1 FROM (
-  SELECT start_key, end_key, config FROM %[1]s
-   WHERE start_key >= $%[2]d AND start_key < $%[3]d
+	validationStmt := fmt.Sprintf(`
+SELECT bool_and(valid) FROM (
+  SELECT bool_and(prev_end_key IS NULL OR start_key >= prev_end_key) AS valid FROM (
+    SELECT start_key, lag(end_key, 1) OVER (ORDER BY start_key) AS prev_end_key FROM %[1]s
+    WHERE start_key >= $1 AND start_key < $2
+  )
   UNION ALL
-  SELECT start_key, end_key, config FROM (
-    SELECT start_key, end_key, config FROM %[1]s
-    WHERE start_key < $%[2]d ORDER BY start_key DESC LIMIT 1
-  ) WHERE end_key > $%[2]d
-)
-`,
-			k.configurationsTableFQN, // [1]
-			startKeyIdx+1,            // [2] -- prepared statement placeholder (1-indexed)
-			endKeyIdx+1,              // [3] -- prepared statement placeholder (1-indexed)
-		)
-	}
-	validationStmt := fmt.Sprintf("SELECT true = ALL(%s)", validationInnerStmtBuilder.String())
+  SELECT * FROM (
+    SELECT $1 >= end_key FROM %[1]s
+    WHERE start_key < $1 ORDER BY start_key DESC LIMIT 1
+  )
+)`, k.configurationsTableFQN)
+
 	return validationStmt, validationQueryArgs
 }
 
@@ -414,14 +417,7 @@ SELECT count(*) = 1 FROM (
 // expected to be valid and to have non-empty end keys. Spans are also expected
 // to be non-overlapping with other spans in the same list.
 func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Record) error {
-	targetsToUpdate := func(recs []spanconfig.Record) []spanconfig.Target {
-		targets := make([]spanconfig.Target, len(recs))
-		for i, ent := range recs {
-			targets[i] = ent.GetTarget()
-		}
-		return targets
-	}(toUpsert)
-
+	targetsToUpdate := spanconfig.TargetsFromRecords(toUpsert)
 	for _, list := range [][]spanconfig.Target{toDelete, targetsToUpdate} {
 		if err := validateSpanTargets(list); err != nil {
 			return err
