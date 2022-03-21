@@ -153,6 +153,65 @@ LIMIT 2`,
 			},
 		},
 		{
+			desc: "one range, but a partial startPK and endPK split",
+			b: makeSelectQueryBuilder(
+				1,
+				mockTime,
+				[]string{"col1", "col2"},
+				tree.Datums{tree.NewDInt(100)},
+				tree.Datums{tree.NewDInt(181)},
+				*mockTimestampTZ,
+				2,
+			),
+			iterations: []iteration{
+				{
+					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+WHERE crdb_internal_expiration <= $1 AND (col1) >= ($3) AND (col1) < ($2)
+ORDER BY col1, col2
+LIMIT 2`,
+					expectedArgs: []interface{}{
+						mockTime,
+						tree.NewDInt(181),
+						tree.NewDInt(100),
+					},
+					rows: []tree.Datums{
+						{tree.NewDInt(100), tree.NewDInt(12)},
+						{tree.NewDInt(105), tree.NewDInt(12)},
+					},
+				},
+				{
+					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
+ORDER BY col1, col2
+LIMIT 2`,
+					expectedArgs: []interface{}{
+						mockTime,
+						tree.NewDInt(181),
+						tree.NewDInt(105), tree.NewDInt(12),
+					},
+					rows: []tree.Datums{
+						{tree.NewDInt(112), tree.NewDInt(19)},
+						{tree.NewDInt(180), tree.NewDInt(132)},
+					},
+				},
+				{
+					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
+ORDER BY col1, col2
+LIMIT 2`,
+					expectedArgs: []interface{}{
+						mockTime,
+						tree.NewDInt(181),
+						tree.NewDInt(180), tree.NewDInt(132),
+					},
+					rows: []tree.Datums{},
+				},
+			},
+		},
+		{
 			desc: "first range",
 			b: makeSelectQueryBuilder(
 				1,
