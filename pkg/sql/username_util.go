@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/lib/pq/oid"
 	"hash/fnv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -31,9 +32,9 @@ func GetUserIDWithCache(
 	executor *InternalExecutor,
 	txn *kv.Txn,
 	role security.SQLUsername,
-) (uuid.UUID, error) {
+) (oid.Oid, error) {
 
-	var userID uuid.UUID
+	var userID oid.Oid
 	roleMembersCache := execCfg.RoleMemberCache
 
 	// Lookup table version.
@@ -52,14 +53,14 @@ func GetUserIDWithCache(
 		return GetUserID(ctx, executor, txn, role)
 	}
 
-	userID, found := func() (uuid.UUID, bool) {
+	userID, found := func() (oid.Oid, bool) {
 		roleMembersCache.Lock()
 		defer roleMembersCache.Unlock()
 		if roleMembersCache.tableVersion != tableVersion {
 			// Update version and drop the map.
 			roleMembersCache.tableVersion = tableVersion
 			roleMembersCache.userCache = make(map[uuid.UUID]userRoleMembership)
-			roleMembersCache.userIDCache = make(map[security.SQLUsername]uuid.UUID)
+			roleMembersCache.userIDCache = make(map[security.SQLUsername]oid.Oid)
 			roleMembersCache.boundAccount.Empty(ctx)
 		}
 		userMapping, ok := roleMembersCache.userIDCache[role]
@@ -80,9 +81,9 @@ func GetUserIDWithCache(
 // GetUserID returns id of the user if role exists
 func GetUserID(
 	ctx context.Context, executor *InternalExecutor, txn *kv.Txn, role security.SQLUsername,
-) (uuid.UUID, error) {
+) (oid.Oid, error) {
 
-	var userID uuid.UUID
+	var userID oid.Oid
 	query := `SELECT user_id FROM system.users WHERE username=$1`
 
 	values, err := executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
@@ -96,7 +97,7 @@ func GetUserID(
 
 	if values != nil {
 		if v := values[0]; v != tree.DNull {
-			userID = (*(v.(*tree.DUuid))).UUID
+			userID = oid.Oid(v.(*tree.DOid).DInt)
 		}
 	}
 	return userID, nil
@@ -125,7 +126,39 @@ func ToSQLIDs(
 		if err != nil {
 			return nil, err
 		}
-		targetRoles[role] = roleID.String()
+		targetRoles[role] = string(roleID)
+	}
+	return targetRoles, nil
+}
+
+// PublicRoleName is the SQLUsername for PublicRole.
+func PublicRoleInfo(ctx context.Context, p *planner) security.SQLUserInfo {
+	id, _ := GetUserID(ctx, p.execCfg.InternalExecutor, nil, security.PublicRoleName())
+	return security.SQLUserInfo{
+		Username: security.PublicRoleName(),
+		UserID:   id,
+	}
+}
+
+// ToSQLUserInfos converts a slice of security.SQLUsername to slice of security.SQLUserInfo.
+func ToSQLUsernamesWithCache(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	descsCol *descs.Collection,
+	executor *InternalExecutor,
+	txn *kv.Txn,
+	roles []security.SQLUsername,
+) ([]security.SQLUserInfo, error) {
+	targetRoles := make([]security.SQLUserInfo, len(roles))
+	for i, role := range roles {
+		id, err := GetUserIDWithCache(ctx, execCfg, descsCol, executor, txn, role)
+		if err != nil {
+			return nil, err
+		}
+		targetRoles[i] = security.SQLUserInfo{
+			Username: role,
+			UserID:   id,
+		}
 	}
 	return targetRoles, nil
 }

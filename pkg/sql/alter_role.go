@@ -173,6 +173,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 		return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", n.roleName)
 	}
+	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, n.roleName)
+	if err != nil {
+		return err
+	}
 
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
 	if err != nil {
@@ -195,9 +199,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			params.ctx,
 			opName,
 			params.p.txn,
-			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1 AND user_id=$3`,
 			n.roleName,
 			hashedPassword,
+			roleID,
 		)
 		if err != nil {
 			return err
@@ -209,10 +214,6 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			}
 		}
 	}
-	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil, n.roleName)
-	if err != nil {
-		return err
-	}
 
 	// Get a map of statements to execute for role options and their values.
 	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.AlterRole)
@@ -221,7 +222,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName, roleID.String()}
+		qargs := []interface{}{n.roleName, roleID}
 
 		if value != nil {
 			isNull, val, err := value()
@@ -447,7 +448,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				deleteQuery,
 				n.dbDescID,
 				roleName,
-				roleID.String(),
+				roleID,
 			)
 		} else {
 			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
@@ -459,7 +460,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				n.dbDescID,
 				roleName,
 				newSettings,
-				roleID.String(),
+				roleID,
 			)
 		}
 		if internalExecErr != nil {

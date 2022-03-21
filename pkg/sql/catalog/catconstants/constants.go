@@ -84,6 +84,7 @@ const (
 	SQLInstancesTableName                  SystemTableName = "sql_instances"
 	SpanConfigurationsTableName            SystemTableName = "span_configurations"
 	TenantSettingsTableName                SystemTableName = "tenant_settings"
+	UserIDSequenceTableName                SystemTableName = "user_id_seq"
 )
 
 // Oid for virtual database and table.

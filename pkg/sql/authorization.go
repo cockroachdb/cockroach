@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -57,7 +56,7 @@ type MembershipCache struct {
 	populateCacheGroup singleflight.Group
 	stopper            *stop.Stopper
 	// userIDCache is a mapping from username to user ID.
-	userIDCache map[security.SQLUsername]uuid.UUID
+	userIDCache map[security.SQLUsername]oid.Oid
 }
 
 // NewMembershipCache initializes a new MembershipCache.
@@ -259,7 +258,7 @@ func (p *planner) checkRolePredicate(
 	if ok := predicate(user); ok {
 		return ok, nil
 	}
-	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{user, uuid.Nil})
+	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{user, 0})
 	if err != nil {
 		return false, err
 	}
@@ -295,7 +294,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	}
 
 	// Expand role memberships.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{user, uuid.Nil})
+	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{user, 0})
 	if err != nil {
 		return err
 	}
@@ -333,7 +332,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsernam
 	}
 
 	// Expand role memberships.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{user, uuid.Nil})
+	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{user, 0})
 	if err != nil {
 		return false, err
 	}
@@ -398,7 +397,7 @@ func MemberOfWithAdminOption(
 	if txn == nil || !txn.IsOpen() {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
-	if member.UserID == uuid.Nil {
+	if member.UserID == 0 {
 		member.UserID, _ = GetUserID(ctx, execCfg.InternalExecutor, txn, member.Username)
 	}
 
@@ -423,28 +422,28 @@ func MemberOfWithAdminOption(
 	// Check version and maybe clear cache while holding the mutex.
 	// We use a closure here so that we release the lock here, then keep
 	// going and re-lock if adding the looked-up entry.
-	userMapping, found := func() (userRoleMembership, bool) {
-		roleMembersCache.Lock()
-		defer roleMembersCache.Unlock()
-		if roleMembersCache.tableVersion < tableVersion {
-			// If the cache is based on an old table version, then update version and
-			// drop the map.
-			roleMembersCache.tableVersion = tableVersion
-			roleMembersCache.userCache = make(map[uuid.UUID]userRoleMembership)
-			roleMembersCache.boundAccount.Empty(ctx)
-		} else if roleMembersCache.tableVersion > tableVersion {
-			// If the cache is based on a newer table version, then this transaction
-			// should not use the cached data.
-			return nil, false
-		}
-		userMapping, ok := roleMembersCache.userCache[member.UserID]
-		return userMapping, ok
-	}()
-
-	if found {
-		// Found: return.
-		return userMapping, nil
-	}
+	//userMapping, found := func() (userRoleMembership, bool) {
+	//	roleMembersCache.Lock()
+	//	defer roleMembersCache.Unlock()
+	//	if roleMembersCache.tableVersion < tableVersion {
+	//		// If the cache is based on an old table version, then update version and
+	//		// drop the map.
+	//		roleMembersCache.tableVersion = tableVersion
+	//		roleMembersCache.userCache = make(map[uuid.UUID]userRoleMembership)
+	//		roleMembersCache.boundAccount.Empty(ctx)
+	//	} else if roleMembersCache.tableVersion > tableVersion {
+	//		// If the cache is based on a newer table version, then this transaction
+	//		// should not use the cached data.
+	//		return nil, false
+	//	}
+	//	userMapping, ok := roleMembersCache.userCache[member.UserID]
+	//	return userMapping, ok
+	//}()
+	//
+	//if found {
+	//	// Found: return.
+	//	return userMapping, nil
+	//}
 
 	// Lookup memberships outside the lock. There will be at most one request
 	// in-flight for each user. The role_memberships table version is also part
@@ -476,29 +475,29 @@ func MemberOfWithAdminOption(
 		return nil, ctx.Err()
 	}
 
-	func() {
-		// Update membership if the table version hasn't changed.
-		roleMembersCache.Lock()
-		defer roleMembersCache.Unlock()
-		if roleMembersCache.tableVersion != tableVersion {
-			// Table version has changed while we were looking: don't cache the data.
-			return
-		}
-
-		// Table version remains the same: update map, unlock, return.
-		sizeOfEntry := int64(len(member.Username.Normalized()))
-		for m := range memberships {
-			sizeOfEntry += int64(len(m.Normalized()))
-			sizeOfEntry += memsize.Bool
-		}
-		if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
-			// If there is no memory available to cache the entry, we can still
-			// proceed so that the query has a chance to succeed.
-			log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
-		} else {
-			roleMembersCache.userCache[member.UserID] = memberships
-		}
-	}()
+	//func() {
+	//	// Update membership if the table version hasn't changed.
+	//	roleMembersCache.Lock()
+	//	defer roleMembersCache.Unlock()
+	//	if roleMembersCache.tableVersion != tableVersion {
+	//		// Table version has changed while we were looking: don't cache the data.
+	//		return
+	//	}
+	//
+	//	// Table version remains the same: update map, unlock, return.
+	//	sizeOfEntry := int64(len(member.Username.Normalized()))
+	//	for m := range memberships {
+	//		sizeOfEntry += int64(len(m.Normalized()))
+	//		sizeOfEntry += memsize.Bool
+	//	}
+	//	if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
+	//		// If there is no memory available to cache the entry, we can still
+	//		// proceed so that the query has a chance to succeed.
+	//		log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
+	//	} else {
+	//		roleMembersCache.userCache[member.UserID] = memberships
+	//	}
+	//}()
 	return memberships, nil
 }
 
@@ -555,9 +554,9 @@ func resolveMemberOfWithAdminOption(
 	}
 
 	// Keep track of members we looked up.
-	visited := map[security.SQLUsername]struct{}{}
-	toVisit := []security.SQLUsername{member.Username}
-	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
+	visited := map[security.SQLUserInfo]struct{}{}
+	toVisit := []security.SQLUserInfo{member}
+	lookupRolesStmt := `SELECT "role", "isAdmin", "role_id" FROM system.role_members WHERE "member" = $1 and "member_id"= $2`
 
 	for len(toVisit) > 0 {
 		// Pop first element.
@@ -569,7 +568,7 @@ func resolveMemberOfWithAdminOption(
 		visited[m] = struct{}{}
 
 		it, err := ie.QueryIterator(
-			ctx, "expand-roles", txn, lookupRolesStmt, m.Normalized(),
+			ctx, "expand-roles", txn, lookupRolesStmt, m.Username.Normalized(), m.UserID,
 		)
 		if err != nil {
 			return nil, err
@@ -580,10 +579,11 @@ func resolveMemberOfWithAdminOption(
 			row := it.Cur()
 			roleName := tree.MustBeDString(row[0])
 			isAdmin := row[1].(*tree.DBool)
+			roleID := row[2].(*tree.DOid).String()
 
-			// system.role_members stores pre-normalized usernames.
-			role := security.MakeSQLUsernameFromPreNormalizedString(string(roleName))
-			ret[role] = bool(*isAdmin)
+			// system.role_members storeFs pre-normalized usernames.
+			role := security.MakeSQLUserInfoFromPreNormalizedString(string(roleName), roleID)
+			ret[role.Username] = bool(*isAdmin)
 
 			// We need to expand this role. Let the "pop" worry about already-visited elements.
 			toVisit = append(toVisit, role)
@@ -626,7 +626,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = $1 AND user_id = $2 LIMIT 1`,
-			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized(), roleID.String())
+			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized(), roleID)
 	if err != nil {
 		return false, err
 	}
@@ -800,7 +800,7 @@ func (p *planner) checkCanAlterToNewOwner(
 	if p.User() == newOwner {
 		return nil
 	}
-	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), uuid.Nil})
+	memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), 0})
 	if err != nil {
 		return err
 	}

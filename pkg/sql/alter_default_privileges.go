@@ -12,8 +12,6 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -105,8 +103,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	if len(targetRoles) == 0 {
 		targetRoles = append(targetRoles, params.p.User())
 	}
-
-	if err := params.p.validateRoles(params.ctx, targetRoles, false /* isPublicValid */); err != nil {
+	targetRoleInfos, err := ToSQLUsernamesWithCache(params.ctx, params.p.execCfg, params.p.Descriptors(), params.p.execCfg.InternalExecutor, params.p.txn, targetRoles)
+	if err != nil {
+		return err
+	}
+	if err := params.p.validateRoles(params.ctx, targetRoleInfos, false /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -125,8 +126,12 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	granteeSQLUserInfos, err := ToSQLUsernamesWithCache(params.ctx, params.p.execCfg, params.p.Descriptors(), params.p.execCfg.InternalExecutor, params.p.txn, granteeSQLUsernames)
+	if err != nil {
+		return err
+	}
 
-	if err := params.p.validateRoles(params.ctx, granteeSQLUsernames, true /* isPublicValid */); err != nil {
+	if err := params.p.validateRoles(params.ctx, granteeSQLUserInfos, true /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -139,7 +144,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		// by yourself or by roles that you are a member of.
 		for _, targetRole := range targetRoles {
 			if targetRole != params.p.User() {
-				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, security.SQLUserInfo{params.p.User(), uuid.Nil})
+				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, security.SQLUserInfo{params.p.User(), 0})
 				if err != nil {
 					return err
 				}

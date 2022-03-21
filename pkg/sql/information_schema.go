@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"sort"
 	"strconv"
 	"strings"
@@ -237,7 +236,7 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 func populateRoleHierarchy(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error, onlyIsAdmin bool,
 ) error {
-	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), uuid.Nil})
+	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), 0})
 	if err != nil {
 		return err
 	}
@@ -585,7 +584,7 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 	schema: vtable.InformationSchemaEnabledRoles,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User()
-		memberMap, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{currentUser, uuid.Nil})
+		memberMap, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{currentUser, 0})
 		if err != nil {
 			return err
 		}

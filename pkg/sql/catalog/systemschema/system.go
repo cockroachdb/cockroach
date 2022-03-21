@@ -81,12 +81,15 @@ CREATE TABLE system.descriptor (
   CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
+	UserIDSequenceSchema = `
+CREATE SEQUENCE system.user_id_seq START 100 INCREMENT 1;`
+
 	UsersTableSchema = `
 CREATE TABLE system.users (
   username         STRING,
   "hashedPassword" BYTES,
   "isRole"         BOOL NOT NULL DEFAULT false,
-	user_id          UUID NOT NULL DEFAULT gen_random_uuid(),
+	user_id          OID NOT NULL DEFAULT OID(nextval('system.user_id_seq')),
   CONSTRAINT "primary" PRIMARY KEY (username),
 	INDEX (user_id)
 );`
@@ -96,7 +99,7 @@ CREATE TABLE system.role_options (
 	username STRING NOT NULL,
 	option STRING NOT NULL,
 	value STRING,
-	user_id UUID,
+	user_id OID,
 	CONSTRAINT "primary" PRIMARY KEY (username, option, user_id),
 	FAMILY "primary" (username, option, value, user_id)
 )`
@@ -278,8 +281,8 @@ CREATE TABLE system.role_members (
   "role"   STRING NOT NULL,
   "member" STRING NOT NULL,
   "isAdmin"  BOOL NOT NULL,
-	"role_id"	 UUID,
-	"member_id" UUID,
+	"role_id"	 OID,
+	"member_id" OID,
   CONSTRAINT "primary" PRIMARY KEY ("role", "member", "role_id", "member_id"),
   INDEX ("role", "role_id"),
   INDEX ("member", "member_id")
@@ -563,7 +566,7 @@ CREATE TABLE system.database_role_settings (
     database_id  OID NOT NULL,
     role_name    STRING NOT NULL,
     settings     STRING[] NOT NULL,
-    role_id      UUID NOT NULL,
+    role_id      OID NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (database_id, role_name, role_id),
 		FAMILY "primary" (
 			database_id,
@@ -882,10 +885,54 @@ var (
 			pk("id"),
 		))
 
-	falseBoolString     = "false"
-	trueBoolString      = "true"
-	zeroIntString       = "0:::INT8"
-	genRandomUUIDString = "gen_random_uuid()"
+	falseBoolString  = "false"
+	trueBoolString   = "true"
+	zeroIntString    = "0:::INT8"
+	genNextOIDString = "OID(nextval('system.user_id_seq'))"
+
+	// UserIDSequence is the descriptor for the user ID sequence.
+	UserIDSequence = registerSystemTable(
+		UserIDSequenceSchema,
+		systemTable(
+			catconstants.UserIDSequenceTableName,
+			keys.UserIDSequenceID,
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.SequenceOpts = &descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+				MinValue:  100,
+				MaxValue:  math.MaxUint32,
+				Start:     1,
+				CacheSize: 1,
+			}
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
+		},
+	)
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = registerSystemTable(
@@ -897,7 +944,7 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
-				{Name: "user_id", ID: 4, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "user_id", ID: 4, Type: types.Oid, DefaultExpr: &genNextOIDString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
@@ -1404,8 +1451,8 @@ var (
 				{Name: "role", ID: 1, Type: types.String},
 				{Name: "member", ID: 2, Type: types.String},
 				{Name: "isAdmin", ID: 3, Type: types.Bool},
-				{Name: "role_id", ID: 4, Type: types.Uuid},
-				{Name: "member_id", ID: 5, Type: types.Uuid},
+				{Name: "role_id", ID: 4, Type: types.Oid},
+				{Name: "member_id", ID: 5, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1741,7 +1788,7 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "option", ID: 2, Type: types.String},
 				{Name: "value", ID: 3, Type: types.String, Nullable: true},
-				{Name: "user_id", ID: 4, Type: types.Uuid},
+				{Name: "user_id", ID: 4, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2206,7 +2253,7 @@ var (
 				{Name: "database_id", ID: 1, Type: types.Oid, Nullable: false},
 				{Name: "role_name", ID: 2, Type: types.String, Nullable: false},
 				{Name: "settings", ID: 3, Type: types.StringArray, Nullable: false},
-				{Name: "role_id", ID: 4, Type: types.Uuid, Nullable: false},
+				{Name: "role_id", ID: 4, Type: types.Oid, Nullable: false},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
