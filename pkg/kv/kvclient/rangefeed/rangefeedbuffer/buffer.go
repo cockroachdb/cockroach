@@ -22,7 +22,7 @@ import (
 
 // ErrBufferLimitExceeded is returned by the buffer when attempting to add more
 // events than the limit the buffer is configured with.
-var ErrBufferLimitExceeded = errors.New("buffer limit exceeded")
+var ErrBufferLimitExceeded = errors.New("rangefeed buffer limit exceeded")
 
 // Event is the unit of what can be added to the buffer.
 type Event interface {
@@ -34,19 +34,20 @@ type Event interface {
 // order en-masse whenever the rangefeed frontier is bumped. If we accumulate
 // more events than the limit allows for, we error out to the caller.
 type Buffer struct {
-	limit int
-
 	mu struct {
 		syncutil.Mutex
 
 		events
 		frontier hlc.Timestamp
+		limit    int
 	}
 }
 
 // New constructs a Buffer with the provided limit.
 func New(limit int) *Buffer {
-	return &Buffer{limit: limit}
+	b := &Buffer{}
+	b.mu.limit = limit
+	return b
 }
 
 // Add adds the given entry to the buffer.
@@ -60,7 +61,7 @@ func (b *Buffer) Add(ev Event) error {
 		return nil
 	}
 
-	if b.mu.events.Len()+1 > b.limit {
+	if b.mu.events.Len()+1 > b.mu.limit {
 		return ErrBufferLimitExceeded
 	}
 
@@ -91,6 +92,16 @@ func (b *Buffer) Flush(ctx context.Context, frontier hlc.Timestamp) (events []Ev
 	b.mu.events = b.mu.events[idx:]
 	b.mu.frontier = frontier
 	return events
+}
+
+// SetLimit is used to limit the number of events the buffer internally tracks.
+// If already in excess of the limit, future additions will error out (until the
+// buffer is Flush()-ed at least).
+func (b *Buffer) SetLimit(limit int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.mu.limit = limit
 }
 
 type events []Event
