@@ -75,6 +75,9 @@ func TestLargeKeys(t *testing.T) {
 	// here.
 	_, err := db.Exec("SET distsql_workmem='100KiB'")
 	require.NoError(t, err)
+	// TODO(yuzefovich): remove this once the streamer is enabled by default.
+	_, err = db.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = true;")
+	require.NoError(t, err)
 	// To improve the test coverage, occasionally lower the maximum number of
 	// concurrent requests.
 	if rng.Float64() < 0.25 {

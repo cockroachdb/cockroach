@@ -224,6 +224,10 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
+	// TODO(yuzefovich): remove this once the streamer is enabled by default.
+	_, err := db.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = true;")
+	require.NoError(t, err)
+
 	// The initial estimate for TargetBytes argument for each asynchronous
 	// request by the Streamer will be numRowsPerRange x initialAvgResponseSize,
 	// so we pick the blob size such that about half of rows are included in the
@@ -232,7 +236,7 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	const numRows = 20
 	const numRowsPerRange = 4
 
-	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
+	_, err = db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
 	require.NoError(t, err)
 	for i := 0; i < numRows; i++ {
 		if i > 0 && i%numRowsPerRange == 0 {
@@ -288,10 +292,14 @@ func TestStreamerWideRows(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
+	// TODO(yuzefovich): remove this once the streamer is enabled by default.
+	_, err := db.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = true;")
+	require.NoError(t, err)
+
 	const blobSize = 10 * initialAvgResponseSize
 	const numRows = 2
 
-	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob1 STRING, blob2 STRING, INDEX (k), FAMILY (pk, k, blob1), FAMILY (blob2))")
+	_, err = db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob1 STRING, blob2 STRING, INDEX (k), FAMILY (pk, k, blob1), FAMILY (blob2))")
 	require.NoError(t, err)
 	for i := 0; i < numRows; i++ {
 		if i > 0 {
