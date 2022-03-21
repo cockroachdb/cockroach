@@ -40,12 +40,13 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		}
 	}
 
-	makeSpanAndSpanConfigWithProtectionPolicies := func(span roachpb.Span,
+	makeSpanAndSpanConfigWithProtectionPolicies := func(
+		span roachpb.Span,
 		pp []roachpb.ProtectionPolicy,
-	) spanAndSpanConfig {
-		return spanAndSpanConfig{
-			span: span,
-			cfg: roachpb.SpanConfig{
+	) roachpb.SpanConfigEntry {
+		return roachpb.SpanConfigEntry{
+			Target: spanconfig.MakeTargetFromSpan(span).ToProto(),
+			Config: roachpb.SpanConfig{
 				GCPolicy: roachpb.GCPolicy{
 					ProtectionPolicies: pp,
 				},
@@ -73,7 +74,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		{ProtectedTimestamp: ts4},
 	})
 	// Mark sp43 as excluded from backup.
-	sp43Cfg.cfg.ExcludeDataFromBackup = true
+	sp43Cfg.Config.ExcludeDataFromBackup = true
 
 	subscriber := New(
 		nil, /* clock */
@@ -82,20 +83,20 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		1<<20, /* 1 MB */
 		roachpb.SpanConfig{},
 		cluster.MakeTestingClusterSettings(),
-		nil,
+		&spanconfig.TestingKnobs{
+			StoreForEachOverlappingSpanConfigOverride: func() []roachpb.SpanConfigEntry {
+				return []roachpb.SpanConfigEntry{sp42Cfg, sp43Cfg}
+			},
+		},
 	)
-	m := &manualStore{
-		spanAndConfigs: []spanAndSpanConfig{sp42Cfg, sp43Cfg},
-	}
-	subscriber.mu.internal = m
 
 	for _, testCase := range []struct {
 		name string
-		test func(t *testing.T, m *manualStore, subscriber *KVSubscriber)
+		test func(t *testing.T, subscriber *KVSubscriber)
 	}{
 		{
 			"span not excluded from backup",
-			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
+			func(t *testing.T, subscriber *KVSubscriber) {
 				protections, _, err := subscriber.GetProtectionTimestamps(ctx, sp42)
 				require.NoError(t, err)
 				sort.SliceIsSorted(protections, func(i, j int) bool {
@@ -106,7 +107,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 		{
 			"span excluded from backup",
-			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
+			func(t *testing.T, subscriber *KVSubscriber) {
 				protections, _, err := subscriber.GetProtectionTimestamps(ctx, sp43)
 				require.NoError(t, err)
 				sort.SliceIsSorted(protections, func(i, j int) bool {
@@ -117,7 +118,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 		{
 			"span across two table spans",
-			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
+			func(t *testing.T, subscriber *KVSubscriber) {
 				protections, _, err := subscriber.GetProtectionTimestamps(ctx, sp4243)
 				require.NoError(t, err)
 				sort.SliceIsSorted(protections, func(i, j int) bool {
@@ -128,56 +129,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			testCase.test(t, m, subscriber)
+			testCase.test(t, subscriber)
 		})
 	}
-}
-
-var _ spanconfig.Store = &manualStore{}
-
-type spanAndSpanConfig struct {
-	span roachpb.Span
-	cfg  roachpb.SpanConfig
-}
-
-type manualStore struct {
-	spanAndConfigs []spanAndSpanConfig
-}
-
-// Apply implements the spanconfig.Store interface.
-func (m *manualStore) Apply(
-	context.Context, bool, ...spanconfig.Update,
-) (deleted []spanconfig.Target, added []spanconfig.Record) {
-	panic("unimplemented")
-}
-
-// NeedsSplit implements the spanconfig.Store interface.
-func (m *manualStore) NeedsSplit(context.Context, roachpb.RKey, roachpb.RKey) bool {
-	panic("unimplemented")
-}
-
-// ComputeSplitKey implements the spanconfig.Store interface.
-func (m *manualStore) ComputeSplitKey(context.Context, roachpb.RKey, roachpb.RKey) roachpb.RKey {
-	panic("unimplemented")
-}
-
-// GetSpanConfigForKey implements the spanconfig.Store interface.
-func (m *manualStore) GetSpanConfigForKey(
-	context.Context, roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	panic("unimplemented")
-}
-
-// ForEachOverlappingSpanConfig implements the spanconfig.Store interface.
-func (m *manualStore) ForEachOverlappingSpanConfig(
-	_ context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
-) error {
-	for _, spanAndConfig := range m.spanAndConfigs {
-		if spanAndConfig.span.Overlaps(span) {
-			if err := f(spanAndConfig.span, spanAndConfig.cfg); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

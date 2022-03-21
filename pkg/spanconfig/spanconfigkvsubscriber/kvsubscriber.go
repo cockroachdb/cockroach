@@ -92,7 +92,7 @@ type KVSubscriber struct {
 		// populated while the exposed spanconfig.StoreReader appears static.
 		// Once sufficiently caught up, the fresh spanconfig.Store is swapped in
 		// and the old discarded. See type-level comment for more details.
-		internal spanconfig.Store
+		internal *spanconfigstore.Store
 		handlers []handler
 	}
 }

@@ -217,12 +217,6 @@ type Reconciler interface {
 type Store interface {
 	StoreWriter
 	StoreReader
-	// ForEachOverlappingSpanConfig invokes the supplied callback on each
-	// span config that overlaps with the supplied span. In addition to the
-	// SpanConfig, the span it applies over is passed into the callback as well.
-	ForEachOverlappingSpanConfig(
-		context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
-	) error
 }
 
 // StoreWriter is the write-only portion of the Store interface.

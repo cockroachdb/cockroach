@@ -128,10 +128,23 @@ func (s *Store) Apply(
 	return deleted, added
 }
 
-// ForEachOverlappingSpanConfig is part of the spanconfig.Store interface.
+// ForEachOverlappingSpanConfig invokes the supplied callback on each
+// span config that overlaps with the supplied span. In addition to the
+// SpanConfig, the span it applies over is passed into the callback as well.
 func (s *Store) ForEachOverlappingSpanConfig(
 	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
 ) error {
+	if fn := s.knobs.StoreForEachOverlappingSpanConfigOverride; fn != nil {
+		for _, entry := range fn() {
+			entrySp := entry.Target.GetSpan()
+			if entrySp.Overlaps(span) {
+				if err := f(*entrySp, entry.Config); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
