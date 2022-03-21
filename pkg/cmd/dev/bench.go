@@ -46,6 +46,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	// `go help testflag`).
 	benchCmd.Flags().String(benchTimeFlag, "", "duration to run each benchmark for")
 	benchCmd.Flags().Bool(benchMemFlag, false, "print memory allocations for benchmarks")
+	benchCmd.Flags().Bool(streamOutputFlag, false, "stream bench output during run")
 	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 
 	return benchCmd
@@ -55,16 +56,17 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
-		filter      = mustGetFlagString(cmd, filterFlag)
-		ignoreCache = mustGetFlagBool(cmd, ignoreCacheFlag)
-		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
-		short       = mustGetFlagBool(cmd, shortFlag)
-		showLogs    = mustGetFlagBool(cmd, showLogsFlag)
-		verbose     = mustGetFlagBool(cmd, vFlag)
-		count       = mustGetFlagInt(cmd, countFlag)
-		benchTime   = mustGetFlagString(cmd, benchTimeFlag)
-		benchMem    = mustGetFlagBool(cmd, benchMemFlag)
-		testArgs    = mustGetFlagString(cmd, testArgsFlag)
+		filter       = mustGetFlagString(cmd, filterFlag)
+		ignoreCache  = mustGetFlagBool(cmd, ignoreCacheFlag)
+		timeout      = mustGetFlagDuration(cmd, timeoutFlag)
+		short        = mustGetFlagBool(cmd, shortFlag)
+		showLogs     = mustGetFlagBool(cmd, showLogsFlag)
+		verbose      = mustGetFlagBool(cmd, vFlag)
+		count        = mustGetFlagInt(cmd, countFlag)
+		benchTime    = mustGetFlagString(cmd, benchTimeFlag)
+		benchMem     = mustGetFlagBool(cmd, benchMemFlag)
+		streamOutput = mustGetFlagBool(cmd, streamOutputFlag)
+		testArgs     = mustGetFlagString(cmd, testArgsFlag)
 	)
 
 	// Enumerate all benches to run.
@@ -142,7 +144,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, goTestArgs...)
 	}
-	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs)...)
+	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
