@@ -111,7 +111,7 @@ export const StatementTableCell = {
                   return {
                     name: (
                       <div className={cx("diagnostic-report-dropdown-option")}>
-                        {`Cancel current diagnostic request`}
+                        {`Cancel diagnostic request`}
                       </div>
                     ),
                     value: dr,
@@ -247,7 +247,7 @@ export const NodeLink = (props: {
   nodeNames?: NodeNames;
 }): React.ReactElement => (
   <Link to={`/node/${props.nodeId}`}>
-    <div className={cx("node-name-tooltip__info-icon")}>
+    <div className={cx("node-link")}>
       {props.nodeNames ? props.nodeNames[props.nodeId] : "N" + props.nodeId}
     </div>
   </Link>

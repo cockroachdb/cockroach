@@ -93,6 +93,11 @@
     margin-top: $spacing-small;
     margin-left: $spacing-medium;
 
+    .ant-alert-info {
+        background-color: $colors--primary-blue-alert;
+        border: none;
+    }
+
     &-icon {
       margin-top: $spacing-medium-small;
     }

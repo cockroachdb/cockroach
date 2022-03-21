@@ -36,6 +36,7 @@ go_test(
     name = "spanconfigkvsubscriber_test",
     srcs = [
         "datadriven_test.go",
+        "kvsubscriber_client_test.go",
         "kvsubscriber_test.go",
         "main_test.go",
         "spanconfigdecoder_test.go",
@@ -48,6 +49,7 @@ go_test(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
