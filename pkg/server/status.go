@@ -161,16 +161,22 @@ func (b *baseStatusServer) getLocalSessions(
 		return nil, serverError(ctx, err)
 	}
 
+	hasViewActivityRedacted, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITYREDACTED)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	hasViewActivity, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITY)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
 	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	errViewActivity := b.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx)
-	// TODO(knz): The following check on errViewActivity is incorrect, it
-	// does not properly handle non-privilege errors.
-	// See: https://github.com/cockroachdb/cockroach/issues/76288
-	if !isAdmin && errViewActivity != nil {
+	if !isAdmin && !hasViewActivity && !hasViewActivityRedacted {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
 		if reqUsername.Undefined() {
@@ -184,11 +190,6 @@ func (b *baseStatusServer) getLocalSessions(
 				"client user %q does not have permission to view sessions from user %q",
 				sessionUser, reqUsername)
 		}
-	}
-
-	hasViewActivityRedacted, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITYREDACTED)
-	if err != nil {
-		return nil, serverError(ctx, err)
 	}
 
 	// The empty username means "all sessions".
@@ -254,6 +255,8 @@ func findSessionByQueryID(queryID string) sessionFinder {
 	}
 }
 
+// checkCancelPrivilege returns nil if the user has the necessary cancel action
+// privileges for a session. This function returns a proper gRPC error status.
 func (b *baseStatusServer) checkCancelPrivilege(
 	ctx context.Context, username security.SQLUsername, findSession sessionFinder,
 ) error {
@@ -264,7 +267,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	{
 		sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 		if err != nil {
-			return err
+			return serverError(ctx, err)
 		}
 		if username.Undefined() || username == sessionUser {
 			reqUser = sessionUser
