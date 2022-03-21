@@ -60,6 +60,7 @@ import Nodes from "src/views/reports/containers/nodes";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
+import HotRanges from "src/views/reports/containers/hotranges";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
@@ -68,6 +69,7 @@ import SessionDetails from "src/views/sessions/sessionDetails";
 import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
+import HotRangesPage from "src/views/hotRanges/index";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -262,6 +264,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   path="/debug/enqueue_range"
                   component={EnqueueRange}
                 />
+                <Route exact path="/debug/hotranges" component={HotRanges} />
+                <Route
+                  exact
+                  path="/debug/hotranges/:node_id"
+                  component={HotRanges}
+                />
 
                 <Route path="/raft">
                   <Raft>
@@ -330,7 +338,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   path={`/reports/statements/diagnosticshistory`}
                   component={StatementsDiagnosticsHistoryView}
                 />
-
+                {/* hot ranges */}
+                <Route exact path={`/hotranges`} component={HotRangesPage} />
                 {/* old route redirects */}
                 <Redirect
                   exact

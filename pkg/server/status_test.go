@@ -1121,6 +1121,28 @@ func TestHotRangesResponse(t *testing.T) {
 	}
 }
 
+func TestHotRanges2Response(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.Background())
+
+	var hotRangesResp serverpb.HotRangesResponseV2
+	if err := postStatusJSONProto(ts, "v2/hotranges", &serverpb.HotRangesRequest{}, &hotRangesResp); err != nil {
+		t.Fatal(err)
+	}
+	lastQPS := math.MaxFloat64
+	for _, r := range hotRangesResp.Ranges {
+		if r.RangeID == 0 {
+			t.Errorf("unexpected empty range id: %d", r.RangeID)
+		}
+		if r.QPS > lastQPS {
+			t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f", lastQPS, r.QPS)
+		}
+		lastQPS = r.QPS
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
