@@ -126,9 +126,9 @@ type proxyHandler struct {
 	// idleMonitor will detect idle connections to DRAINING pods.
 	idleMonitor *idle.Monitor
 
-	// directory is optional and if set, will be used to resolve
-	// backend id to IP addresses.
-	directory *tenant.Directory
+	// directoryCache is optional and if set, will be used to resolve tenants
+	// to their IP addresses.
+	directoryCache tenant.DirectoryCache
 
 	// CertManger keeps up to date the certificates used.
 	certManager *certmgr.CertManager
@@ -196,7 +196,7 @@ func newProxyHandler(
 		}
 
 		client := tenant.NewDirectoryClient(conn)
-		handler.directory, err = tenant.NewDirectory(ctx, stopper, client, dirOpts...)
+		handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -280,8 +280,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		RoutingRule: handler.RoutingRule,
 		StartupMsg:  backendStartupMsg,
 	}
-	if handler.directory != nil {
-		connector.Directory = handler.directory
+	if handler.directoryCache != nil {
+		connector.DirectoryCache = handler.directoryCache
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.
