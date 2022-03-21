@@ -1,0 +1,147 @@
+# Test for unstructured log with no split.
+run payloadMsgLen=100 redactable=true structured=false withLongStack=false splittable=true channel=12 prefixLen=178
+hello ‹world› and universe
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"message":"hello ‹world› and universe"}
+
+# Test for unstructured log, with split. Max len is 23 after suffix length.
+run payloadMsgLen=38 redactable=false structured=false withLongStack=false splittable=true channel=12 prefixLen=178
+hello world and universe
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"message":"hello world "}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"message":"and universe"}
+
+# Test for unstructured log, split with correct redaction markers. Max len is 23 after suffix length.
+run payloadMsgLen=38 redactable=true structured=false withLongStack=false splittable=true channel=12 prefixLen=178
+hello ‹world› and universe
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"message":"hello ‹wor›"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"message":"‹ld› and"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"message":" universe"}
+
+
+# Test for structured log, don't split on an integer value. Max len is 23 after suffix length.
+run payloadMsgLen=38 redactable=false structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Timestamp":1647874213395872000
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"Timestamp":1647874213395872000}}
+
+# Test for structured log, don't split on a field that does not contain splittable markers. Max len is 23 after suffix length.
+run payloadMsgLen=38 redactable=false structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"StringField":"this is a string value"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"StringField":"this is a string value"}}
+
+# Test for structured log, split on an string value with correction quotations. Max len is 26 after suffix length.
+run payloadMsgLen=41 redactable=false structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"StringField":"❰this is a string value❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"StringField":"❰this is ❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"StringField":"❰a string❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"StringField":"❰ value❱"}}
+
+# Test for structured log, split on an string value with correction quotations and redaction markers. Max len is 26 after suffix length.
+run payloadMsgLen=41 redactable=true structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"StringField":"❰‹this is a string›❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"StringField":"❰‹this ›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"StringField":"❰‹is a ›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"StringField":"❰‹strin›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"StringField":"❰‹g›❱"}}
+
+# Multi-field structured log, integer and string fields, split string with escaped characters and redaction markers. Max len is 26 after suffix length.
+# Split early on *all* JSON keys.
+run payloadMsgLen=41 redactable=true structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Number":12345678901234567890,"Statement":"❰SELECT id, name, something FROM \"\".\"\".table WHERE column = ‹'secret_column'›❱","User":"‹test›"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Number":12345678901234567890}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰SELECT id,❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰ name, som❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰ething FRO❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰M \"\".\"\"❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰.table WHE❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰RE column ❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰= ‹'secr›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰‹et_colu›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰‹mn'›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"User":"‹test›"}}
+
+# Multi-field structured log, integer and string fields, split with escaped characters and redaction markers. Max len is 46 after suffix length.
+# Split early on *some* JSON keys.
+run payloadMsgLen=61 redactable=true structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Number":1234567890,"Statement":"❰SELECT id, name, something FROM \"\".\"\".table WHERE column = ‹'secret_column'›❱","User":"‹test›"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Number":1234567890,"Statement":"❰SELECT id,❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰ name, something FROM \"\".\"\"❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰.table WHERE column = ‹'secr›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Statement":"❰‹et_column'›❱","User":"‹test›"}}
+
+# Test for unstructured log containing multi-byte sequences.
+run payloadMsgLen=38 redactable=false structured=false withLongStack=false splittable=true channel=12 prefixLen=178
+☃☃☃☃☃☃☃☃☃☃☃☃
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"message":"☃☃☃☃"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"message":"☃☃☃☃"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"message":"☃☃☃☃"}
+
+# Test for splitting long stack.
+run payloadMsgLen=58 redactable=true structured=false withLongStack=true splittable=true channel=12 prefixLen=178
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"message":"","stacks":"this is aaaaaaaaaaaa"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"stacks":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"stacks":"aaaaa fake stack"}
+
+# Multi-field structured log, integer and string fields, split with escaped characters and redaction markers. Max len is 46 after suffix length.
+# Include long stack.
+run payloadMsgLen=61 redactable=true structured=true withLongStack=true splittable=true channel=12 prefixLen=187
+"Number":1234567890,"Message":"❰This is a \"message\" for ‹you›❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Number":1234567890,"Message":"❰This is a \"❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Message":"❰message\" for ‹you›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"stacks":"this is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"stacks":"aaaaaaaaaaaaa fake stack"}
+
+# Test for split in middle of redaction marker. This test splits in the middle of both the start and ending redaction marker. Max len 26 after suffix length.
+run payloadMsgLen=41 redactable=true structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Redaction":"❰This is ‹marker›❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰This is ‹›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰‹marker›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰❱"}}
+
+# Test for split right before the closing redaction marker. Max len 33 after suffix length.
+run payloadMsgLen=48 redactable=true structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Redaction":"❰This is ‹marker›❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰This is ‹marker›❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰‹›❱"}}
+
+# Test for split right before the closing splittable marker. Max len 31 after suffix length.
+run payloadMsgLen=46 redactable=false structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Splittable":"❰This is marker❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"Splittable":"❰This is marker❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"Splittable":"❰❱"}}
+
+# Test for split right before the closing quotation marker. Should not split as we are outside of splittable markers. Max len 38 after suffix length.
+run payloadMsgLen=53 redactable=false structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Quotation":"❰This is a quotation❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"Quotation":"❰This is a quotation❱"}}
+
+# Test for split in middle of escape character. Max len 28 after suffix length.
+run payloadMsgLen=43 redactable=true structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Redaction":"❰This is an \"escaped\" string❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰This is an \"❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰escaped\" st❱"}}
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":1,"event":{"Redaction":"❰ring❱"}}
+
+# Test for no split if payload is exact size of configured max len after considering suffix length. Max len 39 after suffix length.
+run payloadMsgLen=54 redactable=false structured=true withLongStack=false splittable=true channel=12 prefixLen=187
+"Exact":"❰This is an exact length❱"
+----
+json: {"channel_numeric":12,"channel":"TELEMETRY","timestamp":"0.000000000","severity_numeric":0,"severity":"UNKNOWN","goroutine":0,"file":"","line":0,"entry_counter":0,"redactable":0,"event":{"Exact":"❰This is an exact length❱"}}
+
+
+# TODO(thomas): add test cases for splittable = false

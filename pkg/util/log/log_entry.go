@@ -170,6 +170,11 @@ type entryPayload struct {
 
 	// Whether the payload message is redactable or not.
 	redactable bool
+
+	// Whether the payload message is intended to be split into multiple logs if
+	// it exceeds a threshold size. If not, the payload message is truncated
+	// instead.
+	splittable bool
 }
 
 func makeRedactablePayload(ctx context.Context, m redact.RedactableString) entryPayload {
@@ -177,6 +182,8 @@ func makeRedactablePayload(ctx context.Context, m redact.RedactableString) entry
 		message:    string(m),
 		tags:       makeFormattableTags(ctx, true /* redactable */),
 		redactable: true,
+		// By default, truncate payloads instead of splitting.
+		splittable: false,
 	}
 }
 
@@ -185,6 +192,8 @@ func makeUnsafePayload(ctx context.Context, m string) entryPayload {
 		message:    m,
 		tags:       makeFormattableTags(ctx, false /* redactable */),
 		redactable: false,
+		// By default, truncate payloads instead of splitting.
+		splittable: false,
 	}
 }
 
