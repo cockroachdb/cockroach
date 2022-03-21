@@ -206,6 +206,7 @@ func TestKeyRewriter(t *testing.T) {
 
 		key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
 		oldNoTenantKey, oldTenantID, err := keys.DecodeTenantPrefix(key)
+		require.NoError(t, err)
 		newKey, ok, err := newKr.RewriteKey(key)
 		require.NoError(t, err)
 		if !ok {
