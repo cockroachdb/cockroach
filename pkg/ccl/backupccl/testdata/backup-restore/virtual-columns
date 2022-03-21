@@ -26,7 +26,7 @@ new-server name=s2 share-io-dir=s1
 ----
 
 exec-sql server=s2
-RESTORE FROM 'nodelocal://0/test/'
+RESTORE FROM LATEST IN 'nodelocal://0/test/'
 ----
 
 query-sql

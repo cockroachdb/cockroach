@@ -148,7 +148,7 @@ GRANT CREATE ON DATABASE testuser_db TO testuser;
 ----
 
 exec-sql user=testuser
-RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage FROM 'nodelocal://1/test' WITH into_db='testuser_db';
+RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
 ----
 
 # Check that user1 doesn't have any privs, but testuser should be the owner.
@@ -211,7 +211,7 @@ GRANT CREATE ON DATABASE restoredb TO user1;
 ----
 
 exec-sql
-RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage, testdb.testtable_greeting_owner FROM 'nodelocal://1/test' WITH into_db='restoredb';
+RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage, testdb.testtable_greeting_owner FROM LATEST IN 'nodelocal://1/test' WITH into_db='restoredb';
 ----
 
 query-sql
@@ -268,7 +268,7 @@ DROP DATABASE testdb CASCADE;
 ----
 
 exec-sql
-RESTORE DATABASE testdb FROM 'nodelocal://0/test/';
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://0/test/';
 ----
 
 
@@ -350,7 +350,7 @@ DROP DATABASE testdb CASCADE;
 
 # Now, let's restore a single database as a non-admin (testuser).
 exec-sql user=testuser
-RESTORE DATABASE testdb FROM 'nodelocal://0/test/';
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://0/test/';
 ----
 
 # Check that user1 doesn't have any privs.
@@ -435,7 +435,7 @@ new-server name=s2 share-io-dir=s1 allow-implicit-access
 ----
 
 exec-sql
-RESTORE FROM 'nodelocal://0/test/';
+RESTORE FROM LATEST IN 'nodelocal://0/test/';
 ----
 
 # Check user1.
