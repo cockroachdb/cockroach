@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsstatereader"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -572,7 +573,7 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get protected timestamp state")
 	}
-	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+	ptsStateReader := spanconfigptsstatereader.New(ctx, ptsState)
 	clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
 	missingClusterProtection := len(clusterProtections) == 0
 	for _, update := range updates {

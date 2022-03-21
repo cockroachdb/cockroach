@@ -29,6 +29,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigptsstatereader",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

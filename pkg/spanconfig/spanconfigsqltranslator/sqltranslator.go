@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsstatereader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -95,7 +96,7 @@ func (s *SQLTranslator) Translate(
 	if err != nil {
 		return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to get protected timestamp state")
 	}
-	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+	ptsStateReader := spanconfigptsstatereader.New(ctx, ptsState)
 
 	if generateSystemSpanConfigurations {
 		records, err = s.generateSystemSpanConfigRecords(ptsStateReader)
@@ -163,7 +164,7 @@ var descLookupFlags = tree.CommonLookupFlags{
 // generateSystemSpanConfigRecords is responsible for generating all the SpanConfigs
 // that apply to spanconfig.SystemTargets.
 func (s *SQLTranslator) generateSystemSpanConfigRecords(
-	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+	ptsStateReader *spanconfigptsstatereader.ProtectedTimestampStateReader,
 ) ([]spanconfig.Record, error) {
 	tenantPrefix := s.codec.TenantPrefix()
 	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
@@ -222,7 +223,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	id descpb.ID,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+	ptsStateReader *spanconfigptsstatereader.ProtectedTimestampStateReader,
 ) (_ []spanconfig.Record, err error) {
 	if zonepb.IsNamedZoneID(uint32(id)) {
 		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
@@ -327,7 +328,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	table catalog.TableDescriptor,
-	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+	ptsStateReader *spanconfigptsstatereader.ProtectedTimestampStateReader,
 ) ([]spanconfig.Record, error) {
 	// We don't want to create a record (and in-turn a split point) for a table
 	// descriptor that doesn't correspond to a physical table, as no data is

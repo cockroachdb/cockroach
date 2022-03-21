@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsstatereader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -409,7 +410,7 @@ func isTenantProtected(
 		if err != nil {
 			return errors.Wrap(err, "failed to get protectedts State")
 		}
-		ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+		ptsStateReader := spanconfigptsstatereader.New(ctx, ptsState)
 
 		// First check if the system tenant has any cluster level protections that protect
 		// all secondary tenants.

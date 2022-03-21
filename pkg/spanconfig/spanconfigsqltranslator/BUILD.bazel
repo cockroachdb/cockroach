@@ -12,6 +12,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigptsstatereader",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfig
+package spanconfigptsstatereader
 
 import (
 	"context"
@@ -26,13 +26,11 @@ type ProtectedTimestampStateReader struct {
 	clusterProtections      []roachpb.ProtectionPolicy
 }
 
-// NewProtectedTimestampStateReader returns an instance of a
-// ProtectedTimestampStateReader that can be used to fetch target specific
-// protected timestamp records given the supplied ptpb.State. The ptpb.State is
-// the transactional state of the `system.protected_ts_records` table.
-func NewProtectedTimestampStateReader(
-	_ context.Context, ptsState ptpb.State,
-) *ProtectedTimestampStateReader {
+// New returns an instance of a ProtectedTimestampStateReader that can be used
+// to fetch target specific protected timestamp records given the supplied
+// ptpb.State. The ptpb.State is the transactional state of the
+// `system.protected_ts_records` table.
+func New(_ context.Context, ptsState ptpb.State) *ProtectedTimestampStateReader {
 	reader := &ProtectedTimestampStateReader{
 		schemaObjectProtections: make(map[descpb.ID][]roachpb.ProtectionPolicy),
 		tenantProtections:       make([]TenantProtectedTimestamps, 0),

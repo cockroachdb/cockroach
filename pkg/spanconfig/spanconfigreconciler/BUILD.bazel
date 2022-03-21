@@ -11,6 +11,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigptsstatereader",
         "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql",
