@@ -23,7 +23,7 @@ INSERT INTO maxrow VALUES (2, repeat('x', 20000))
 pq: row larger than max row size: table 109 family 0 primary key /Table/109/1/2/0 size 20013
 
 exec-sql
-BACKUP maxrow TO 'nodelocal://1/maxrow';
+BACKUP maxrow INTO 'nodelocal://1/maxrow';
 ----
 
 exec-sql

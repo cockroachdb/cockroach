@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -590,6 +591,15 @@ func backupPlanHook(
 		"BACKUP",
 	); err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	// Deprecation notice for `BACKUP TO` syntax. Remove this once the syntax is
+	// deleted in 22.2.
+	if !backupStmt.Nested {
+		p.BufferClientNotice(ctx,
+			pgnotice.Newf("Note the `BACKUP TO` syntax will be removed in a future release, please"+
+				"switch over to using `BACKUP INTO` to create a backup collection: %s",
+				"https://www.cockroachlabs.com/docs/stable/backup.html#considerations"))
 	}
 
 	var err error

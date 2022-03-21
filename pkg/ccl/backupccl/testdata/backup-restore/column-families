@@ -29,7 +29,7 @@ SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB';
 ----
 
 exec-sql
-BACKUP cfs TO 'nodelocal://1/foo';
+BACKUP cfs INTO 'nodelocal://1/foo';
 ----
 
 exec-sql
