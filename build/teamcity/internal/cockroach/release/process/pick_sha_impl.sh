@@ -29,7 +29,8 @@ bazel build --config=crosslinux //pkg/cmd/release
 $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   pick-sha \
   ${DRY_RUN:+--dry-run} \
-  --release-series=$RELEASE_SERIES \
+  --template-dir=pkg/cmd/release/templates \
+  --release-series="$RELEASE_SERIES" \
   --smtp-user=cronjob@cockroachlabs.com \
   --smtp-host=smtp.gmail.com \
   --smtp-port=587 \
