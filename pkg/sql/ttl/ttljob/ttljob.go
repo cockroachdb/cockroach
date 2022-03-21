@@ -398,6 +398,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					p.ExecCfg(),
 					details,
 					p.ExtendedEvalContext().Descs,
+					knobs,
 					metrics,
 					initialVersion,
 					r.startPK,
@@ -424,7 +425,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if ttlSettings.RowStatsPollInterval != 0 {
 		g.GoCtx(func(ctx context.Context) error {
 			// Do once initially to ensure we have some base statistics.
-			fetchStatistics(ctx, p.ExecCfg(), details, metrics, aostDuration)
+			fetchStatistics(ctx, p.ExecCfg(), knobs, details, metrics, aostDuration)
 			// Wait until poll interval is reached, or early exit when we are done
 			// with the TTL job.
 			for {
@@ -432,7 +433,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				case <-statsCloseCh:
 					return nil
 				case <-time.After(ttlSettings.RowStatsPollInterval):
-					fetchStatistics(ctx, p.ExecCfg(), details, metrics, aostDuration)
+					fetchStatistics(ctx, p.ExecCfg(), knobs, details, metrics, aostDuration)
 				}
 			}
 		})
@@ -540,6 +541,7 @@ func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 func fetchStatistics(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
+	knobs sql.TTLTestingKnobs,
 	details jobspb.RowLevelTTLDetails,
 	metrics rowLevelTTLMetrics,
 	aostDuration time.Duration,
@@ -589,7 +591,7 @@ func fetchStatistics(
 		}
 		return nil
 	}(); err != nil {
-		if onStatisticsError := execCfg.TTLTestingKnobs.OnStatisticsError; onStatisticsError != nil {
+		if onStatisticsError := knobs.OnStatisticsError; onStatisticsError != nil {
 			onStatisticsError(err)
 		}
 		log.Warningf(ctx, "failed to get statistics for table id %d: %s", details.TableID, err)
@@ -601,6 +603,7 @@ func runTTLOnRange(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.RowLevelTTLDetails,
 	descriptors *descs.Collection,
+	knobs sql.TTLTestingKnobs,
 	metrics rowLevelTTLMetrics,
 	tableVersion descpb.DescriptorVersion,
 	startPK tree.Datums,
@@ -636,7 +639,7 @@ func runTTLOnRange(
 	)
 
 	for {
-		if f := execCfg.TTLTestingKnobs.OnDeleteLoopStart; f != nil {
+		if f := knobs.OnDeleteLoopStart; f != nil {
 			if err := f(); err != nil {
 				return err
 			}
@@ -681,7 +684,7 @@ func runTTLOnRange(
 					return err
 				}
 				version := desc.GetVersion()
-				if mockVersion := execCfg.TTLTestingKnobs.MockDescriptorVersionDuringDelete; mockVersion != nil {
+				if mockVersion := knobs.MockDescriptorVersionDuringDelete; mockVersion != nil {
 					version = *mockVersion
 				}
 				if version != tableVersion {
