@@ -1182,6 +1182,7 @@ func setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
+	newSpan.SetLazyTag("request", ba)
 	return ctx, spanForRequest{
 		needRecording: needRecordingCollection,
 		tenID:         tenID,
