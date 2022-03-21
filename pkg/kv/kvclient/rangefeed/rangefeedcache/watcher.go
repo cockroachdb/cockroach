@@ -343,12 +343,17 @@ func (s *Watcher) Run(ctx context.Context) error {
 func (s *Watcher) handleUpdate(
 	ctx context.Context, buffer *rangefeedbuffer.Buffer, ts hlc.Timestamp, updateType UpdateType,
 ) {
+	events := buffer.Flush(ctx, ts)
 	s.onUpdate(ctx, Update{
 		Type:      updateType,
 		Timestamp: ts,
-		Events:    buffer.Flush(ctx, ts),
+		Events:    events,
 	})
 	if fn := s.knobs.OnTimestampAdvance; fn != nil {
 		fn(ts)
+	}
+
+	if updateType == CompleteUpdate {
+		log.Infof(ctx, "%s: completed initial scan; flushed %d events", s.name, len(events))
 	}
 }

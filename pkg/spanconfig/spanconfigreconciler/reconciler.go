@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -239,6 +241,8 @@ func (f *fullReconciler) reconcile(
 		}
 	}
 
+	log.Infof(ctx, "fully reconciled: upserted len(%d) entries, deleted len(%d)", len(toUpsert), len(toDelete))
+
 	// Keep a copy of the current view of the world (i.e. KVAccessor
 	// contents). We could also fetch everything from KV, but making a copy here
 	// is cheaper (and saves an RTT). We'll later mutate
@@ -398,6 +402,8 @@ func (r *incrementalReconciler) reconcile(
 			if len(sqlUpdates) == 0 {
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
+			log.Infof(ctx, "sqlwatcher received %d updates", len(sqlUpdates))
+			gotWatcherUpdates := timeutil.Now()
 
 			// Process the SQLUpdates and identify all descriptor IDs that require
 			// translation. If the SQLUpdates includes ProtectedTimestampUpdates then
@@ -444,6 +450,9 @@ func (r *incrementalReconciler) reconcile(
 				return err
 			}
 
+			log.Infof(ctx, "sqltranslator translated %d records in %s", len(records), timeutil.Since(gotWatcherUpdates))
+
+			reconcilerStart := timeutil.Now()
 			updates := make([]spanconfig.Update, 0,
 				len(missingTableIDs)+len(missingProtectedTimestampTargets)+len(records))
 			for _, entry := range records {
@@ -475,6 +484,8 @@ func (r *incrementalReconciler) reconcile(
 				if err := r.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 					return err
 				}
+				log.Infof(ctx, "incrementally reconciled: +%d -%d entries in %s",
+					len(toUpsert), len(toDelete), timeutil.Since(reconcilerStart))
 			}
 
 			return callback(checkpoint)

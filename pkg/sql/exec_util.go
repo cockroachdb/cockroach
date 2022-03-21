@@ -1460,6 +1460,10 @@ type ExecutorTestingKnobs struct {
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
 	AfterBackupCheckpoint func()
+
+	// SkipCreateTableEventLogging skips insertions into the event log for CREATE
+	// TABLE statements.
+	SkipCreateTableEventLogging bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
