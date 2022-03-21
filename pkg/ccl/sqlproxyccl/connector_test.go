@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -731,7 +732,7 @@ func TestRetriableConnectorError(t *testing.T) {
 	require.True(t, errors.Is(err, errRetryConnectorSentinel))
 }
 
-var _ TenantResolver = &testTenantResolver{}
+var _ tenant.Resolver = &testTenantResolver{}
 
 // testTenantResolver is a test implementation of the tenant resolver.
 type testTenantResolver struct {

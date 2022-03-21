@@ -23,6 +23,38 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Resolver is an interface for the tenant directory. Currently only
+// tenant.Directory implements it.
+//
+// TODO(jaylim-crl): Rename this to Directory, and the current tenant.Directory
+// to tenant.directory.
+type Resolver interface {
+	// EnsureTenantAddr returns an IP address of one of the given tenant's SQL
+	// processes based on the tenantID and clusterName fields. This should block
+	// until the process associated with the IP is ready.
+	//
+	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
+	// deleted), this will return a GRPC NotFound error.
+	EnsureTenantAddr(
+		ctx context.Context,
+		tenantID roachpb.TenantID,
+		clusterName string,
+	) (string, error)
+
+	// LookupTenantAddrs returns the IP addresses for all available SQL
+	// processes for the given tenant. It returns a GRPC NotFound error if the
+	// tenant does not exist.
+	//
+	// Unlike EnsureTenantAddr which blocks until there is an associated
+	// process, LookupTenantAddrs will just return an empty set if no processes
+	// are available for the tenant.
+	LookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
+
+	// ReportFailure is used to indicate to the resolver that a connection
+	// attempt to connect to a particular SQL tenant pod have failed.
+	ReportFailure(ctx context.Context, tenantID roachpb.TenantID, addr string) error
+}
+
 // dirOptions control the behavior of tenant.Directory.
 type dirOptions struct {
 	deterministic bool
@@ -98,6 +130,8 @@ type Directory struct {
 	}
 }
 
+var _ Resolver = &Directory{}
+
 // NewDirectory constructs a new Directory instance that tracks SQL tenant
 // processes managed by a given Directory server. The given context is used for
 // tracing pod watcher activity.
@@ -139,6 +173,8 @@ func NewDirectory(
 // such as the name of the cluster, before being allowed to connect. Similarly,
 // if the tenant does not exist (e.g. because it was deleted), EnsureTenantAddr
 // returns a GRPC NotFound error.
+//
+// EnsureTenantAddr implements the Resolver interface.
 func (d *Directory) EnsureTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
@@ -172,6 +208,8 @@ func (d *Directory) EnsureTenantAddr(
 // into the directory's cache (LookupTenantAddrs will never attempt to fetch it).
 // If no processes are available for the tenant, LookupTenantAddrs will return the
 // empty set (unlike EnsureTenantAddr).
+//
+// LookupTenantAddrs implements the Resolver interface.
 func (d *Directory) LookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
@@ -202,6 +240,8 @@ func (d *Directory) LookupTenantAddrs(
 // particular pod as "unhealthy" so that it's less likely to be chosen.
 // However, today there can be at most one pod for a given tenant, so it
 // must always be chosen. Keep the parameter as a placeholder for the future.
+//
+// ReportFailure implements the Resolver interface.
 func (d *Directory) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
