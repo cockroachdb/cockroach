@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { longToInt } from "./fixLong";
+
 export const kibi = 1024;
 export const byteUnits: string[] = [
   "B",
@@ -163,3 +165,14 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
 };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] h:mm A";
+
+export function RenderCount(yesCount: Long, totalCount: Long) {
+  if (longToInt(yesCount) == 0) {
+    return "No";
+  }
+  if (longToInt(yesCount) == longToInt(totalCount)) {
+    return "Yes";
+  }
+  const noCount = longToInt(totalCount) - longToInt(yesCount);
+  return `${longToInt(yesCount)} Yes / ${noCount} No`;
+}
