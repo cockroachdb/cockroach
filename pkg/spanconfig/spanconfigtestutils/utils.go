@@ -45,7 +45,7 @@ var configRe = regexp.MustCompile(`^(FALLBACK)|(^\w)$`)
 
 // ParseSpan is helper function that constructs a roachpb.Span from a string of
 // the form "[start, end)".
-func ParseSpan(t *testing.T, sp string) roachpb.Span {
+func ParseSpan(t testing.TB, sp string) roachpb.Span {
 	if !spanRe.MatchString(sp) {
 		t.Fatalf("expected %s to match span regex", sp)
 	}
@@ -60,7 +60,7 @@ func ParseSpan(t *testing.T, sp string) roachpb.Span {
 
 // parseSystemTarget is a helepr function that constructs a
 // spanconfig.SystemTarget from a string of the form {source=<id>,target=<id>}
-func parseSystemTarget(t *testing.T, systemTarget string) spanconfig.SystemTarget {
+func parseSystemTarget(t testing.TB, systemTarget string) spanconfig.SystemTarget {
 	if !systemTargetRe.MatchString(systemTarget) {
 		t.Fatalf("expected %s to match system target regex", systemTargetRe)
 	}
@@ -86,7 +86,7 @@ func parseSystemTarget(t *testing.T, systemTarget string) spanconfig.SystemTarge
 
 // ParseTarget is a helper function that constructs a spanconfig.Target from a
 // string that conforms to spanRe.
-func ParseTarget(t *testing.T, target string) spanconfig.Target {
+func ParseTarget(t testing.TB, target string) spanconfig.Target {
 	switch {
 	case spanRe.MatchString(target):
 		return spanconfig.MakeTargetFromSpan(ParseSpan(t, target))
@@ -101,7 +101,7 @@ func ParseTarget(t *testing.T, target string) spanconfig.Target {
 // ParseConfig is helper function that constructs a roachpb.SpanConfig that's
 // "tagged" with the given string (i.e. a constraint with the given string a
 // required key).
-func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
+func ParseConfig(t testing.TB, conf string) roachpb.SpanConfig {
 	if !configRe.MatchString(conf) {
 		t.Fatalf("expected %s to match config regex", conf)
 	}
@@ -129,7 +129,7 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 // ParseSpanConfigRecord is helper function that constructs a
 // spanconfig.Target from a string of the form target:config. See
 // ParseTarget and ParseConfig above.
-func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
+func ParseSpanConfigRecord(t testing.TB, conf string) spanconfig.Record {
 	parts := strings.Split(conf, ":")
 	if len(parts) != 2 {
 		t.Fatalf("expected single %q separator", ":")
@@ -151,7 +151,7 @@ func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
 //		system-target {source=20,target=20}
 //		system-target {source=1,target=20}
 //
-func ParseKVAccessorGetArguments(t *testing.T, input string) []spanconfig.Target {
+func ParseKVAccessorGetArguments(t testing.TB, input string) []spanconfig.Target {
 	var targets []spanconfig.Target
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
@@ -192,7 +192,7 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []spanconfig.Target
 // 		delete {source=1,target=20}:D
 //
 func ParseKVAccessorUpdateArguments(
-	t *testing.T, input string,
+	t testing.TB, input string,
 ) ([]spanconfig.Target, []spanconfig.Record) {
 	var toDelete []spanconfig.Target
 	var toUpsert []spanconfig.Record
@@ -225,7 +225,7 @@ func ParseKVAccessorUpdateArguments(
 //      set [c,d):C
 //      set [d,e):D
 //
-func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.Update) {
+func ParseStoreApplyArguments(t testing.TB, input string) (updates []spanconfig.Update) {
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -274,7 +274,7 @@ func PrintSpan(sp roachpb.Span) string {
 }
 
 // PrintTarget is a helper function that prints a spanconfig.Target.
-func PrintTarget(t *testing.T, target spanconfig.Target) string {
+func PrintTarget(t testing.TB, target spanconfig.Target) string {
 	switch {
 	case target.IsSpanTarget():
 		return PrintSpan(target.GetSpan())
@@ -311,7 +311,7 @@ func PrintSpanConfig(config roachpb.SpanConfig) string {
 // entry is assumed to either have been constructed using ParseSpanConfigRecord
 // above, or the constituent span and config to have been constructed using the
 // Parse{Span,Config} helpers above.
-func PrintSpanConfigRecord(t *testing.T, record spanconfig.Record) string {
+func PrintSpanConfigRecord(t testing.TB, record spanconfig.Record) string {
 	return fmt.Sprintf("%s:%s", PrintTarget(t, record.GetTarget()), PrintSpanConfig(record.GetConfig()))
 }
 
@@ -478,7 +478,7 @@ func (rs SplitPoints) String() string {
 
 // GetSplitPoints returns a list of range split points as suggested by the given
 // StoreReader.
-func GetSplitPoints(ctx context.Context, t *testing.T, reader spanconfig.StoreReader) SplitPoints {
+func GetSplitPoints(ctx context.Context, t testing.TB, reader spanconfig.StoreReader) SplitPoints {
 	var splitPoints []SplitPoint
 	splitKey := roachpb.RKeyMin
 	for {
@@ -501,7 +501,7 @@ func GetSplitPoints(ctx context.Context, t *testing.T, reader spanconfig.StoreRe
 
 // ParseProtectionTarget returns a ptpb.Target based on the input. This target
 // could either refer to a Cluster, list of Tenants or SchemaObjects.
-func ParseProtectionTarget(t *testing.T, input string) *ptpb.Target {
+func ParseProtectionTarget(t testing.TB, input string) *ptpb.Target {
 	line := strings.Split(input, "\n")
 	if len(line) != 1 {
 		t.Fatal("only one target must be specified per protectedts operation")
