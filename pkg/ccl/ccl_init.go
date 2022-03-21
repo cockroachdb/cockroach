@@ -12,8 +12,7 @@ package ccl
 // import of this package enables building a binary with CCL features.
 
 import (
-	// ccl init hooks. Don't include cliccl here, it pulls in pkg/cli, which
-	// does weird things at init time.
+	// ccl init hooks.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
