@@ -13,7 +13,9 @@ package log
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,5 +91,92 @@ func TestJSONFormats(t *testing.T) {
 
 		return buf.String()
 	})
+}
 
+func TestFormatJSONLongLineBreaks(t *testing.T) {
+	formats := []logFormatter{
+		formatJSONFull{},
+	}
+	datadriven.RunTest(t, "testdata/json_break_lines", func(t *testing.T, td *datadriven.TestData) string {
+		if td.Cmd != "run" {
+			t.Fatalf("unknown command: %s", td.Cmd)
+		}
+		var maxLen int
+		var redactable bool
+		var structured bool
+		var withLongStack bool
+		td.ScanArgs(t, "maxlen", &maxLen)
+		td.ScanArgs(t, "redactable", &redactable)
+		td.ScanArgs(t, "structured", &structured)
+		td.ScanArgs(t, "withLongStack", &withLongStack)
+
+		defer func(prev int) { longLineLenJSON.set(prev) }(int(longLineLenJSON))
+		longLineLenJSON.set(maxLen)
+
+		longLine := string(bytes.Repeat([]byte("a"), 50))
+
+		withBigStack := func(e logEntry) logEntry {
+			e.stacks = []byte("this is " + longLine + " fake stack")
+			return e
+		}
+
+		entry := logEntry{
+			payload: entryPayload{
+				redactable: redactable,
+				message:    td.Input,
+			},
+			structured: structured,
+		}
+
+		if withLongStack {
+			entry = withBigStack(entry)
+		}
+
+		var buf bytes.Buffer
+		for _, f := range formats {
+			b := f.formatEntry(entry)
+			out := b.String()
+			putBuffer(b)
+
+			lines := strings.Split(out, "\n")
+			for _, l := range lines {
+				l = strings.TrimSuffix(l, "\n")
+				if len(l) == 0 {
+					continue
+				}
+				fmt.Fprintf(&buf, "%s: %s\n", f.formatterName(), l)
+
+				// Verify that the JSON log is valid JSON format.
+				var raw map[string]interface{}
+				if unMarshalErr := json.Unmarshal([]byte(l), &raw); unMarshalErr != nil {
+					t.Fatalf("error unmarshaling log line %s\n, with error: %v", l, unMarshalErr)
+				}
+
+				var eventOrMsgBytes []byte
+				var eventOrMsgInterface interface{}
+				var err error
+
+				if structured {
+					eventOrMsgInterface = raw["event"]
+				} else {
+					eventOrMsgInterface = raw["message"]
+				}
+
+				if !withLongStack && eventOrMsgInterface == nil {
+					t.Fatalf("couldn't parse event/message from log line")
+				}
+
+				// Verify that the event/message follows valid JSON format.
+				eventOrMsgBytes, err = json.Marshal(eventOrMsgInterface)
+
+				if err != nil {
+					t.Fatalf("error marshalling eventPayload %v: %v", eventOrMsgInterface, err)
+				}
+				if len(eventOrMsgBytes) > maxLen {
+					t.Fatalf("line too large: %d bytes, expected max %d - %q", len(eventOrMsgBytes), maxLen, l)
+				}
+			}
+		}
+		return buf.String()
+	})
 }
