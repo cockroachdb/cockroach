@@ -179,7 +179,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   type="secondary"
                   size="small"
                 >
-                  Cancel query
+                  Cancel statement
                 </Button>
                 <Button
                   onClick={() => {

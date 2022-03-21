@@ -218,28 +218,28 @@ export function makeSessionsColumns(
       cell: ({ session }) => {
         const menuItems: DropdownItem[] = [
           {
-            value: "terminateStatement",
-            name: "Terminate Statement",
+            value: "cancelStatement",
+            name: "Cancel Statement",
             disabled: session.active_queries?.length === 0,
           },
           {
-            value: "terminateSession",
-            name: "Terminate Session",
+            value: "cancelSession",
+            name: "Cancel Session",
           },
         ];
 
         const onMenuItemChange = (
-          value: "terminateStatement" | "terminateSession",
+          value: "cancelStatement" | "cancelSession",
         ) => {
           switch (value) {
-            case "terminateSession":
+            case "cancelSession":
               onTerminateSessionClick && onTerminateSessionClick();
               terminateSessionRef?.current?.showModalFor({
                 session_id: session.id,
                 node_id: session.node_id.toString(),
               });
               break;
-            case "terminateStatement":
+            case "cancelStatement":
               if (session.active_queries?.length > 0) {
                 onTerminateStatementClick && onTerminateStatementClick();
                 terminateQueryRef?.current?.showModalFor({

@@ -4,6 +4,12 @@
   white-space: nowrap;
   line-height: $line-height--medium;
   font-weight: $font-weight--bold;
+  color: $colors--primary-blue-3;
+
+  &:hover {
+    color: $colors--primary-blue-3;
+    text-decoration: underline;
+  }
 
   &__unset {
     color: $tooltip-color;
