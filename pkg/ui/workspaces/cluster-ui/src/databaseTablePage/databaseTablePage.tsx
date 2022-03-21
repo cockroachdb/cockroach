@@ -352,7 +352,7 @@ export class DatabaseTablePage extends React.Component<
             onChange={this.onTabChange}
             activeKey={this.state.tab}
           >
-            <TabPane tab="Overview" key="overview">
+            <TabPane tab="Overview" key="overview" className={cx("tab-pane")}>
               <Row gutter={18}>
                 <Col className="gutter-row" span={18}>
                   <SqlBox value={this.props.details.createStatement} />
@@ -436,7 +436,7 @@ export class DatabaseTablePage extends React.Component<
                     <div className={cx("index-stats__reset-info")}>
                       <Tooltip
                         placement="bottom"
-                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster."
+                        title="Index stats accumulate from the time the index was created or had its stats reset. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster."
                       >
                         <div
                           className={cx("index-stats__last-reset", "underline")}
@@ -474,7 +474,7 @@ export class DatabaseTablePage extends React.Component<
                 </SummaryCard>
               </Row>
             </TabPane>
-            <TabPane tab="Grants" key="grants">
+            <TabPane tab="Grants" key="grants" className={cx("tab-pane")}>
               <DatabaseTableGrantsTable
                 data={this.props.details.grants}
                 columns={this.grantsColumns}
