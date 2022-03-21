@@ -90,7 +90,9 @@ message StreamIngestionDetails {
   reserved 5;
   roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 
-  // NEXT ID: 7.
+  // Stream of tenant data will be ingested as a new tenant with 'new_tenant_id'.
+  roachpb.TenantID new_tenant_id = 7 [(gogoproto.customname) = "NewTenantID", (gogoproto.nullable) = false];
+  // NEXT ID: 8.
 }
 
 message StreamIngestionProgress {

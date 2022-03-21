@@ -344,6 +344,20 @@ func (m *randomStreamClient) Subscribe(
 	if err != nil {
 		return nil, err
 	}
+
+	copyKeyVal := func(keyVal *roachpb.KeyValue) *roachpb.KeyValue {
+		res := roachpb.KeyValue{
+			Key: make([]byte, len(keyVal.Key)),
+			Value: roachpb.Value{
+				RawBytes: make([]byte, len(keyVal.Value.RawBytes)),
+				Timestamp: keyVal.Value.Timestamp,
+			},
+		}
+		copy(res.Key, keyVal.Key)
+		copy(res.Value.RawBytes, keyVal.Value.RawBytes)
+		return &res
+	}
+
 	receiveFn := func(ctx context.Context) error {
 		defer close(eventCh)
 
@@ -354,17 +368,15 @@ func (m *randomStreamClient) Subscribe(
 		numKVEventsSinceLastResolved := 0
 
 		rng, _ := randutil.NewPseudoRand()
-		var dupKVEvent streamingccl.Event
 
 		for {
 			var event streamingccl.Event
+			var keyValCopy *roachpb.KeyValue
 			if numKVEventsSinceLastResolved == config.kvsPerCheckpoint {
 				// Emit a CheckpointEvent.
 				resolvedTime := timeutil.Now()
 				hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
 				event = streamingccl.MakeCheckpointEvent(hlcResolvedTime)
-				dupKVEvent = nil
-
 				numKVEventsSinceLastResolved = 0
 			} else {
 				// If there are system KVs to emit, prioritize those.
@@ -376,14 +388,14 @@ func (m *randomStreamClient) Subscribe(
 				} else {
 					numKVEventsSinceLastResolved++
 					// Generate a duplicate KVEvent.
-					if rng.Float64() < config.dupProbability && dupKVEvent != nil {
-						dupKV := dupKVEvent.GetKV()
-						event = streamingccl.MakeKVEvent(*dupKV)
+					if rng.Float64() < config.dupProbability && keyValCopy != nil {
+						event = streamingccl.MakeKVEvent(*keyValCopy)
 					} else {
 						event = streamingccl.MakeKVEvent(makeRandomKey(r, config, tableDesc))
-						dupKVEvent = event
 					}
 				}
+				// Create a copy of KeyValue generated as the KeyValue in the event might get modified later.
+				keyValCopy = copyKeyVal(event.GetKV())
 			}
 
 			select {
@@ -392,6 +404,11 @@ func (m *randomStreamClient) Subscribe(
 				return ctx.Err()
 			}
 
+			if event.Type() == streamingccl.KVEvent {
+				// Use the originally generated KeyValue copy as the KeyValue inside the event might
+				// get modified by ingestion processor's tenant rekeyer.
+				event = streamingccl.MakeKVEvent(*keyValCopy)
+			}
 			func() {
 				m.mu.Lock()
 				defer m.mu.Unlock()

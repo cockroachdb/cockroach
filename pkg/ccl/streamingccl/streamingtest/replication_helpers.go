@@ -182,7 +182,7 @@ type ReplicationHelper struct {
 // NewReplicationHelper starts test server and configures it to have active
 // tenant.
 func NewReplicationHelper(
-	t *testing.T, serverArgs base.TestServerArgs,
+	t *testing.T, serverArgs base.TestServerArgs, tenantID roachpb.TenantID,
 ) (*ReplicationHelper, func()) {
 	ctx := context.Background()
 
@@ -202,7 +202,6 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 	require.NoError(t, err)
 
 	// Start tenant server
-	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 
 	// Sink to read data from.

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -85,7 +87,15 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	// Register interceptors on the random stream client, which will be used by
 	// the processors.
-	streamValidator := newStreamClientValidator()
+	const oldTenantID = 10
+	const tenantID = 30
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MakeTenantID(oldTenantID)),
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{{
+			OldID: roachpb.MakeTenantID(oldTenantID),
+			NewID: roachpb.MakeTenantID(tenantID),
+		}}, true /* restoreTenantFromStream */)
+	require.NoError(t, err)
+	streamValidator := newStreamClientValidator(rekeyer)
 	registerValidator := registerValidatorWithClient(streamValidator)
 	client := streamclient.GetRandomStreamClientSingletonForTesting()
 	defer func() {
@@ -130,13 +140,12 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	allowResponse = make(chan struct{})
 	receivedRevertRequest = make(chan struct{})
-	_, err := conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
+	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
 	require.NoError(t, err)
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
-	const tenantID = 10
 	streamAddr := getTestRandomClientURI()
-	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s'`, streamAddr)
+	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s' AS TENANT %d`, streamAddr, tenantID)
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
 	_, err = conn.Exec(query)

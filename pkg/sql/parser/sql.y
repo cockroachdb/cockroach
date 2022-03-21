@@ -3159,12 +3159,13 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause
+| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause AS TENANT iconst64
   {
    $$.val = &tree.StreamIngestion{
      Targets: $2.targetList(),
      From: $7.stringOrPlaceholderOptList(),
      AsOf: $8.asOfClause(),
+     AsTenant: tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(uint64($11.int64()))},
    }
   }
 | RESTORE error // SHOW HELP: RESTORE
@@ -6791,6 +6792,7 @@ targets:
   }
 // TODO(knz): This should learn how to parse more complex expressions
 // and placeholders.
+
 | TENANT iconst64
   {
     tenID := uint64($2.int64())

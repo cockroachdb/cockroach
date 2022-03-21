@@ -31,7 +31,8 @@ func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	streamAddress streamingccl.StreamAddress,
-	tenantID roachpb.TenantID,
+	oldTenantID roachpb.TenantID,
+	newTenantID roachpb.TenantID,
 	startTime hlc.Timestamp,
 	progress jobspb.Progress,
 	jobID jobspb.JobID,
@@ -43,7 +44,7 @@ func ingest(
 	}
 	ingestWithClient := func() error {
 		// TODO(dt): if there is an existing stream ID, reconnect to it.
-		streamID, err := client.Create(ctx, tenantID)
+		streamID, err := client.Create(ctx, oldTenantID)
 		if err != nil {
 			return err
 		}
@@ -73,7 +74,7 @@ func ingest(
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, initialHighWater, jobID, streamID)
+			streamAddress, topology, sqlInstanceIDs, initialHighWater, jobID, streamID, oldTenantID, newTenantID)
 		if err != nil {
 			return err
 		}
@@ -92,7 +93,8 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	err := ingest(resumeCtx, p, streamAddress, details.TenantID, details.StartTime, s.job.Progress(), s.job.ID())
+	err := ingest(resumeCtx, p, streamAddress, details.TenantID, details.NewTenantID,
+		details.StartTime, s.job.Progress(), s.job.ID())
 	if err != nil {
 		return err
 	}

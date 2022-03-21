@@ -153,8 +153,6 @@ func ingestionPlanHook(
 		}
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-
-		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.TenantID.TenantID)
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if ingestionStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
@@ -164,11 +162,21 @@ func ingestionPlanHook(
 			startTime = asOf.Timestamp
 		}
 
+		//TODO(casper): make target to be tenant-only.
+		oldTenantID := ingestionStmt.Targets.TenantID.TenantID
+		newTenantID := ingestionStmt.AsTenant.TenantID
+		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
+			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",
+				oldTenantID.ToUint64(), newTenantID.ToUint64())
+		}
+
+		prefix := keys.MakeTenantPrefix(newTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
-			TenantID:      ingestionStmt.Targets.TenantID.TenantID,
+			TenantID:      oldTenantID,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
+			NewTenantID:   newTenantID,
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)

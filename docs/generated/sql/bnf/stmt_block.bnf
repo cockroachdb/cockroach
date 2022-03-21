@@ -204,7 +204,7 @@ restore_stmt ::=
 	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_of_clause
+	| 'RESTORE' targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_of_clause 'AS' 'TENANT' iconst64
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -649,6 +649,9 @@ opt_with_restore_options ::=
 	'WITH' restore_options_list
 	| 'WITH' 'OPTIONS' '(' restore_options_list ')'
 	| 
+
+iconst64 ::=
+	'ICONST'
 
 resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -1361,9 +1364,6 @@ table_pattern ::=
 
 table_pattern_list ::=
 	( table_pattern ) ( ( ',' table_pattern ) )*
-
-iconst64 ::=
-	'ICONST'
 
 privilege ::=
 	name

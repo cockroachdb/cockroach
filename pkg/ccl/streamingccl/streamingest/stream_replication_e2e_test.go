@@ -70,8 +70,8 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	}
 
 	// Start the source cluster.
-	tenantID := serverutils.TestTenantID()
-	sc, sourceSysDB, sourceTenantDB, srcCleanup := startTestClusterWithTenant(ctx, t, args, tenantID, 3)
+	srcTenantID := roachpb.MakeTenantID(10)
+	sc, sourceSysDB, sourceTenantDB, srcCleanup := startTestClusterWithTenant(ctx, t, args, srcTenantID, 3)
 	defer srcCleanup()
 	sourceSysSQL, sourceTenantSQL := sqlutils.MakeSQLRunner(sourceSysDB), sqlutils.MakeSQLRunner(sourceTenantDB)
 
@@ -85,7 +85,8 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
   `)
 
 	// Start the destination cluster.
-	_, destSysDB, destTenantDB, destCleanup := startTestClusterWithTenant(ctx, t, args, tenantID, 2)
+	destTenantID := roachpb.MakeTenantID(20)
+	_, destSysDB, destTenantDB, destCleanup := startTestClusterWithTenant(ctx, t, args, destTenantID, 2)
 	defer destCleanup()
 	destSysSQL, destTenantSQL := sqlutils.MakeSQLRunner(destSysDB), sqlutils.MakeSQLRunner(destTenantDB)
 
@@ -103,7 +104,8 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	sourceSysSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 	var ingestionJobID, streamProducerJobID int
 	destSysSQL.QueryRow(t,
-		`RESTORE TENANT `+tenantID.String()+` FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime,
+		`RESTORE TENANT `+srcTenantID.String()+` FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+
+			` AS TENANT `+destTenantID.String(),
 		pgURL.String(),
 	).Scan(&ingestionJobID)
 	sourceSysSQL.CheckQueryResultsRetry(t,

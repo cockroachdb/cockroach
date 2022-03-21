@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"net/url"
 	"strconv"
 	"sync"
@@ -150,23 +151,36 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).DB()
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	const tenantID = 20
+	tenantRekey := execinfrapb.TenantRekey{
+		OldID: roachpb.MakeTenantID(tenantID),
+		NewID: roachpb.MakeTenantID(tenantID + 10),
+	}
 
 	t.Run("finite stream client", func(t *testing.T) {
 		v := roachpb.MakeValueFromString("value_1")
 		v.Timestamp = hlc.Timestamp{WallTime: 1}
-		sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
-		events := []streamingccl.Event{
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+		sampleKV := func() roachpb.KeyValue {
+			key, err := keys.RewriteKeyToTenantPrefix(roachpb.Key("key_1"),
+				keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID)))
+			require.NoError(t, err)
+			return roachpb.KeyValue{Key: key, Value: v}
+		}
+		//sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
+		events := func() []streamingccl.Event {
+			return []streamingccl.Event{
+				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}
 		}
 		p1 := streamclient.SubscriptionToken("p1")
 		p2 := streamclient.SubscriptionToken("p2")
 		mockClient := &mockStreamClient{
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events, string(p2): events},
+			partitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
 		}
 
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
@@ -175,7 +189,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			{ID: "2", SubscriptionToken: p2},
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
-			partitions, startTime, nil /* interceptEvents */, mockClient)
+			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient)
 		require.NoError(t, err)
 
 		actualRows := make(map[string]struct{})
@@ -211,7 +225,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			{SubscriptionToken: streamclient.SubscriptionToken("2")},
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test",
-			partitions, startTime, nil /* interceptEvents */, &errorStreamClient{})
+			partitions, startTime, nil /* interceptEvents */, tenantRekey, &errorStreamClient{})
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -235,7 +249,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			processEventCh <- struct{}{}
 		}}
 		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
-			partitions, startTime, nil /* interceptEvents */, mockClient, streamingTestingKnob)
+			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient, streamingTestingKnob)
 		defer func() {
 			require.NoError(t, sip.forceClientForTests.Close())
 		}()
@@ -391,7 +405,8 @@ func TestRandomClientGeneration(t *testing.T) {
 	// The random client returns system and table data partitions.
 	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(streamAddr))
 	require.NoError(t, err)
-	id, err := streamClient.Create(ctx, roachpb.MakeTenantID(2))
+	const tenantID = 20
+	id, err := streamClient.Create(ctx, roachpb.MakeTenantID(tenantID))
 	require.NoError(t, err)
 
 	topo, err := streamClient.Plan(ctx, id)
@@ -405,10 +420,17 @@ func TestRandomClientGeneration(t *testing.T) {
 	// Cancel the flow after emitting 1000 checkpoint events from the client.
 	mu := syncutil.Mutex{}
 	cancelAfterCheckpoints := makeCheckpointEventCounter(&mu, 1000, cancel)
-	streamValidator := newStreamClientValidator()
+	tenantRekey := execinfrapb.TenantRekey{
+		OldID: roachpb.MakeTenantID(tenantID),
+		NewID: roachpb.MakeTenantID(tenantID + 10),
+	}
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID)),
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{tenantRekey}, true /* restoreTenantFromStream */)
+	require.NoError(t, err)
+	streamValidator := newStreamClientValidator(rekeyer)
 	validator := registerValidatorWithClient(streamValidator)
 	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr, topo,
-		startTime, []streamclient.InterceptFn{cancelAfterCheckpoints, validator}, nil /* mockClient */)
+		startTime, []streamclient.InterceptFn{cancelAfterCheckpoints, validator}, tenantRekey, nil /* mockClient */)
 	require.NoError(t, err)
 
 	partitionSpanToTableID := getPartitionSpanToTableID(t, topo)
@@ -479,10 +501,11 @@ func runStreamIngestionProcessor(
 	partitions streamclient.Topology,
 	startTime hlc.Timestamp,
 	interceptEvents []streamclient.InterceptFn,
+	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
 ) (*distsqlutils.RowBuffer, error) {
 	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr,
-		partitions, startTime, interceptEvents, mockClient, nil /* streamingTestingKnobs */)
+		partitions, startTime, interceptEvents, tenantRekey, mockClient, nil /* streamingTestingKnobs */)
 	require.NoError(t, err)
 
 	sip.Run(ctx)
@@ -506,6 +529,7 @@ func getStreamIngestionProcessor(
 	partitions streamclient.Topology,
 	startTime hlc.Timestamp,
 	interceptEvents []streamclient.InterceptFn,
+	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*streamIngestionProcessor, *distsqlutils.RowBuffer, error) {
@@ -531,7 +555,7 @@ func getStreamIngestionProcessor(
 
 	var spec execinfrapb.StreamIngestionDataSpec
 	spec.StreamAddress = streamAddr
-
+	spec.TenantRekey = tenantRekey
 	spec.PartitionIds = make([]string, len(partitions))
 	spec.PartitionAddresses = make([]string, len(partitions))
 	spec.PartitionSpecs = make([]string, len(partitions))
@@ -575,6 +599,15 @@ func registerValidatorWithClient(
 		case streamingccl.KVEvent:
 			kv := *event.GetKV()
 
+			if validator.rekeyer != nil {
+				rekey, _, err := validator.rekeyer.RewriteKey(kv.Key)
+				if err != nil {
+					panic(err.Error())
+				}
+				kv.Key = rekey
+				kv.Value.ClearChecksum()
+				kv.Value.InitChecksum(kv.Key)
+			}
 			err := validator.noteRow(string(spec), string(kv.Key), string(kv.Value.RawBytes),
 				kv.Value.Timestamp)
 			if err != nil {
