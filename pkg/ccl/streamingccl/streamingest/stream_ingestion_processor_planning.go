@@ -36,6 +36,8 @@ func distStreamIngestionPlanSpecs(
 	initialHighWater hlc.Timestamp,
 	jobID jobspb.JobID,
 	streamID streaming.StreamID,
+	oldTenantID roachpb.TenantID,
+	newTenantID roachpb.TenantID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
@@ -53,6 +55,10 @@ func distStreamIngestionPlanSpecs(
 				StartTime:          initialHighWater,
 				StreamAddress:      string(streamAddress),
 				PartitionAddresses: make([]string, 0),
+				TenantRekey: execinfrapb.TenantRekey{
+					OldID: oldTenantID,
+					NewID: newTenantID,
+				},
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}
