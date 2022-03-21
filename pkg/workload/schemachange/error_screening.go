@@ -177,16 +177,25 @@ func (og *operationGenerator) colIsPrimaryKey(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
 	primaryColumns, err := og.scanStringArray(ctx, tx,
-		`SELECT array_agg(column_name)
-		FROM (
-			SELECT DISTINCT column_name
-				FROM information_schema.statistics
-			WHERE (index_name = 'primary' OR index_name LIKE '%pkey%')
-				AND table_schema = $1
-				AND table_name = $2
-				AND storing = 'NO'
-		);
-	`, tableName.Schema(), tableName.Object())
+		`
+SELECT array_agg(column_name)
+  FROM (
+		SELECT DISTINCT column_name
+		  FROM information_schema.statistics
+		 WHERE (
+				index_name
+				IN (
+						SELECT index_name
+						  FROM crdb_internal.table_indexes
+						 WHERE index_type = 'primary'
+						       AND descriptor_id = $3::REGCLASS
+					)
+		       )
+		       AND table_schema = $1
+		       AND table_name = $2
+		       AND storing = 'NO'
+       );
+	`, tableName.Schema(), tableName.Object(), tableName.String())
 	if err != nil {
 		return false, err
 	}
@@ -282,15 +291,18 @@ func (og *operationGenerator) tableHasPrimaryKeySwapActive(
 	indexName, err := og.scanStringArray(
 		ctx,
 		tx,
-		fmt.Sprintf(`
+		`
 SELECT array_agg(index_name)
   FROM (
-		SELECT index_name
-		  FROM [SHOW INDEXES FROM %s]
-		 WHERE index_name LIKE '%%_pkey%%'
-		 LIMIT 1
+SELECT
+	index_name
+FROM
+	crdb_internal.table_indexes
+WHERE
+	index_type = 'primary'
+	AND descriptor_id = $1::REGCLASS
        );
-	`, tableName.String()),
+	`, tableName.String(),
 	)
 	if err != nil {
 		return err
