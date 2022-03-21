@@ -27,7 +27,7 @@ new-server name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1,us
 ----
 
 exec-sql
-RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
 ----
 
 exec-sql
@@ -35,7 +35,7 @@ DROP DATABASE d;
 ----
 
 exec-sql
-RESTORE DATABASE d FROM 'nodelocal://0/database_backup/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/';
 ----
 
 query-sql
@@ -52,13 +52,13 @@ new-server name=s3 share-io-dir=s1 allow-implicit-access localities=eu-central-1
 ----
 
 exec-sql
-RESTORE DATABASE d FROM 'nodelocal://0/database_backup/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/';
 ----
 pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
 HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
 
 exec-sql
-RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
 ----
 pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
 HINT: there are two ways you can resolve this issue: 1) update the cluster to which you're restoring to ensure that the regions present on the nodes' --locality flags match those present in the backup image, or 2) restore with the "skip_localities_check" option
@@ -97,7 +97,7 @@ SET CLUSTER SETTING sql.defaults.primary_region = 'non-existent-region';
 ----
 
 exec-sql
-RESTORE DATABASE no_region_db FROM 'nodelocal://1/no_region_database_backup/';
+RESTORE DATABASE no_region_db FROM LATEST IN 'nodelocal://1/no_region_database_backup/';
 ----
 pq: region "non-existent-region" does not exist
 HINT: valid regions: eu-central-1, eu-north-1
@@ -109,7 +109,7 @@ SET CLUSTER SETTING sql.defaults.primary_region = 'eu-central-1';
 ----
 
 exec-sql
-RESTORE DATABASE no_region_db FROM 'nodelocal://1/no_region_database_backup/';
+RESTORE DATABASE no_region_db FROM LATEST IN 'nodelocal://1/no_region_database_backup/';
 ----
 NOTICE: setting the PRIMARY REGION as eu-central-1 on database no_region_db
 HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
@@ -148,7 +148,7 @@ SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
 ----
 
 exec-sql
-RESTORE FROM 'nodelocal://1/no_region_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://1/no_region_cluster_backup/';
 ----
 NOTICE: setting the PRIMARY REGION as eu-north-1 on database defaultdb
 HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
@@ -176,7 +176,7 @@ public t table root <nil> REGIONAL BY TABLE IN PRIMARY REGION
 
 # Check we can restore without triggering the default primary region.
 exec-sql
-RESTORE DATABASE eu_central_db FROM 'nodelocal://1/eu_central_database_backup/';
+RESTORE DATABASE eu_central_db FROM LATEST IN 'nodelocal://1/eu_central_database_backup/';
 ----
 
 query-sql

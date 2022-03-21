@@ -1075,6 +1075,13 @@ func restorePlanHook(
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
+	} else {
+		// Deprecation notice for non-colelction `RESTORE FROM` syntax. Remove this
+		// once the syntax is deleted in 22.2.
+		p.BufferClientNotice(ctx,
+			pgnotice.Newf("Note the `RESTORE FROM <backup>` syntax will be removed in a future release, please"+
+				"switch over to using `RESTORE FROM <backup> IN <collection>` to restore a particular backup from a collection: %s",
+				"https://www.cockroachlabs.com/docs/stable/restore.html#view-the-backup-subdirectories"))
 	}
 
 	var incStorageFn func() ([]string, error)

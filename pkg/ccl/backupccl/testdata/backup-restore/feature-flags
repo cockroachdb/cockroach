@@ -36,7 +36,7 @@ SET CLUSTER SETTING feature.restore.enabled = FALSE;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM 'nodelocal://0/test-root/';
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test-root/';
 ----
 pq: feature RESTORE was disabled by the database administrator
 
@@ -46,5 +46,5 @@ SET CLUSTER SETTING feature.restore.enabled = TRUE;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM 'nodelocal://0/test-root/';
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test-root/';
 ----

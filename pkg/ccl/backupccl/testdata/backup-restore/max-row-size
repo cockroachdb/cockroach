@@ -31,7 +31,7 @@ CREATE DATABASE d2;
 ----
 
 exec-sql
-RESTORE maxrow FROM 'nodelocal://1/maxrow' WITH into_db='d2';
+RESTORE maxrow FROM LATEST IN 'nodelocal://1/maxrow' WITH into_db='d2';
 ----
 
 query-sql

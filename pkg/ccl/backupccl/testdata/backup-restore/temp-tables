@@ -59,7 +59,7 @@ DROP DATABASE d1
 ----
 
 exec-sql
-RESTORE DATABASE d1 FROM 'nodelocal://0/d1_backup/'
+RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://0/d1_backup/'
 ----
 
 exec-sql
@@ -88,7 +88,7 @@ DROP DATABASE d1
 ----
 
 exec-sql
-RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/'
+RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://0/d1_star_backup/'
 ----
 
 exec-sql
@@ -120,7 +120,7 @@ USE defaultdb;
 ----
 
 exec-sql
-RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
 ----
 
 # The pg_temp schema from the BACKUP should show up in its original database.
