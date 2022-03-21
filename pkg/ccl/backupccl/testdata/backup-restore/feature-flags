@@ -13,7 +13,7 @@ SET CLUSTER SETTING feature.backup.enabled = FALSE;
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://0/test-root/';
+BACKUP INTO 'nodelocal://0/test-root/';
 ----
 pq: feature BACKUP was disabled by the database administrator
 
@@ -23,7 +23,7 @@ SET CLUSTER SETTING feature.backup.enabled = TRUE;
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://0/test-root/';
+BACKUP INTO 'nodelocal://0/test-root/';
 ----
 
 exec-sql

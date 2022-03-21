@@ -8,11 +8,11 @@ CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes')
 ----
 
 exec-sql
-BACKUP DATABASE d TO 'nodelocal://1/database_backup/'
+BACKUP DATABASE d INTO 'nodelocal://1/database_backup/'
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://1/full_cluster_backup/'
+BACKUP INTO 'nodelocal://1/full_cluster_backup/'
 ----
 
 new-server name=s2 share-io-dir=s1 allow-implicit-access
