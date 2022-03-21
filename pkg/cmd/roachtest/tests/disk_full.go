@@ -34,15 +34,14 @@ func registerDiskFull(r registry.Registry) {
 			}
 
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
-					"./workload run kv --tolerate-errors --init --read-percent=0"+
+					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
 						" --concurrency=10 --duration=4m {pgurl:2-%d}",
 					nodes)
 				c.Run(ctx, c.Node(nodes+1), cmd)
@@ -116,13 +115,16 @@ func registerDiskFull(r registry.Registry) {
 
 				// Clear the emergency ballast. Clearing the ballast
 				// should allow the node to start, perform compactions,
-				// etc.
+				// etc. Allow a death here as the monitor may detect the
+				// node is still dead until the node has had its ballast
+				// file removed and has been successfully restarted.
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
-				m.ResetDeaths()
+				m.ExpectDeath()
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
 				if err := c.StartE(ctx, c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
+				m.ResetDeaths()
 
 				// Wait a little while and delete the large file we
 				// added to induce the out-of-disk condition.
