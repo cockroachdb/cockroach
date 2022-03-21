@@ -102,7 +102,7 @@ var _ spanconfig.KVSubscriber = &KVSubscriber{}
 // marshaled span config proto). The value used here was pulled out of thin air
 // -- it only serves to coarsely limit how large the KVSubscriber's underlying
 // rangefeed buffer can get.
-const spanConfigurationsTableRowSize = 5 << 10 // 5 KB
+const spanConfigurationsTableRowSize = 5 << 10 // 5 KB // XXX: Grossly over-estimated.
 
 // New instantiates a KVSubscriber.
 func New(
@@ -283,6 +283,14 @@ func (s *KVSubscriber) handlePartialUpdate(
 			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}
+}
+
+// TestingNumberOfSpanConfigs returns the number of span configs stored
+// internally, for testing purposes.
+func (s *KVSubscriber) TestingNumberOfSpanConfigs() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.internal.TestingNumberOfSpanConfigs()
 }
 
 type handler struct {

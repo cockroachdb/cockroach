@@ -490,14 +490,16 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	// Log Create Table event. This is an auditable log event and is
-	// recorded in the same transaction as the table descriptor update.
-	if err := params.p.logEvent(params.ctx,
-		desc.ID,
-		&eventpb.CreateTable{
-			TableName: n.n.Table.FQString(),
-		}); err != nil {
-		return err
+	if !params.ExecCfg().TestingKnobs.SkipCreateTableEventLogging {
+		// Log Create Table event. This is an auditable log event and is
+		// recorded in the same transaction as the table descriptor update.
+		if err := params.p.logEvent(params.ctx,
+			desc.ID,
+			&eventpb.CreateTable{
+				TableName: n.n.Table.FQString(),
+			}); err != nil {
+			return err
+		}
 	}
 
 	// If we are in an explicit txn or the source has placeholders, we execute the

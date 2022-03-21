@@ -40,7 +40,7 @@ var batchSizeSetting = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"spanconfig.kvaccessor.batch_size",
 	`number of span config records to access in a single batch`,
-	500,
+	10000, // XXX: Bumped higher than 500.
 )
 
 // KVAccessor provides read/write access to all the span configurations for a

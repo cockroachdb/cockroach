@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -239,6 +240,8 @@ func (f *fullReconciler) reconcile(
 		}
 	}
 
+	log.Infof(ctx, "fully reconciled: upserted len(%d) entries, deleted len(%d)", len(toUpsert), len(toDelete))
+
 	// Keep a copy of the current view of the world (i.e. KVAccessor
 	// contents). We could also fetch everything from KV, but making a copy here
 	// is cheaper (and saves an RTT). We'll later mutate
@@ -398,6 +401,7 @@ func (r *incrementalReconciler) reconcile(
 			if len(sqlUpdates) == 0 {
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
+			log.Infof(ctx, "sqlwatcher received %d updates", len(sqlUpdates))
 
 			// Process the SQLUpdates and identify all descriptor IDs that require
 			// translation. If the SQLUpdates includes ProtectedTimestampUpdates then
@@ -472,9 +476,11 @@ func (r *incrementalReconciler) reconcile(
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
 			if len(toDelete) != 0 || len(toUpsert) != 0 {
+				log.Infof(ctx, "incrementally reconciling: upserting len(%d) entries, deleting len(%d)", len(toUpsert), len(toDelete))
 				if err := r.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 					return err
 				}
+				log.Infof(ctx, "incrementally reconciled: upserted len(%d) entries, deleted len(%d)", len(toUpsert), len(toDelete))
 			}
 
 			return callback(checkpoint)

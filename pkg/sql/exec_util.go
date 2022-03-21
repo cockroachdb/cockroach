@@ -1438,6 +1438,10 @@ type ExecutorTestingKnobs struct {
 		txnID uuid.UUID,
 		txnFingerprintID roachpb.TransactionFingerprintID,
 	)
+
+	// SkipCreateTableEventLogging skips insertions into the event log for CREATE
+	// TABLE statements.
+	SkipCreateTableEventLogging bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
