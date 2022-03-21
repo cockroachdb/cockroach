@@ -37,7 +37,7 @@ CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "ap-
 statement error current database test is not multi-region enabled
 SELECT default_to_database_primary_region(gateway_region())
 
-query T
+query T nodeidx=0
 SELECT gateway_region()
 ----
 ap-southeast-2
@@ -52,7 +52,7 @@ SELECT gateway_region()
 ----
 us-east-1
 
-query TT
+query TT nodeidx=0
 USE region_test_db;
 SELECT gateway_region(), default_to_database_primary_region(gateway_region())
 ----
@@ -64,7 +64,7 @@ SELECT gateway_region(), default_to_database_primary_region(gateway_region())
 ----
 us-east-1  ap-southeast-2
 
-query TT
+query TT nodeidx=0
 USE multi_region_test_db;
 SELECT gateway_region(), default_to_database_primary_region(gateway_region())
 ----
@@ -1053,12 +1053,12 @@ USE drop_region_db
 statement error pgcode 42P12 cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
-query T noticetrace
+query T noticetrace,nodeidx=0
 ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
 ----
 
 # Ensure that events are generated for dropping the region
-query IT
+query IT nodeidx=0
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'alter_database_drop_region'
@@ -1462,6 +1462,9 @@ CREATE VIEW v AS SELECT v FROM kv
 # this is not simple, as we need to explicitly select the crdb_region
 # column, and then convert that column to be generated and hidden.
 subtest create_table_as_regional_by_row
+
+# Make default 0 for rest of test
+user root nodeidx=0
 
 statement ok
 CREATE DATABASE "mr-create-table-as" PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1";

@@ -1,0 +1,40 @@
+# LogicTest: 5node !metamorphic
+
+# Default is node 1
+query I
+SELECT * FROM crdb_internal.node_id()
+----
+1
+
+# Zero selects node 1
+query I nodeidx=0
+SELECT * FROM crdb_internal.node_id()
+----
+1
+
+# 1 selects node 2
+query I nodeidx=1
+SELECT crdb_internal.node_id()
+----
+2
+
+# Default is still 1
+query I
+SELECT * FROM crdb_internal.node_id()
+----
+1
+
+user root nodeidx=1
+
+# Default is now 2
+query I
+SELECT * FROM crdb_internal.node_id()
+----
+2
+
+# -1 sets it back to default
+user root nodeidx=-1
+query I
+SELECT * FROM crdb_internal.node_id()
+----
+1

@@ -1,5 +1,8 @@
 # LogicTest: 5node
 
+# Make default 0 for rest of test
+user root nodeidx=0
+
 # Ensure that cost-based-optimizer uses an index with zone constraints that most
 # closely matches the gateway's locality. Use "retry" option, since it can take
 # a bit of time for gossip to refresh the zone.

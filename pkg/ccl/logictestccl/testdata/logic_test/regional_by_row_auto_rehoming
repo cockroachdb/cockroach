@@ -1,5 +1,8 @@
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
+# This test assume node 1 is default gateway.
+user root nodeidx=0
+
 statement ok
 SET experimental_enable_auto_rehoming = true;
 CREATE DATABASE testdb PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2";

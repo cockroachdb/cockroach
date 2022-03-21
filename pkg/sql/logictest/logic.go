@@ -286,6 +286,7 @@ import (
 //            Cannot be combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
+//      - nodeidx: index of node to run the query on.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -441,6 +442,8 @@ import (
 // - For validation testing: just -d or -bigtest.
 // - For compatibility testing: add -allow-prepare-fail -flex-types.
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
+
+const unsetGatewayIdx = -1
 
 var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
@@ -1511,22 +1514,26 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 
 // setUser sets the DB client to the specified user.
 // It returns a cleanup function to be run when the credentials
-// are no longer needed.
+// are no longer needed. nodeIdxOverride can be set to -1 to reset
+// the default connection to gateway node.
 func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	if t.clients == nil {
 		t.clients = map[string]*gosql.DB{}
 	}
-	if db, ok := t.clients[user]; ok {
+
+	nodeIdx := t.nodeIdx
+	if nodeIdxOverride >= 0 {
+		nodeIdx = nodeIdxOverride
+	}
+
+	clientKey := fmt.Sprintf("%s-%d", user, nodeIdx)
+
+	if db, ok := t.clients[clientKey]; ok {
 		t.db = db
 		t.user = user
 
 		// No cleanup necessary, but return a no-op func to avoid nil pointer dereference.
 		return func() {}
-	}
-
-	nodeIdx := t.nodeIdx
-	if nodeIdxOverride > 0 {
-		nodeIdx = nodeIdxOverride
 	}
 
 	addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
@@ -1551,7 +1558,7 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
 		t.Fatal(err)
 	}
-	t.clients[user] = db
+	t.clients[clientKey] = db
 	t.db = db
 	t.user = pgUser
 
@@ -1945,7 +1952,7 @@ func (t *logicTest) newCluster(
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser, 0 /* nodeIdxOverride */))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser, unsetGatewayIdx /* nodeIdxOverride */))
 }
 
 // shutdownCluster performs the necessary cleanup to shutdown the current test
@@ -2736,7 +2743,10 @@ func (t *logicTest) processSubtest(
 			t.success(path)
 
 		case "query":
-			var query logicQuery
+			query := logicQuery{
+				nodeIdx: unsetGatewayIdx,
+			}
+
 			query.pos = fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile)
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
@@ -3402,7 +3412,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	t.noticeBuffer = nil
 
 	db := t.db
-	if query.nodeIdx != 0 {
+	if query.nodeIdx != unsetGatewayIdx {
 		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
 		if len(t.tenantAddrs) > 0 {
 			addr = t.tenantAddrs[query.nodeIdx]
@@ -4037,6 +4047,8 @@ type TestServerArgs struct {
 	forceProductionBatchSizes bool
 	// If set, then sql.distsql.temp_storage.workmem is not randomized.
 	DisableWorkmemRandomization bool
+	// If set, gateway is always node 1.
+	DisableMetamorphicGateway bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -4205,6 +4217,11 @@ func RunLogicTestWithDefaultConfig(
 						perErrorSummary: make(map[string][]string),
 						rng:             rng,
 					}
+
+					if !onlyNonMetamorphic && !serverArgs.DisableMetamorphicGateway {
+						lt.nodeIdx = util.ConstantWithMetamorphicTestRange("gateway-nodeidx", 0, 0, cfg.numNodes)
+					}
+
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}

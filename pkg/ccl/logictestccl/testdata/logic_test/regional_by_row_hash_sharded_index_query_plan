@@ -1,6 +1,9 @@
 # LogicTest: multiregion-9node-3region-3azs
 # TODO(#75864): enable multiregion-9node-3region-3azs-tenant
 
+# Make default 0 for rest of test
+user root nodeidx=0
+
 statement ok
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
 
