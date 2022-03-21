@@ -207,6 +207,7 @@ go_library(
         "//pkg/workload/movr",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
+        "//pkg/workload/ttllogger",
         "//pkg/workload/workloadsql",
         "//pkg/workload/ycsb",
         "@com_github_cockroachdb_apd_v3//:apd",
