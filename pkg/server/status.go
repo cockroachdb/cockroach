@@ -254,6 +254,8 @@ func findSessionByQueryID(queryID string) sessionFinder {
 	}
 }
 
+// checkCancelPrivilege returns nil if the user has the necessary cancel action
+// privileges for a session. This function returns a proper gRPC error status.
 func (b *baseStatusServer) checkCancelPrivilege(
 	ctx context.Context, username security.SQLUsername, findSession sessionFinder,
 ) error {
@@ -264,7 +266,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	{
 		sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 		if err != nil {
-			return err
+			return serverError(ctx, err)
 		}
 		if username.Undefined() || username == sessionUser {
 			reqUser = sessionUser
