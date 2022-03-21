@@ -15,11 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // TestRecordSystemTargetValidation checks that a Record with SystemTarget is
 // validated on construction.
 func TestRecordSystemTargetValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, tc := range []struct {
 		name        string
 		fn          func(scfg *roachpb.SpanConfig)

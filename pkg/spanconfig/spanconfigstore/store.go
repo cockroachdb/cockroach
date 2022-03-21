@@ -234,3 +234,11 @@ func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 			return f(record)
 		})
 }
+
+// TestingNumberOfSpanConfigs returns the number of span configs stored
+// internally, for testing purposes.
+func (s *Store) TestingNumberOfSpanConfigs() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.spanConfigStore.tree.Len()
+}

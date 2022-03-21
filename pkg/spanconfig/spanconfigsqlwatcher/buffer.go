@@ -188,6 +188,10 @@ func (b *buffer) flush(
 	ctx context.Context,
 ) (sqlUpdates []spanconfig.SQLUpdate, _ hlc.Timestamp, _ error) {
 	bufferedEvents, combinedFrontierTS := b.flushEvents(ctx)
+	if len(bufferedEvents) == 0 {
+		return nil, combinedFrontierTS, nil // nothing to do
+	}
+
 	evs := make(events, 0, len(bufferedEvents))
 	for i, ev := range bufferedEvents {
 		if i != 0 {

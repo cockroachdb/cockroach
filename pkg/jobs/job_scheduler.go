@@ -176,7 +176,7 @@ func (s *jobScheduler) processSchedule(
 
 	// Grab job executor and execute the job.
 	log.Infof(ctx,
-		"Starting job for schedule %d (%q); scheduled to run at %s; next run scheduled for %s",
+		"starting job for schedule %d (%q); scheduled to run at %s; next run scheduled for %s",
 		schedule.ScheduleID(), schedule.ScheduleLabel(),
 		schedule.ScheduledRunTime(), schedule.NextRun())
 
