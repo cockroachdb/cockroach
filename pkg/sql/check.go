@@ -604,6 +604,8 @@ func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
 	return nil
 }
 
+var invalidTableTTLScheduledJobError = errors.Newf("invalid scheduled job for table")
+
 // validateTTLScheduledJobsInCurrentDB is part of the EvalPlanner interface.
 func (p *planner) validateTTLScheduledJobInTable(
 	ctx context.Context, tableDesc catalog.TableDescriptor,
@@ -616,6 +618,14 @@ func (p *planner) validateTTLScheduledJobInTable(
 	execCfg := p.ExecCfg()
 	env := JobSchedulerEnv(execCfg)
 
+	wrapError := func(origErr error) error {
+		return errors.WithHintf(
+			errors.Mark(origErr, invalidTableTTLScheduledJobError),
+			`use crdb_internal.repair_ttl_table_scheduled_job(%d) to repair the missing job`,
+			tableDesc.GetID(),
+		)
+	}
+
 	sj, err := jobs.LoadScheduledJob(
 		ctx,
 		env,
@@ -625,11 +635,13 @@ func (p *planner) validateTTLScheduledJobInTable(
 	)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			return pgerror.Newf(
-				pgcode.Internal,
-				"table id %d maps to a non-existent scheduled job id %d",
-				tableDesc.GetID(),
-				ttl.ScheduleID,
+			return wrapError(
+				pgerror.Newf(
+					pgcode.Internal,
+					"table id %d maps to a non-existent scheduled job id %d",
+					tableDesc.GetID(),
+					ttl.ScheduleID,
+				),
 			)
 		}
 		return errors.Wrapf(err, "error fetching scheduled job %d for table id %d", ttl.ScheduleID, tableDesc.GetID())
@@ -637,26 +649,60 @@ func (p *planner) validateTTLScheduledJobInTable(
 
 	var args catpb.ScheduledRowLevelTTLArgs
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, &args); err != nil {
-		return pgerror.Wrapf(
-			err,
-			pgcode.Internal,
-			"error unmarshalling scheduled jobs args for table id %d, schedule id %d",
-			tableDesc.GetID(),
-			ttl.ScheduleID,
+		return wrapError(
+			pgerror.Wrapf(
+				err,
+				pgcode.Internal,
+				"error unmarshalling scheduled jobs args for table id %d, schedule id %d",
+				tableDesc.GetID(),
+				ttl.ScheduleID,
+			),
 		)
 	}
 
 	if args.TableID != tableDesc.GetID() {
-		return pgerror.Newf(
-			pgcode.Internal,
-			"scheduled job id %d points to table id %d instead of table id %d",
-			ttl.ScheduleID,
-			args.TableID,
-			tableDesc.GetID(),
+		return wrapError(
+			pgerror.Newf(
+				pgcode.Internal,
+				"scheduled job id %d points to table id %d instead of table id %d",
+				ttl.ScheduleID,
+				args.TableID,
+				tableDesc.GetID(),
+			),
 		)
 	}
 
 	return nil
+}
+
+// RepairTTLScheduledJobForTable is part of the EvalPlanner interface.
+func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error {
+	tableDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, descpb.ID(tableID), tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return err
+	}
+	validateErr := p.validateTTLScheduledJobInTable(ctx, tableDesc)
+	if validateErr == nil {
+		return nil
+	}
+	if !errors.HasType(validateErr, invalidTableTTLScheduledJobError) {
+		return errors.Wrap(validateErr, "error validating TTL on table")
+	}
+	sj, err := CreateRowLevelTTLScheduledJob(
+		ctx,
+		p.ExecCfg(),
+		p.txn,
+		p.User(),
+		tableDesc.GetID(),
+		tableDesc.GetRowLevelTTL(),
+	)
+	if err != nil {
+		return err
+	}
+	tableDesc.RowLevelTTL.ScheduleID = sj.ScheduleID()
+	return p.Descriptors().WriteDesc(
+		ctx, false /* kvTrace */, tableDesc, p.txn,
+	)
 }
 
 func formatValues(colNames []string, values tree.Datums) string {

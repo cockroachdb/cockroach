@@ -47,6 +47,12 @@ CREATE TABLE public.tbl (
 statement ok
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
+statement ok
+SELECT crdb_internal.repair_ttl_table_scheduled_job('tbl'::regclass::oid)
+
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
 statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
 
