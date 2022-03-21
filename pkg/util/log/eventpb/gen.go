@@ -87,6 +87,7 @@ type fieldInfo struct {
 	MixedRedactable     bool
 	Inherited           bool
 	IsEnum              bool
+	Splittable          bool
 }
 
 func run() error {
@@ -410,6 +411,12 @@ func readInput(
 						regexps.infos = append(regexps.infos, reInfo{ReName: safeReName, ReDef: safeRe})
 					}
 				}
+				// Determine if field is splittable.
+				splittable := false
+				if re := fieldDefRe.ReplaceAllString(line, "$splittable"); re != "" && re == "true" {
+					splittable = true
+				}
+
 				fi := fieldInfo{
 					Comment:             comment,
 					FieldType:           typ,
@@ -418,6 +425,7 @@ func readInput(
 					ReportingSafeRe:     safeReName,
 					MixedRedactable:     mixed,
 					IsEnum:              isEnum,
+					Splittable:          splittable,
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -445,6 +453,7 @@ var fieldDefRe = regexp.MustCompile(`\s*(?P<typ>[a-z._A-Z0-9]+)` +
 	`\s+(.*customname\) = "(?P<noverride>[A-Za-z]+)")?` +
 	`(.*"redact:\\"(?P<reportingsafe>nonsensitive|mixed)\\"")?` +
 	`(.*"redact:\\"safeif:(?P<safeif>([^\\]|\\[^"])+)\\"")?` +
+	`(.*splittable:\\"(?P<splittable>([^\\]|\\[^"])+)\\")?` +
 	`).*$`)
 
 func camelToSnake(typeName string) string {
@@ -502,6 +511,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
    if m.{{.FieldName}} != "" {
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":\""...)
+		 {{ if .Splittable -}}
+		 b = append(b, StartSplittableMarker()...)
+		 {{- end }}
      {{ if .AlwaysReportingSafe -}}
      b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.{{.FieldName}})))
      {{- else if ne .ReportingSafeRe "" }}
@@ -517,6 +529,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.{{.FieldName}})))))
      b = append(b, redact.EndMarker()...)
      {{- end }}
+		 {{ if .Splittable -}}
+		 b = append(b, EndSplittableMarker()...)
+		 {{- end }}
      b = append(b, '"')
    }
    {{- else if eq .FieldType "array_of_string" -}}
@@ -526,6 +541,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      for i, v := range m.{{.FieldName}} {
        if i > 0 { b = append(b, ',') }
        b = append(b, '"')
+			 {{ if .Splittable -}}
+			 b = append(b, StartSplittableMarker()...)
+			 {{- end }}
        {{ if .AlwaysReportingSafe -}}
        b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
        {{- else if ne .ReportingSafeRe "" }}
@@ -541,6 +559,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
        b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
        b = append(b, redact.EndMarker()...)
        {{- end }}
+			 {{ if .Splittable -}}
+			 b = append(b, EndSplittableMarker()...)
+			 {{- end }}
        b = append(b, '"')
      }
      b = append(b, ']')
