@@ -10,6 +10,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigptsstatereader",
         "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql",
