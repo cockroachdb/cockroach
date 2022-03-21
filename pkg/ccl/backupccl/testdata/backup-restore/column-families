@@ -37,7 +37,7 @@ CREATE DATABASE r1;
 ----
 
 exec-sql
-RESTORE cfs FROM 'nodelocal://1/foo' WITH into_db='r1';
+RESTORE cfs FROM LATEST IN 'nodelocal://1/foo' WITH into_db='r1';
 ----
 
 query-sql
