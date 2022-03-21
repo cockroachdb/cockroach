@@ -121,6 +121,8 @@ var retiredSettings = map[string]struct{}{
 	"bulkio.backup.resolve_destination_in_job.enabled":                 {},
 	"sql.defaults.experimental_hash_sharded_indexes.enabled":           {},
 	"schemachanger.backfiller.max_sst_size":                            {},
+	"kv.bulk_ingest.buffer_increment":                                  {},
+	"schemachanger.backfiller.buffer_increment":                        {},
 }
 
 // register adds a setting to the registry.

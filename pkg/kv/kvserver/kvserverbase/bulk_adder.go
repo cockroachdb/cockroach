@@ -33,10 +33,6 @@ type BulkAdderOptions struct {
 	// BufferSize is the maximum size we can grow the BulkAdder buffer to.
 	MaxBufferSize func() int64
 
-	// StepBufferSize is the increment in which we will attempt to grow the
-	// BulkAdder buffer if the memory monitor permits.
-	StepBufferSize int64
-
 	// SkipDuplicates configures handling of duplicate keys within a local sorted
 	// batch. When true if the same key/value pair is added more than once
 	// subsequent additions will be ignored instead of producing an error. If an

@@ -67,11 +67,6 @@ var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
 	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
 )
 
-var backfillerBufferIncrementSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
-	"schemachanger.backfiller.buffer_increment", "the size by which the BulkAdder attempts to grow its buffer before flushing", 32<<20,
-)
-
 func newIndexBackfiller(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -185,12 +180,10 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
-	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	opts := kvserverbase.BulkAdderOptions{
 		Name:                     ib.desc.GetName() + " backfill",
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
-		StepBufferSize:           stepSize,
 		SkipDuplicates:           ib.ContainsInvertedIndex(),
 		BatchTimestamp:           ib.spec.ReadAsOf,
 		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -103,6 +104,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				return encoding.EncodeStringAscending(append([]byte{}, prefix...), fmt.Sprintf("k%d", i))
 			}
 
+			t.Logf("splitting at %s and %s", key(split1), key(split2))
 			if err := kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
@@ -131,8 +133,9 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			mockCache.Insert(ctx, r)
 
 			ts := hlc.Timestamp{WallTime: 100}
+			lots := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MinBufferSize: batchSize()}, nil, /* bulkMon */
+				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, lots,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -177,6 +180,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			}
 			var splitRetries int
 			for _, sp := range getRecAndFinish() {
+				t.Log(sp.String())
 				splitRetries += tracing.CountLogMessages(sp, "SSTable cannot be added spanning range bounds")
 			}
 			if splitRetries != expectedSplitRetries {
