@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -940,6 +941,17 @@ func TestChartCatalogGen(t *testing.T) {
 	}
 }
 
+// walkAllSections invokes the visitor on each of the ChartSections nestled under
+// the input one.
+func walkAllSections(chartCatalog []catalog.ChartSection, visit func(c *catalog.ChartSection)) {
+	for _, c := range chartCatalog {
+		visit(&c)
+		for _, ic := range c.Subsections {
+			visit(ic)
+		}
+	}
+}
+
 // findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
 // that are not defined. This is most likely caused by a metric being removed.
 func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
@@ -1026,9 +1038,35 @@ func TestChartCatalogMetrics(t *testing.T) {
 			metricNames = append(metricNames, metricName)
 		}
 		sort.Strings(metricNames)
-		t.Fatalf(`The following metrics need to be added to the chart catalog
+		t.Errorf(`The following metrics need to be added to the chart catalog
 		    (pkg/ts/catalog/chart_catalog.go): %v`, metricNames)
 	}
+
+	internalTSDBMetricNamesWithoutPrefix := map[string]struct{}{}
+	for _, name := range catalog.AllInternalTimeseriesMetricNames() {
+		name = strings.TrimPrefix(name, "cr.node.")
+		name = strings.TrimPrefix(name, "cr.store.")
+		internalTSDBMetricNamesWithoutPrefix[name] = struct{}{}
+	}
+	walkAllSections(chartCatalog, func(cs *catalog.ChartSection) {
+		for _, chart := range cs.Charts {
+			for _, metric := range chart.Metrics {
+				if *metric.MetricType.Enum() != io_prometheus_client.MetricType_HISTOGRAM {
+					continue
+				}
+				// We have a histogram. Make sure that it is properly represented in
+				// AllInternalTimeseriesMetricNames(). It's not a complete check but good enough in
+				// practice. Ideally we wouldn't require `histogramMetricsNames` and
+				// the associated manual step when adding a histogram. See:
+				// https://github.com/cockroachdb/cockroach/issues/64373
+				_, ok := internalTSDBMetricNamesWithoutPrefix[metric.Name+"-p50"]
+				if !ok {
+					t.Errorf("histogram %s needs to be added to `catalog.histogramMetricsNames` manually",
+						metric.Name)
+				}
+			}
+		}
+	})
 }
 
 func TestHotRangesResponse(t *testing.T) {

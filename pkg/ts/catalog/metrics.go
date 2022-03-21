@@ -12,28 +12,110 @@ package catalog
 
 import "sort"
 
-var metricsNames []string
+var internalTSMetricsNames []string
 
 func init() {
-	metricsNames = allMetricsNames()
+	internalTSMetricsNames = allInternalTSMetricsNames()
 }
 
-// AllMetricsNames returns all of the possible metric names used by the
-// sections.
+// AllInternalTimeseriesMetricNames returns a slice that returns all of the
+// metric names used by CockroachDB's internal timeseries database. This is
+// *not* the list of names as it appears on prometheus. In particular, since
+// the internal TS DB does not support histograms, it instead records timeseries
+// for a number of quantiles.
 //
-// Note that it will return some metric names that don't exist since the
-// sections do not indicate whether metrics are per-node or per-store (so both
-// are returned).
-func AllMetricsNames() []string {
-	return metricsNames
+// For technical reasons, the returned set will contain metrics names that do
+// not exist. This is because a running server is required to determine the
+// proper prefix for each metric (per-node or per-store); we don't have one
+// here, so we return both possible prefixes.
+func AllInternalTimeseriesMetricNames() []string {
+	return internalTSMetricsNames
 }
 
-func allMetricsNames() []string {
+// The histogramMetricsNames variable below was originally seeded using the invocation
+// below. It's kept up to date via `server.TestChartCatalogMetrics`.
+var _ = `
+./cockroach demo --empty -e \
+    "select name from crdb_internal.node_metrics where name like '%-p50'" | \
+    sed -E 's/^(.*)-p50$/"\1": {},/'
+`
+
+var histogramMetricsNames = map[string]struct{}{
+	"sql.txn.latency.internal":                  {},
+	"sql.conn.latency":                          {},
+	"sql.mem.sql.session.max":                   {},
+	"sql.stats.flush.duration":                  {},
+	"changefeed.checkpoint_hist_nanos":          {},
+	"admission.wait_durations.sql-sql-response": {},
+	"admission.wait_durations.sql-kv-response":  {},
+	"sql.exec.latency":                          {},
+	"sql.stats.mem.max.internal":                {},
+	"admission.wait_durations.sql-leaf-start":   {},
+	"sql.disk.distsql.max":                      {},
+	"txn.restarts":                              {},
+	"sql.stats.flush.duration.internal":         {},
+	"sql.distsql.exec.latency":                  {},
+	"sql.mem.internal.txn.max":                  {},
+	"changefeed.emit_hist_nanos":                {},
+	"changefeed.flush_hist_nanos":               {},
+	"sql.service.latency":                       {},
+	"round-trip-latency":                        {},
+	"admission.wait_durations.kv":               {},
+	"sql.mem.distsql.max":                       {},
+	"kv.prober.write.latency":                   {},
+	"exec.latency":                              {},
+	"admission.wait_durations.sql-root-start":   {},
+	"sql.mem.bulk.max":                          {},
+	"sql.distsql.flows.queue_wait":              {},
+	"sql.txn.latency":                           {},
+	"sql.mem.root.max":                          {},
+	"admission.wait_durations.kv-stores":        {},
+	"sql.stats.mem.max":                         {},
+	"sql.distsql.service.latency.internal":      {},
+	"sql.stats.reported.mem.max.internal":       {},
+	"sql.stats.reported.mem.max":                {},
+	"sql.exec.latency.internal":                 {},
+	"sql.mem.internal.session.max":              {},
+	"sql.distsql.exec.latency.internal":         {},
+	"kv.prober.read.latency":                    {},
+	"sql.distsql.service.latency":               {},
+	"sql.service.latency.internal":              {},
+	"sql.mem.sql.txn.max":                       {},
+	"liveness.heartbeatlatency":                 {},
+	"txn.durations":                             {},
+	"raft.process.handleready.latency":          {},
+	"raft.process.commandcommit.latency":        {},
+	"raft.process.logcommit.latency":            {},
+	"raft.scheduler.latency":                    {},
+	"txnwaitqueue.pusher.wait_time":             {},
+	"txnwaitqueue.query.wait_time":              {},
+	"raft.process.applycommitted.latency":       {},
+}
+
+func allInternalTSMetricsNames() []string {
 	m := map[string]struct{}{}
 	for _, section := range charts {
 		for _, chart := range section.Charts {
 			for _, metric := range chart.Metrics {
-				m[metric] = struct{}{}
+				// Jump through hoops to create the correct internal timeseries metrics names.
+				// See:
+				// https://github.com/cockroachdb/cockroach/issues/64373
+				_, isHist := histogramMetricsNames[metric]
+				if !isHist {
+					m[metric] = struct{}{}
+					continue
+				}
+				for _, p := range []string{
+					"p50",
+					"p75",
+					"p90",
+					"p99",
+					"p99.9",
+					"p99.99",
+					"p99.999",
+				} {
+					m[metric+"-"+p] = struct{}{}
+				}
 			}
 		}
 	}
