@@ -15,11 +15,11 @@ us-east-1
 us-west-1
 
 exec-sql
-BACKUP DATABASE d TO 'nodelocal://1/database_backup/';
+BACKUP DATABASE d INTO 'nodelocal://1/database_backup/';
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://1/full_cluster_backup/';
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
 ----
 
 # A new cluster with the same locality settings.
@@ -77,11 +77,11 @@ INSERT INTO no_region_db_2.t VALUES (1), (2), (3);
 ----
 
 exec-sql
-BACKUP DATABASE no_region_db TO 'nodelocal://1/no_region_database_backup/';
+BACKUP DATABASE no_region_db INTO 'nodelocal://1/no_region_database_backup/';
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://1/no_region_cluster_backup/';
+BACKUP INTO 'nodelocal://1/no_region_cluster_backup/';
 ----
 
 exec-sql
@@ -136,7 +136,7 @@ INSERT INTO eu_central_db.t VALUES (1), (2), (3);
 NOTICE: setting eu-central-1 as the PRIMARY REGION as no PRIMARY REGION was specified
 
 exec-sql
-BACKUP DATABASE eu_central_db TO 'nodelocal://1/eu_central_database_backup/';
+BACKUP DATABASE eu_central_db INTO 'nodelocal://1/eu_central_database_backup/';
 ----
 
 # New cluster for a cluster backup.

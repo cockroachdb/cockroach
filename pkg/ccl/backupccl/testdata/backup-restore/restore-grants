@@ -130,7 +130,7 @@ testdb sc othertable admin ALL true
 
 
 exec-sql
-BACKUP TO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://0/test/'
 ----
 
 # Ensure that testuser is indeed the owner of the type, but dropping it.
