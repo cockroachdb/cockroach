@@ -23,7 +23,7 @@ go_proto_library(
 go_library(
     name = "tenant",
     srcs = [
-        "directory.go",
+        "directory_cache.go",
         "entry.go",
         "pod.go",
     ],
@@ -47,7 +47,7 @@ go_test(
     name = "tenant_test",
     size = "large",
     srcs = [
-        "directory_test.go",
+        "directory_cache_test.go",
         "main_test.go",
         "pod_test.go",
     ],
