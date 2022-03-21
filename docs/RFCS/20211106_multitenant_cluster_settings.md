@@ -1,9 +1,9 @@
 - Feature Name: Multi-tenant cluster settings
-- Status: draft
+- Status: accepted
 - Start Date: 2021-11-06
 - Authors: Radu Berinde
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: (one or more # from the issue tracker)
+- RFC PR: #73349
+- Cockroach Issue: #77935
 
 # Summary
 
@@ -125,8 +125,13 @@ New statements for the system tenant only (which concern only `tenant-ro` and
      otherwise the setting default.
 
  - `SHOW CLUSTER SETTING <setting> FOR TENANT <id>`
+   - Display the setting override. If there is no override, the statement
+     returns NULL. (We choose to not make this statement 'peek' into
+     the tenant to display the customization set by the tenant itself.)
 
  - `SHOW [ALL] CLUSTER SETTINGS FOR TENANT <id>`
+   - Display the setting overrides for the given tenant. If there is no
+     override, the statement returns NULL.
 
 In all statements above, using `id=1` (the system tenant's ID) is not valid.
 
