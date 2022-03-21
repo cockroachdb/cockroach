@@ -43,13 +43,13 @@ export const SessionDetailsPageConnected = withRouter(
         analyticsActions.track({
           name: "Session Actions Clicked",
           page: "Sessions Details",
-          action: "Terminate Session",
+          action: "Cancel Session",
         }),
       onTerminateStatementClick: () =>
         analyticsActions.track({
           name: "Session Actions Clicked",
           page: "Sessions Details",
-          action: "Terminate Statement",
+          action: "Cancel Statement",
         }),
       onBackButtonClick: () =>
         analyticsActions.track({

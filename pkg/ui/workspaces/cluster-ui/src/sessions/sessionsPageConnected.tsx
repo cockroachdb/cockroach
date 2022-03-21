@@ -130,13 +130,13 @@ export const SessionsPageConnected = withRouter(
         analyticsActions.track({
           name: "Session Actions Clicked",
           page: "Sessions",
-          action: "Terminate Session",
+          action: "Cancel Session",
         }),
       onTerminateStatementClick: () =>
         analyticsActions.track({
           name: "Session Actions Clicked",
           page: "Sessions",
-          action: "Terminate Statement",
+          action: "Cancel Statement",
         }),
       onFilterChange: (value: Filters) => {
         dispatch(
