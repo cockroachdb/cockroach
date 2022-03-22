@@ -35,18 +35,24 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
  * @param ReqBuilder expects protobuf stub to encode request payload. It has to be
  * class type, not instance;
  * @param reqPayload is request payload object;
+ * @param timeout is the timeout for the request (optional),
+ * format is TimeoutValue (positive integer of at most 8 digits) +
+ * TimeoutUnit ( Hour → "H", Minute → "M", Second → "S", Millisecond → "m" ),
+ * e.g. "1M" (1 minute), default value "30000m" (30 seconds);
  **/
 export const fetchData = <P extends ProtoBuilder<P>, T extends ProtoBuilder<T>>(
   RespBuilder: T,
   path: string,
   ReqBuilder?: P,
   reqPayload?: FirstConstructorParameter<P>,
+  timeout?: string,
 ): Promise<InstanceType<T>> => {
+  const grpcTimeout = timeout || "30000m";
   const params: RequestInit = {
     headers: {
       Accept: "application/x-protobuf",
       "Content-Type": "application/x-protobuf",
-      "Grpc-Timeout": "30000m",
+      "Grpc-Timeout": grpcTimeout,
     },
     credentials: "same-origin",
   };
