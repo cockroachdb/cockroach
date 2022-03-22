@@ -747,17 +747,22 @@ func RunCommitTrigger(
 	return result.Result{}, nil
 }
 
-// splitTrigger is called on a successful commit of a transaction
-// containing an AdminSplit operation. It copies the AbortSpan for
-// the new range and recomputes stats for both the existing, left hand
-// side (LHS) range and the right hand side (RHS) range. For
-// performance it only computes the stats for the original range (the
-// left hand side) and infers the RHS stats by subtracting from the
-// original stats. We compute the LHS stats because the split key
-// computation ensures that we do not create large LHS
-// ranges. However, this optimization is only possible if the stats
-// are fully accurate. If they contain estimates, stats for both the
-// LHS and RHS are computed.
+// splitTrigger is called on a successful commit of a transaction containing an
+// AdminSplit operation. It copies the AbortSpan for the new range and
+// recomputes stats for both the existing, left hand side (LHS) range and the
+// right hand side (RHS) range. For performance it only computes the stats for
+// one side of the range and infers the stats for the other side by subtracting
+// from the original stats. The choice of which side to scan is controlled by a
+// heuristic. This choice defaults to scanning the LHS stats and inferring the
+// RHS because the split key computation performed by the splitQueue ensures
+// that we do not create large LHS ranges. However, if the RHS's global keyspace
+// is entirely empty, it is scanned first instead. An example where we expect
+// this heuristic to choose the RHS is bulk ingestion, which often splits off
+// empty ranges and benefits from scanning the empty RHS when computing stats.
+// Regardless of the choice of which side to scan first, the optimization to
+// infer the other side's stats is only possible if the stats are fully accurate
+// (ContainsEstimates = 0). If they contain estimates, stats for both the LHS
+// and RHS are computed.
 //
 // Splits are complicated. A split is initiated when a replica receives an
 // AdminSplit request. Note that this request (and other "admin" requests)
@@ -915,27 +920,61 @@ func splitTrigger(
 			split.RightDesc.StartKey, split.RightDesc.EndKey, desc)
 	}
 
-	// Compute the absolute stats for the (post-split) LHS. No more
-	// modifications to it are allowed after this line.
-
-	leftMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
+	// Determine which side to scan first when computing the post-split stats. We
+	// scan the left-hand side first unless the right side's global keyspace is
+	// entirely empty. In cases where the range's stats do not already contain
+	// estimates, only one side needs to be scanned.
+	// TODO(nvanbenschoten): this is a simple heuristic. If we had a cheap way to
+	// determine the relative sizes of the LHS and RHS, we could be more
+	// sophisticated here and always choose to scan the cheaper side.
+	scanRightFirst, err := isGlobalKeyspaceEmpty(batch, &split.RightDesc)
 	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
+			"unable to determine whether right hand side of split is empty")
 	}
-	log.Event(ctx, "computed stats for left hand side range")
 
 	h := splitStatsHelperInput{
 		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
 		DeltaBatchEstimated:      bothDeltaMS,
-		AbsPostSplitLeft:         leftMS,
-		AbsPostSplitRightFn: func() (enginepb.MVCCStats, error) {
-			rightMS, err := rditer.ComputeStatsForRange(
-				&split.RightDesc, batch, ts.WallTime,
-			)
-			return rightMS, errors.Wrap(err, "unable to compute stats for RHS range after split")
-		},
+		AbsPostSplitLeftFn:       makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		AbsPostSplitRightFn:      makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
+		ScanRightFirst:           scanRightFirst,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
+}
+
+// isGlobalKeyspaceEmpty returns whether the global keyspace of the provided
+// range is entirely empty or whether it contains at least one key.
+func isGlobalKeyspaceEmpty(reader storage.Reader, d *roachpb.RangeDescriptor) (bool, error) {
+	span := d.KeySpan().AsRawSpanWithNoLocals()
+	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: span.EndKey})
+	defer iter.Close()
+	iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+	ok, err := iter.Valid()
+	if err != nil {
+		return false, err
+	}
+	return !ok /* empty */, nil
+}
+
+// makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
+// range descriptor which computes the range's statistics.
+func makeScanStatsFn(
+	ctx context.Context,
+	reader storage.Reader,
+	ts hlc.Timestamp,
+	sideDesc *roachpb.RangeDescriptor,
+	sideName string,
+) splitStatsScanFn {
+	return func() (enginepb.MVCCStats, error) {
+		sideMS, err := rditer.ComputeStatsForRange(sideDesc, reader, ts.WallTime)
+		if err != nil {
+			return enginepb.MVCCStats{}, errors.Wrapf(err,
+				"unable to compute stats for %s range after split", sideName)
+		}
+		log.Eventf(ctx, "computed stats for %s range", sideName)
+		return sideMS, nil
+	}
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -967,6 +1006,10 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
+	// Compute the absolute stats for the (post-split) ranges. No more
+	// modifications to the left hand side are allowed after this line and any
+	// modifications to the right hand side are accounted for by updating the
+	// helper's AbsPostSplitRight() reference.
 	h, err := makeSplitStatsHelper(statsInput)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
