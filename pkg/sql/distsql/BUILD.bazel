@@ -17,7 +17,6 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
-        "//pkg/sql/row",
         "//pkg/sql/rowflow",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
